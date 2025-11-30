@@ -1,0 +1,24 @@
+[project]
+name = "choosy-backend"
+version = "0.1.0"
+description = "Choosy Backend API - Recipe Management System"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.115.12",
+    "uvicorn[standard]>=0.30.0",
+    "sqlalchemy>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "httpx>=0.25.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[project.scripts]
+choosy-server = "entry:run_server"
+choosy-dev = "entry:run_dev_server"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
