@@ -1,8 +1,8 @@
 """
 菜谱相关的 Pydantic 模型
 """
-from typing import List, Optional
-from pydantic import BaseModel, ConfigDict
+from typing import Any, List, Optional
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 # 食材模型
@@ -98,6 +98,17 @@ class RecipeResponse(RecipeBase):
     additional_notes: List[str] = []
     
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator('additional_notes', mode='before')
+    @classmethod
+    def extract_notes(cls, v: Any) -> List[str]:
+        """从 AdditionalNote 对象中提取 note 字段"""
+        if not v:
+            return []
+        # 如果是对象列表，提取 note 字段
+        if v and hasattr(v[0], 'note'):
+            return [item.note for item in v]
+        return v
 
 
 class RecipeListItem(BaseModel):
