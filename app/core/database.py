@@ -11,7 +11,7 @@ from app.core.config import settings
 engine = create_engine(
     settings.DATABASE_URL,
     connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {},
-    echo=settings.DEBUG,  # 开发环境打印 SQL 语句
+    echo=False,  # 设为 True 可打印 SQL 语句用于调试
 )
 
 # 创建会话工厂

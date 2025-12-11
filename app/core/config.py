@@ -26,7 +26,20 @@ class Settings(BaseSettings):
     CORS_ALLOW_METHODS: List[str] = ["*"]
     CORS_ALLOW_HEADERS: List[str] = ["*"]
     
-    DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY")
+    DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY", "")
+    
+    # 微信小程序配置
+    WX_APPID: str = os.getenv("WX_APPID", "")
+    WX_SECRET: str = os.getenv("WX_SECRET", "")
+    
+    # JWT 配置
+    ACCESS_TOKEN_EXPIRE_SECONDS: int = 60 * 60 * 2  # 2 小时
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 365  # 1 年
+    MAX_REFRESH_TOKENS_PER_USER: int = 10  # 每用户最多 10 个 refresh_token
+    
+    # JWK 密钥（从环境变量读取 JSON 字符串）
+    JWS_KEY: str = os.getenv("JWS_KEY", "")  # Ed25519 私钥（包含公钥）
+    JWE_KEY: str = os.getenv("JWE_KEY", "")  # A256GCM 对称密钥
     
     class Config:
         env_file = ".env"
