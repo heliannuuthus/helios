@@ -583,4 +583,3 @@ func (h *RecipeHandler) toRecipeResponse(r *models.Recipe) *RecipeResponse {
 		AdditionalNotes:  notes,
 	}
 }
-
