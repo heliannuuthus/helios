@@ -1,0 +1,43 @@
+# Choosy 后端配置文件
+# 复制此文件为 config.toml 并填入实际值
+
+[app]
+name = "Choosy API"
+version = "1.0.0"
+debug = true
+
+[log]
+level = "debug"  # debug, info, warn, error
+format = "console"  # console, json
+
+[server]
+host = "0.0.0.0"
+port = 18000
+
+[database]
+url = "db/choosy.db"
+
+[cors]
+origins = ["*"]
+allow_credentials = true
+allow_methods = ["*"]
+allow_headers = ["*"]
+
+[dashscope]
+api_key = ""
+
+[idps.wxmp]
+appid = ""
+secret = ""
+
+[auth]
+issuer = "choosy.heliannuuthus.com"
+audience = "choosy"
+expiresIn = 7200           # access_token 过期时间(秒)，2小时
+refreshExpiresIn = 365     # refresh_token 过期时间(天)，1年
+maxRefreshToken = 10       # 每用户最大 refresh_token 数
+
+[auth.token]
+sign_key = ""  # Ed25519 签名密钥 (base64url 编码的 JWK)
+enc_key = ""   # A256GCM 加密密钥 (base64url 编码的 JWK)
+
