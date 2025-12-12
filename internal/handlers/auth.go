@@ -364,4 +364,3 @@ func (h *AuthHandler) LogoutAll(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("已登出所有设备，共撤销 %d 个会话", count)})
 }
-
