@@ -1,0 +1,166 @@
+package config
+
+import (
+	"fmt"
+	"reflect"
+	"strings"
+	"sync"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
+)
+
+var (
+	v        *viper.Viper
+	mu       sync.RWMutex
+	snapshot map[string]any // 配置快照，用于检测变更
+)
+
+// Load 加载配置
+func Load() {
+	if v != nil {
+		return
+	}
+
+	v = viper.New()
+
+	// 设置配置文件
+	v.SetConfigName("config")
+	v.SetConfigType("toml")
+	v.AddConfigPath(".")
+	v.AddConfigPath("./config")
+
+	// 设置环境变量前缀和自动绑定
+	v.SetEnvPrefix("CHOOSY")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
+
+	// 读取配置文件
+	if err := v.ReadInConfig(); err != nil {
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			panic("读取配置文件失败: " + err.Error())
+		}
+		panic("配置文件不存在，请创建 config.toml")
+	}
+
+	// 保存初始快照
+	snapshot = v.AllSettings()
+
+	// 启用热更新
+	v.WatchConfig()
+	v.OnConfigChange(func(e fsnotify.Event) {
+		mu.Lock()
+		defer mu.Unlock()
+
+		newSettings := v.AllSettings()
+		changes := detectChanges("", snapshot, newSettings)
+
+		if len(changes) > 0 {
+			fmt.Printf("[config] 配置热更新: %s\n", e.Name)
+			for _, change := range changes {
+				fmt.Printf("[config]   %s: %v -> %v\n", change.Key, change.OldValue, change.NewValue)
+			}
+		}
+
+		// 更新快照
+		snapshot = newSettings
+	})
+}
+
+// ConfigChange 配置变更
+type ConfigChange struct {
+	Key      string
+	OldValue any
+	NewValue any
+}
+
+// detectChanges 检测配置变更
+func detectChanges(prefix string, old, new map[string]any) []ConfigChange {
+	var changes []ConfigChange
+
+	// 检查新增和修改的 key
+	for k, newVal := range new {
+		key := k
+		if prefix != "" {
+			key = prefix + "." + k
+		}
+
+		oldVal, exists := old[k]
+		if !exists {
+			changes = append(changes, ConfigChange{Key: key, OldValue: nil, NewValue: newVal})
+			continue
+		}
+
+		// 递归检查嵌套 map
+		if newMap, ok := newVal.(map[string]any); ok {
+			if oldMap, ok := oldVal.(map[string]any); ok {
+				changes = append(changes, detectChanges(key, oldMap, newMap)...)
+				continue
+			}
+		}
+
+		// 值比较
+		if !reflect.DeepEqual(oldVal, newVal) {
+			changes = append(changes, ConfigChange{Key: key, OldValue: oldVal, NewValue: newVal})
+		}
+	}
+
+	// 检查删除的 key
+	for k, oldVal := range old {
+		key := k
+		if prefix != "" {
+			key = prefix + "." + k
+		}
+
+		if _, exists := new[k]; !exists {
+			changes = append(changes, ConfigChange{Key: key, OldValue: oldVal, NewValue: nil})
+		}
+	}
+
+	return changes
+}
+
+// V 返回 viper 实例
+func V() *viper.Viper {
+	if v == nil {
+		Load()
+	}
+	return v
+}
+
+// 便捷方法（线程安全）
+func GetString(key string) string {
+	mu.RLock()
+	defer mu.RUnlock()
+	return V().GetString(key)
+}
+
+func GetInt(key string) int {
+	mu.RLock()
+	defer mu.RUnlock()
+	return V().GetInt(key)
+}
+
+func GetBool(key string) bool {
+	mu.RLock()
+	defer mu.RUnlock()
+	return V().GetBool(key)
+}
+
+func GetStringSlice(key string) []string {
+	mu.RLock()
+	defer mu.RUnlock()
+	return V().GetStringSlice(key)
+}
+
+func GetStringMap(key string) map[string]any {
+	mu.RLock()
+	defer mu.RUnlock()
+	return V().GetStringMap(key)
+}
+
+func GetStringMapString(key string) map[string]string {
+	mu.RLock()
+	defer mu.RUnlock()
+	return V().GetStringMapString(key)
+}
