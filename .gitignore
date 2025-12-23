@@ -11,7 +11,7 @@ bin/
 config.toml
 
 # Database
-# db/*.db
+*.db
 
 # IDE
 .idea/
