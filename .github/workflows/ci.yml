@@ -32,6 +32,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Download dependencies
+        run: go mod download
+
       - name: Install tools
         run: |
           go install github.com/google/wire/cmd/wire@latest
