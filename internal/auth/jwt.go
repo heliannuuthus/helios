@@ -80,7 +80,7 @@ func GetJWEKey() (*JWK, error) {
 
 func generateID() string {
 	bytes := make([]byte, 16)
-	rand.Read(bytes)
+	_, _ = rand.Read(bytes)
 	return hex.EncodeToString(bytes)
 }
 
@@ -223,7 +223,7 @@ func createAccessToken(identity *Identity) (string, error) {
 	}
 
 	jti := make([]byte, 16)
-	rand.Read(jti)
+	_, _ = rand.Read(jti)
 
 	expiresIn := config.GetInt("auth.expiresIn")
 
@@ -264,7 +264,7 @@ func base62Encode(data []byte) string {
 
 func generateRefreshToken() string {
 	randomBytes := make([]byte, 24)
-	rand.Read(randomBytes)
+	_, _ = rand.Read(randomBytes)
 	return base62Encode(randomBytes)
 }
 
@@ -436,4 +436,3 @@ func GetOpenIDFromToken(tokenString string) (string, error) {
 	}
 	return identity.GetOpenID(), nil
 }
-

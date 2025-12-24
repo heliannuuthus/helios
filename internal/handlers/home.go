@@ -4,7 +4,6 @@ import (
 	"math/rand"
 	"net/http"
 	"strconv"
-	"time"
 
 	"choosy-backend/internal/config"
 	"choosy-backend/internal/recipe"
@@ -180,7 +179,6 @@ func (h *HomeHandler) getRandomRecipes(count int) []RecipeListItem {
 		})
 	}
 
-	rand.Seed(time.Now().UnixNano())
 	rand.Shuffle(len(items), func(i, j int) {
 		items[i], items[j] = items[j], items[i]
 	})
