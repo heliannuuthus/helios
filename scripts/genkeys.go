@@ -26,7 +26,7 @@ func b64URLEncode(data []byte) string {
 
 func generateKid() string {
 	bytes := make([]byte, 8)
-	rand.Read(bytes)
+	_, _ = rand.Read(bytes)
 	return b64URLEncode(bytes)
 }
 
@@ -49,7 +49,7 @@ func generateEd25519JWK() *JWK {
 
 func generateAESJWK() *JWK {
 	keyBytes := make([]byte, 32) // AES-256
-	rand.Read(keyBytes)
+	_, _ = rand.Read(keyBytes)
 
 	return &JWK{
 		Kty: "oct",
@@ -108,4 +108,3 @@ func main() {
 	fmt.Println("✅ 密钥生成完成")
 	fmt.Println("============================================================")
 }
-

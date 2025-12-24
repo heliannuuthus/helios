@@ -109,7 +109,6 @@ func main() {
 		home := api.Group("/home")
 		{
 			home.GET("/banners", app.HomeHandler.GetBanners)
-			home.GET("/recommend", app.HomeHandler.GetRecommendRecipes)
 			home.GET("/hot", app.HomeHandler.GetHotRecipes)
 		}
 

@@ -138,8 +138,8 @@ func (c *Client) GetWeatherByAdcode(adcode string) (*Weather, error) {
 	live := result.Lives[0]
 	var temp float64
 	var humidity int
-	fmt.Sscanf(live.Temperature, "%f", &temp)
-	fmt.Sscanf(live.Humidity, "%d", &humidity)
+	_, _ = fmt.Sscanf(live.Temperature, "%f", &temp)
+	_, _ = fmt.Sscanf(live.Humidity, "%d", &humidity)
 
 	return &Weather{
 		Temperature: temp,
@@ -178,4 +178,3 @@ func (c *Client) GetWeather(lat, lng float64) (*Weather, error) {
 
 	return weather, nil
 }
-

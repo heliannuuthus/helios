@@ -46,4 +46,3 @@ type WxCode2SessionResponse struct {
 	ErrCode    int    `json:"errcode,omitempty"`
 	ErrMsg     string `json:"errmsg,omitempty"`
 }
-

@@ -33,4 +33,3 @@ func GetSeason(t time.Time) string {
 		return "winter"
 	}
 }
-

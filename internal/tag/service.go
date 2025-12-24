@@ -87,4 +87,3 @@ func (s *Service) GetDistinctTagValues(tagType models.TagType) ([]TagValue, erro
 		Scan(&results).Error
 	return results, err
 }
-
