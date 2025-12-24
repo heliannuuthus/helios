@@ -67,7 +67,7 @@ func Init() {
 // Sync 刷新日志缓冲
 func Sync() {
 	if Log != nil {
-		Log.Sync()
+		_ = Log.Sync()
 	}
 }
 

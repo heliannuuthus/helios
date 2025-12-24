@@ -158,4 +158,3 @@ func (s *Service) GetFavoriteRecipeIDs(openID string, recipeIDs []string) ([]str
 
 	return result, nil
 }
-

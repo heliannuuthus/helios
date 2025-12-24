@@ -94,4 +94,3 @@ func GetCurrentUser(authorization string) (*Identity, error) {
 
 	return VerifyAccessToken(token)
 }
-

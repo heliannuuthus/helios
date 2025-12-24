@@ -362,4 +362,3 @@ func (s *Service) fillTagsForOne(recipe *models.Recipe) error {
 	recipe.Tags = recipes[0].Tags
 	return nil
 }
-
