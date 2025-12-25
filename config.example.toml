@@ -26,6 +26,10 @@ allow_headers = ["*"]
 [dashscope]
 api_key = ""
 
+[openrouter]
+api_key = ""  # OpenRouter API Key (https://openrouter.ai/keys)
+model = "deepseek/deepseek-chat-v3-0324:free"  # 免费模型，其他选项：deepseek/deepseek-r1-0528:free, google/gemma-3-27b-it:free
+
 # 和风天气 API 配置 (https://dev.qweather.com/)
 [weather]
 api_key = ""  # 填入和风天气 API Key
