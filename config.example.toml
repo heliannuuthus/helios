@@ -23,21 +23,26 @@ allow_credentials = true
 allow_methods = ["*"]
 allow_headers = ["*"]
 
+# 阿里通义千问 API 配置 (https://dashscope.console.aliyun.com/)
 [dashscope]
 api_key = ""
 
+# OpenRouter API 配置 (https://openrouter.ai/keys)
 [openrouter]
-api_key = ""  # OpenRouter API Key (https://openrouter.ai/keys)
+api_key = ""  # OpenRouter API Key，可使用免费模型
 model = "deepseek/deepseek-chat-v3-0324:free"  # 免费模型，其他选项：deepseek/deepseek-r1-0528:free, google/gemma-3-27b-it:free
 
-# 和风天气 API 配置 (https://dev.qweather.com/)
-[weather]
-api_key = ""  # 填入和风天气 API Key
+# 高德地图 API 配置 (https://console.amap.com/)
+# 用于：1. 逆地理编码（经纬度转地址）2. 天气查询
+[amap]
+api_key = ""  # 高德地图 Web 服务 API Key
 
+# 微信小程序配置 (https://mp.weixin.qq.com/)
 [idps.wxmp]
-appid = ""
-secret = ""
+appid = ""  # 微信小程序 AppID
+secret = ""  # 微信小程序 Secret
 
+# 认证配置
 [auth]
 issuer = "choosy.heliannuuthus.com"
 audience = "choosy"
@@ -45,11 +50,12 @@ expiresIn = 7200           # access_token 过期时间(秒)，2小时
 refreshExpiresIn = 365     # refresh_token 过期时间(天)，1年
 maxRefreshToken = 10       # 每用户最大 refresh_token 数
 
+# JWT 密钥配置（使用 python3 scripts/genkeys.py 生成）
 [auth.token]
-sign_key = ""  # Ed25519 签名密钥 (base64url 编码的 JWK)
-enc_key = ""   # A256GCM 加密密钥 (base64url 编码的 JWK)
+sign_key = ""  # Ed25519 签名密钥（base64url 编码的 JWK JSON）
+enc_key = ""   # A256GCM 加密密钥（base64url 编码的 JWK JSON）
 
-# 首页配置
+# 首页轮播图配置
 [[home.banners]]
 id = "banner_1"
 image_url = "https://example.com/banner1.jpg"
@@ -63,4 +69,3 @@ image_url = "https://example.com/banner2.jpg"
 title = "新菜上线"
 link = "recipe_id_here"
 link_type = "recipe"
-
