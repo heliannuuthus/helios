@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	"choosy-backend/internal/config"
+	"choosy-backend/internal/logger"
 
 	"gorm.io/gorm"
 )
@@ -30,6 +31,8 @@ func (s *Service) WxCode2Session(code string) (*WxCode2SessionResponse, error) {
 		return nil, errors.New("微信小程序 IdP 未配置")
 	}
 
+	logger.Infof("[Auth] 微信登录请求 - Code: %s...", code[:min(len(code), 10)])
+
 	params := url.Values{}
 	params.Set("appid", appid)
 	params.Set("secret", secret)
@@ -40,18 +43,30 @@ func (s *Service) WxCode2Session(code string) (*WxCode2SessionResponse, error) {
 
 	resp, err := http.Get(reqURL)
 	if err != nil {
+		logger.Errorf("[Auth] 请求微信接口失败: %v", err)
 		return nil, fmt.Errorf("请求微信接口失败: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var result WxCode2SessionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		logger.Errorf("[Auth] 解析微信响应失败: %v", err)
 		return nil, fmt.Errorf("解析微信响应失败: %w", err)
 	}
 
 	if result.ErrCode != 0 {
+		logger.Errorf("[Auth] 微信登录失败 - ErrCode: %d, ErrMsg: %s", result.ErrCode, result.ErrMsg)
 		return nil, fmt.Errorf("微信登录失败: %s", result.ErrMsg)
 	}
+
+	logger.Infof("[Auth] 微信登录成功 - T_OpenID: %s, UnionID: %s", 
+		result.OpenID, 
+		func() string {
+			if result.UnionID != "" {
+				return result.UnionID
+			}
+			return "(无)"
+		}())
 
 	return &result, nil
 }

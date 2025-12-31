@@ -305,11 +305,14 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 
 	if len(updates) > 0 {
 		if err := h.db.Model(&dbUser).Updates(updates).Error; err != nil {
+			logger.Errorf("更新用户资料失败 - OpenID: %s, Error: %v", identity.GetOpenID(), err)
 			c.JSON(http.StatusInternalServerError, gin.H{"detail": "更新失败"})
 			return
 		}
+		logger.Infof("[Auth] 用户资料更新成功 - OpenID: %s, Updates: %v", identity.GetOpenID(), updates)
 	}
 
+	// 重新查询以返回最新数据
 	h.db.First(&dbUser, "openid = ?", identity.GetOpenID())
 
 	c.JSON(http.StatusOK, UserProfile{

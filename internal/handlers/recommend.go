@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"choosy-backend/internal/auth"
 	"choosy-backend/internal/recommend"
 
 	"github.com/gin-gonic/gin"
@@ -47,7 +48,7 @@ type WeatherResponse struct {
 
 // GetRecommendations 获取智能推荐
 // @Summary 获取智能推荐菜谱
-// @Description 根据地理位置、天气、时间等因素智能推荐菜谱
+// @Description 根据地理位置、天气、时间等因素智能推荐菜谱（基于 LLM，支持用户个性化）
 // @Tags recommend
 // @Accept json
 // @Produce json
@@ -74,10 +75,17 @@ func (h *RecommendHandler) GetRecommendations(c *gin.Context) {
 		limit = 20
 	}
 
+	// 构建推荐上下文
 	ctx := &recommend.Context{
 		Latitude:  req.Latitude,
 		Longitude: req.Longitude,
 		Timestamp: req.Timestamp,
+	}
+
+	// 获取用户身份（如果已登录）
+	if user, exists := c.Get("user"); exists {
+		identity := user.(*auth.Identity)
+		ctx.UserID = identity.GetOpenID()
 	}
 
 	result, err := h.service.GetRecommendations(ctx, limit)
