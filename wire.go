@@ -8,6 +8,7 @@ import (
 	"choosy-backend/internal/database"
 	"choosy-backend/internal/favorite"
 	"choosy-backend/internal/handlers"
+	"choosy-backend/internal/history"
 	"choosy-backend/internal/recipe"
 	"choosy-backend/internal/recommend"
 	"choosy-backend/internal/tag"
@@ -22,11 +23,13 @@ var ProviderSet = wire.NewSet(
 	recipe.NewService,
 	auth.NewService,
 	favorite.NewService,
+	history.NewService,
 	tag.NewService,
 	recommend.NewService,
 	handlers.NewRecipeHandler,
 	handlers.NewAuthHandler,
 	handlers.NewFavoriteHandler,
+	handlers.NewHistoryHandler,
 	handlers.NewHomeHandler,
 	handlers.NewTagHandler,
 	handlers.NewRecommendHandler,
@@ -38,6 +41,7 @@ type App struct {
 	RecipeHandler    *handlers.RecipeHandler
 	AuthHandler      *handlers.AuthHandler
 	FavoriteHandler  *handlers.FavoriteHandler
+	HistoryHandler   *handlers.HistoryHandler
 	HomeHandler      *handlers.HomeHandler
 	TagHandler       *handlers.TagHandler
 	RecommendHandler *handlers.RecommendHandler

@@ -105,6 +105,16 @@ func main() {
 			favorites.DELETE("/:recipe_id", app.FavoriteHandler.RemoveFavorite)
 		}
 
+		// 浏览历史路由
+		history := api.Group("/history")
+		history.Use(middleware.RequireAuth())
+		{
+			history.GET("", app.HistoryHandler.GetViewHistory)
+			history.POST("", app.HistoryHandler.AddViewHistory)
+			history.DELETE("", app.HistoryHandler.ClearViewHistory)
+			history.DELETE("/:recipe_id", app.HistoryHandler.RemoveViewHistory)
+		}
+
 		// 首页路由
 		home := api.Group("/home")
 		{
