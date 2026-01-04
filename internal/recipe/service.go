@@ -1,22 +1,162 @@
 package recipe
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
 
 	"choosy-backend/internal/models"
 
+	"github.com/dgraph-io/ristretto"
 	"gorm.io/gorm"
 )
 
+const (
+	categoriesCacheKey = "categories"
+	cacheMaxCost       = 100 // 最大成本（分类数据很小，100 足够）
+	cacheNumCounters   = 1000 // 计数器数量（用于统计）
+	cacheBufferItems   = 64  // 缓冲区大小
+	refreshInterval    = 10 * time.Minute // 刷新间隔
+	refreshTimeout     = 5 * time.Second  // 刷新超时时间
+)
+
+// categoryCacheRefresher 分类缓存刷新器（内聚的刷新逻辑）
+type categoryCacheRefresher struct {
+	db            *gorm.DB
+	cache         *ristretto.Cache
+	refreshMutex  sync.Mutex
+	isRefreshing  bool
+	refreshTicker *time.Ticker
+	stopChan      chan struct{}
+	stopped       bool
+}
+
+// newCategoryCacheRefresher 创建分类缓存刷新器
+func newCategoryCacheRefresher(db *gorm.DB, cache *ristretto.Cache) *categoryCacheRefresher {
+	return &categoryCacheRefresher{
+		db:       db,
+		cache:    cache,
+		stopChan: make(chan struct{}),
+	}
+}
+
+// doRefresh 执行实际的刷新操作（同步）
+func (r *categoryCacheRefresher) doRefresh(ctx context.Context) error {
+	var categories []string
+	err := r.db.WithContext(ctx).Model(&models.Recipe{}).
+		Distinct("category").
+		Where("category IS NOT NULL AND category != ''").
+		Pluck("category", &categories).Error
+
+	if err == nil {
+		r.cache.SetWithTTL(categoriesCacheKey, categories, 1, 30*time.Minute)
+	}
+	return err
+}
+
+// refresh 异步刷新分类缓存（非阻塞）
+func (r *categoryCacheRefresher) refresh() {
+	if r.cache == nil {
+		return
+	}
+
+	// 检查是否正在刷新，避免并发刷新
+	r.refreshMutex.Lock()
+	if r.isRefreshing {
+		r.refreshMutex.Unlock()
+		return
+	}
+	r.isRefreshing = true
+	r.refreshMutex.Unlock()
+
+	// 异步执行刷新，不阻塞
+	go func() {
+		defer func() {
+			r.refreshMutex.Lock()
+			r.isRefreshing = false
+			r.refreshMutex.Unlock()
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+		defer cancel()
+		r.doRefresh(ctx)
+	}()
+}
+
+// start 启动定期刷新
+func (r *categoryCacheRefresher) start() {
+	if r.cache == nil {
+		return
+	}
+
+	// 首次同步刷新，确保启动时有数据
+	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	r.doRefresh(ctx)
+	cancel()
+
+	// 启动定期刷新协程
+	r.refreshTicker = time.NewTicker(refreshInterval)
+	go func() {
+		for {
+			select {
+			case <-r.refreshTicker.C:
+				r.refresh()
+			case <-r.stopChan:
+				return
+			}
+		}
+	}()
+}
+
+// stop 停止刷新（幂等）
+func (r *categoryCacheRefresher) stop() {
+	r.refreshMutex.Lock()
+	defer r.refreshMutex.Unlock()
+
+	if r.stopped {
+		return
+	}
+	r.stopped = true
+
+	if r.refreshTicker != nil {
+		r.refreshTicker.Stop()
+	}
+	close(r.stopChan)
+}
+
 // Service 菜谱服务
 type Service struct {
-	db *gorm.DB
+	db                    *gorm.DB
+	categoriesCache       *ristretto.Cache
+	categoryCacheRefresher *categoryCacheRefresher
 }
 
 // NewService 创建菜谱服务
 func NewService(db *gorm.DB) *Service {
-	return &Service{db: db}
+	s := &Service{db: db}
+	
+	// 初始化 Ristretto 缓存
+	cache, err := ristretto.NewCache(&ristretto.Config{
+		NumCounters: cacheNumCounters,
+		MaxCost:     cacheMaxCost,
+		BufferItems: cacheBufferItems,
+	})
+	if err != nil {
+		// 如果缓存初始化失败，继续运行但不使用缓存
+		return s
+	}
+	s.categoriesCache = cache
+	
+	// 等待缓存初始化完成
+	s.categoriesCache.Wait()
+	
+	// 创建并启动分类缓存刷新器
+	s.categoryCacheRefresher = newCategoryCacheRefresher(db, cache)
+	s.categoryCacheRefresher.start()
+	
+	return s
 }
 
 // CreateRecipe 创建菜谱
@@ -261,13 +401,29 @@ func (s *Service) DeleteRecipe(id string) error {
 	return s.db.Delete(&recipe).Error
 }
 
-// GetCategories 获取所有分类
+// GetCategories 获取所有分类（从缓存获取，缓存未命中时查询数据库）
 func (s *Service) GetCategories() ([]string, error) {
+	// 尝试从缓存获取
+	if s.categoriesCache != nil {
+		if cached, found := s.categoriesCache.Get(categoriesCacheKey); found {
+			if categories, ok := cached.([]string); ok {
+				return categories, nil
+			}
+		}
+	}
+
+	// 缓存未命中，查询数据库
 	var categories []string
 	err := s.db.Model(&models.Recipe{}).
 		Distinct("category").
 		Where("category IS NOT NULL AND category != ''").
 		Pluck("category", &categories).Error
+
+	if err == nil && s.categoriesCache != nil {
+		// 更新缓存，TTL=30分钟
+		s.categoriesCache.SetWithTTL(categoriesCacheKey, categories, 1, 30*time.Minute)
+	}
+
 	return categories, err
 }
 
