@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"choosy-backend/internal/auth"
+	"choosy-backend/internal/logger"
 	"choosy-backend/internal/recommend"
 
 	"github.com/gin-gonic/gin"
@@ -90,7 +91,8 @@ func (h *RecommendHandler) GetRecommendations(c *gin.Context) {
 
 	result, err := h.service.GetRecommendations(ctx, limit)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		logger.Errorf("[RecommendHandler] 获取推荐失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "服务器内部错误"})
 		return
 	}
 
