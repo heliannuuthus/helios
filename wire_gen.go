@@ -11,6 +11,7 @@ import (
 	"choosy-backend/internal/database"
 	"choosy-backend/internal/favorite"
 	"choosy-backend/internal/handlers"
+	"choosy-backend/internal/history"
 	"choosy-backend/internal/recipe"
 	"choosy-backend/internal/recommend"
 	"choosy-backend/internal/tag"
@@ -30,6 +31,8 @@ func InitializeApp() (*App, error) {
 	recipeHandler := handlers.NewRecipeHandler(db)
 	authHandler := handlers.NewAuthHandler(db)
 	favoriteHandler := handlers.NewFavoriteHandler(db)
+	historyService := history.NewService(db)
+	historyHandler := handlers.NewHistoryHandler(db)
 	homeHandler := handlers.NewHomeHandler(db)
 	tagHandler := handlers.NewTagHandler(db)
 	recommendHandler := handlers.NewRecommendHandler(db)
@@ -38,17 +41,19 @@ func InitializeApp() (*App, error) {
 		RecipeHandler:    recipeHandler,
 		AuthHandler:      authHandler,
 		FavoriteHandler:  favoriteHandler,
+		HistoryHandler:   historyHandler,
 		HomeHandler:      homeHandler,
 		TagHandler:       tagHandler,
 		RecommendHandler: recommendHandler,
 	}
+	_ = historyService
 	return app, nil
 }
 
 // wire.go:
 
 // ProviderSet 提供者集合
-var ProviderSet = wire.NewSet(database.Get, recipe.NewService, auth.NewService, favorite.NewService, tag.NewService, recommend.NewService, handlers.NewRecipeHandler, handlers.NewAuthHandler, handlers.NewFavoriteHandler, handlers.NewHomeHandler, handlers.NewTagHandler, handlers.NewRecommendHandler)
+var ProviderSet = wire.NewSet(database.Get, recipe.NewService, auth.NewService, favorite.NewService, history.NewService, tag.NewService, recommend.NewService, handlers.NewRecipeHandler, handlers.NewAuthHandler, handlers.NewFavoriteHandler, handlers.NewHistoryHandler, handlers.NewHomeHandler, handlers.NewTagHandler, handlers.NewRecommendHandler)
 
 // App 应用依赖容器
 type App struct {
@@ -56,6 +61,7 @@ type App struct {
 	RecipeHandler    *handlers.RecipeHandler
 	AuthHandler      *handlers.AuthHandler
 	FavoriteHandler  *handlers.FavoriteHandler
+	HistoryHandler   *handlers.HistoryHandler
 	HomeHandler      *handlers.HomeHandler
 	TagHandler       *handlers.TagHandler
 	RecommendHandler *handlers.RecommendHandler
