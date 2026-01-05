@@ -46,7 +46,7 @@ var (
 func GetClient() *Client {
 	clientOnce.Do(func() {
 		client = &Client{
-			apiKey:       config.GetString("amap.api_key"),
+			apiKey:       config.GetString("amap.api-key"),
 			weatherCache: make(map[string]*cachedWeather),
 		}
 	})
@@ -56,7 +56,7 @@ func GetClient() *Client {
 // GetLocation 逆地理编码
 func (c *Client) GetLocation(lat, lng float64) (*Location, error) {
 	if c.apiKey == "" {
-		return nil, fmt.Errorf("未配置 amap.api_key")
+		return nil, fmt.Errorf("未配置 amap.api-key")
 	}
 
 	url := fmt.Sprintf("https://restapi.amap.com/v3/geocode/regeo?location=%.6f,%.6f&key=%s", lng, lat, c.apiKey)
@@ -109,7 +109,7 @@ func (c *Client) GetLocation(lat, lng float64) (*Location, error) {
 // GetWeatherByAdcode 根据 adcode 获取天气
 func (c *Client) GetWeatherByAdcode(adcode string) (*Weather, error) {
 	if c.apiKey == "" {
-		return nil, fmt.Errorf("未配置 amap.api_key")
+		return nil, fmt.Errorf("未配置 amap.api-key")
 	}
 
 	url := fmt.Sprintf("https://restapi.amap.com/v3/weather/weatherInfo?city=%s&key=%s&extensions=base", adcode, c.apiKey)
