@@ -38,7 +38,8 @@ jobs:
               # tag 推送，使用 tag 名称
               IMAGE_TAG="${HEAD_BRANCH}"
             else
-              # 分支推送，使用 latest
+              # 分支推送，使用 latest（实际镜像 tag 为 {version}-alpha-{run}-{commit}）
+              # 部署时使用 latest，因为 docker.yml 同时推送了 latest tag
               IMAGE_TAG="latest"
             fi
           else
