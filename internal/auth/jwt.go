@@ -42,9 +42,9 @@ func GetJWSKey() (jwk.Key, error) {
 		return jwsKey, nil
 	}
 
-	signKeyStr := config.GetString("auth.token.sign_key")
+	signKeyStr := config.GetString("auth.token.sign-key")
 	if signKeyStr == "" {
-		return nil, errors.New("auth.token.sign_key 未配置")
+		return nil, errors.New("auth.token.sign-key 未配置")
 	}
 
 	// 从 base64url 解码 JWK JSON
@@ -73,9 +73,9 @@ func GetJWEKey() (jwk.Key, error) {
 		return jweKey, nil
 	}
 
-	encKeyStr := config.GetString("auth.token.enc_key")
+	encKeyStr := config.GetString("auth.token.enc-key")
 	if encKeyStr == "" {
-		return nil, errors.New("auth.token.enc_key 未配置")
+		return nil, errors.New("auth.token.enc-key 未配置")
 	}
 
 	// 从 base64url 解码 JWK JSON
@@ -99,7 +99,7 @@ func GetJWEKey() (jwk.Key, error) {
 }
 
 func cleanupOldRefreshTokens(db *gorm.DB, openid string) {
-	maxTokens := config.GetInt("auth.maxRefreshToken")
+	maxTokens := config.GetInt("auth.max-refresh-token")
 
 	var tokens []models.RefreshToken
 	db.Where("openid = ?", openid).Order("created_at DESC").Find(&tokens)
@@ -162,7 +162,7 @@ func createAccessToken(identity *Identity) (string, error) {
 	}
 
 	// 2. 创建 JWT claims
-	expiresIn := config.GetInt("auth.expiresIn")
+	expiresIn := config.GetInt("auth.expires-in")
 	token := jwt.New()
 
 	_ = token.Set(jwt.IssuerKey, config.GetString("auth.issuer"))
@@ -274,7 +274,7 @@ func GenerateTokenPair(db *gorm.DB, tOpenID, nickname, avatar string) (*TokenPai
 	}
 
 	refreshToken := generateRefreshToken()
-	refreshExpiresIn := config.GetInt("auth.refreshExpiresIn")
+	refreshExpiresIn := config.GetInt("auth.refresh-expires-in")
 	expiresAt := now.Add(time.Duration(refreshExpiresIn) * 24 * time.Hour)
 
 	cleanupOldRefreshTokens(db, user.OpenID)
@@ -293,13 +293,13 @@ func GenerateTokenPair(db *gorm.DB, tOpenID, nickname, avatar string) (*TokenPai
 	}
 
 	logger.Infof("[Auth] Token 对生成成功 - OpenID: %s, T_OpenID: %s, ExpiresIn: %ds",
-		user.OpenID, user.TOpenID, config.GetInt("auth.expiresIn"))
+		user.OpenID, user.TOpenID, config.GetInt("auth.expires-in"))
 
 	return &TokenPair{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		TokenType:    "Bearer",
-		ExpiresIn:    config.GetInt("auth.expiresIn"),
+		ExpiresIn:    config.GetInt("auth.expires-in"),
 	}, nil
 }
 
@@ -397,7 +397,7 @@ func RefreshTokens(db *gorm.DB, refreshToken string) (*TokenPair, error) {
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		TokenType:    "Bearer",
-		ExpiresIn:    config.GetInt("auth.expiresIn"),
+		ExpiresIn:    config.GetInt("auth.expires-in"),
 	}, nil
 }
 

@@ -15,36 +15,35 @@ import (
 
 // RecommendHandler 推荐处理器
 type RecommendHandler struct {
-	service *recommend.Service
+	service     *recommend.Service
+	rateLimiter *recommend.DailyRateLimiter
 }
 
 // NewRecommendHandler 创建推荐处理器
 func NewRecommendHandler(db *gorm.DB) *RecommendHandler {
 	return &RecommendHandler{
-		service: recommend.NewService(db),
+		service:     recommend.NewService(db),
+		rateLimiter: recommend.NewDailyRateLimiter(10), // 每日最多 10 次
 	}
 }
 
 type RecommendRequest struct {
-	Latitude  float64 `json:"latitude" binding:"required"`
-	Longitude float64 `json:"longitude" binding:"required"`
-	Timestamp int64   `json:"timestamp"`
+	Latitude   float64  `json:"latitude" binding:"required"`
+	Longitude  float64  `json:"longitude" binding:"required"`
+	Timestamp  int64    `json:"timestamp"`
+	ExcludeIDs []string `json:"exclude_ids,omitempty"` // 排除的菜谱 ID（换一批时传入已推荐的）
+}
+
+// RecommendRecipeItem 推荐菜品项（包含推荐理由）
+type RecommendRecipeItem struct {
+	RecipeListItem
+	Reason string `json:"reason"` // 该菜品的推荐理由
 }
 
 type RecommendResponse struct {
-	Recipes     []RecipeListItem `json:"recipes"`
-	Reason      string           `json:"reason"`
-	Weather     *WeatherResponse `json:"weather,omitempty"`
-	MealTime    string           `json:"meal_time"`
-	Season      string           `json:"season"`
-	Temperature string           `json:"temperature"`
-}
-
-type WeatherResponse struct {
-	Temperature float64 `json:"temperature"`
-	Humidity    int     `json:"humidity"`
-	Weather     string  `json:"weather"`
-	City        string  `json:"city,omitempty"`
+	Recipes   []RecommendRecipeItem `json:"recipes"`
+	Summary   string                `json:"summary"`   // LLM 生成的一句话整体评价
+	Remaining int                   `json:"remaining"` // 今日剩余推荐次数
 }
 
 // GetRecommendations 获取智能推荐
@@ -78,15 +77,26 @@ func (h *RecommendHandler) GetRecommendations(c *gin.Context) {
 
 	// 构建推荐上下文
 	ctx := &recommend.Context{
-		Latitude:  req.Latitude,
-		Longitude: req.Longitude,
-		Timestamp: req.Timestamp,
+		Latitude:   req.Latitude,
+		Longitude:  req.Longitude,
+		Timestamp:  req.Timestamp,
+		ExcludeIDs: req.ExcludeIDs,
 	}
 
 	// 获取用户身份（如果已登录）
 	if user, exists := c.Get("user"); exists {
 		identity := user.(*auth.Identity)
 		ctx.UserID = identity.GetOpenID()
+	}
+
+	// 检查每日推荐次数限制
+	remaining, allowed := h.rateLimiter.Check(ctx.UserID)
+	if !allowed {
+		c.JSON(http.StatusTooManyRequests, gin.H{
+			"detail":    "今日推荐次数已用完，明天再来吧",
+			"remaining": 0,
+		})
+		return
 	}
 
 	result, err := h.service.GetRecommendations(ctx, limit)
@@ -96,33 +106,28 @@ func (h *RecommendHandler) GetRecommendations(c *gin.Context) {
 		return
 	}
 
-	response := RecommendResponse{
-		Recipes:     make([]RecipeListItem, len(result.Recipes)),
-		Reason:      result.Reason,
-		MealTime:    result.MealTime,
-		Season:      result.Season,
-		Temperature: result.Temperature,
-	}
+	// 推荐成功，增加计数
+	h.rateLimiter.Increment(ctx.UserID)
 
-	if result.Weather != nil {
-		response.Weather = &WeatherResponse{
-			Temperature: result.Weather.Temperature,
-			Humidity:    result.Weather.Humidity,
-			Weather:     result.Weather.Weather,
-			City:        result.Weather.City,
-		}
+	response := RecommendResponse{
+		Recipes:   make([]RecommendRecipeItem, len(result.Recipes)),
+		Summary:   result.Summary,
+		Remaining: remaining - 1, // 本次请求后的剩余次数
 	}
 
 	for i, r := range result.Recipes {
-		response.Recipes[i] = RecipeListItem{
-			ID:               r.RecipeID,
-			Name:             r.Name,
-			Description:      r.Description,
-			Category:         r.Category,
-			Difficulty:       r.Difficulty,
-			Tags:             GroupTags(r.Tags),
-			ImagePath:        r.GetImagePath(),
-			TotalTimeMinutes: r.TotalTimeMinutes,
+		response.Recipes[i] = RecommendRecipeItem{
+			RecipeListItem: RecipeListItem{
+				ID:               r.Recipe.RecipeID,
+				Name:             r.Recipe.Name,
+				Description:      r.Recipe.Description,
+				Category:         r.Recipe.Category,
+				Difficulty:       r.Recipe.Difficulty,
+				Tags:             GroupTags(r.Recipe.Tags),
+				ImagePath:        r.Recipe.GetImagePath(),
+				TotalTimeMinutes: r.Recipe.TotalTimeMinutes,
+			},
+			Reason: r.Reason,
 		}
 	}
 

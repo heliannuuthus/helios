@@ -104,7 +104,7 @@ func (h *HomeHandler) loadBannersFromConfig() []BannerItem {
 			ID: getString(bannerMap, "id", generateBannerID(i)),
 		}
 
-		if imageURL := getString(bannerMap, "image_url", ""); imageURL != "" {
+		if imageURL := getString(bannerMap, "image-url", ""); imageURL != "" {
 			banner.ImageURL = imageURL
 		}
 		if title := getString(bannerMap, "title", ""); title != "" {
@@ -113,7 +113,7 @@ func (h *HomeHandler) loadBannersFromConfig() []BannerItem {
 		if link := getString(bannerMap, "link", ""); link != "" {
 			banner.Link = link
 		}
-		if linkType := getString(bannerMap, "link_type", "none"); linkType != "" {
+		if linkType := getString(bannerMap, "link-type", "none"); linkType != "" {
 			banner.LinkType = linkType
 		}
 

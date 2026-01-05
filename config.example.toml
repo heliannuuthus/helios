@@ -25,17 +25,17 @@ allow_headers = ["*"]
 
 # 阿里通义千问 API 配置 (https://dashscope.console.aliyun.com/)
 [dashscope]
-api_key = ""
+api-key = ""
 
 # OpenRouter API 配置 (https://openrouter.ai/keys)
 [openrouter]
-api_key = ""  # OpenRouter API Key，可使用免费模型
-model = "deepseek/deepseek-chat-v3-0324:free"  # 免费模型，其他选项：deepseek/deepseek-r1-0528:free, google/gemma-3-27b-it:free
+api-key = ""  # OpenRouter API Key，可使用免费模型
+model = "xiaomi/mimo-v2-flash:free"  # MiMo-V2-Flash 免费模型，支持工具调用，推荐用于 agent 场景
 
 # 高德地图 API 配置 (https://console.amap.com/)
 # 用于：1. 逆地理编码（经纬度转地址）2. 天气查询
 [amap]
-api_key = ""  # 高德地图 Web 服务 API Key
+api-key = ""  # 高德地图 Web 服务 API Key
 
 # 微信小程序配置 (https://mp.weixin.qq.com/)
 [idps.wxmp]
@@ -46,26 +46,26 @@ secret = ""  # 微信小程序 Secret
 [auth]
 issuer = "choosy.heliannuuthus.com"
 audience = "choosy"
-expiresIn = 7200           # access_token 过期时间(秒)，2小时
-refreshExpiresIn = 365     # refresh_token 过期时间(天)，1年
-maxRefreshToken = 10       # 每用户最大 refresh_token 数
+expires-in = 7200           # access_token 过期时间(秒)，2小时
+refresh-expires-in = 365     # refresh_token 过期时间(天)，1年
+max-refresh-token = 10       # 每用户最大 refresh_token 数
 
 # JWT 密钥配置（使用 python3 scripts/genkeys.py 生成）
 [auth.token]
-sign_key = ""  # Ed25519 签名密钥（base64url 编码的 JWK JSON）
-enc_key = ""   # A256GCM 加密密钥（base64url 编码的 JWK JSON）
+sign-key = ""  # Ed25519 签名密钥（base64url 编码的 JWK JSON）
+enc-key = ""   # A256GCM 加密密钥（base64url 编码的 JWK JSON）
 
 # 首页轮播图配置
 [[home.banners]]
 id = "banner_1"
-image_url = "https://example.com/banner1.jpg"
+image-url = "https://example.com/banner1.jpg"
 title = "今日推荐"
 link = ""
-link_type = "none"  # recipe, url, none
+link-type = "none"  # recipe, url, none
 
 [[home.banners]]
 id = "banner_2"
-image_url = "https://example.com/banner2.jpg"
+image-url = "https://example.com/banner2.jpg"
 title = "新菜上线"
 link = "recipe_id_here"
-link_type = "recipe"
+link-type = "recipe"
