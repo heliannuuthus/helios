@@ -1,6 +1,10 @@
 name: Deploy
 
 on:
+  workflow_run:
+    workflows: ["Docker Build & Push"]
+    types: [completed]
+    branches: [main, master]
   push:
     tags:
       - 'v*'
@@ -13,6 +17,10 @@ on:
         options:
           - staging
           - production
+      image_tag:
+        description: 'Image tag to deploy (leave empty for latest)'
+        required: false
+        type: string
 
 env:
   IMAGE_NAME: choosy-backend
@@ -20,41 +28,41 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'push' && 'production' || inputs.environment }}
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    environment: ${{ github.event_name == 'push' && 'production' || inputs.environment || 'production' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set environment
+      - name: Set environment and image tag
         id: env
         run: |
+          # 确定环境
           if [ "${{ github.event_name }}" = "push" ]; then
-            echo "env=production" >> $GITHUB_OUTPUT
-            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            ENV="production"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ inputs.environment }}"
           else
-            echo "env=${{ inputs.environment }}" >> $GITHUB_OUTPUT
-            echo "tag=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+            ENV="production"
           fi
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.REG_ENDPOINT }}
-          username: ${{ secrets.REG_USERNAME }}
-          password: ${{ secrets.REG_PASSWORD }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ secrets.REG_ENDPOINT }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.env }}
-            ${{ secrets.REG_ENDPOINT }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          echo "env=${ENV}" >> $GITHUB_OUTPUT
+          
+          # 确定镜像 tag
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            # 手动指定的 tag
+            IMAGE_TAG="${{ inputs.image_tag }}"
+          elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # Tag 推送时，使用 docker.yml 生成的格式
+            TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+            COMMIT_SHA=$(git rev-parse --short HEAD)
+            IMAGE_TAG="${TIMESTAMP}-${COMMIT_SHA}"
+          else
+            # 默认使用 latest
+            IMAGE_TAG="latest"
+          fi
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Deploy env: ${ENV}, image tag: ${IMAGE_TAG}"
 
       - name: Deploy to server
         uses: appleboy/ssh-action@v1.2.0
@@ -63,22 +71,37 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
-            docker login ${{ secrets.REG_ENDPOINT }} -u ${{ secrets.REG_USERNAME }} -p ${{ secrets.REG_PASSWORD }}
-            docker pull ${{ secrets.REG_ENDPOINT }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.env }}
-            docker stop choosy-backend-${{ steps.env.outputs.env }} || true
-            docker rm choosy-backend-${{ steps.env.outputs.env }} || true
+            set -e
+            
+            # 登录镜像仓库
+            docker login ${{ vars.REG_ENDPOINT }} -u ${{ secrets.REG_USERNAME }} -p ${{ secrets.REG_PASSWORD }}
+            
+            # 拉取镜像
+            IMAGE="${{ vars.REG_ENDPOINT }}/${{ secrets.REG_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.image_tag }}"
+            echo "Pulling image: ${IMAGE}"
+            docker pull ${IMAGE}
+            
+            # 停止并删除旧容器
+            CONTAINER_NAME="choosy-backend-${{ steps.env.outputs.env }}"
+            docker stop ${CONTAINER_NAME} 2>/dev/null || true
+            docker rm ${CONTAINER_NAME} 2>/dev/null || true
+            
+            # 启动新容器
+            PORT=${{ steps.env.outputs.env == 'production' && '18000' || '18001' }}
             docker run -d \
-              --name choosy-backend-${{ steps.env.outputs.env }} \
+              --name ${CONTAINER_NAME} \
               --restart unless-stopped \
-              -p ${{ steps.env.outputs.env == 'production' && '18000' || '18001' }}:18000 \
+              -p ${PORT}:18000 \
               -v /opt/choosy/${{ steps.env.outputs.env }}/config.toml:/app/config.toml \
               -v /opt/choosy/${{ steps.env.outputs.env }}/db:/app/db \
-              ${{ secrets.REG_ENDPOINT }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.env.outputs.env }}
-        env:
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+              ${IMAGE}
+            
+            echo "Container ${CONTAINER_NAME} started on port ${PORT}"
 
       - name: Health check
         run: |
           sleep 10
           PORT=${{ steps.env.outputs.env == 'production' && '18000' || '18001' }}
+          echo "Health check: http://${{ secrets.DEPLOY_HOST }}:${PORT}/health"
           curl -f http://${{ secrets.DEPLOY_HOST }}:${PORT}/health || exit 1
+          echo "Health check passed!"
