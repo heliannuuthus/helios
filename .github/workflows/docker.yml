@@ -30,18 +30,19 @@ jobs:
       - name: Generate image tags
         id: meta
         run: |
-          # 格式：YYYYMMDD-HHMMSS
-          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
           # 短 commit hash
           COMMIT_SHA=$(git rev-parse --short HEAD)
+          # pipeline id (GitHub Actions run number)
+          RUN_NUMBER=${{ github.run_number }}
           
           if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            # tag push 时使用版本号
+            # tag push 时直接使用版本号
             VERSION=${GITHUB_REF#refs/tags/}
             TAG="${VERSION}"
           else
-            # branch push 时使用时间戳-commit
-            TAG="${TIMESTAMP}-${COMMIT_SHA}"
+            # branch push 时使用格式：{latest_tag}-alpha-{run_number}-{commit_hash}
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            TAG="${LATEST_TAG}-alpha-${RUN_NUMBER}-${COMMIT_SHA}"
             VERSION="${TAG}"
           fi
           
