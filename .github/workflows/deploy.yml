@@ -88,22 +88,22 @@ jobs:
             echo "=== Deploying ${CONTAINER_NAME} ==="
             echo "Image: ${IMAGE}"
             
-            # 登录镜像仓库（nerdctl for containerd）
-            echo "${REG_PASSWORD}" | nerdctl login ${REG_VPC_ENDPOINT} -u ${REG_USERNAME} --password-stdin
+            # 登录镜像仓库（nerdctl for containerd，需要 sudo）
+            echo "${REG_PASSWORD}" | sudo nerdctl login ${REG_VPC_ENDPOINT} -u ${REG_USERNAME} --password-stdin
             
             # 拉取镜像
             echo "Pulling image..."
-            nerdctl pull ${IMAGE}
+            sudo nerdctl pull ${IMAGE}
             
             # 停止并删除旧容器
             echo "Stopping old container..."
-            nerdctl stop ${CONTAINER_NAME} 2>/dev/null || true
-            nerdctl rm ${CONTAINER_NAME} 2>/dev/null || true
+            sudo nerdctl stop ${CONTAINER_NAME} 2>/dev/null || true
+            sudo nerdctl rm ${CONTAINER_NAME} 2>/dev/null || true
             
             # 启动新容器
             PORT=$([[ "${ENV}" == "production" ]] && echo "18000" || echo "18001")
             echo "Starting new container on port ${PORT}..."
-            nerdctl run -d \
+            sudo nerdctl run -d \
               --name ${CONTAINER_NAME} \
               --restart unless-stopped \
               -p ${PORT}:18000 \
@@ -112,7 +112,7 @@ jobs:
               ${IMAGE}
             
             echo "=== Container ${CONTAINER_NAME} started on port ${PORT} ==="
-            nerdctl ps | grep ${CONTAINER_NAME}
+            sudo nerdctl ps | grep ${CONTAINER_NAME}
 
       - name: Health check
         run: |
