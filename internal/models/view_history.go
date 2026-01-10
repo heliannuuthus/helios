@@ -18,5 +18,5 @@ type ViewHistory struct {
 }
 
 func (ViewHistory) TableName() string {
-	return "view_history"
+	return "t_view_history"
 }

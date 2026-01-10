@@ -42,9 +42,9 @@ func GetJWSKey() (jwk.Key, error) {
 		return jwsKey, nil
 	}
 
-	signKeyStr := config.GetString("auth.token.sign-key")
+	signKeyStr := config.GetString("kms.token.sign-key")
 	if signKeyStr == "" {
-		return nil, errors.New("auth.token.sign-key 未配置")
+		return nil, errors.New("kms.token.sign-key 未配置")
 	}
 
 	// 从 base64url 解码 JWK JSON
@@ -73,9 +73,9 @@ func GetJWEKey() (jwk.Key, error) {
 		return jweKey, nil
 	}
 
-	encKeyStr := config.GetString("auth.token.enc-key")
+	encKeyStr := config.GetString("kms.token.enc-key")
 	if encKeyStr == "" {
-		return nil, errors.New("auth.token.enc-key 未配置")
+		return nil, errors.New("kms.token.enc-key 未配置")
 	}
 
 	// 从 base64url 解码 JWK JSON
@@ -143,10 +143,10 @@ func generateRefreshToken() string {
 }
 
 // createAccessToken 创建 access token（JWE 嵌套 JWS）
-func createAccessToken(identity *Identity) (string, error) {
+func createAccessToken(identity *Identity, idp string) (string, error) {
 	now := time.Now()
 
-	logger.Infof("[Auth] 开始生成 Access Token - OpenID: %s", identity.OpenID)
+	logger.Infof("[Auth] 开始生成 Access Token - OpenID: %s, IDP: %s", identity.OpenID, idp)
 
 	// 1. 获取密钥
 	signKey, err := GetJWSKey()
@@ -166,7 +166,9 @@ func createAccessToken(identity *Identity) (string, error) {
 	token := jwt.New()
 
 	_ = token.Set(jwt.IssuerKey, config.GetString("auth.issuer"))
-	_ = token.Set(jwt.AudienceKey, config.GetString("auth.audience"))
+	// aud 格式: issuer:idp，如 choosy:wechat:mp
+	audience := fmt.Sprintf("%s:%s", config.GetString("auth.issuer"), idp)
+	_ = token.Set(jwt.AudienceKey, audience)
 	_ = token.Set(jwt.IssuedAtKey, now.Unix())
 	_ = token.Set(jwt.ExpirationKey, now.Add(time.Duration(expiresIn)*time.Second).Unix())
 
@@ -176,7 +178,6 @@ func createAccessToken(identity *Identity) (string, error) {
 
 	// 将 identity 信息作为自定义 claims
 	_ = token.Set("openid", identity.OpenID)
-	_ = token.Set("t_openid", identity.TOpenID)
 	_ = token.Set("nickname", identity.Nickname)
 	_ = token.Set("avatar", identity.Avatar)
 
@@ -200,74 +201,176 @@ func createAccessToken(identity *Identity) (string, error) {
 		return "", fmt.Errorf("JWT 加密失败: %w", err)
 	}
 
-	logger.Infof("[Auth] Access Token 生成成功 - OpenID: %s, Kid: %s, Size: %d bytes",
-		identity.OpenID, kid, len(encryptedToken))
+	logger.Infof("[Auth] Access Token 生成成功 - OpenID: %s, Aud: %s, Kid: %s, Size: %d bytes",
+		identity.OpenID, audience, kid, len(encryptedToken))
 
 	return string(encryptedToken), nil
 }
 
-func upsertUser(db *gorm.DB, tOpenID, nickname, avatar string) (*models.User, error) {
-	logger.Infof("[Auth] 开始查询/创建用户 - T_OpenID: %s, Nickname: %s", tOpenID, nickname)
+// LoginParams 登录参数
+type LoginParams struct {
+	IDP      string  // 身份提供方，如 wechat:mp
+	TOpenID  string  // 第三方 openid
+	UnionID  string  // unionid（可选）
+	Nickname string  // 昵称
+	Avatar   string  // 头像
+	RawData  *string // 原始授权数据（可选）
+}
 
-	var user models.User
-	err := db.Where("t_openid = ?", tOpenID).First(&user).Error
+// selectOrCreateUser 查找或创建用户（支持 unionid 和手机号关联）
+func selectOrCreateUser(db *gorm.DB, params *LoginParams) (*models.User, error) {
+	logger.Infof("[Auth] 开始查询/创建用户 - IDP: %s, T_OpenID: %s, UnionID: %s",
+		params.IDP, params.TOpenID, params.UnionID)
+
+	now := time.Now()
+
+	// 1. 先查当前 idp + t_openid 是否存在
+	var identity models.UserIdentity
+	err := db.Where("idp = ? AND t_openid = ?", params.IDP, params.TOpenID).First(&identity).Error
 
 	if err == nil {
-		logger.Infof("[Auth] 找到现有用户 - OpenID: %s, T_OpenID: %s, Nickname: %s, CreatedAt: %s",
-			user.OpenID, user.TOpenID, user.Nickname, user.CreatedAt.Format("2006-01-02 15:04:05"))
+		// 找到了，直接查用户
+		var user models.User
+		if err := db.Where("openid = ?", identity.OpenID).First(&user).Error; err != nil {
+			logger.Errorf("[Auth] 用户身份存在但用户不存在 - OpenID: %s, Error: %v", identity.OpenID, err)
+			return nil, err
+		}
+
+		// 更新最后登录时间
+		db.Model(&user).Update("last_login_at", now)
+
+		logger.Infof("[Auth] 找到现有用户 - OpenID: %s, IDP: %s, Nickname: %s",
+			user.OpenID, params.IDP, user.Nickname)
 		return &user, nil
 	}
 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		logger.Errorf("[Auth] 查询用户失败 - T_OpenID: %s, Error: %v", tOpenID, err)
+		logger.Errorf("[Auth] 查询用户身份失败 - IDP: %s, T_OpenID: %s, Error: %v",
+			params.IDP, params.TOpenID, err)
 		return nil, err
 	}
 
-	logger.Infof("[Auth] 未找到用户，开始创建新用户 - T_OpenID: %s", tOpenID)
-
-	now := time.Now()
-	user = models.User{
-		OpenID:    generateID(),
-		TOpenID:   tOpenID,
-		Nickname:  nickname,
-		Avatar:    avatar,
-		CreatedAt: now,
-		UpdatedAt: now,
+	// 2. 没找到，如果有 unionid，尝试通过 unionid 关联
+	var existingOpenID string
+	if params.UnionID != "" {
+		unionIDP := getUnionIDP(params.IDP)
+		var unionIdentity models.UserIdentity
+		err := db.Where("idp = ? AND t_openid = ?", unionIDP, params.UnionID).First(&unionIdentity).Error
+		if err == nil {
+			existingOpenID = unionIdentity.OpenID
+			logger.Infof("[Auth] 通过 UnionID 找到已有用户 - OpenID: %s, UnionIDP: %s",
+				existingOpenID, unionIDP)
+		}
 	}
 
-	if err := db.Create(&user).Error; err != nil {
-		logger.Errorf("[Auth] 创建用户失败 - T_OpenID: %s, Error: %v", tOpenID, err)
+	// 3. 开始事务：创建用户或绑定身份
+	var user models.User
+	err = db.Transaction(func(tx *gorm.DB) error {
+		if existingOpenID != "" {
+			// 已有用户，只需绑定新身份
+			if err := tx.Where("openid = ?", existingOpenID).First(&user).Error; err != nil {
+				return err
+			}
+		} else {
+			// 创建新用户
+			user = models.User{
+				OpenID:      generateID(),
+				Nickname:    params.Nickname,
+				Avatar:      params.Avatar,
+				Gender:      0,
+				Status:      0,
+				LastLoginAt: &now,
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			}
+			if err := tx.Create(&user).Error; err != nil {
+				return err
+			}
+			logger.Infof("[Auth] 创建新用户 - OpenID: %s, Nickname: %s", user.OpenID, user.Nickname)
+		}
+
+		// 插入当前 idp 身份
+		newIdentity := models.UserIdentity{
+			OpenID:    user.OpenID,
+			IDP:       params.IDP,
+			TOpenID:   params.TOpenID,
+			RawData:   params.RawData,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		if err := tx.Create(&newIdentity).Error; err != nil {
+			return err
+		}
+		logger.Infof("[Auth] 绑定身份 - OpenID: %s, IDP: %s, T_OpenID: %s",
+			user.OpenID, params.IDP, params.TOpenID)
+
+		// 如果有 unionid 且之前没有记录，也插入
+		if params.UnionID != "" && existingOpenID == "" {
+			unionIDP := getUnionIDP(params.IDP)
+			unionIdentity := models.UserIdentity{
+				OpenID:    user.OpenID,
+				IDP:       unionIDP,
+				TOpenID:   params.UnionID,
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			if err := tx.Create(&unionIdentity).Error; err != nil {
+				return err
+			}
+			logger.Infof("[Auth] 绑定 UnionID - OpenID: %s, IDP: %s, UnionID: %s",
+				user.OpenID, unionIDP, params.UnionID)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Errorf("[Auth] 创建用户/绑定身份失败 - Error: %v", err)
 		return nil, err
 	}
 
-	logger.Infof("[Auth] 创建新用户成功 - OpenID: %s, T_OpenID: %s, Nickname: %s",
-		user.OpenID, user.TOpenID, user.Nickname)
+	// 更新最后登录时间（如果是已有用户绑定新身份）
+	if existingOpenID != "" {
+		db.Model(&user).Update("last_login_at", now)
+	}
 
 	return &user, nil
 }
 
+// getUnionIDP 根据 idp 获取对应的 unionid idp
+func getUnionIDP(idp string) string {
+	switch idp {
+	case IDPWechatMP, IDPWechatOA:
+		return IDPWechatUnionID
+	case IDPDouyinMP:
+		return IDPDouyinUnionID
+	default:
+		return idp + ":unionid"
+	}
+}
+
 // GenerateTokenPair 生成 access_token 和 refresh_token
-func GenerateTokenPair(db *gorm.DB, tOpenID, nickname, avatar string) (*TokenPair, error) {
-	logger.Infof("[Auth] 开始生成 Token 对 - T_OpenID: %s", tOpenID)
+func GenerateTokenPair(db *gorm.DB, params *LoginParams) (*TokenPair, error) {
+	logger.Infof("[Auth] 开始生成 Token 对 - IDP: %s, T_OpenID: %s", params.IDP, params.TOpenID)
 
 	now := time.Now()
 
-	user, err := upsertUser(db, tOpenID, nickname, avatar)
+	user, err := selectOrCreateUser(db, params)
 	if err != nil {
-		logger.Errorf("[Auth] 保存用户信息失败 - T_OpenID: %s, Error: %v", tOpenID, err)
+		logger.Errorf("[Auth] 保存用户信息失败 - IDP: %s, T_OpenID: %s, Error: %v",
+			params.IDP, params.TOpenID, err)
 		return nil, fmt.Errorf("保存用户信息失败: %w", err)
 	}
 
 	identity := &Identity{
 		OpenID:   user.OpenID,
-		TOpenID:  user.TOpenID,
 		Nickname: user.Nickname,
 		Avatar:   user.Avatar,
 	}
 
-	logger.Infof("[Auth] 准备生成 Access Token - OpenID: %s, T_OpenID: %s", user.OpenID, user.TOpenID)
+	logger.Infof("[Auth] 准备生成 Access Token - OpenID: %s, IDP: %s", user.OpenID, params.IDP)
 
-	accessToken, err := createAccessToken(identity)
+	accessToken, err := createAccessToken(identity, params.IDP)
 	if err != nil {
 		logger.Errorf("[Auth] 生成 Access Token 失败 - OpenID: %s, Error: %v", user.OpenID, err)
 		return nil, fmt.Errorf("生成 access_token 失败: %w", err)
@@ -292,8 +395,8 @@ func GenerateTokenPair(db *gorm.DB, tOpenID, nickname, avatar string) (*TokenPai
 		return nil, fmt.Errorf("存储 refresh_token 失败: %w", err)
 	}
 
-	logger.Infof("[Auth] Token 对生成成功 - OpenID: %s, T_OpenID: %s, ExpiresIn: %ds",
-		user.OpenID, user.TOpenID, config.GetInt("auth.expires-in"))
+	logger.Infof("[Auth] Token 对生成成功 - OpenID: %s, Aud: %s:%s, ExpiresIn: %ds",
+		user.OpenID, config.GetString("auth.issuer"), params.IDP, config.GetInt("auth.expires-in"))
 
 	return &TokenPair{
 		AccessToken:  accessToken,
@@ -346,26 +449,25 @@ func VerifyAccessToken(tokenString string) (*Identity, error) {
 	logger.Infof("[Auth] JWT 验证成功 - Issuer: %s, JTI: %s", issuer, jti)
 
 	// 4. 提取 identity 信息
-	var openid, tOpenid, nickname, avatar string
+	var openid, nickname, avatar string
 	_ = token.Get("openid", &openid)
-	_ = token.Get("t_openid", &tOpenid)
 	_ = token.Get("nickname", &nickname)
 	_ = token.Get("avatar", &avatar)
 
 	identity := &Identity{
 		OpenID:   openid,
-		TOpenID:  tOpenid,
 		Nickname: nickname,
 		Avatar:   avatar,
 	}
 
-	logger.Infof("[Auth] Token 验证成功 - OpenID: %s, T_OpenID: %s", identity.OpenID, identity.TOpenID)
+	aud, _ := token.Audience()
+	logger.Infof("[Auth] Token 验证成功 - OpenID: %s, Aud: %v", identity.OpenID, aud)
 
 	return identity, nil
 }
 
-// RefreshTokens 刷新 token
-func RefreshTokens(db *gorm.DB, refreshToken string) (*TokenPair, error) {
+// RefreshTokens 刷新 token（刷新时保持原 IDP）
+func RefreshTokens(db *gorm.DB, refreshToken string, idp string) (*TokenPair, error) {
 	var dbToken models.RefreshToken
 	if err := db.Where("token = ?", refreshToken).First(&dbToken).Error; err != nil {
 		return nil, errors.New("refresh_token 无效")
@@ -383,12 +485,11 @@ func RefreshTokens(db *gorm.DB, refreshToken string) (*TokenPair, error) {
 
 	identity := &Identity{
 		OpenID:   user.OpenID,
-		TOpenID:  user.TOpenID,
 		Nickname: user.Nickname,
 		Avatar:   user.Avatar,
 	}
 
-	accessToken, err := createAccessToken(identity)
+	accessToken, err := createAccessToken(identity, idp)
 	if err != nil {
 		return nil, fmt.Errorf("生成 access_token 失败: %w", err)
 	}

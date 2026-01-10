@@ -3,7 +3,6 @@ package auth
 // Identity 用户身份信息（JWE 内层加密内容）
 type Identity struct {
 	OpenID   string `json:"sub"`
-	TOpenID  string `json:"uid"`
 	Nickname string `json:"nickname,omitempty"`
 	Avatar   string `json:"picture,omitempty"`
 }
@@ -11,11 +10,6 @@ type Identity struct {
 // GetOpenID 返回系统生成的 openid
 func (u *Identity) GetOpenID() string {
 	return u.OpenID
-}
-
-// GetTOpenID 返回第三方平台 openid
-func (u *Identity) GetTOpenID() string {
-	return u.TOpenID
 }
 
 // TokenPair token 对
@@ -46,3 +40,14 @@ type WxCode2SessionResponse struct {
 	ErrCode    int    `json:"errcode,omitempty"`
 	ErrMsg     string `json:"errmsg,omitempty"`
 }
+
+// IdP 常量
+const (
+	IDPWechatMP      = "wechat:mp"      // 微信小程序
+	IDPWechatUnionID = "wechat:unionid" // 微信 UnionID
+	IDPWechatOA      = "wechat:oa"      // 微信公众号
+	IDPDouyinMP      = "douyin:mp"      // 抖音小程序
+	IDPDouyinUnionID = "douyin:unionid" // 抖音 UnionID
+	IDPAlipayMP      = "alipay:mp"      // 支付宝小程序
+	IDPAppleSignIn   = "apple:signin"   // Apple 登录
+)

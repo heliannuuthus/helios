@@ -65,7 +65,7 @@ func (r *Recipe) GetImagePath() *string {
 }
 
 func (Recipe) TableName() string {
-	return "recipes"
+	return "t_recipe"
 }
 
 // Ingredient 食材表
@@ -81,7 +81,7 @@ type Ingredient struct {
 }
 
 func (Ingredient) TableName() string {
-	return "ingredients"
+	return "t_ingredient"
 }
 
 // Step 步骤表
@@ -93,7 +93,7 @@ type Step struct {
 }
 
 func (Step) TableName() string {
-	return "steps"
+	return "t_step"
 }
 
 // AdditionalNote 小贴士表
@@ -104,5 +104,5 @@ type AdditionalNote struct {
 }
 
 func (AdditionalNote) TableName() string {
-	return "additional_notes"
+	return "t_additional_note"
 }

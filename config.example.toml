@@ -50,10 +50,13 @@ expires-in = 7200           # access_token 过期时间(秒)，2小时
 refresh-expires-in = 365     # refresh_token 过期时间(天)，1年
 max-refresh-token = 10       # 每用户最大 refresh_token 数
 
-# JWT 密钥配置（使用 python3 scripts/genkeys.py 生成）
-[auth.token]
+# KMS 密钥配置（使用 python3 scripts/genkeys.py 生成）
+[kms.token]
 sign-key = ""  # Ed25519 签名密钥（base64url 编码的 JWK JSON）
 enc-key = ""   # A256GCM 加密密钥（base64url 编码的 JWK JSON）
+
+[kms.database]
+enc-key = ""   # AES-256-GCM 加密密钥（Base64 编码，32字节）
 
 # 首页轮播图配置
 [[home.banners]]

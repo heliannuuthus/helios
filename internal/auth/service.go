@@ -68,9 +68,16 @@ func (s *Service) WxCode2Session(code string) (*WxCode2SessionResponse, error) {
 	return &result, nil
 }
 
-// GenerateToken 生成 token
-func (s *Service) GenerateToken(openid, nickname, avatar string) (*TokenPair, error) {
-	return GenerateTokenPair(s.db, openid, nickname, avatar)
+// GenerateToken 生成 token（微信小程序登录）
+func (s *Service) GenerateToken(wxResult *WxCode2SessionResponse, nickname, avatar string) (*TokenPair, error) {
+	params := &LoginParams{
+		IDP:      IDPWechatMP,
+		TOpenID:  wxResult.OpenID,
+		UnionID:  wxResult.UnionID,
+		Nickname: nickname,
+		Avatar:   avatar,
+	}
+	return GenerateTokenPair(s.db, params)
 }
 
 // VerifyToken 验证 access_token
@@ -79,8 +86,8 @@ func (s *Service) VerifyToken(token string) (*Identity, error) {
 }
 
 // RefreshToken 刷新 token
-func (s *Service) RefreshToken(refreshToken string) (*TokenPair, error) {
-	return RefreshTokens(s.db, refreshToken)
+func (s *Service) RefreshToken(refreshToken string, idp string) (*TokenPair, error) {
+	return RefreshTokens(s.db, refreshToken, idp)
 }
 
 // RevokeToken 撤销 refresh_token

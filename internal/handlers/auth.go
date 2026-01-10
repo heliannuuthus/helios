@@ -8,6 +8,7 @@ import (
 
 	"choosy-backend/internal/auth"
 	"choosy-backend/internal/config"
+	"choosy-backend/internal/kms"
 	"choosy-backend/internal/logger"
 	"choosy-backend/internal/models"
 
@@ -149,7 +150,7 @@ func (h *AuthHandler) handleAuthorizationCode(c *gin.Context, code, nickname, av
 		avatar = generateRandomAvatar(wxResult.OpenID)
 	}
 
-	tokens, err := h.service.GenerateToken(wxResult.OpenID, nickname, avatar)
+	tokens, err := h.service.GenerateToken(wxResult, nickname, avatar)
 	if err != nil {
 		logger.Errorf("生成 token 失败: %v", err)
 		c.JSON(http.StatusInternalServerError, OAuth2Error{
@@ -176,7 +177,10 @@ func (h *AuthHandler) handleRefreshToken(c *gin.Context, refreshToken string) {
 		return
 	}
 
-	tokens, err := h.service.RefreshToken(refreshToken)
+	// refresh 时默认使用 wechat:mp（后续可从请求头或其他方式获取）
+	idp := auth.IDPWechatMP
+
+	tokens, err := h.service.RefreshToken(refreshToken, idp)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, OAuth2Error{
 			Error:            "invalid_grant",
@@ -224,6 +228,8 @@ type UserProfile struct {
 	OpenID   string `json:"openid"`
 	Nickname string `json:"nickname,omitempty"`
 	Avatar   string `json:"avatar,omitempty"`
+	Gender   int8   `json:"gender"`
+	Phone    string `json:"phone,omitempty"`
 }
 
 // Profile 获取当前用户信息
@@ -250,16 +256,26 @@ func (h *AuthHandler) Profile(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, UserProfile{
+	profile := UserProfile{
 		OpenID:   dbUser.OpenID,
 		Nickname: dbUser.Nickname,
 		Avatar:   dbUser.Avatar,
-	})
+		Gender:   dbUser.Gender,
+	}
+	// 解密手机号并脱敏
+	if dbUser.EncryptedPhone != nil && *dbUser.EncryptedPhone != "" {
+		if phone, err := kms.DecryptPhone(*dbUser.EncryptedPhone, dbUser.OpenID); err == nil {
+			profile.Phone = kms.MaskPhone(phone)
+		}
+	}
+
+	c.JSON(http.StatusOK, profile)
 }
 
 type UpdateProfileRequest struct {
 	Nickname string `json:"nickname" binding:"omitempty,max=64"`
 	Avatar   string `json:"avatar" binding:"omitempty,url,max=512"`
+	Gender   *int8  `json:"gender" binding:"omitempty,oneof=0 1 2"`
 }
 
 // UpdateProfile 更新当前用户信息
@@ -302,6 +318,9 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	if req.Avatar != "" {
 		updates["avatar"] = req.Avatar
 	}
+	if req.Gender != nil {
+		updates["gender"] = *req.Gender
+	}
 
 	if len(updates) > 0 {
 		if err := h.db.Model(&dbUser).Updates(updates).Error; err != nil {
@@ -315,11 +334,20 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	// 重新查询以返回最新数据
 	h.db.First(&dbUser, "openid = ?", identity.GetOpenID())
 
-	c.JSON(http.StatusOK, UserProfile{
+	profile := UserProfile{
 		OpenID:   dbUser.OpenID,
 		Nickname: dbUser.Nickname,
 		Avatar:   dbUser.Avatar,
-	})
+		Gender:   dbUser.Gender,
+	}
+	// 解密手机号并脱敏
+	if dbUser.EncryptedPhone != nil && *dbUser.EncryptedPhone != "" {
+		if phone, err := kms.DecryptPhone(*dbUser.EncryptedPhone, dbUser.OpenID); err == nil {
+			profile.Phone = kms.MaskPhone(phone)
+		}
+	}
+
+	c.JSON(http.StatusOK, profile)
 }
 
 // LogoutAll 登出所有设备
@@ -341,4 +369,137 @@ func (h *AuthHandler) LogoutAll(c *gin.Context) {
 	count := h.service.RevokeAllTokens(identity.GetOpenID())
 
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("已登出所有设备，共撤销 %d 个会话", count)})
+}
+
+type BindPhoneRequest struct {
+	Code string `json:"code" binding:"required"`
+}
+
+// BindPhone 绑定手机号
+// @Summary 绑定手机号
+// @Description 通过小程序授权码绑定手机号，支持微信/抖音/支付宝小程序
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param request body BindPhoneRequest true "绑定请求"
+// @Success 200
+// @Failure 400 {object} OAuth2Error
+// @Failure 401 {object} map[string]string
+// @Failure 409 {object} OAuth2Error "手机号已被其他账号绑定"
+// @Router /api/auth/bindPhone [post]
+func (h *AuthHandler) BindPhone(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录或登录已过期"})
+		return
+	}
+
+	identity := user.(*auth.Identity)
+
+	var req BindPhoneRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, OAuth2Error{
+			Error:            "invalid_request",
+			ErrorDescription: err.Error(),
+		})
+		return
+	}
+
+	// 查询当前用户
+	var dbUser models.User
+	if err := h.db.Where("openid = ?", identity.GetOpenID()).First(&dbUser).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"detail": "用户不存在"})
+		return
+	}
+
+	// 检查是否已绑定手机号
+	if dbUser.Phone != nil && *dbUser.Phone != "" {
+		c.JSON(http.StatusBadRequest, OAuth2Error{
+			Error:            "already_bound",
+			ErrorDescription: "您已绑定手机号",
+		})
+		return
+	}
+
+	// 从 Token aud 解析 idp
+	idp := h.getIDPFromContext(c)
+	if idp == "" {
+		idp = auth.IDPWechatMP // 默认微信
+	}
+
+	// 获取手机号
+	provider, err := auth.GetPhoneProvider(idp)
+	if err != nil {
+		logger.Errorf("[Auth] 获取手机号提供方失败 - IDP: %s, Error: %v", idp, err)
+		c.JSON(http.StatusBadRequest, OAuth2Error{
+			Error:            "unsupported_platform",
+			ErrorDescription: err.Error(),
+		})
+		return
+	}
+
+	phone, err := provider.GetPhoneNumber(req.Code)
+	if err != nil {
+		logger.Errorf("[Auth] 获取手机号失败 - OpenID: %s, Error: %v", identity.GetOpenID(), err)
+		c.JSON(http.StatusBadRequest, OAuth2Error{
+			Error:            "phone_fetch_failed",
+			ErrorDescription: "获取手机号失败，请重试",
+		})
+		return
+	}
+
+	// 计算手机号哈希（用于查询）
+	phoneHash := kms.Hash(phone)
+
+	// 检查手机号是否已被其他用户绑定
+	var existingUser models.User
+	if err := h.db.Where("phone = ? AND openid != ?", phoneHash, identity.GetOpenID()).First(&existingUser).Error; err == nil {
+		c.JSON(http.StatusConflict, OAuth2Error{
+			Error:            "phone_bound",
+			ErrorDescription: "该手机号已绑定其他账号",
+		})
+		return
+	}
+
+	// 加密手机号（用于展示）
+	encryptedPhone, err := kms.EncryptPhone(phone, identity.GetOpenID())
+	if err != nil {
+		logger.Errorf("[Auth] 加密手机号失败 - OpenID: %s, Error: %v", identity.GetOpenID(), err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "绑定失败"})
+		return
+	}
+
+	// 绑定手机号（同时存储哈希和密文）
+	if err := h.db.Model(&dbUser).Updates(map[string]interface{}{
+		"phone":           phoneHash,
+		"encrypted_phone": encryptedPhone,
+	}).Error; err != nil {
+		logger.Errorf("[Auth] 绑定手机号失败 - OpenID: %s, Error: %v", identity.GetOpenID(), err)
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": "绑定失败"})
+		return
+	}
+
+	logger.Infof("[Auth] 手机号绑定成功 - OpenID: %s, Phone: %s",
+		identity.GetOpenID(), kms.MaskPhone(phone))
+
+	c.Status(http.StatusOK)
+}
+
+// getIDPFromContext 从请求上下文获取 idp
+func (h *AuthHandler) getIDPFromContext(c *gin.Context) string {
+	// 从 Token 的 aud 解析
+	// aud 格式: issuer:provider:namespace，如 choosy:wechat:mp
+	if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+		token := authHeader
+		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			token = authHeader[7:]
+		}
+		if identity, err := auth.VerifyAccessToken(token); err == nil {
+			_ = identity // Token 验证成功，但 Identity 里没有 aud
+			// TODO: 如果需要从 Token 获取 aud，需要修改 VerifyAccessToken 返回 aud
+		}
+	}
+	// 暂时默认返回微信
+	return auth.IDPWechatMP
 }
