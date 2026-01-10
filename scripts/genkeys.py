@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-生成 JWK 密钥
+生成 KMS 密钥
 
 使用方法:
   # 首次运行，创建虚拟环境
@@ -28,6 +28,11 @@ except ImportError:
 def b64url_encode(data: bytes) -> str:
     """Base64URL 编码（无填充）"""
     return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
+
+
+def b64_encode(data: bytes) -> str:
+    """标准 Base64 编码"""
+    return base64.b64encode(data).decode("utf-8")
 
 
 def generate_kid() -> str:
@@ -89,7 +94,7 @@ def generate_ed25519_jwk_fallback() -> dict:
 
 
 def generate_aes_jwk() -> dict:
-    """生成 AES-256-GCM JWK"""
+    """生成 AES-256-GCM JWK（用于 JWT 加密）"""
     key_bytes = secrets.token_bytes(32)  # AES-256
     kid = generate_kid()
 
@@ -102,9 +107,17 @@ def generate_aes_jwk() -> dict:
     }
 
 
+def generate_aes_raw_key() -> str:
+    """生成 AES-256-GCM 原始密钥（用于数据库加密）
+    返回 Base64 编码的 32 字节密钥
+    """
+    key_bytes = secrets.token_bytes(32)  # AES-256
+    return b64_encode(key_bytes)
+
+
 def main():
     print("=" * 60)
-    print("生成 JWK 密钥")
+    print("生成 KMS 密钥")
     print("=" * 60)
     print()
 
@@ -122,8 +135,11 @@ def main():
         jws_key = generate_ed25519_jwk_fallback()
         print("⚠️  使用 fallback 方法生成密钥")
 
-    # 生成 JWE 密钥（AES-256-GCM）
+    # 生成 JWE 密钥（AES-256-GCM，用于 JWT）
     jwe_key = generate_aes_jwk()
+
+    # 生成数据库加密密钥（AES-256-GCM）
+    db_enc_key = generate_aes_raw_key()
 
     # JSON 序列化后 base64url 编码
     jws_key_json = json.dumps(jws_key, separators=(",", ":"))
@@ -133,12 +149,17 @@ def main():
     jwe_key_b64 = b64url_encode(jwe_key_json.encode("utf-8"))
 
     print()
-    print("请将以下内容添加到 config.toml 的 [auth.token] 部分：")
+    print("请将以下内容添加到 config.toml：")
     print("-" * 60)
     print()
-    print(f'sign_key = "{jws_key_b64}"')
+    print("# JWT Token 密钥")
+    print("[kms.token]")
+    print(f'sign-key = "{jws_key_b64}"')
+    print(f'enc-key = "{jwe_key_b64}"')
     print()
-    print(f'enc_key = "{jwe_key_b64}"')
+    print("# 数据库加密密钥（AES-256-GCM）")
+    print("[kms.database]")
+    print(f'enc-key = "{db_enc_key}"')
     print()
     print("-" * 60)
     print()
@@ -165,4 +186,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
