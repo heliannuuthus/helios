@@ -29,6 +29,13 @@ definitions:
           type: string
         type: array
     type: object
+  handlers.BindPhoneRequest:
+    properties:
+      code:
+        type: string
+    required:
+    - code
+    type: object
   handlers.CategoryResponse:
     properties:
       key:
@@ -442,6 +449,12 @@ definitions:
       avatar:
         maxLength: 512
         type: string
+      gender:
+        enum:
+        - 0
+        - 1
+        - 2
+        type: integer
       nickname:
         maxLength: 64
         type: string
@@ -450,9 +463,13 @@ definitions:
     properties:
       avatar:
         type: string
+      gender:
+        type: integer
       nickname:
         type: string
       openid:
+        type: string
+      phone:
         type: string
     type: object
   handlers.WeatherInfo:
@@ -473,6 +490,42 @@ info:
   title: Choosy API
   version: "1.0"
 paths:
+  /api/auth/bindPhone:
+    post:
+      consumes:
+      - application/json
+      description: 通过小程序授权码绑定手机号，支持微信/抖音/支付宝小程序
+      parameters:
+      - description: 绑定请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.BindPhoneRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.OAuth2Error'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: 手机号已被其他账号绑定
+          schema:
+            $ref: '#/definitions/handlers.OAuth2Error'
+      security:
+      - Bearer: []
+      summary: 绑定手机号
+      tags:
+      - auth
   /api/auth/logout-all:
     post:
       produces:
