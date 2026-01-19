@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"zwei-backend/internal/models"
+	"github.com/heliannuuthus/helios/internal/models"
 
 	"gorm.io/gorm"
 )

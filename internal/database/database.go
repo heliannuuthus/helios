@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"zwei-backend/internal/config"
-	"zwei-backend/internal/logger"
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/logger"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"

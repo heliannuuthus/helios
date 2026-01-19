@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"zwei-backend/internal/amap"
-	"zwei-backend/internal/config"
-	"zwei-backend/internal/logger"
-	"zwei-backend/internal/models"
-	"zwei-backend/internal/tag"
-	"zwei-backend/internal/utils"
+	"github.com/heliannuuthus/helios/pkg/amap"
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/logger"
+	"github.com/heliannuuthus/helios/internal/models"
+	"github.com/heliannuuthus/helios/internal/tag"
+	"github.com/heliannuuthus/helios/pkg/utils"
 
 	"github.com/invopop/jsonschema"
 	"github.com/sashabaranov/go-openai"
@@ -24,6 +24,81 @@ type Service struct {
 	db        *gorm.DB
 	amap      *amap.Client
 	llmClient *openai.Client
+}
+
+// ContextRequest 上下文请求
+type ContextRequest struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Timestamp int64   `json:"timestamp"`
+}
+
+// LocationInfo 位置信息
+type LocationInfo struct {
+	Province string `json:"province"`
+	City     string `json:"city"`
+	District string `json:"district"`
+	Adcode   string `json:"-"`
+}
+
+// TimeInfo 时间信息
+type TimeInfo struct {
+	Timestamp int64  `json:"timestamp"`
+	MealTime  string `json:"meal_time"`
+	Season    string `json:"season"`
+	DayOfWeek int    `json:"day_of_week"`
+	Hour      int    `json:"hour"`
+}
+
+// ContextResponse 上下文响应
+type ContextResponse struct {
+	Location *LocationInfo        `json:"location"`
+	Weather  *WeatherInfoResponse `json:"weather"`
+	Time     *TimeInfo            `json:"time"`
+}
+
+// GetContext 获取推荐上下文信息（位置、天气、时间）
+func (s *Service) GetContext(req *ContextRequest) *ContextResponse {
+	response := &ContextResponse{}
+
+	// 获取位置信息
+	logger.Debugf("[Recommend] 获取位置 - Lat: %.6f, Lng: %.6f", req.Latitude, req.Longitude)
+	location, err := s.amap.GetLocation(req.Latitude, req.Longitude)
+	if err != nil {
+		logger.Errorf("[Recommend] 高德逆地理编码失败 - Lat: %.6f, Lng: %.6f, Error: %v", req.Latitude, req.Longitude, err)
+	} else {
+		response.Location = &LocationInfo{
+			Province: location.Province,
+			City:     location.City,
+			District: location.District,
+			Adcode:   location.Adcode,
+		}
+
+		// 获取天气信息
+		if location.Adcode != "" {
+			weather, err := s.amap.GetWeatherByAdcode(location.Adcode)
+			if err == nil {
+				response.Weather = &WeatherInfoResponse{
+					Temperature: weather.Temperature,
+					Humidity:    weather.Humidity,
+					Weather:     weather.Weather,
+					Icon:        "", // 高德 API 可能不返回 icon，需要根据 weather 字段生成
+				}
+			}
+		}
+	}
+
+	// 构建时间信息
+	t := time.UnixMilli(req.Timestamp)
+	response.Time = &TimeInfo{
+		Timestamp: req.Timestamp,
+		MealTime:  utils.GetMealTime(t),
+		Season:    utils.GetSeason(t),
+		DayOfWeek: int(t.Weekday()),
+		Hour:      t.Hour(),
+	}
+
+	return response
 }
 
 // WeatherInfo 天气信息（内部使用）
@@ -146,7 +221,7 @@ func NewService(db *gorm.DB) *Service {
 
 	return &Service{
 		db:        db,
-		amap:      amap.GetClient(),
+		amap:      amap.NewClient(config.GetString("amap.api-key")),
 		llmClient: openai.NewClientWithConfig(clientConfig),
 	}
 }

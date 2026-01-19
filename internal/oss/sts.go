@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"zwei-backend/internal/config"
-	"zwei-backend/internal/logger"
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/logger"
 
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"

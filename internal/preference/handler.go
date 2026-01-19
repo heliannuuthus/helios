@@ -3,9 +3,9 @@ package preference
 import (
 	"net/http"
 
-	"zwei-backend/internal/auth"
-	"zwei-backend/internal/logger"
-	"zwei-backend/internal/tag"
+	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/logger"
+	"github.com/heliannuuthus/helios/internal/tag"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -62,7 +62,7 @@ func (h *Handler) GetUserPreferences(c *gin.Context) {
 	}
 
 	identity := user.(*auth.Identity)
-	prefs, err := h.service.GetUserPreferences(identity.OpenID)
+	prefs, err := h.service.GetUserPreferences(identity.GetOpenID())
 	if err != nil {
 		logger.Error("获取用户偏好失败", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取用户偏好失败"})
@@ -108,7 +108,7 @@ func (h *Handler) UpdateUserPreferences(c *gin.Context) {
 	}
 
 	// 更新偏好
-	if err := h.service.UpdateUserPreferences(identity.OpenID, &req); err != nil {
+	if err := h.service.UpdateUserPreferences(identity.GetOpenID(), &req); err != nil {
 		logger.Error("更新用户偏好失败", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新用户偏好失败"})
 		return

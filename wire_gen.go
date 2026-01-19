@@ -9,20 +9,21 @@ package main
 import (
 	"github.com/google/wire"
 	"gorm.io/gorm"
-	"zwei-backend/internal/auth"
-	"zwei-backend/internal/database"
-	"zwei-backend/internal/favorite"
-	"zwei-backend/internal/history"
-	"zwei-backend/internal/home"
-	"zwei-backend/internal/preference"
-	"zwei-backend/internal/recipe"
-	"zwei-backend/internal/recommend"
-	"zwei-backend/internal/tag"
-	"zwei-backend/internal/upload"
+	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/database"
+	"github.com/heliannuuthus/helios/internal/favorite"
+	"github.com/heliannuuthus/helios/internal/history"
+	"github.com/heliannuuthus/helios/internal/home"
+	"github.com/heliannuuthus/helios/internal/preference"
+	"github.com/heliannuuthus/helios/internal/recipe"
+	"github.com/heliannuuthus/helios/internal/recommend"
+	"github.com/heliannuuthus/helios/internal/tag"
+	"github.com/heliannuuthus/helios/internal/upload"
+	"github.com/heliannuuthus/helios/internal/zwei"
 )
 
 import (
-	_ "zwei-backend/docs"
+	_ "github.com/heliannuuthus/helios/docs"
 )
 
 // Injectors from wire.go:
@@ -31,7 +32,14 @@ import (
 func InitializeApp() (*App, error) {
 	db := database.Get()
 	handler := recipe.NewHandler(db)
-	authHandler := auth.NewHandler(db)
+	
+	// auth.NewService 返回 (*Service, error)
+	authService, err := auth.NewService(db)
+	if err != nil {
+		return nil, err
+	}
+	authHandler := auth.NewHandler(authService)
+	
 	favoriteHandler := favorite.NewHandler(db)
 	historyHandler := history.NewHandler(db)
 	homeHandler := home.NewHandler(db)
@@ -39,6 +47,8 @@ func InitializeApp() (*App, error) {
 	recommendHandler := recommend.NewHandler(db)
 	uploadHandler := upload.NewHandler(db)
 	preferenceHandler := preference.NewHandler(db)
+	zweiService := zwei.NewService(authService)
+	zweiHandler := zwei.NewHandler(zweiService)
 	app := &App{
 		DB:                db,
 		RecipeHandler:     handler,
@@ -50,6 +60,7 @@ func InitializeApp() (*App, error) {
 		RecommendHandler:  recommendHandler,
 		UploadHandler:     uploadHandler,
 		PreferenceHandler: preferenceHandler,
+		ZweiHandler:       zweiHandler,
 	}
 	return app, nil
 }
@@ -57,7 +68,7 @@ func InitializeApp() (*App, error) {
 // wire.go:
 
 // ProviderSet 提供者集合
-var ProviderSet = wire.NewSet(database.Get, recipe.NewService, auth.NewService, favorite.NewService, history.NewService, preference.NewService, tag.NewService, recommend.NewService, recipe.NewHandler, auth.NewHandler, favorite.NewHandler, history.NewHandler, home.NewHandler, tag.NewHandler, recommend.NewHandler, upload.NewHandler, preference.NewHandler)
+var ProviderSet = wire.NewSet(database.Get, recipe.NewService, auth.NewService, favorite.NewService, history.NewService, preference.NewService, tag.NewService, recommend.NewService, zwei.NewService, recipe.NewHandler, auth.NewHandler, favorite.NewHandler, history.NewHandler, home.NewHandler, tag.NewHandler, recommend.NewHandler, upload.NewHandler, preference.NewHandler, zwei.NewHandler)
 
 // App 应用依赖容器
 type App struct {
@@ -71,4 +82,5 @@ type App struct {
 	RecommendHandler  *recommend.Handler
 	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
+	ZweiHandler       *zwei.Handler
 }

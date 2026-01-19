@@ -1,4 +1,4 @@
-module zwei-backend
+module github.com/heliannuuthus/helios
 
 go 1.25
 

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"zwei-backend/internal/models"
-	"zwei-backend/internal/tag"
+	"github.com/heliannuuthus/helios/internal/models"
+	"github.com/heliannuuthus/helios/internal/tag"
 
 	"github.com/dgraph-io/ristretto"
 	"gorm.io/gorm"

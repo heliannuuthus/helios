@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"zwei-backend/internal/config"
-	"zwei-backend/internal/logger"
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/logger"
 )
 
 // Code2SessionResponse 微信 code2session 响应

@@ -3,7 +3,7 @@ package tag
 import (
 	"net/http"
 
-	"zwei-backend/internal/models"
+	"github.com/heliannuuthus/helios/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

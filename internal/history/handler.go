@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"zwei-backend/internal/auth"
-	"zwei-backend/internal/types"
+	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/types"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

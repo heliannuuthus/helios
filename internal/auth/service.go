@@ -1,262 +1,485 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
 	"math/big"
+	"net/url"
 	"time"
 
-	"zwei-backend/internal/config"
-	"zwei-backend/internal/idp/alipay"
-	"zwei-backend/internal/idp/tt"
-	"zwei-backend/internal/idp/wechat"
-	"zwei-backend/internal/logger"
-	"zwei-backend/internal/models"
-
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/logger"
 	"gorm.io/gorm"
 )
 
 // Service 认证服务
 type Service struct {
-	db *gorm.DB
+	db           *gorm.DB
+	store        Store
+	tokenManager *TokenManager
+	idpManager   *IDPManager
 }
 
 // NewService 创建认证服务
-func NewService(db *gorm.DB) *Service {
-	return &Service{db: db}
-}
-
-// Login 统一登录入口
-// idp: 身份提供方，如 wechat:mp, tt:mp, alipay:mp
-// code: 平台返回的授权码
-func (s *Service) Login(idp, code string) (*TokenPair, error) {
-	logger.Infof("[Auth] 开始登录流程 - IDP: %s", idp)
-
-	var tOpenID, unionID string
-	var err error
-
-	switch idp {
-	case IDPWechatMP:
-		client := wechat.NewClient()
-		result, err := client.Code2Session(code)
-		if err != nil {
-			return nil, fmt.Errorf("微信登录失败: %w", err)
-		}
-		tOpenID = result.OpenID
-		unionID = result.UnionID
-
-	case IDPTTMP:
-		client := tt.NewClient()
-		result, err := client.Code2Session(code)
-		if err != nil {
-			return nil, fmt.Errorf("抖音登录失败: %w", err)
-		}
-		tOpenID = result.OpenID
-		unionID = result.UnionID
-
-	case IDPAlipayMP:
-		client := alipay.NewClient()
-		result, err := client.Code2Session(code)
-		if err != nil {
-			return nil, fmt.Errorf("支付宝登录失败: %w", err)
-		}
-		tOpenID = result.OpenID
-		unionID = result.UnionID
-
-	default:
-		return nil, fmt.Errorf("不支持的平台: %s", idp)
-	}
-
-	// 生成默认昵称和头像
-	nickname := generateRandomNickname()
-	avatar := generateRandomAvatar(tOpenID)
-
-	// 查找或创建用户
-	user, err := s.selectOrCreateUser(idp, tOpenID, unionID, nickname, avatar)
+func NewService(db *gorm.DB) (*Service, error) {
+	tokenManager, err := NewTokenManager()
 	if err != nil {
-		return nil, fmt.Errorf("用户管理失败: %w", err)
+		return nil, fmt.Errorf("create token manager: %w", err)
 	}
 
-	// 生成 token
-	return s.generateTokenPair(user, idp)
+	return &Service{
+		db:           db,
+		store:        NewMemoryStore(), // TODO: 支持 Redis
+		tokenManager: tokenManager,
+		idpManager:   NewIDPManager(),
+	}, nil
 }
 
-// selectOrCreateUser 查找或创建用户（支持 unionid 关联）
-func (s *Service) selectOrCreateUser(idp, tOpenID, unionID, nickname, avatar string) (*models.User, error) {
-	logger.Infof("[Auth] 开始查询/创建用户 - IDP: %s, T_OpenID: %s, UnionID: %s", idp, tOpenID, unionID)
+// ============= Authorize =============
 
-	now := time.Now()
+// Authorize 创建认证会话
+func (s *Service) Authorize(ctx context.Context, req *AuthorizeRequest) (*AuthorizeResponse, error) {
+	// 1. 验证客户端
+	client, err := s.getClient(req.ClientID)
+	if err != nil {
+		return nil, NewError(ErrInvalidClient, "client not found")
+	}
 
-	// 1. 先查当前 idp + t_openid 是否存在
-	var identity models.UserIdentity
-	err := s.db.Where("idp = ? AND t_openid = ?", idp, tOpenID).First(&identity).Error
+	// 2. 验证重定向 URI
+	if !client.ValidateRedirectURI(req.RedirectURI) {
+		return nil, NewError(ErrInvalidRequest, "invalid redirect_uri")
+	}
 
-	if err == nil {
-		// 找到了，直接查用户
-		var user models.User
-		if err := s.db.Where("openid = ?", identity.OpenID).First(&user).Error; err != nil {
-			logger.Errorf("[Auth] 用户身份存在但用户不存在 - OpenID: %s, Error: %v", identity.OpenID, err)
+	// 3. 创建会话
+	sessionID := GenerateSessionID()
+	session := &Session{
+		ID:                  sessionID,
+		ClientID:            req.ClientID,
+		RedirectURI:         req.RedirectURI,
+		CodeChallenge:       req.CodeChallenge,
+		CodeChallengeMethod: req.CodeChallengeMethod,
+		State:               req.State,
+		Scope:               req.Scope,
+		CreatedAt:           time.Now(),
+		ExpiresAt:           time.Now().Add(10 * time.Minute),
+	}
+
+	if err := s.store.SaveSession(ctx, session); err != nil {
+		return nil, NewError(ErrServerError, "failed to create session")
+	}
+
+	logger.Infof("[Auth] 创建认证会话 - SessionID: %s, ClientID: %s", sessionID, req.ClientID)
+
+	return &AuthorizeResponse{
+		SessionID: sessionID,
+	}, nil
+}
+
+// ============= Login =============
+
+// Login 处理 IDP 登录
+func (s *Service) Login(ctx context.Context, sessionID string, req *LoginRequest) (*LoginResponse, error) {
+	// 1. 获取会话
+	session, err := s.store.GetSession(ctx, sessionID)
+	if err != nil {
+		if errors.Is(err, ErrSessionNotFound) || errors.Is(err, ErrSessionExpired) {
+			return nil, NewError(ErrInvalidRequest, "session not found or expired")
+		}
+		return nil, NewError(ErrServerError, err.Error())
+	}
+
+	// 2. 获取客户端并验证 IDP
+	client, err := s.getClient(session.ClientID)
+	if err != nil {
+		return nil, NewError(ErrInvalidClient, "client not found")
+	}
+
+	if !client.ValidateIDP(req.IDP) {
+		return nil, NewError(ErrInvalidRequest, fmt.Sprintf("idp %s not allowed for this client", req.IDP))
+	}
+
+	// 3. 调用 IDP 换取用户信息
+	idpResult, err := s.idpManager.Exchange(ctx, req.IDP, req.Code)
+	if err != nil {
+		logger.Errorf("[Auth] IDP 认证失败 - IDP: %s, Error: %v", req.IDP, err)
+		return nil, NewError(ErrAccessDenied, fmt.Sprintf("idp auth failed: %v", err))
+	}
+
+	// 4. 查找或创建用户
+	user, err := s.findOrCreateUser(ctx, req.IDP, idpResult)
+	if err != nil {
+		return nil, NewError(ErrServerError, fmt.Sprintf("user management failed: %v", err))
+	}
+
+	// 5. 更新会话
+	session.UserID = user.ID
+	session.IDP = req.IDP
+	if err := s.store.UpdateSession(ctx, session); err != nil {
+		return nil, NewError(ErrServerError, "failed to update session")
+	}
+
+	// 6. 生成授权码
+	code := GenerateAuthorizationCode()
+	authCode := &AuthorizationCode{
+		Code:                code,
+		ClientID:            session.ClientID,
+		RedirectURI:         session.RedirectURI,
+		CodeChallenge:       session.CodeChallenge,
+		CodeChallengeMethod: string(session.CodeChallengeMethod),
+		Scope:               session.Scope,
+		UserID:              user.ID,
+		CreatedAt:           time.Now(),
+		ExpiresAt:           time.Now().Add(5 * time.Minute),
+	}
+
+	if err := s.store.SaveAuthCode(ctx, authCode); err != nil {
+		return nil, NewError(ErrServerError, "failed to save authorization code")
+	}
+
+	// 7. 删除会话
+	_ = s.store.DeleteSession(ctx, sessionID)
+
+	// 8. 构建响应
+	redirectURI := session.RedirectURI + "?code=" + url.QueryEscape(code)
+	if session.State != "" {
+		redirectURI += "&state=" + url.QueryEscape(session.State)
+	}
+
+	logger.Infof("[Auth] 登录成功 - UserID: %s, IDP: %s", user.ID, req.IDP)
+
+	return &LoginResponse{
+		Code:        code,
+		RedirectURI: redirectURI,
+	}, nil
+}
+
+// ============= Token =============
+
+// ExchangeToken 交换 Token
+func (s *Service) ExchangeToken(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
+	switch req.GrantType {
+	case GrantTypeAuthorizationCode:
+		return s.exchangeAuthorizationCode(ctx, req)
+	case GrantTypeRefreshToken:
+		return s.exchangeRefreshToken(ctx, req)
+	default:
+		return nil, NewError(ErrUnsupportedGrantType, "unsupported grant type")
+	}
+}
+
+func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
+	// 1. 获取授权码
+	authCode, err := s.store.GetAuthCode(ctx, req.Code)
+	if err != nil {
+		return nil, NewError(ErrInvalidGrant, "invalid or expired authorization code")
+	}
+
+	// 2. 验证客户端
+	if req.ClientID != authCode.ClientID {
+		return nil, NewError(ErrInvalidGrant, "client_id mismatch")
+	}
+
+	// 3. 验证重定向 URI
+	if req.RedirectURI != authCode.RedirectURI {
+		return nil, NewError(ErrInvalidGrant, "redirect_uri mismatch")
+	}
+
+	// 4. 验证 PKCE
+	if !VerifyCodeChallenge(CodeChallengeMethod(authCode.CodeChallengeMethod), authCode.CodeChallenge, req.CodeVerifier) {
+		return nil, NewError(ErrInvalidGrant, "invalid code_verifier")
+	}
+
+	// 5. 标记授权码已使用
+	if err := s.store.MarkAuthCodeUsed(ctx, req.Code); err != nil {
+		return nil, NewError(ErrServerError, "failed to mark code as used")
+	}
+
+	// 6. 获取用户和客户端
+	user, err := s.getUserByID(authCode.UserID)
+	if err != nil {
+		return nil, NewError(ErrServerError, "user not found")
+	}
+
+	client, err := s.getClient(authCode.ClientID)
+	if err != nil {
+		return nil, NewError(ErrInvalidClient, "client not found")
+	}
+
+	// 7. 生成 Token
+	return s.generateTokens(ctx, client, user, authCode.Scope)
+}
+
+func (s *Service) exchangeRefreshToken(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
+	// 1. 获取 Refresh Token
+	var refreshToken RefreshToken
+	if err := s.db.Where("token = ? AND revoked = ?", req.RefreshToken, false).First(&refreshToken).Error; err != nil {
+		return nil, NewError(ErrInvalidGrant, "invalid refresh token")
+	}
+
+	// 2. 检查是否有效
+	if !refreshToken.IsValid() {
+		return nil, NewError(ErrInvalidGrant, "refresh token expired or revoked")
+	}
+
+	// 3. 验证客户端
+	if req.ClientID != refreshToken.ClientID {
+		return nil, NewError(ErrInvalidGrant, "client_id mismatch")
+	}
+
+	// 4. 获取用户和客户端
+	user, err := s.getUserByID(refreshToken.UserID)
+	if err != nil {
+		return nil, NewError(ErrServerError, "user not found")
+	}
+
+	client, err := s.getClient(refreshToken.ClientID)
+	if err != nil {
+		return nil, NewError(ErrInvalidClient, "client not found")
+	}
+
+	// 5. 生成新的 Access Token（不轮转 Refresh Token）
+	accessTTL := time.Duration(client.AccessTokenExpiresIn) * time.Second
+	if accessTTL == 0 {
+		accessTTL = time.Duration(config.GetInt("auth.expires-in")) * time.Second
+	}
+
+	var token string
+	if user.Domain == DomainCIAM {
+		token, err = s.tokenManager.CreateIDToken(user.ID, client.ID, user.Domain, user.Name, user.Picture, accessTTL)
+	} else {
+		token, err = s.tokenManager.CreateAccessToken(user.ID, client.ID, user.Domain, accessTTL)
+	}
+	if err != nil {
+		return nil, NewError(ErrServerError, "failed to create token")
+	}
+
+	resp := &TokenResponse{
+		TokenType:    "Bearer",
+		ExpiresIn:    int(accessTTL.Seconds()),
+		RefreshToken: refreshToken.Token,
+	}
+
+	if user.Domain == DomainCIAM {
+		resp.IDToken = token
+	} else {
+		resp.AccessToken = token
+	}
+
+	return resp, nil
+}
+
+// ============= Revoke =============
+
+// RevokeToken 撤销 Token
+func (s *Service) RevokeToken(ctx context.Context, token string) error {
+	result := s.db.Model(&RefreshToken{}).Where("token = ?", token).Update("revoked", true)
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+// RevokeAllTokens 撤销用户所有 Token
+func (s *Service) RevokeAllTokens(userID string) int64 {
+	result := s.db.Model(&RefreshToken{}).Where("user_id = ?", userID).Update("revoked", true)
+	return result.RowsAffected
+}
+
+// ============= UserInfo =============
+
+// GetUserInfo 获取用户信息
+func (s *Service) GetUserInfo(userID string) (*UserInfoResponse, error) {
+	user, err := s.getUserByID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: 解密手机号
+	phone := ""
+
+	return user.ToUserInfo(phone), nil
+}
+
+// UpdateUserInfo 更新用户信息
+func (s *Service) UpdateUserInfo(userID string, req *UpdateUserInfoRequest) (*UserInfoResponse, error) {
+	user, err := s.getUserByID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	updates := make(map[string]any)
+	if req.Name != "" {
+		updates["name"] = req.Name
+	}
+	if req.Picture != "" {
+		updates["picture"] = req.Picture
+	}
+
+	if len(updates) > 0 {
+		if err := s.db.Model(user).Updates(updates).Error; err != nil {
 			return nil, err
 		}
+	}
 
-		// 更新最后登录时间
-		s.db.Model(&user).Update("last_login_at", now)
+	return s.GetUserInfo(userID)
+}
 
-		logger.Infof("[Auth] 找到现有用户 - OpenID: %s, IDP: %s, Nickname: %s", user.OpenID, idp, user.Nickname)
+// ============= Helper Methods =============
+
+func (s *Service) getClient(clientID string) (*Client, error) {
+	var client Client
+	if err := s.db.Preload("RedirectURIs").Preload("AllowedIDPs").
+		Where("id = ?", clientID).First(&client).Error; err != nil {
+		return nil, err
+	}
+	return &client, nil
+}
+
+func (s *Service) getUserByID(userID string) (*User, error) {
+	var user User
+	if err := s.db.Where("id = ?", userID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (s *Service) findOrCreateUser(ctx context.Context, idp IDP, result *IDPResult) (*User, error) {
+	domain := idp.GetDomain()
+
+	// 1. 查找已有身份
+	var identity UserIdentity
+	err := s.db.Where("idp = ? AND provider_id = ?", idp, result.ProviderID).First(&identity).Error
+
+	if err == nil {
+		// 找到身份，获取用户
+		var user User
+		if err := s.db.Where("id = ?", identity.UserID).First(&user).Error; err != nil {
+			return nil, err
+		}
+		s.db.Model(&user).Update("last_login_at", time.Now())
+		logger.Infof("[Auth] 找到已有用户 - UserID: %s, IDP: %s", user.ID, idp)
 		return &user, nil
 	}
 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		logger.Errorf("[Auth] 查询用户身份失败 - IDP: %s, T_OpenID: %s, Error: %v", idp, tOpenID, err)
 		return nil, err
 	}
 
-	// 2. 没找到，如果有 unionid，尝试通过 unionid 关联
-	var existingOpenID string
-	if unionID != "" {
-		unionIDP := getUnionIDP(idp)
-		var unionIdentity models.UserIdentity
-		err := s.db.Where("idp = ? AND t_openid = ?", unionIDP, unionID).First(&unionIdentity).Error
-		if err == nil {
-			existingOpenID = unionIdentity.OpenID
-			logger.Infof("[Auth] 通过 UnionID 找到已有用户 - OpenID: %s, UnionIDP: %s", existingOpenID, unionIDP)
-		}
+	// 2. 检查是否支持自动创建
+	if !idp.SupportsAutoCreate() {
+		return nil, errors.New("user not found and auto-create not supported for this idp")
 	}
 
-	// 3. 开始事务：创建用户或绑定身份
-	var user models.User
-	err = s.db.Transaction(func(tx *gorm.DB) error {
-		if existingOpenID != "" {
-			// 已有用户，只需绑定新身份
-			if err := tx.Where("openid = ?", existingOpenID).First(&user).Error; err != nil {
-				return err
-			}
-		} else {
-			// 创建新用户
-			user = models.User{
-				OpenID:      GenerateID(),
-				Nickname:    nickname,
-				Avatar:      avatar,
-				Gender:      0,
-				Status:      0,
-				LastLoginAt: &now,
-				CreatedAt:   now,
-				UpdatedAt:   now,
-			}
-			if err := tx.Create(&user).Error; err != nil {
-				return err
-			}
-			logger.Infof("[Auth] 创建新用户 - OpenID: %s, Nickname: %s", user.OpenID, user.Nickname)
-		}
+	// 3. 创建新用户
+	now := time.Now()
+	user := User{
+		ID:          GenerateUserID(),
+		Domain:      domain,
+		Name:        generateRandomName(),
+		Picture:     generateRandomAvatar(result.ProviderID),
+		LastLoginAt: now,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
 
-		// 插入当前 idp 身份
-		newIdentity := models.UserIdentity{
-			OpenID:    user.OpenID,
-			IDP:       idp,
-			TOpenID:   tOpenID,
-			CreatedAt: now,
-			UpdatedAt: now,
-		}
-		if err := tx.Create(&newIdentity).Error; err != nil {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&user).Error; err != nil {
 			return err
 		}
-		logger.Infof("[Auth] 绑定身份 - OpenID: %s, IDP: %s, T_OpenID: %s", user.OpenID, idp, tOpenID)
 
-		// 如果有 unionid 且之前没有记录，也插入
-		if unionID != "" && existingOpenID == "" {
-			unionIDP := getUnionIDP(idp)
-			unionIdentity := models.UserIdentity{
-				OpenID:    user.OpenID,
-				IDP:       unionIDP,
-				TOpenID:   unionID,
-				CreatedAt: now,
-				UpdatedAt: now,
-			}
-			if err := tx.Create(&unionIdentity).Error; err != nil {
-				return err
-			}
-			logger.Infof("[Auth] 绑定 UnionID - OpenID: %s, IDP: %s, UnionID: %s", user.OpenID, unionIDP, unionID)
+		identity := UserIdentity{
+			UserID:     user.ID,
+			IDP:        idp,
+			ProviderID: result.ProviderID,
+			UnionID:    result.UnionID,
+			RawData:    result.RawData,
+			CreatedAt:  now,
+			UpdatedAt:  now,
 		}
 
-		return nil
+		return tx.Create(&identity).Error
 	})
 
 	if err != nil {
-		logger.Errorf("[Auth] 创建用户/绑定身份失败 - Error: %v", err)
 		return nil, err
 	}
 
-	// 更新最后登录时间（如果是已有用户绑定新身份）
-	if existingOpenID != "" {
-		s.db.Model(&user).Update("last_login_at", now)
-	}
-
+	logger.Infof("[Auth] 创建新用户 - UserID: %s, IDP: %s", user.ID, idp)
 	return &user, nil
 }
 
-// generateTokenPair 生成 token 对
-func (s *Service) generateTokenPair(user *models.User, idp string) (*TokenPair, error) {
-	logger.Infof("[Auth] 开始生成 Token 对 - OpenID: %s, IDP: %s", user.OpenID, idp)
-
+func (s *Service) generateTokens(ctx context.Context, client *Client, user *User, scope string) (*TokenResponse, error) {
 	now := time.Now()
 
-	identity := &Identity{
-		OpenID:   user.OpenID,
-		Nickname: user.Nickname,
-		Avatar:   user.Avatar,
+	accessTTL := time.Duration(client.AccessTokenExpiresIn) * time.Second
+	if accessTTL == 0 {
+		accessTTL = time.Duration(config.GetInt("auth.expires-in")) * time.Second
 	}
 
-	accessToken, err := CreateAccessToken(identity, idp)
+	refreshTTL := time.Duration(client.RefreshTokenExpiresIn) * time.Second
+	if refreshTTL == 0 {
+		refreshTTL = time.Duration(config.GetInt("auth.refresh-expires-in")) * 24 * time.Hour
+	}
+
+	resp := &TokenResponse{
+		TokenType: "Bearer",
+		ExpiresIn: int(accessTTL.Seconds()),
+	}
+
+	var err error
+	if user.Domain == DomainCIAM {
+		// C 端用户使用 ID Token
+		resp.IDToken, err = s.tokenManager.CreateIDToken(user.ID, client.ID, user.Domain, user.Name, user.Picture, accessTTL)
+	} else {
+		// B 端用户使用 Access Token
+		resp.AccessToken, err = s.tokenManager.CreateAccessToken(user.ID, client.ID, user.Domain, accessTTL)
+	}
 	if err != nil {
-		logger.Errorf("[Auth] 生成 Access Token 失败 - OpenID: %s, Error: %v", user.OpenID, err)
-		return nil, fmt.Errorf("生成 access_token 失败: %w", err)
+		return nil, fmt.Errorf("create token: %w", err)
 	}
 
-	refreshToken := GenerateRefreshToken()
-	refreshExpiresIn := config.GetInt("auth.refresh-expires-in")
-	expiresAt := now.Add(time.Duration(refreshExpiresIn) * 24 * time.Hour)
+	// 创建 Refresh Token
+	s.cleanupOldRefreshTokens(user.ID, client.ID)
 
-	CleanupOldRefreshTokens(s.db, user.OpenID)
-
-	dbToken := models.RefreshToken{
-		OpenID:    user.OpenID,
-		Token:     refreshToken,
-		ExpiresAt: expiresAt,
+	refreshToken := &RefreshToken{
+		Token:     GenerateRefreshTokenValue(),
+		UserID:    user.ID,
+		ClientID:  client.ID,
+		Scope:     scope,
+		ExpiresAt: now.Add(refreshTTL),
 		CreatedAt: now,
-		UpdatedAt: now,
 	}
 
-	if err := s.db.Create(&dbToken).Error; err != nil {
-		logger.Errorf("[Auth] 存储 Refresh Token 失败 - OpenID: %s, Error: %v", user.OpenID, err)
-		return nil, fmt.Errorf("存储 refresh_token 失败: %w", err)
+	if err := s.db.Create(refreshToken).Error; err != nil {
+		return nil, fmt.Errorf("create refresh token: %w", err)
 	}
 
-	logger.Infof("[Auth] Token 对生成成功 - OpenID: %s, Aud: %s:%s, ExpiresIn: %ds",
-		user.OpenID, config.GetString("auth.issuer"), idp, config.GetInt("auth.expires-in"))
+	resp.RefreshToken = refreshToken.Token
 
-	return &TokenPair{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    config.GetInt("auth.expires-in"),
-	}, nil
+	return resp, nil
 }
 
-// getUnionIDP 根据 idp 获取对应的 unionid idp
-func getUnionIDP(idp string) string {
-	switch idp {
-	case IDPWechatMP, IDPWechatOA:
-		return IDPWechatUnionID
-	case IDPTTMP:
-		return IDPTTUnionID
-	default:
-		return idp + ":unionid"
+func (s *Service) cleanupOldRefreshTokens(userID, clientID string) {
+	maxTokens := config.GetInt("auth.max-refresh-token")
+	if maxTokens <= 0 {
+		maxTokens = 10
+	}
+
+	var tokens []RefreshToken
+	s.db.Where("user_id = ? AND client_id = ? AND revoked = ?", userID, clientID, false).
+		Order("created_at DESC").
+		Find(&tokens)
+
+	if len(tokens) >= maxTokens {
+		for _, t := range tokens[maxTokens-1:] {
+			s.db.Model(&t).Update("revoked", true)
+		}
 	}
 }
 
-// generateRandomNickname 生成随机昵称
-func generateRandomNickname() string {
+func generateRandomName() string {
 	adjectives := []string{"快乐的", "聪明的", "勇敢的", "温柔的", "活泼的", "安静的", "优雅的", "幽默的"}
 	nouns := []string{"小猫", "小狗", "小鸟", "小鱼", "小兔", "小熊", "小鹿", "小羊"}
 
@@ -266,9 +489,7 @@ func generateRandomNickname() string {
 	return adjectives[adjIndex.Int64()] + nouns[nounIndex.Int64()] + fmt.Sprintf("%04d", time.Now().Unix()%10000)
 }
 
-// generateRandomAvatar 生成随机头像 URL
 func generateRandomAvatar(seed string) string {
-	// 使用 seed 生成一致的随机数
 	hash := 0
 	for _, c := range seed {
 		hash = hash*31 + int(c)
@@ -276,41 +497,5 @@ func generateRandomAvatar(seed string) string {
 	if hash < 0 {
 		hash = -hash
 	}
-
-	avatarIndex := hash % 10
-	return fmt.Sprintf("https://api.dicebear.com/7.x/avataaars/svg?seed=%s&size=200", fmt.Sprintf("user%d", avatarIndex))
-}
-
-// VerifyToken 验证 access_token
-func (s *Service) VerifyToken(token string) (*Identity, error) {
-	return VerifyAccessToken(token)
-}
-
-// RefreshToken 刷新 token
-func (s *Service) RefreshToken(refreshToken string, idp string) (*TokenPair, error) {
-	return RefreshTokens(s.db, refreshToken, idp)
-}
-
-// RevokeToken 撤销 refresh_token
-func (s *Service) RevokeToken(refreshToken string) bool {
-	return RevokeRefreshToken(s.db, refreshToken)
-}
-
-// RevokeAllTokens 撤销用户所有 refresh_token
-func (s *Service) RevokeAllTokens(openid string) int64 {
-	return RevokeAllRefreshTokens(s.db, openid)
-}
-
-// GetCurrentUser 从 Authorization header 获取当前用户
-func GetCurrentUser(authorization string) (*Identity, error) {
-	if authorization == "" {
-		return nil, errors.New("未提供认证信息")
-	}
-
-	token := authorization
-	if len(authorization) > 7 && authorization[:7] == "Bearer " {
-		token = authorization[7:]
-	}
-
-	return VerifyAccessToken(token)
+	return fmt.Sprintf("https://api.dicebear.com/7.x/avataaars/svg?seed=%s&size=200", fmt.Sprintf("user%d", hash%10))
 }

@@ -5,14 +5,11 @@ import (
 	"strconv"
 	"time"
 
-	"zwei-backend/internal/amap"
-	"zwei-backend/internal/auth"
-	"zwei-backend/internal/logger"
-	"zwei-backend/internal/types"
-	"zwei-backend/internal/utils"
+	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/logger"
+	"github.com/heliannuuthus/helios/internal/types"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -137,37 +134,6 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// ContextRequest 上下文请求
-type ContextRequest struct {
-	Latitude  float64 `json:"latitude" binding:"required"`
-	Longitude float64 `json:"longitude" binding:"required"`
-	Timestamp int64   `json:"timestamp"`
-}
-
-// LocationInfo 位置信息
-type LocationInfo struct {
-	Province string `json:"province"`
-	City     string `json:"city"`
-	District string `json:"district"`
-	Adcode   string `json:"-"`
-}
-
-// TimeInfo 时间信息
-type TimeInfo struct {
-	Timestamp int64  `json:"timestamp"`
-	MealTime  string `json:"meal_time"`
-	Season    string `json:"season"`
-	DayOfWeek int    `json:"day_of_week"`
-	Hour      int    `json:"hour"`
-}
-
-// ContextResponse 上下文响应
-type ContextResponse struct {
-	Location *LocationInfo        `json:"location"`
-	Weather  *WeatherInfoResponse `json:"weather"`
-	Time     *TimeInfo            `json:"time"`
-}
-
 // GetContext 获取推荐上下文信息
 // @Summary 获取推荐上下文
 // @Description 根据经纬度获取位置、天气、时间信息
@@ -190,42 +156,6 @@ func (h *Handler) GetContext(c *gin.Context) {
 		req.Timestamp = time.Now().UnixMilli()
 	}
 
-	response := ContextResponse{}
-
-	logger.Debug("获取位置", zap.Float64("lat", req.Latitude), zap.Float64("lng", req.Longitude))
-	amapClient := amap.GetClient()
-	location, err := amapClient.GetLocation(req.Latitude, req.Longitude)
-	if err != nil {
-		logger.Error("高德逆地理编码失败", zap.Error(err), zap.Float64("lat", req.Latitude), zap.Float64("lng", req.Longitude))
-	} else {
-		response.Location = &LocationInfo{
-			Province: location.Province,
-			City:     location.City,
-			District: location.District,
-			Adcode:   location.Adcode,
-		}
-
-		if location.Adcode != "" {
-			weather, err := amapClient.GetWeatherByAdcode(location.Adcode)
-			if err == nil {
-				response.Weather = &WeatherInfoResponse{
-					Temperature: weather.Temperature,
-					Humidity:    weather.Humidity,
-					Weather:     weather.Weather,
-					Icon:        "", // 高德 API 可能不返回 icon，需要根据 weather 字段生成
-				}
-			}
-		}
-	}
-
-	t := time.UnixMilli(req.Timestamp)
-	response.Time = &TimeInfo{
-		Timestamp: req.Timestamp,
-		MealTime:  utils.GetMealTime(t),
-		Season:    utils.GetSeason(t),
-		DayOfWeek: int(t.Weekday()),
-		Hour:      t.Hour(),
-	}
-
+	response := h.service.GetContext(&req)
 	c.JSON(http.StatusOK, response)
 }

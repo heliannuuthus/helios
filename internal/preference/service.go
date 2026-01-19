@@ -1,8 +1,8 @@
 package preference
 
 import (
-	"zwei-backend/internal/models"
-	"zwei-backend/internal/tag"
+	"github.com/heliannuuthus/helios/internal/models"
+	"github.com/heliannuuthus/helios/internal/tag"
 
 	"sync"
 

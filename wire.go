@@ -4,16 +4,17 @@
 package main
 
 import (
-	"zwei-backend/internal/auth"
-	"zwei-backend/internal/database"
-	"zwei-backend/internal/favorite"
-	"zwei-backend/internal/history"
-	"zwei-backend/internal/home"
-	"zwei-backend/internal/preference"
-	"zwei-backend/internal/recipe"
-	"zwei-backend/internal/recommend"
-	"zwei-backend/internal/tag"
-	"zwei-backend/internal/upload"
+	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/database"
+	"github.com/heliannuuthus/helios/internal/favorite"
+	"github.com/heliannuuthus/helios/internal/history"
+	"github.com/heliannuuthus/helios/internal/home"
+	"github.com/heliannuuthus/helios/internal/preference"
+	"github.com/heliannuuthus/helios/internal/recipe"
+	"github.com/heliannuuthus/helios/internal/recommend"
+	"github.com/heliannuuthus/helios/internal/tag"
+	"github.com/heliannuuthus/helios/internal/upload"
+	"github.com/heliannuuthus/helios/internal/zwei"
 
 	"github.com/google/wire"
 	"gorm.io/gorm"
@@ -29,6 +30,7 @@ var ProviderSet = wire.NewSet(
 	preference.NewService,
 	tag.NewService,
 	recommend.NewService,
+	zwei.NewService,
 	recipe.NewHandler,
 	auth.NewHandler,
 	favorite.NewHandler,
@@ -38,6 +40,7 @@ var ProviderSet = wire.NewSet(
 	recommend.NewHandler,
 	upload.NewHandler,
 	preference.NewHandler,
+	zwei.NewHandler,
 )
 
 // App 应用依赖容器
@@ -52,6 +55,7 @@ type App struct {
 	RecommendHandler  *recommend.Handler
 	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
+	ZweiHandler       *zwei.Handler
 }
 
 // InitializeApp 初始化应用（由 wire 生成）

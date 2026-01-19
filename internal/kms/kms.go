@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync"
 
-	"zwei-backend/internal/config"
-	"zwei-backend/internal/logger"
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/logger"
 )
 
 var (

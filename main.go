@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 
-	"zwei-backend/internal/config"
-	"zwei-backend/internal/logger"
-	"zwei-backend/internal/middleware"
-	"zwei-backend/internal/oss"
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/logger"
+	"github.com/heliannuuthus/helios/internal/middleware"
+	"github.com/heliannuuthus/helios/internal/oss"
 
-	_ "zwei-backend/docs" // swagger docs
+	_ "github.com/heliannuuthus/helios/docs" // swagger docs
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -83,18 +83,31 @@ func main() {
 	// Swagger 文档
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
+	// Zwei 路由组（小程序相关）
+	zweiGroup := r.Group("/zwei")
+	{
+		// Zwei 认证路由（OIDC 风格）
+		authGroup := zweiGroup.Group("/auth")
+		{
+			authGroup.POST("/authorize", app.ZweiHandler.Authorize) // OIDC 授权端点
+		}
+	}
+
+	// Auth 路由（OAuth2.1 风格）
+	authGroup := r.Group("/auth")
+	{
+		authGroup.POST("/authorize", app.AuthHandler.Authorize) // 创建认证会话
+		authGroup.POST("/login", app.AuthHandler.Login)         // IDP 登录
+		authGroup.POST("/token", app.AuthHandler.Token)         // 获取/刷新 Token
+		authGroup.POST("/revoke", app.AuthHandler.Revoke)       // 撤销 Token
+		authGroup.POST("/logout", middleware.RequireAuth(), app.AuthHandler.Logout)
+		authGroup.GET("/userinfo", middleware.RequireAuth(), app.AuthHandler.UserInfo)
+		authGroup.PUT("/userinfo", middleware.RequireAuth(), app.AuthHandler.UpdateUserInfo)
+	}
+
 	// API 路由
 	api := r.Group("/api")
 	{
-		// 认证路由（OAuth2.1 风格）
-		api.POST("/token", app.AuthHandler.Token)   // 获取/刷新 token
-		api.POST("/revoke", app.AuthHandler.Revoke) // 撤销 token
-		api.POST("/revoke-all", middleware.RequireAuth(), app.AuthHandler.LogoutAll)
-		api.GET("/stats", middleware.RequireAuth(), app.AuthHandler.GetStats) // 获取统计数据
-
-		// 平台相关路由（根据不同的 idp 做不同的数据处理）
-		api.POST("/:idp/profile", middleware.RequireAuth(), app.AuthHandler.IdpProfile) // 更新平台相关用户信息
-
 		// 菜谱路由
 		recipes := api.Group("/recipes")
 		{
@@ -110,10 +123,6 @@ func main() {
 		// 用户相关路由（统一使用 /user 前缀）
 		user := api.Group("/user")
 		{
-			// 用户信息路由
-			user.GET("/profile", middleware.RequireAuth(), app.AuthHandler.Profile)
-			user.PUT("/profile", middleware.RequireAuth(), app.AuthHandler.UpdateProfile)
-
 			// 收藏路由
 			favorites := user.Group("/favorites")
 			favorites.Use(middleware.RequireAuth())

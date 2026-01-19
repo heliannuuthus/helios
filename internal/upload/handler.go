@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"zwei-backend/internal/auth"
-	"zwei-backend/internal/logger"
-	"zwei-backend/internal/models"
-	"zwei-backend/internal/oss"
+	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/logger"
+	"github.com/heliannuuthus/helios/internal/models"
+	"github.com/heliannuuthus/helios/internal/oss"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

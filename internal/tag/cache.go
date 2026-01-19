@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"zwei-backend/internal/models"
+	"github.com/heliannuuthus/helios/internal/models"
 
 	"github.com/dgraph-io/ristretto"
 	"gorm.io/gorm"

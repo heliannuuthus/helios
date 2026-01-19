@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"zwei-backend/internal/config"
-	"zwei-backend/internal/recipe"
-	"zwei-backend/internal/types"
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/recipe"
+	"github.com/heliannuuthus/helios/internal/types"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"

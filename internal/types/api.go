@@ -1,6 +1,6 @@
 package types
 
-import "zwei-backend/internal/models"
+import "github.com/heliannuuthus/helios/internal/models"
 
 // RecipeListItem 菜谱列表项
 type RecipeListItem struct {
