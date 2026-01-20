@@ -8,7 +8,7 @@ import (
 type Relationship struct {
 	ID          uint       `gorm:"primaryKey;autoIncrement;column:_id"`
 	ServiceID   string     `gorm:"column:service_id;size:32;not null;index"`
-	SubjectType string    `gorm:"column:subject_type;size:32;not null;index"`
+	SubjectType string     `gorm:"column:subject_type;size:32;not null;index"`
 	SubjectID   string     `gorm:"column:subject_id;size:64;not null"`
 	Relation    string     `gorm:"column:relation;size:32;not null"`
 	ObjectType  string     `gorm:"column:object_type;size:32;not null"`

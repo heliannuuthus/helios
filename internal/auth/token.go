@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -61,12 +62,12 @@ func NewTokenManager() (*TokenManager, error) {
 }
 
 // CreateAccessToken 创建 Access Token
-// B 端用户使用，sub 是 JWE 加密的用户 ID
-func (tm *TokenManager) CreateAccessToken(userID string, clientID string, domain Domain, ttl time.Duration) (string, error) {
+// sub 字段包含加密的用户信息（openid, nickname, picture, email, phone）
+func (tm *TokenManager) CreateAccessToken(claims *SubjectClaims, clientID string, scope string, ttl time.Duration) (string, error) {
 	now := time.Now()
 
-	// 加密 sub（用户 ID）
-	encryptedSub, err := tm.encryptSub(userID)
+	// 加密 sub（用户信息）
+	encryptedSub, err := tm.encryptSubjectClaims(claims)
 	if err != nil {
 		return "", fmt.Errorf("encrypt sub: %w", err)
 	}
@@ -85,8 +86,8 @@ func (tm *TokenManager) CreateAccessToken(userID string, clientID string, domain
 	_, _ = rand.Read(jtiBytes)
 	_ = token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes))
 
-	// 自定义 claims
-	_ = token.Set("domain", string(domain))
+	// scope
+	_ = token.Set("scope", scope)
 
 	// 签名
 	signedToken, err := jwt.Sign(token, jwt.WithKey(jwa.EdDSA(), tm.signingKey))
@@ -97,42 +98,7 @@ func (tm *TokenManager) CreateAccessToken(userID string, clientID string, domain
 	return string(signedToken), nil
 }
 
-// CreateIDToken 创建 ID Token
-// C 端用户使用，sub 是明文用户 ID
-func (tm *TokenManager) CreateIDToken(userID string, clientID string, domain Domain, name, picture string, ttl time.Duration) (string, error) {
-	now := time.Now()
-
-	token := jwt.New()
-	_ = token.Set(jwt.IssuerKey, tm.issuer)
-	_ = token.Set(jwt.SubjectKey, userID)
-	_ = token.Set(jwt.AudienceKey, clientID)
-	_ = token.Set(jwt.IssuedAtKey, now.Unix())
-	_ = token.Set(jwt.ExpirationKey, now.Add(ttl).Unix())
-
-	// JTI
-	jtiBytes := make([]byte, 16)
-	_, _ = rand.Read(jtiBytes)
-	_ = token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes))
-
-	// 用户信息
-	_ = token.Set("domain", string(domain))
-	if name != "" {
-		_ = token.Set("name", name)
-	}
-	if picture != "" {
-		_ = token.Set("picture", picture)
-	}
-
-	// 签名
-	signedToken, err := jwt.Sign(token, jwt.WithKey(jwa.EdDSA(), tm.signingKey))
-	if err != nil {
-		return "", fmt.Errorf("sign id token: %w", err)
-	}
-
-	return string(signedToken), nil
-}
-
-// VerifyAccessToken 验证 Access Token
+// VerifyAccessToken 验证 Access Token，返回完整身份信息
 func (tm *TokenManager) VerifyAccessToken(tokenString string) (*Identity, error) {
 	// 验证签名
 	token, err := jwt.Parse([]byte(tokenString),
@@ -150,52 +116,66 @@ func (tm *TokenManager) VerifyAccessToken(tokenString string) (*Identity, error)
 	}
 
 	// 解密 sub
-	userID, err := tm.decryptSub(encryptedSub)
+	claims, err := tm.decryptSubjectClaims(encryptedSub)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt sub: %w", err)
 	}
 
-	// 获取 domain
-	var domain string
-	_ = token.Get("domain", &domain)
+	// 获取 scope
+	var scope string
+	_ = token.Get("scope", &scope)
 
 	return &Identity{
-		UserID: userID,
-		Domain: Domain(domain),
+		UserID:   claims.OpenID,
+		Scope:    scope,
+		Nickname: claims.Nickname,
+		Picture:  claims.Picture,
+		Email:    claims.Email,
+		Phone:    claims.Phone,
 	}, nil
 }
 
-// VerifyIDToken 验证 ID Token
-func (tm *TokenManager) VerifyIDToken(tokenString string) (*Identity, error) {
-	token, err := jwt.Parse([]byte(tokenString),
-		jwt.WithKey(jwa.EdDSA(), tm.signingKey),
-		jwt.WithValidate(true),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("verify token: %w", err)
+// ParseAccessTokenUnverified 解析 Token 但不验证（用于获取 claims）
+func (tm *TokenManager) ParseAccessTokenUnverified(tokenString string) (aud string, iss string, exp int64, iat int64, scope string, err error) {
+	token, parseErr := jwt.Parse([]byte(tokenString), jwt.WithVerify(false))
+	if parseErr != nil {
+		err = parseErr
+		return
 	}
 
-	sub, ok := token.Subject()
-	if !ok {
-		return nil, errors.New("missing sub")
+	if audVal, ok := token.Audience(); ok && len(audVal) > 0 {
+		aud = audVal[0]
 	}
-
-	var domain string
-	_ = token.Get("domain", &domain)
-
-	return &Identity{
-		UserID: sub,
-		Domain: Domain(domain),
-	}, nil
+	if issVal, ok := token.Issuer(); ok {
+		iss = issVal
+	}
+	if expVal, ok := token.Expiration(); ok {
+		exp = expVal.Unix()
+	}
+	if iatVal, ok := token.IssuedAt(); ok {
+		iat = iatVal.Unix()
+	}
+	_ = token.Get("scope", &scope)
+	return
 }
 
-// encryptSub 加密用户 ID
-func (tm *TokenManager) encryptSub(userID string) (string, error) {
+// encryptSubjectClaims 加密用户信息
+func (tm *TokenManager) encryptSubjectClaims(claims *SubjectClaims) (string, error) {
 	if tm.encryptKey == nil {
-		return userID, nil // 没有加密密钥则不加密
+		// 没有加密密钥则返回 JSON
+		data, err := json.Marshal(claims)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
 	}
 
-	encrypted, err := jwe.Encrypt([]byte(userID),
+	data, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
+
+	encrypted, err := jwe.Encrypt(data,
 		jwe.WithKey(jwa.DIRECT(), tm.encryptKey),
 		jwe.WithContentEncryption(jwa.A256GCM()),
 	)
@@ -206,20 +186,55 @@ func (tm *TokenManager) encryptSub(userID string) (string, error) {
 	return string(encrypted), nil
 }
 
-// decryptSub 解密用户 ID
-func (tm *TokenManager) decryptSub(encryptedSub string) (string, error) {
+// decryptSubjectClaims 解密用户信息
+func (tm *TokenManager) decryptSubjectClaims(encryptedSub string) (*SubjectClaims, error) {
+	var data []byte
+
 	if tm.encryptKey == nil {
-		return encryptedSub, nil
+		// 没有加密密钥则直接解析 JSON
+		data = []byte(encryptedSub)
+	} else {
+		decrypted, err := jwe.Decrypt([]byte(encryptedSub),
+			jwe.WithKey(jwa.DIRECT(), tm.encryptKey),
+		)
+		if err != nil {
+			return nil, err
+		}
+		data = decrypted
 	}
 
-	decrypted, err := jwe.Decrypt([]byte(encryptedSub),
-		jwe.WithKey(jwa.DIRECT(), tm.encryptKey),
+	var claims SubjectClaims
+	if err := json.Unmarshal(data, &claims); err != nil {
+		return nil, err
+	}
+
+	return &claims, nil
+}
+
+// VerifyServiceJWT 验证 Service JWT（用于 introspect）
+func (tm *TokenManager) VerifyServiceJWT(tokenString string, serviceKey []byte) (serviceID string, jti string, err error) {
+	// 使用 HMAC 验证
+	key, err := jwk.Import(serviceKey)
+	if err != nil {
+		return "", "", fmt.Errorf("import service key: %w", err)
+	}
+
+	token, err := jwt.Parse([]byte(tokenString),
+		jwt.WithKey(jwa.HS256(), key),
+		jwt.WithValidate(true),
 	)
 	if err != nil {
-		return "", err
+		return "", "", fmt.Errorf("verify service jwt: %w", err)
 	}
 
-	return string(decrypted), nil
+	sub, ok := token.Subject()
+	if !ok {
+		return "", "", errors.New("missing sub in service jwt")
+	}
+
+	jtiVal, _ := token.JwtID()
+
+	return sub, jtiVal, nil
 }
 
 // GenerateAuthorizationCode 生成授权码
@@ -236,18 +251,14 @@ func GenerateSessionID() string {
 	return base64.RawURLEncoding.EncodeToString(bytes)
 }
 
-// VerifyCodeChallenge 验证 PKCE
+// VerifyCodeChallenge 验证 PKCE（只支持 S256）
 func VerifyCodeChallenge(method CodeChallengeMethod, challenge, verifier string) bool {
-	switch method {
-	case CodeChallengeMethodS256:
-		hash := sha256.Sum256([]byte(verifier))
-		computed := base64.RawURLEncoding.EncodeToString(hash[:])
-		return computed == challenge
-	case CodeChallengeMethodPlain:
-		return challenge == verifier
-	default:
+	if method != CodeChallengeMethodS256 {
 		return false
 	}
+	hash := sha256.Sum256([]byte(verifier))
+	computed := base64.RawURLEncoding.EncodeToString(hash[:])
+	return computed == challenge
 }
 
 // VerifyAccessToken 兼容旧接口（全局函数）
@@ -256,10 +267,5 @@ func VerifyAccessToken(tokenString string) (*Identity, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 先尝试 Access Token，再尝试 ID Token
-	identity, err := tm.VerifyAccessToken(tokenString)
-	if err != nil {
-		identity, err = tm.VerifyIDToken(tokenString)
-	}
-	return identity, err
+	return tm.VerifyAccessToken(tokenString)
 }

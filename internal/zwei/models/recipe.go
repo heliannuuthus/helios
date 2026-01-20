@@ -41,7 +41,7 @@ type Recipe struct {
 	RecipeID         string      `gorm:"uniqueIndex;not null;column:recipe_id;size:32" json:"id"`
 	Name             string      `gorm:"uniqueIndex;not null;size:128" json:"name"`
 	Description      *string     `gorm:"type:text" json:"description"`
-	Images           StringSlice  `gorm:"type:json;default:'[]'" json:"images"`
+	Images           StringSlice `gorm:"type:json;default:'[]'" json:"images"`
 	Category         string      `gorm:"index" json:"category"`
 	Difficulty       int         `json:"difficulty"`
 	Servings         int         `json:"servings"`

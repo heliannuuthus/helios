@@ -89,7 +89,7 @@ type RecipeResponse struct {
 	ImagePath        *string              `json:"image_path"`
 	Category         string               `json:"category"`
 	Difficulty       int                  `json:"difficulty"`
-	Tags             TagsGrouped    `json:"tags"`
+	Tags             TagsGrouped          `json:"tags"`
 	Servings         int                  `json:"servings"`
 	PrepTimeMinutes  *int                 `json:"prep_time_minutes"`
 	CookTimeMinutes  *int                 `json:"cook_time_minutes"`

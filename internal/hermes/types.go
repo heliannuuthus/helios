@@ -1,18 +1,4 @@
-package management
-
-// DomainCreateRequest 创建域请求
-type DomainCreateRequest struct {
-	DomainID    string  `json:"domain_id" binding:"required"`
-	Name        string  `json:"name" binding:"required"`
-	Description *string `json:"description"`
-}
-
-// DomainUpdateRequest 更新域请求
-type DomainUpdateRequest struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	Status      *int8   `json:"status"`
-}
+package hermes
 
 // ServiceCreateRequest 创建服务请求
 type ServiceCreateRequest struct {
@@ -20,31 +6,31 @@ type ServiceCreateRequest struct {
 	DomainID              string  `json:"domain_id" binding:"required"`
 	Name                  string  `json:"name" binding:"required"`
 	Description           *string `json:"description"`
-	AccessTokenExpiresIn   *int    `json:"access_token_expires_in"`
-	RefreshTokenExpiresIn  *int    `json:"refresh_token_expires_in"`
+	AccessTokenExpiresIn  *int    `json:"access_token_expires_in"`
+	RefreshTokenExpiresIn *int    `json:"refresh_token_expires_in"`
 }
 
 // ServiceUpdateRequest 更新服务请求
 type ServiceUpdateRequest struct {
 	Name                  *string `json:"name"`
 	Description           *string `json:"description"`
-	AccessTokenExpiresIn   *int    `json:"access_token_expires_in"`
-	RefreshTokenExpiresIn  *int    `json:"refresh_token_expires_in"`
+	AccessTokenExpiresIn  *int    `json:"access_token_expires_in"`
+	RefreshTokenExpiresIn *int    `json:"refresh_token_expires_in"`
 	Status                *int8   `json:"status"`
 }
 
 // ApplicationCreateRequest 创建应用请求
 type ApplicationCreateRequest struct {
-	DomainID    string   `json:"domain_id" binding:"required"`
-	AppID       string   `json:"app_id" binding:"required"`
-	Name        string   `json:"name" binding:"required"`
+	DomainID     string   `json:"domain_id" binding:"required"`
+	AppID        string   `json:"app_id" binding:"required"`
+	Name         string   `json:"name" binding:"required"`
 	RedirectURIs []string `json:"redirect_uris"`
-	NeedKey     bool     `json:"need_key"` // 是否需要密钥
+	NeedKey      bool     `json:"need_key"` // 是否需要密钥
 }
 
 // ApplicationUpdateRequest 更新应用请求
 type ApplicationUpdateRequest struct {
-	Name        *string  `json:"name"`
+	Name         *string  `json:"name"`
 	RedirectURIs []string `json:"redirect_uris"`
 }
 

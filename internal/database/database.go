@@ -51,12 +51,13 @@ func connectDB(dataSource string) (*gorm.DB, error) {
 	database := config.GetString(fmt.Sprintf("database.%s.name", dataSource))
 	if database == "" {
 		// 如果没有指定，使用默认值
-		if dataSource == "zwei" {
+		switch dataSource {
+		case "zwei":
 			database = config.GetString("database.name")
 			if database == "" {
 				database = "zwei"
 			}
-		} else if dataSource == "auth" {
+		case "auth":
 			database = "auth"
 		}
 	}

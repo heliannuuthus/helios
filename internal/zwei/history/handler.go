@@ -32,8 +32,8 @@ type HistoryResponse struct {
 }
 
 type HistoryListItem struct {
-	RecipeID string                `json:"recipe_id"`
-	ViewedAt string                `json:"viewed_at"`
+	RecipeID string          `json:"recipe_id"`
+	ViewedAt string          `json:"viewed_at"`
 	Recipe   *RecipeListItem `json:"recipe,omitempty"`
 }
 

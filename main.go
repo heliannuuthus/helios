@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/internal/middleware"
+	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/pkg/oss"
 
 	_ "github.com/heliannuuthus/helios/docs" // swagger docs
@@ -87,18 +87,21 @@ func main() {
 	// Swagger 文档
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-
-	// Auth 路由（OAuth2.1 风格）
+	// Auth 路由（OAuth2.1/OIDC 风格）
 	authGroup := r.Group("/auth")
 	{
-		authGroup.POST("/authorize", app.AuthHandler.Authorize) // 创建认证会话
-		authGroup.POST("/login", app.AuthHandler.Login)         // IDP 登录
-		authGroup.POST("/token", app.AuthHandler.Token)         // 获取/刷新 Token
-		authGroup.POST("/revoke", app.AuthHandler.Revoke)       // 撤销 Token
+		authGroup.GET("/authorize", app.AuthHandler.Authorize)    // 创建认证会话并重定向到登录页面
+		authGroup.POST("/login", app.AuthHandler.Login)           // IDP 登录
+		authGroup.POST("/token", app.AuthHandler.Token)           // 获取/刷新 Token
+		authGroup.POST("/introspect", app.AuthHandler.Introspect) // Token 内省
+		authGroup.POST("/revoke", app.AuthHandler.Revoke)         // 撤销 Token
 		authGroup.POST("/logout", middleware.RequireAuth(), app.AuthHandler.Logout)
 		authGroup.GET("/userinfo", middleware.RequireAuth(), app.AuthHandler.UserInfo)
 		authGroup.PUT("/userinfo", middleware.RequireAuth(), app.AuthHandler.UpdateUserInfo)
 	}
+
+	// IDPs 路由（获取认证源配置）
+	r.GET("/idps", app.AuthHandler.IDPs) // 获取认证源配置
 
 	// API 路由
 	api := r.Group("/api")
@@ -206,6 +209,57 @@ func main() {
 		upload.Use(middleware.RequireAuth())
 		{
 			upload.POST("/image", app.UploadHandler.UploadImage)
+		}
+	}
+
+	// Hermes 身份与访问管理路由
+	hermes := r.Group("/hermes")
+	hermes.Use(middleware.RequireAuth())
+	{
+		// 域管理
+		domains := hermes.Group("/domains")
+		{
+			domains.GET("", app.HermesHandler.ListDomains)
+			domains.GET("/:domain_id", app.HermesHandler.GetDomain)
+		}
+
+		// 服务管理
+		services := hermes.Group("/services")
+		{
+			services.GET("", app.HermesHandler.ListServices)
+			services.POST("", app.HermesHandler.CreateService)
+			services.GET("/:service_id", app.HermesHandler.GetService)
+			services.PUT("/:service_id", app.HermesHandler.UpdateService)
+		}
+
+		// 应用管理
+		applications := hermes.Group("/applications")
+		{
+			applications.GET("", app.HermesHandler.ListApplications)
+			applications.POST("", app.HermesHandler.CreateApplication)
+			applications.GET("/:app_id", app.HermesHandler.GetApplication)
+			applications.PUT("/:app_id", app.HermesHandler.UpdateApplication)
+			applications.GET("/:app_id/relations", app.HermesHandler.GetApplicationServiceRelations)
+			applications.POST("/:app_id/services/:service_id/relations", app.HermesHandler.SetApplicationServiceRelations)
+		}
+
+		// 关系管理
+		relationships := hermes.Group("/relationships")
+		{
+			relationships.GET("", app.HermesHandler.ListRelationships)
+			relationships.POST("", app.HermesHandler.CreateRelationship)
+			relationships.DELETE("", app.HermesHandler.DeleteRelationship)
+		}
+
+		// 组管理
+		groups := hermes.Group("/groups")
+		{
+			groups.GET("", app.HermesHandler.ListGroups)
+			groups.POST("", app.HermesHandler.CreateGroup)
+			groups.GET("/:group_id", app.HermesHandler.GetGroup)
+			groups.PUT("/:group_id", app.HermesHandler.UpdateGroup)
+			groups.GET("/:group_id/members", app.HermesHandler.GetGroupMembers)
+			groups.POST("/:group_id/members", app.HermesHandler.SetGroupMembers)
 		}
 	}
 

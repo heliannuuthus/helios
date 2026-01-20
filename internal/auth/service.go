@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
@@ -10,7 +11,10 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/kms"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/lestrrat-go/jwx/v3/jwt"
 	"gorm.io/gorm"
 )
 
@@ -39,23 +43,22 @@ func NewService(db *gorm.DB) (*Service, error) {
 
 // ============= Authorize =============
 
-// Authorize 创建认证会话
-func (s *Service) Authorize(ctx context.Context, req *AuthorizeRequest) (*AuthorizeResponse, error) {
-	// 1. 验证客户端
+// Authorize 创建认证会话，返回 sessionID（用于设置 Cookie）
+func (s *Service) Authorize(ctx context.Context, req *AuthorizeRequest) (string, error) {
+	// 1. 验证 response_type（只允许 code）
+	if req.ResponseType != "code" {
+		return "", NewError(ErrUnsupportedResponseType, "response_type must be 'code'")
+	}
+
+	// 2. 验证客户端
 	client, err := s.getClient(req.ClientID)
 	if err != nil {
-		return nil, NewError(ErrInvalidClient, "client not found")
+		return "", NewError(ErrInvalidClient, "client not found")
 	}
 
-	// 2. 验证重定向 URI
+	// 3. 验证重定向 URI
 	if !client.ValidateRedirectURI(req.RedirectURI) {
-		return nil, NewError(ErrInvalidRequest, "invalid redirect_uri")
-	}
-
-	// 3. 获取客户端允许的 IDPs 配置
-	idpConfigs, err := s.getIDPConfigs(client)
-	if err != nil {
-		return nil, NewError(ErrServerError, "failed to get idp configs")
+		return "", NewError(ErrInvalidRequest, "invalid redirect_uri")
 	}
 
 	// 4. 创建会话
@@ -73,20 +76,23 @@ func (s *Service) Authorize(ctx context.Context, req *AuthorizeRequest) (*Author
 	}
 
 	if err := s.store.SaveSession(ctx, session); err != nil {
-		return nil, NewError(ErrServerError, "failed to create session")
+		return "", NewError(ErrServerError, "failed to create session")
 	}
 
 	logger.Infof("[Auth] 创建认证会话 - SessionID: %s, ClientID: %s", sessionID, req.ClientID)
 
-	return &AuthorizeResponse{
-		SessionID: sessionID,
-		IDPs:      idpConfigs,
-	}, nil
+	return sessionID, nil
 }
 
-// getIDPConfigs 获取客户端允许的 IDPs 配置（从配置文件读取）
-func (s *Service) getIDPConfigs(client *Client) ([]IDPConfig, error) {
-	// 根据域返回该域下所有支持的 IDPs
+// GetIDPConfigs 获取客户端允许的 IDPs 配置（从配置文件读取）
+func (s *Service) GetIDPConfigs(clientID string) (*IDPsResponse, error) {
+	// 1. 验证客户端
+	client, err := s.getClient(clientID)
+	if err != nil {
+		return nil, NewError(ErrInvalidClient, "client not found")
+	}
+
+	// 2. 根据域返回该域下所有支持的 IDPs
 	var idps []IDP
 	switch client.Domain {
 	case DomainCIAM:
@@ -97,7 +103,7 @@ func (s *Service) getIDPConfigs(client *Client) ([]IDPConfig, error) {
 		return nil, fmt.Errorf("unknown domain: %s", client.Domain)
 	}
 
-	// 构建配置列表
+	// 3. 构建配置列表
 	configs := make([]IDPConfig, 0, len(idps))
 	for _, idp := range idps {
 		idpConfig := IDPConfig{
@@ -105,26 +111,66 @@ func (s *Service) getIDPConfigs(client *Client) ([]IDPConfig, error) {
 			Extra: make(map[string]interface{}),
 		}
 
-		// 根据 IDP 类型添加客户端 ID（如果需要）
+		// 根据 IDP 类型添加配置
 		switch idp {
 		case IDPWechatMP:
 			if appid := config.GetString("idps.wxmp.appid"); appid != "" {
 				idpConfig.ClientID = appid
 			}
+			idpConfig.AllowedScopes = s.getAllowedScopes("idps.wxmp")
+			if config.GetBool("idps.wxmp.capture.required") {
+				idpConfig.Capture = &CaptureConfig{
+					Required: true,
+					Type:     config.GetString("idps.wxmp.capture.type"),
+					SiteKey:  config.GetString("idps.wxmp.capture.site_key"),
+				}
+			}
 		case IDPTTMP:
 			if appid := config.GetString("idps.tt.appid"); appid != "" {
 				idpConfig.ClientID = appid
+			}
+			idpConfig.AllowedScopes = s.getAllowedScopes("idps.tt")
+			if config.GetBool("idps.tt.capture.required") {
+				idpConfig.Capture = &CaptureConfig{
+					Required: true,
+					Type:     config.GetString("idps.tt.capture.type"),
+					SiteKey:  config.GetString("idps.tt.capture.site_key"),
+				}
 			}
 		case IDPAlipayMP:
 			if appid := config.GetString("idps.alipay.appid"); appid != "" {
 				idpConfig.ClientID = appid
 			}
+			idpConfig.AllowedScopes = s.getAllowedScopes("idps.alipay")
+			if config.GetBool("idps.alipay.capture.required") {
+				idpConfig.Capture = &CaptureConfig{
+					Required: true,
+					Type:     config.GetString("idps.alipay.capture.type"),
+					SiteKey:  config.GetString("idps.alipay.capture.site_key"),
+				}
+			}
+		case IDPWecom:
+			idpConfig.AllowedScopes = s.getAllowedScopes("idps.wecom")
+		case IDPGithub:
+			idpConfig.AllowedScopes = s.getAllowedScopes("idps.github")
+		case IDPGoogle:
+			idpConfig.AllowedScopes = s.getAllowedScopes("idps.google")
 		}
 
 		configs = append(configs, idpConfig)
 	}
 
-	return configs, nil
+	return &IDPsResponse{IDPs: configs}, nil
+}
+
+// getAllowedScopes 从配置读取 connection 允许的 scopes
+func (s *Service) getAllowedScopes(configPrefix string) []string {
+	scopes := config.GetStringSlice(configPrefix + ".allowed_scopes")
+	if len(scopes) == 0 {
+		// 默认只允许 openid
+		return []string{ScopeOpenID}
+	}
+	return scopes
 }
 
 // ============= Login =============
@@ -157,34 +203,76 @@ func (s *Service) Login(ctx context.Context, sessionID string, req *LoginRequest
 		return nil, NewError(ErrInvalidRequest, fmt.Sprintf("idp %s not allowed for this client", idp))
 	}
 
-	// 4. 从 data 中获取认证凭证（根据 connection 类型不同）
+	// 4. 检查前置认证需求（如人机验证）
+	// 如果 connection 配置了 Capture 且 data 中没有验证结果，返回 require
+	if require := s.checkPreAuthRequirement(idp, req.Data); require != "" {
+		// 返回特殊响应，handler 会构造 InteractionRequiredResponse
+		// 使用 Code 字段传递 require 信息（handler 会识别并转换）
+		return &LoginResponse{
+			Code: "require:" + require, // handler 会检查并转换为 InteractionRequiredResponse
+		}, nil
+	}
+
+	// 5. 从 data 中获取认证凭证（根据 connection 类型不同）
 	// OAuth2 connection（如 wechat:mp）需要 code
 	code, ok := req.Data["code"]
 	if !ok || code == "" {
 		return nil, NewError(ErrInvalidRequest, "code is required in data for oauth2 connection")
 	}
 
-	// 5. 调用 IDP 换取用户信息
+	// 6. 调用 IDP 换取用户信息
 	idpResult, err := s.idpManager.Exchange(ctx, idp, code)
 	if err != nil {
 		logger.Errorf("[Auth] IDP 认证失败 - IDP: %s, Error: %v", idp, err)
 		return nil, NewError(ErrAccessDenied, fmt.Sprintf("idp auth failed: %v", err))
 	}
 
-	// 6. 查找或创建用户（C 端 IDP 允许自动创建）
-	user, err := s.findOrCreateUser(ctx, idp, idpResult)
+	// 7. 查找或创建用户（C 端 IDP 允许自动创建）
+	user, err := s.findOrCreateUser(idp, idpResult)
 	if err != nil {
 		return nil, NewError(ErrServerError, fmt.Sprintf("user management failed: %v", err))
 	}
 
-	// 7. 更新会话
+	// 8. 处理 scope（降级逻辑）
+	requestedScopes := ParseScopes(session.Scope)
+	// 添加默认的 openid
+	if !ContainsScope(requestedScopes, ScopeOpenID) {
+		requestedScopes = append([]string{ScopeOpenID}, requestedScopes...)
+	}
+
+	// 获取 connection 允许的 scopes
+	allowedScopes := s.getAllowedScopesForIDP(idp)
+
+	// 计算交集
+	grantedScopes := ScopeIntersection(requestedScopes, allowedScopes)
+
+	// 检查：除了 openid 还有其他 scope 吗？
+	hasNonOpenIDScope := false
+	for _, scope := range grantedScopes {
+		if scope != ScopeOpenID {
+			hasNonOpenIDScope = true
+			break
+		}
+	}
+
+	if !hasNonOpenIDScope {
+		// 构建错误描述
+		requestedStr := JoinScopes(requestedScopes)
+		allowedStr := JoinScopes(allowedScopes)
+		return nil, NewError(ErrAccessDenied, fmt.Sprintf("No valid scopes granted. Requested: %s, Allowed by connection: %s", requestedStr, allowedStr))
+	}
+
+	grantedScopeStr := JoinScopes(grantedScopes)
+
+	// 9. 更新会话
 	session.UserID = user.OpenID
 	session.IDP = idp
+	session.GrantedScope = grantedScopeStr
 	if err := s.store.UpdateSession(ctx, session); err != nil {
 		return nil, NewError(ErrServerError, "failed to update session")
 	}
 
-	// 8. 生成授权码
+	// 10. 生成授权码
 	authCode := GenerateAuthorizationCode()
 	authCodeObj := &AuthorizationCode{
 		Code:                authCode,
@@ -192,7 +280,7 @@ func (s *Service) Login(ctx context.Context, sessionID string, req *LoginRequest
 		RedirectURI:         session.RedirectURI,
 		CodeChallenge:       session.CodeChallenge,
 		CodeChallengeMethod: string(session.CodeChallengeMethod),
-		Scope:               session.Scope,
+		Scope:               grantedScopeStr, // 使用实际授予的 scope
 		UserID:              user.OpenID,
 		CreatedAt:           time.Now(),
 		ExpiresAt:           time.Now().Add(5 * time.Minute),
@@ -202,21 +290,68 @@ func (s *Service) Login(ctx context.Context, sessionID string, req *LoginRequest
 		return nil, NewError(ErrServerError, "failed to save authorization code")
 	}
 
-	// 9. 删除会话
+	// 11. 删除会话
 	_ = s.store.DeleteSession(ctx, sessionID)
 
-	// 10. 构建响应
+	// 12. 构建响应
 	redirectURI := session.RedirectURI + "?code=" + url.QueryEscape(authCode)
 	if session.State != "" {
 		redirectURI += "&state=" + url.QueryEscape(session.State)
 	}
 
-	logger.Infof("[Auth] 登录成功 - OpenID: %s, IDP: %s", user.OpenID, idp)
+	logger.Infof("[Auth] 登录成功 - OpenID: %s, IDP: %s, GrantedScope: %s", user.OpenID, idp, grantedScopeStr)
 
 	return &LoginResponse{
 		Code:        authCode,
 		RedirectURI: redirectURI,
 	}, nil
+}
+
+// getAllowedScopesForIDP 获取 IDP 允许的 scopes
+func (s *Service) getAllowedScopesForIDP(idp IDP) []string {
+	switch idp {
+	case IDPWechatMP:
+		return s.getAllowedScopes("idps.wxmp")
+	case IDPTTMP:
+		return s.getAllowedScopes("idps.tt")
+	case IDPAlipayMP:
+		return s.getAllowedScopes("idps.alipay")
+	case IDPWecom:
+		return s.getAllowedScopes("idps.wecom")
+	case IDPGithub:
+		return s.getAllowedScopes("idps.github")
+	case IDPGoogle:
+		return s.getAllowedScopes("idps.google")
+	default:
+		return []string{ScopeOpenID}
+	}
+}
+
+// checkPreAuthRequirement 检查前置认证需求
+func (s *Service) checkPreAuthRequirement(idp IDP, data map[string]string) string {
+	// 检查该 IDP 是否配置了 Capture
+	var captureRequired bool
+	var captureType string
+	switch idp {
+	case IDPWechatMP:
+		captureRequired = config.GetBool("idps.wxmp.capture.required")
+		captureType = config.GetString("idps.wxmp.capture.type")
+	case IDPTTMP:
+		captureRequired = config.GetBool("idps.tt.capture.required")
+		captureType = config.GetString("idps.tt.capture.type")
+	case IDPAlipayMP:
+		captureRequired = config.GetBool("idps.alipay.capture.required")
+		captureType = config.GetString("idps.alipay.capture.type")
+	}
+
+	// 如果配置了 Capture 但 data 中没有验证结果，返回 require
+	if captureRequired && captureType != "" {
+		if _, ok := data["capture_token"]; !ok {
+			return "captcha" // 返回 captcha，handler 会构造 InteractionRequiredResponse
+		}
+	}
+
+	return ""
 }
 
 // ============= Token =============
@@ -271,7 +406,7 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 		return nil, NewError(ErrInvalidClient, "client not found")
 	}
 
-	// 7. 生成 Token
+	// 7. 生成 Token（使用授权码中的 scope）
 	return s.generateTokens(ctx, client, user, authCode.Scope)
 }
 
@@ -303,35 +438,16 @@ func (s *Service) exchangeRefreshToken(ctx context.Context, req *TokenRequest) (
 		return nil, NewError(ErrInvalidClient, "client not found")
 	}
 
-	// 5. 生成新的 Access Token（不轮转 Refresh Token）
-	accessTTL := time.Duration(client.AccessTokenExpiresIn) * time.Second
-	if accessTTL == 0 {
-		accessTTL = time.Duration(config.GetInt("auth.expires-in")) * time.Second
-	}
-
-	var token string
-	if user.Domain == DomainCIAM {
-		token, err = s.tokenManager.CreateIDToken(user.OpenID, client.ClientID, user.Domain, user.Name, user.Picture, accessTTL)
-	} else {
-		token, err = s.tokenManager.CreateAccessToken(user.OpenID, client.ClientID, user.Domain, accessTTL)
-	}
+	// 5. 生成新的 Access Token（使用 refresh token 中的 scope）
+	token, err := s.generateTokens(ctx, client, user, refreshToken.Scope)
 	if err != nil {
-		return nil, NewError(ErrServerError, "failed to create token")
+		return nil, err
 	}
 
-	resp := &TokenResponse{
-		TokenType:    "Bearer",
-		ExpiresIn:    int(accessTTL.Seconds()),
-		RefreshToken: refreshToken.Token,
-	}
+	// 保持 refresh token 不变（不轮转）
+	token.RefreshToken = refreshToken.Token
 
-	if user.Domain == DomainCIAM {
-		resp.IDToken = token
-	} else {
-		resp.AccessToken = token
-	}
-
-	return resp, nil
+	return token, nil
 }
 
 // ============= Revoke =============
@@ -346,31 +462,192 @@ func (s *Service) RevokeAllTokens(ctx context.Context, userID string) error {
 	return s.store.RevokeUserRefreshTokens(ctx, userID)
 }
 
+// ============= Introspect =============
+
+// Introspect Token 内省
+func (s *Service) Introspect(ctx context.Context, tokenString string, serviceJWT string) (*IntrospectResponse, error) {
+	// 1. 验证 Service JWT
+	serviceID, _, err := s.verifyServiceJWT(serviceJWT)
+	if err != nil {
+		return nil, NewError(ErrInvalidClient, fmt.Sprintf("invalid service jwt: %v", err))
+	}
+
+	// 2. 检查 jti 防重放（TODO: 实现 Redis 存储）
+	// 这里先跳过，后续实现
+	_ = serviceID // 暂时未使用，后续可用于日志
+
+	// 3. 解析 Access Token（不验证，因为可能已过期）
+	aud, iss, exp, iat, scope, err := s.tokenManager.ParseAccessTokenUnverified(tokenString)
+	if err != nil {
+		return &IntrospectResponse{Active: false}, nil
+	}
+
+	// 4. 验证 Token 签名和有效性
+	identity, err := s.tokenManager.VerifyAccessToken(tokenString)
+	if err != nil {
+		return &IntrospectResponse{Active: false}, nil
+	}
+
+	// 5. 获取用户完整信息
+	user, err := s.getUserByOpenID(identity.UserID)
+	if err != nil {
+		return &IntrospectResponse{Active: false}, nil
+	}
+
+	// 6. 解密手机号（如果有）
+	var phone string
+	if user.PhoneCipher != nil {
+		decryptedPhone, err := kms.DecryptPhone(*user.PhoneCipher, user.OpenID)
+		if err == nil {
+			phone = decryptedPhone
+		}
+	}
+
+	// 7. 构建响应（完整信息，未脱敏）
+	resp := &IntrospectResponse{
+		Active:   true,
+		Sub:      identity.UserID,
+		Aud:      aud,
+		Iss:      iss,
+		Exp:      exp,
+		Iat:      iat,
+		Scope:    scope,
+		Nickname: identity.Nickname,
+		Picture:  identity.Picture,
+		Email:    identity.Email,
+		Phone:    phone,
+	}
+
+	// 如果 Token 中没有，从数据库补充
+	if resp.Nickname == "" {
+		resp.Nickname = user.Name
+	}
+	if resp.Picture == "" {
+		resp.Picture = user.Picture
+	}
+	if resp.Email == "" && user.Email != nil {
+		resp.Email = *user.Email
+	}
+	if resp.Phone == "" && phone != "" {
+		resp.Phone = phone
+	}
+
+	logger.Infof("[Auth] Token 内省成功 - ServiceID: %s, UserID: %s", serviceID, identity.UserID)
+
+	return resp, nil
+}
+
+// verifyServiceJWT 验证 Service JWT
+func (s *Service) verifyServiceJWT(tokenString string) (serviceID string, jti string, err error) {
+	// 解析 JWT 获取 service_id（不验证签名）
+	token, parseErr := jwt.Parse([]byte(tokenString), jwt.WithVerify(false))
+	if parseErr != nil {
+		return "", "", parseErr
+	}
+
+	sub, ok := token.Subject()
+	if !ok {
+		return "", "", errors.New("missing sub in service jwt")
+	}
+
+	jtiVal, _ := token.JwtID()
+
+	// 从数据库获取 service（使用 sub 作为 service_id）
+	var service models.Service
+	if err := s.db.Where("service_id = ?", sub).First(&service).Error; err != nil {
+		return "", "", fmt.Errorf("service not found: %w", err)
+	}
+
+	// 解密 service key
+	domainEncryptKey, err := config.GetDomainEncryptKey(service.DomainID)
+	if err != nil {
+		return "", "", fmt.Errorf("get domain encrypt key: %w", err)
+	}
+
+	encryptedKeyBytes, err := base64.StdEncoding.DecodeString(service.EncryptedKey)
+	if err != nil {
+		return "", "", fmt.Errorf("decode encrypted key: %w", err)
+	}
+
+	serviceKey, err := kms.DecryptAESGCM(domainEncryptKey, encryptedKeyBytes, service.ServiceID)
+	if err != nil {
+		return "", "", fmt.Errorf("decrypt service key: %w", err)
+	}
+
+	// 验证 JWT 签名
+	verifiedServiceID, verifiedJti, verifyErr := s.tokenManager.VerifyServiceJWT(tokenString, serviceKey)
+	if verifyErr != nil {
+		return "", "", fmt.Errorf("verify service jwt: %w", verifyErr)
+	}
+
+	// 返回验证后的 serviceID 和 jti（如果 jtiVal 为空则使用 verifiedJti）
+	if jtiVal == "" {
+		jtiVal = verifiedJti
+	}
+
+	return verifiedServiceID, jtiVal, nil
+}
+
 // ============= UserInfo =============
 
-// GetUserInfo 获取用户信息
-func (s *Service) GetUserInfo(openid string) (*UserInfoResponse, error) {
-	user, err := s.getUserByOpenID(openid)
+// GetUserInfo 获取用户信息（根据 scope 返回，脱敏）
+func (s *Service) GetUserInfo(identity *Identity) (*UserInfoResponse, error) {
+	user, err := s.getUserByOpenID(identity.UserID)
 	if err != nil {
 		return nil, err
 	}
 
-	// TODO: 解密手机号
-	phone := ""
+	resp := &UserInfoResponse{
+		Sub: identity.UserID,
+	}
 
-	return user.ToUserInfo(phone), nil
+	scopes := ParseScopes(identity.Scope)
+
+	// 根据 scope 返回字段
+	if ContainsScope(scopes, ScopeProfile) {
+		resp.Nickname = identity.Nickname
+		resp.Picture = identity.Picture
+		// 如果 Token 中没有，从数据库获取
+		if resp.Nickname == "" {
+			resp.Nickname = user.Name
+		}
+		if resp.Picture == "" {
+			resp.Picture = user.Picture
+		}
+	}
+
+	if ContainsScope(scopes, ScopeEmail) {
+		email := identity.Email
+		if email == "" && user.Email != nil {
+			email = *user.Email
+		}
+		resp.Email = MaskEmail(email)
+	}
+
+	if ContainsScope(scopes, ScopePhone) {
+		phone := identity.Phone
+		if phone == "" && user.PhoneCipher != nil {
+			decryptedPhone, err := kms.DecryptPhone(*user.PhoneCipher, user.OpenID)
+			if err == nil {
+				phone = decryptedPhone
+			}
+		}
+		resp.Phone = MaskPhone(phone)
+	}
+
+	return resp, nil
 }
 
 // UpdateUserInfo 更新用户信息
-func (s *Service) UpdateUserInfo(openid string, req *UpdateUserInfoRequest) (*UserInfoResponse, error) {
-	user, err := s.getUserByOpenID(openid)
+func (s *Service) UpdateUserInfo(identity *Identity, req *UpdateUserInfoRequest) (*UserInfoResponse, error) {
+	user, err := s.getUserByOpenID(identity.UserID)
 	if err != nil {
 		return nil, err
 	}
 
 	updates := make(map[string]any)
-	if req.Name != "" {
-		updates["name"] = req.Name
+	if req.Nickname != "" {
+		updates["name"] = req.Nickname
 	}
 	if req.Picture != "" {
 		updates["picture"] = req.Picture
@@ -382,7 +659,7 @@ func (s *Service) UpdateUserInfo(openid string, req *UpdateUserInfoRequest) (*Us
 		}
 	}
 
-	return s.GetUserInfo(openid)
+	return s.GetUserInfo(identity)
 }
 
 // ============= Helper Methods =============
@@ -403,7 +680,7 @@ func (s *Service) getUserByOpenID(openid string) (*User, error) {
 	return &user, nil
 }
 
-func (s *Service) findOrCreateUser(ctx context.Context, idp IDP, result *IDPResult) (*User, error) {
+func (s *Service) findOrCreateUser(idp IDP, result *IDPResult) (*User, error) {
 	domain := idp.GetDomain()
 
 	// 1. 查找已有身份（通过 idp 和 t_openid）
@@ -480,41 +757,66 @@ func (s *Service) generateTokens(ctx context.Context, client *Client, user *User
 		refreshTTL = time.Duration(config.GetInt("auth.refresh-expires-in")) * 24 * time.Hour
 	}
 
-	resp := &TokenResponse{
-		TokenType: "Bearer",
-		ExpiresIn: int(accessTTL.Seconds()),
+	// 解析 scope，确定要包含哪些用户信息
+	scopes := ParseScopes(scope)
+
+	// 构建 SubjectClaims（加密到 sub）
+	subjectClaims := &SubjectClaims{
+		OpenID: user.OpenID,
 	}
 
-	var err error
-	if user.Domain == DomainCIAM {
-		// C 端用户使用 ID Token
-		resp.IDToken, err = s.tokenManager.CreateIDToken(user.OpenID, client.ClientID, user.Domain, user.Name, user.Picture, accessTTL)
-	} else {
-		// B 端用户使用 Access Token
-		resp.AccessToken, err = s.tokenManager.CreateAccessToken(user.OpenID, client.ClientID, user.Domain, accessTTL)
+	// 根据 scope 添加用户信息
+	if ContainsScope(scopes, ScopeProfile) {
+		subjectClaims.Nickname = user.Name
+		subjectClaims.Picture = user.Picture
 	}
+
+	if ContainsScope(scopes, ScopeEmail) && user.Email != nil {
+		subjectClaims.Email = *user.Email
+	}
+
+	if ContainsScope(scopes, ScopePhone) && user.PhoneCipher != nil {
+		// 解密手机号
+		phone, err := kms.DecryptPhone(*user.PhoneCipher, user.OpenID)
+		if err == nil {
+			subjectClaims.Phone = phone
+		}
+	}
+
+	// 创建 Access Token（统一使用 access_token）
+	accessToken, err := s.tokenManager.CreateAccessToken(subjectClaims, client.ClientID, scope, accessTTL)
 	if err != nil {
 		return nil, fmt.Errorf("create token: %w", err)
 	}
 
-	// 清理旧的 Refresh Token
-	s.cleanupOldRefreshTokens(ctx, user.OpenID, client.ClientID)
-
-	// 创建新的 Refresh Token
-	refreshToken := &RefreshToken{
-		Token:     GenerateRefreshTokenValue(),
-		UserID:    user.OpenID,
-		ClientID:  client.ClientID,
-		Scope:     scope,
-		ExpiresAt: now.Add(refreshTTL),
-		CreatedAt: now,
+	resp := &TokenResponse{
+		AccessToken: accessToken,
+		TokenType:   "Bearer",
+		ExpiresIn:   int(accessTTL.Seconds()),
+		Scope:       scope,
 	}
 
-	if err := s.store.SaveRefreshToken(ctx, refreshToken); err != nil {
-		return nil, fmt.Errorf("create refresh token: %w", err)
-	}
+	// 只有 scope 包含 offline_access 时才返回 refresh_token
+	if ContainsScope(scopes, ScopeOfflineAccess) {
+		// 清理旧的 Refresh Token
+		s.cleanupOldRefreshTokens(ctx, user.OpenID, client.ClientID)
 
-	resp.RefreshToken = refreshToken.Token
+		// 创建新的 Refresh Token
+		refreshToken := &RefreshToken{
+			Token:     GenerateRefreshTokenValue(),
+			UserID:    user.OpenID,
+			ClientID:  client.ClientID,
+			Scope:     scope,
+			ExpiresAt: now.Add(refreshTTL),
+			CreatedAt: now,
+		}
+
+		if err := s.store.SaveRefreshToken(ctx, refreshToken); err != nil {
+			return nil, fmt.Errorf("create refresh token: %w", err)
+		}
+
+		resp.RefreshToken = refreshToken.Token
+	}
 
 	return resp, nil
 }

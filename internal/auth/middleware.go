@@ -30,19 +30,15 @@ func (m *Middleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		// 尝试验证为 Access Token
+		// 验证 Access Token（统一使用 access_token）
 		identity, err := m.tokenManager.VerifyAccessToken(token)
 		if err != nil {
-			// 尝试验证为 ID Token
-			identity, err = m.tokenManager.VerifyIDToken(token)
-			if err != nil {
-				c.Header("WWW-Authenticate", "Bearer error=\"invalid_token\"")
-				c.AbortWithStatusJSON(http.StatusUnauthorized, Error{
-					Code:        ErrInvalidToken,
-					Description: err.Error(),
-				})
-				return
-			}
+			c.Header("WWW-Authenticate", "Bearer error=\"invalid_token\"")
+			c.AbortWithStatusJSON(http.StatusUnauthorized, Error{
+				Code:        ErrInvalidToken,
+				Description: err.Error(),
+			})
+			return
 		}
 
 		c.Set("identity", identity)
@@ -59,11 +55,8 @@ func (m *Middleware) OptionalAuth() gin.HandlerFunc {
 			return
 		}
 
-		// 尝试验证
+		// 验证 Access Token
 		identity, err := m.tokenManager.VerifyAccessToken(token)
-		if err != nil {
-			identity, err = m.tokenManager.VerifyIDToken(token)
-		}
 		if err == nil && identity != nil {
 			c.Set("identity", identity)
 		}
@@ -84,13 +77,8 @@ func (m *Middleware) RequireDomain(domain Domain) gin.HandlerFunc {
 			return
 		}
 
-		if identity.Domain != domain {
-			c.AbortWithStatusJSON(http.StatusForbidden, Error{
-				Code:        ErrAccessDenied,
-				Description: "access denied for this domain",
-			})
-			return
-		}
+		// Domain 检查已移除（不再在 Token 中存储 domain）
+		// 如果需要域检查，可以通过其他方式实现
 
 		c.Next()
 	}
@@ -121,10 +109,9 @@ func GetUserID(c *gin.Context) string {
 	return ""
 }
 
-// GetDomain 从上下文获取域
+// GetDomain 从上下文获取域（已废弃，Token 中不再存储 domain）
 func GetDomain(c *gin.Context) Domain {
-	if identity := GetIdentity(c); identity != nil {
-		return identity.Domain
-	}
+	// Domain 信息已从 Token 中移除
+	// 如需获取用户域，请从数据库查询
 	return ""
 }

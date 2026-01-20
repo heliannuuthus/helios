@@ -8,10 +8,10 @@ package main
 
 import (
 	"github.com/google/wire"
-	"gorm.io/gorm"
 	"github.com/heliannuuthus/helios/internal/auth"
 	"github.com/heliannuuthus/helios/internal/database"
-	"github.com/heliannuuthus/helios/internal/management/upload"
+	"github.com/heliannuuthus/helios/internal/hermes"
+	"github.com/heliannuuthus/helios/internal/hermes/upload"
 	"github.com/heliannuuthus/helios/internal/zwei/favorite"
 	"github.com/heliannuuthus/helios/internal/zwei/history"
 	"github.com/heliannuuthus/helios/internal/zwei/home"
@@ -19,6 +19,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
+	"gorm.io/gorm"
 )
 
 import (
@@ -29,23 +30,20 @@ import (
 
 // InitializeApp 初始化应用（由 wire 生成）
 func InitializeApp() (*App, error) {
-	db := database.Get()
-	handler := recipe.NewHandler(db)
-	
-	// auth.NewService 返回 (*Service, error)
-	authService, err := auth.NewService(db)
+	db := provideDB()
+	handler := provideRecipeHandler()
+	authHandler, err := provideAuthHandler()
 	if err != nil {
 		return nil, err
 	}
-	authHandler := auth.NewHandler(authService)
-	
-	favoriteHandler := favorite.NewHandler(db)
-	historyHandler := history.NewHandler(db)
-	homeHandler := home.NewHandler(db)
-	tagHandler := tag.NewHandler(db)
-	recommendHandler := recommend.NewHandler(db)
-	uploadHandler := upload.NewHandler(db)
-	preferenceHandler := preference.NewHandler(db)
+	favoriteHandler := provideFavoriteHandler()
+	historyHandler := provideHistoryHandler()
+	homeHandler := provideHomeHandler()
+	tagHandler := provideTagHandler()
+	recommendHandler := provideRecommendHandler()
+	uploadHandler := provideUploadHandler()
+	preferenceHandler := providePreferenceHandler()
+	hermesHandler := provideHermesHandler()
 	app := &App{
 		DB:                db,
 		RecipeHandler:     handler,
@@ -57,14 +55,80 @@ func InitializeApp() (*App, error) {
 		RecommendHandler:  recommendHandler,
 		UploadHandler:     uploadHandler,
 		PreferenceHandler: preferenceHandler,
+		HermesHandler:     hermesHandler,
 	}
 	return app, nil
 }
 
 // wire.go:
 
+// 业务模块 Handler（使用 Zwei 数据库）
+func provideRecipeHandler() *recipe.Handler {
+	return recipe.NewHandler(database.GetZwei())
+}
+
+func provideFavoriteHandler() *favorite.Handler {
+	return favorite.NewHandler(database.GetZwei())
+}
+
+func provideHistoryHandler() *history.Handler {
+	return history.NewHandler(database.GetZwei())
+}
+
+func providePreferenceHandler() *preference.Handler {
+	return preference.NewHandler(database.GetZwei())
+}
+
+func provideTagHandler() *tag.Handler {
+	return tag.NewHandler(database.GetZwei())
+}
+
+func provideRecommendHandler() *recommend.Handler {
+	return recommend.NewHandler(database.GetZwei())
+}
+
+func provideHomeHandler() *home.Handler {
+	return home.NewHandler(database.GetZwei())
+}
+
+// 认证模块 Handler（使用 Auth 数据库）
+func provideAuthHandler() (*auth.Handler, error) {
+	authService, err := auth.NewService(database.GetAuth())
+	if err != nil {
+		return nil, err
+	}
+	return auth.NewHandler(authService), nil
+}
+
+func provideUploadHandler() *upload.Handler {
+	return upload.NewHandler(database.GetAuth())
+}
+
+func provideHermesHandler() *hermes.Handler {
+	service := hermes.NewService()
+	return hermes.NewHandler(service)
+}
+
+// provideDB 提供默认数据库连接（用于 App.DB 字段，保持兼容性）
+func provideDB() *gorm.DB {
+	return database.Get()
+}
+
 // ProviderSet 提供者集合
-var ProviderSet = wire.NewSet(database.Get, recipe.NewService, auth.NewService, favorite.NewService, history.NewService, preference.NewService, tag.NewService, recommend.NewService, recipe.NewHandler, auth.NewHandler, favorite.NewHandler, history.NewHandler, home.NewHandler, tag.NewHandler, recommend.NewHandler, upload.NewHandler, preference.NewHandler)
+var ProviderSet = wire.NewSet(
+	provideDB, recipe.NewService, favorite.NewService, history.NewService, preference.NewService, tag.NewService, recommend.NewService, provideRecipeHandler,
+	provideFavoriteHandler,
+	provideHistoryHandler,
+	providePreferenceHandler,
+	provideTagHandler,
+	provideRecommendHandler,
+	provideHomeHandler,
+
+	provideAuthHandler,
+	provideUploadHandler,
+
+	provideHermesHandler,
+)
 
 // App 应用依赖容器
 type App struct {
@@ -78,4 +142,5 @@ type App struct {
 	RecommendHandler  *recommend.Handler
 	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
+	HermesHandler     *hermes.Handler
 }

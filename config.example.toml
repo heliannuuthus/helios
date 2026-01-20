@@ -84,6 +84,19 @@ refresh-expires-in = 365     # refresh_token 过期时间(天)，1年
 max-refresh-token = 10       # 每用户最大 refresh_token 数
 service-url = "http://localhost:18000"  # Auth 服务地址（zwei 模块调用时使用）
 
+# 域配置（Domain 配置，密钥使用 python3 scripts/genkeys.py 生成）
+[auth.domains.ciam]
+name = "Customer Identity"           # 域名称
+description = "C端用户身份域"         # 域描述
+sign-key = "ed25519:base64_encoded_sign_key"      # 签名密钥（格式：算法:base64密钥）
+encrypt-key = "aes256:base64_encoded_encrypt_key"  # 加密密钥（格式：算法:base64密钥）
+
+[auth.domains.piam]
+name = "Partner Identity"           # 域名称
+description = "B端用户身份域"         # 域描述
+sign-key = "ed25519:base64_encoded_sign_key"      # 签名密钥（格式：算法:base64密钥）
+encrypt-key = "aes256:base64_encoded_encrypt_key"  # 加密密钥（格式：算法:base64密钥）
+
 # KMS 密钥配置（使用 python3 scripts/genkeys.py 生成）
 [kms.token]
 sign-key = ""  # Ed25519 签名密钥（base64url 编码的 JWK JSON）

@@ -1,6 +1,6 @@
 package upload
 
-// 注意：此包位于 management 模块下，但包名保持 upload 以保持 API 兼容性
+// 注意：此包位于 hermes 模块下，但包名保持 upload 以保持 API 兼容性
 
 import (
 	"bytes"
@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/heliannuuthus/helios/internal/auth"
-	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/internal/auth/models"
-	"github.com/heliannuuthus/helios/pkg/oss"
-
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+
+	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/auth/models"
+	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/helios/pkg/oss"
 )
 
 type Handler struct {

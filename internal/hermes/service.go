@@ -1,4 +1,4 @@
-package management
+package hermes
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/heliannuuthus/helios/internal/management/models"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/database"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/kms"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"gorm.io/gorm"
@@ -30,63 +30,60 @@ func NewService() *Service {
 
 // ==================== Domain 相关 ====================
 
-// CreateDomain 创建域
-func (s *Service) CreateDomain(ctx context.Context, req *DomainCreateRequest) (*models.Domain, error) {
-	domain := &models.Domain{
-		DomainID:    req.DomainID,
-		Name:        req.Name,
-		Description: req.Description,
-		Status:      0,
+// GetDomain 获取域（从配置读取）
+func (s *Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
+	domainConfig, err := config.GetDomainConfig(domainID)
+	if err != nil {
+		return nil, fmt.Errorf("获取域失败: %w", err)
 	}
 
-	if err := s.db.WithContext(ctx).Create(domain).Error; err != nil {
-		return nil, fmt.Errorf("创建域失败: %w", err)
+	name := domainConfig.Name
+	if name == "" {
+		name = domainID
+	}
+
+	var description *string
+	if domainConfig.Description != "" {
+		description = &domainConfig.Description
+	}
+
+	domain := &models.Domain{
+		DomainID:    domainID,
+		Name:        name,
+		Description: description,
 	}
 
 	return domain, nil
 }
 
-// GetDomain 获取域
-func (s *Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
-	var domain models.Domain
-	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).First(&domain).Error; err != nil {
-		return nil, fmt.Errorf("获取域失败: %w", err)
-	}
-	return &domain, nil
-}
-
-// ListDomains 列出所有域
+// ListDomains 列出所有域（从配置读取）
 func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
-	var domains []models.Domain
-	if err := s.db.WithContext(ctx).Find(&domains).Error; err != nil {
-		return nil, fmt.Errorf("列出域失败: %w", err)
+	authConfig := config.GetAuthConfig()
+	if authConfig == nil {
+		return nil, fmt.Errorf("auth 配置未初始化")
 	}
+
+	domains := make([]models.Domain, 0, len(authConfig.Domains))
+	for domainID, domainConfig := range authConfig.Domains {
+		name := domainConfig.Name
+		if name == "" {
+			name = domainID
+		}
+
+		var description *string
+		if domainConfig.Description != "" {
+			description = &domainConfig.Description
+		}
+
+		domain := models.Domain{
+			DomainID:    domainID,
+			Name:        name,
+			Description: description,
+		}
+		domains = append(domains, domain)
+	}
+
 	return domains, nil
-}
-
-// UpdateDomain 更新域
-func (s *Service) UpdateDomain(ctx context.Context, domainID string, req *DomainUpdateRequest) error {
-	updates := make(map[string]interface{})
-	if req.Name != nil {
-		updates["name"] = *req.Name
-	}
-	if req.Description != nil {
-		updates["description"] = *req.Description
-	}
-	if req.Status != nil {
-		updates["status"] = *req.Status
-	}
-
-	if len(updates) == 0 {
-		return nil
-	}
-
-	if err := s.db.WithContext(ctx).Model(&models.Domain{}).
-		Where("domain_id = ?", domainID).Updates(updates).Error; err != nil {
-		return fmt.Errorf("更新域失败: %w", err)
-	}
-
-	return nil
 }
 
 // ==================== Service 相关 ====================

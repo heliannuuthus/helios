@@ -3,13 +3,13 @@ package preference
 import (
 	"net/http"
 
-	"github.com/heliannuuthus/helios/internal/auth"
-	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/internal/zwei/tag"
-
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+
+	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/zwei/tag"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // Handler 用户偏好处理器
