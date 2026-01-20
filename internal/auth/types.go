@@ -76,15 +76,29 @@ type AuthorizeRequest struct {
 	Scope               string              `json:"scope"`
 }
 
+// IDPConfig IDP 配置信息（返回给前端）
+// Type 字段对应 connection，前端在 login 时传入相同的值
+type IDPConfig struct {
+	Type     string                 `json:"type"`                // Connection（IDP）类型，如 "wechat:mp"，前端在 login 时作为 connection 传入
+	ClientID string                 `json:"client_id,omitempty"` // IDP 的客户端 ID（如微信 appid），如果需要
+	Extra    map[string]interface{} `json:"extra,omitempty"`     // 其他配置信息
+}
+
 // AuthorizeResponse 授权响应
 type AuthorizeResponse struct {
-	SessionID string `json:"session_id"`
+	SessionID string      `json:"session_id"`
+	IDPs      []IDPConfig `json:"idps"` // 客户端允许的 IDPs 配置
 }
 
 // LoginRequest 登录请求
+// Connection 对应 IDP（身份提供方），如 "wechat:mp"、"github"、"local_db" 等
+// 不同的 connection 需要不同的 data 字段：
+//   - OAuth2 connection（如 wechat:mp）: data.code
+//   - Password connection: data.username, data.password
+//   - SMS connection: data.phone, data.code
 type LoginRequest struct {
-	IDP  IDP    `json:"idp" binding:"required"`
-	Code string `json:"code" binding:"required"` // IDP 返回的授权码
+	Connection string            `json:"connection" binding:"required"` // 身份提供方（IDP），如 "wechat:mp"
+	Data       map[string]string `json:"data" binding:"required"`      // Connection 需要的数据，如 {"code": "xxx"}
 }
 
 // LoginResponse 登录响应
@@ -120,11 +134,13 @@ type RevokeRequest struct {
 
 // UserInfoResponse 用户信息响应
 type UserInfoResponse struct {
-	Sub      string `json:"sub"`                 // 用户 ID
-	Name     string `json:"name,omitempty"`      // 昵称
-	Picture  string `json:"picture,omitempty"`   // 头像
-	Phone    string `json:"phone,omitempty"`     // 手机号（脱敏）
-	Domain   Domain `json:"domain"`              // 所属域
+	Sub           string `json:"sub"`                      // 用户 OpenID
+	Name          string `json:"name,omitempty"`           // 昵称
+	Picture       string `json:"picture,omitempty"`        // 头像
+	Email         string `json:"email,omitempty"`          // 邮箱
+	EmailVerified bool   `json:"email_verified,omitempty"` // 邮箱是否已验证
+	Phone         string `json:"phone,omitempty"`          // 手机号（脱敏）
+	Domain        Domain `json:"domain"`                   // 所属域
 }
 
 // UpdateUserInfoRequest 更新用户信息请求

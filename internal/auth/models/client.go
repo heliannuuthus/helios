@@ -1,23 +1,25 @@
-package auth
+package models
 
 import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"time"
+
+	"github.com/heliannuuthus/helios/internal/auth"
 )
 
 // Client OAuth2 客户端
 type Client struct {
-	ID                    uint      `gorm:"primaryKey;autoIncrement;column:_id"`
-	Domain                Domain    `gorm:"column:domain;size:32;not null;index"`
-	ClientID              string    `gorm:"column:client_id;size:64;not null;uniqueIndex"`
-	Name                  string    `gorm:"column:name;size:128;not null"`
-	RedirectURIs          string    `gorm:"column:redirect_uris;type:text"` // JSON 数组
-	AccessTokenExpiresIn  int       `gorm:"column:access_token_expires_in;default:7200"`
-	RefreshTokenExpiresIn int       `gorm:"column:refresh_token_expires_in;default:604800"`
-	CreatedAt             time.Time `gorm:"column:created_at"`
-	UpdatedAt             time.Time `gorm:"column:updated_at"`
+	ID                    uint        `gorm:"primaryKey;autoIncrement;column:_id"`
+	Domain                auth.Domain `gorm:"column:domain;size:32;not null;index"`
+	ClientID              string      `gorm:"column:client_id;size:64;not null;uniqueIndex"`
+	Name                  string      `gorm:"column:name;size:128;not null"`
+	RedirectURIs          string      `gorm:"column:redirect_uris;type:text"` // JSON 数组
+	AccessTokenExpiresIn  int         `gorm:"column:access_token_expires_in;default:7200"`
+	RefreshTokenExpiresIn int         `gorm:"column:refresh_token_expires_in;default:604800"`
+	CreatedAt             time.Time   `gorm:"column:created_at"`
+	UpdatedAt             time.Time   `gorm:"column:updated_at"`
 }
 
 func (Client) TableName() string {
@@ -55,7 +57,7 @@ func (c *Client) ValidateRedirectURI(uri string) bool {
 }
 
 // ValidateIDP 验证 IDP 是否允许（IDP 配置从配置文件读取）
-func (c *Client) ValidateIDP(idp IDP) bool {
+func (c *Client) ValidateIDP(idp auth.IDP) bool {
 	// IDP 所属域必须匹配
 	return idp.GetDomain() == c.Domain
 }

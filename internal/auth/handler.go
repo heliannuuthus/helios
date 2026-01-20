@@ -18,7 +18,15 @@ func NewHandler(service *Service) *Handler {
 
 // Authorize POST /auth/authorize
 // @Summary 创建认证会话
-// @Description 创建 OAuth2 认证会话，返回 session_id
+// @Description 创建 OAuth2 认证会话，返回 session_id 和可用的 connections（IDPs 配置）
+// Session ID 会通过以下方式返回：
+//   - Cookie: auth_session（HttpOnly，SPA 和传统 Web 应用都支持）
+//   - Response Body: session_id 字段（仅用于前端显示，实际使用时必须通过 Cookie）
+//
+// Session ID 必须通过 Cookie 传递，后续 login 请求会从 Cookie 读取。
+// 如果 SPA 和 API 不在同一域名，需要配置 CORS allow_credentials=true。
+//
+// 返回的 idps 配置中，type 字段对应 connection（IDP），前端在 login 时作为 connection 传入
 // @Tags auth
 // @Accept json
 // @Produce json
@@ -43,38 +51,51 @@ func (h *Handler) Authorize(c *gin.Context) {
 		return
 	}
 
-	// 设置 session cookie
+	// 设置 session cookie（HttpOnly，必须通过 Cookie 传递）
+	// HttpOnly 防止 JavaScript 访问，提高安全性
+	// 如果 SPA 和 API 不在同一域名，需要配置 CORS allow_credentials=true
 	c.SetCookie("auth_session", resp.SessionID, 600, "/", "", false, true)
 	c.JSON(http.StatusOK, resp)
 }
 
 // Login POST /auth/login
-// @Summary IDP 登录
-// @Description 使用 IDP code 完成登录，返回授权码
+// @Summary 认证登录
+// @Description 使用 connection（IDP）和对应的 data 完成登录，返回授权码。
+// Session ID 必须从 Cookie（auth_session）获取，如果没有 Cookie 则视为无效 session。
+// SPA 场景使用 HttpOnly Cookie，浏览器会自动发送，更安全。
 // @Tags auth
 // @Accept json
 // @Produce json
 // @Param request body LoginRequest true "登录请求"
 // @Success 200 {object} LoginResponse
 // @Failure 400 {object} Error
+// @Failure 412 {object} Error "Session 过期"
 // @Router /auth/login [post]
 func (h *Handler) Login(c *gin.Context) {
-	// 从 cookie 获取 session_id
-	sessionID, err := c.Cookie("auth_session")
-	if err != nil || sessionID == "" {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, "missing session"))
-		return
-	}
-
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, err.Error()))
 		return
 	}
 
+	// 只能从 cookie 获取 session_id
+	sessionID, err := c.Cookie("auth_session")
+	if err != nil || sessionID == "" {
+		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, "missing session_id (auth_session cookie required)"))
+		return
+	}
+
 	resp, err := h.service.Login(c.Request.Context(), sessionID, &req)
 	if err != nil {
 		if authErr, ok := err.(*Error); ok {
+			// Session 过期返回 412
+			if authErr.Code == ErrInvalidRequest {
+				// 检查错误描述是否包含 session expired
+				if authErr.Description == "session not found or expired" {
+					h.errorResponse(c, http.StatusPreconditionFailed, authErr)
+					return
+				}
+			}
 			h.errorResponse(c, http.StatusBadRequest, authErr)
 		} else {
 			h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, err.Error()))
@@ -82,7 +103,7 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	// 清除 session cookie
+	// 清除 session cookie（如果存在）
 	c.SetCookie("auth_session", "", -1, "/", "", false, true)
 	c.JSON(http.StatusOK, resp)
 }
@@ -159,8 +180,11 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
-	count := h.service.RevokeAllTokens(identity.UserID)
-	c.JSON(http.StatusOK, gin.H{"revoked": count})
+	if err := h.service.RevokeAllTokens(c.Request.Context(), identity.UserID); err != nil {
+		h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, "failed to revoke tokens"))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 // UserInfo GET /auth/userinfo

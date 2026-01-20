@@ -2,13 +2,15 @@ package auth
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"sync"
 	"time"
 )
 
-// Store 会话和授权码存储接口
+// Store 会话、授权码和 RefreshToken 存储接口
 type Store interface {
 	// Session 管理
 	SaveSession(ctx context.Context, session *Session) error
@@ -21,31 +23,67 @@ type Store interface {
 	GetAuthCode(ctx context.Context, code string) (*AuthorizationCode, error)
 	MarkAuthCodeUsed(ctx context.Context, code string) error
 	DeleteAuthCode(ctx context.Context, code string) error
+
+	// RefreshToken 管理
+	SaveRefreshToken(ctx context.Context, token *RefreshToken) error
+	GetRefreshToken(ctx context.Context, token string) (*RefreshToken, error)
+	RevokeRefreshToken(ctx context.Context, token string) error
+	RevokeUserRefreshTokens(ctx context.Context, userID string) error
+	ListUserRefreshTokens(ctx context.Context, userID, clientID string) ([]*RefreshToken, error)
+}
+
+// RefreshToken 刷新令牌（存储在 Redis）
+type RefreshToken struct {
+	Token     string    `json:"token"`
+	UserID    string    `json:"user_id"` // 实际存储的是用户的 OpenID
+	ClientID  string    `json:"client_id"`
+	Scope     string    `json:"scope"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Revoked   bool      `json:"revoked"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// IsValid 检查是否有效
+func (r *RefreshToken) IsValid() bool {
+	return !r.Revoked && time.Now().Before(r.ExpiresAt)
+}
+
+// GenerateRefreshTokenValue 生成刷新令牌值
+func GenerateRefreshTokenValue() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // 错误定义
 var (
-	ErrSessionNotFound = errors.New("session not found")
-	ErrSessionExpired  = errors.New("session expired")
-	ErrCodeNotFound    = errors.New("authorization code not found")
-	ErrCodeExpired     = errors.New("authorization code expired")
-	ErrCodeUsed        = errors.New("authorization code already used")
+	ErrSessionNotFound      = errors.New("session not found")
+	ErrSessionExpired       = errors.New("session expired")
+	ErrCodeNotFound         = errors.New("authorization code not found")
+	ErrCodeExpired          = errors.New("authorization code expired")
+	ErrCodeUsed             = errors.New("authorization code already used")
+	ErrRefreshTokenNotFound = errors.New("refresh token not found")
+	ErrRefreshTokenExpired  = errors.New("refresh token expired")
+	ErrRefreshTokenRevoked  = errors.New("refresh token revoked")
 )
 
 // MemoryStore 内存存储（开发/测试用）
 type MemoryStore struct {
-	mu       sync.RWMutex
-	sessions map[string]*Session
-	codes    map[string]*AuthorizationCode
+	mu            sync.RWMutex
+	sessions      map[string]*Session
+	codes         map[string]*AuthorizationCode
+	refreshTokens map[string]*RefreshToken
+	userTokens    map[string][]string // userID -> []token
 }
 
 // NewMemoryStore 创建内存存储
 func NewMemoryStore() *MemoryStore {
 	store := &MemoryStore{
-		sessions: make(map[string]*Session),
-		codes:    make(map[string]*AuthorizationCode),
+		sessions:      make(map[string]*Session),
+		codes:         make(map[string]*AuthorizationCode),
+		refreshTokens: make(map[string]*RefreshToken),
+		userTokens:    make(map[string][]string),
 	}
-	// 启动清理 goroutine
 	go store.cleanupLoop()
 	return store
 }
@@ -125,6 +163,70 @@ func (s *MemoryStore) DeleteAuthCode(ctx context.Context, code string) error {
 	return nil
 }
 
+func (s *MemoryStore) SaveRefreshToken(ctx context.Context, token *RefreshToken) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refreshTokens[token.Token] = token
+	s.userTokens[token.UserID] = append(s.userTokens[token.UserID], token.Token)
+	return nil
+}
+
+func (s *MemoryStore) GetRefreshToken(ctx context.Context, token string) (*RefreshToken, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rt, ok := s.refreshTokens[token]
+	if !ok {
+		return nil, ErrRefreshTokenNotFound
+	}
+	if time.Now().After(rt.ExpiresAt) {
+		return nil, ErrRefreshTokenExpired
+	}
+	if rt.Revoked {
+		return nil, ErrRefreshTokenRevoked
+	}
+	return rt, nil
+}
+
+func (s *MemoryStore) RevokeRefreshToken(ctx context.Context, token string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rt, ok := s.refreshTokens[token]; ok {
+		rt.Revoked = true
+	}
+	return nil
+}
+
+func (s *MemoryStore) RevokeUserRefreshTokens(ctx context.Context, userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if tokens, ok := s.userTokens[userID]; ok {
+		for _, token := range tokens {
+			if rt, exists := s.refreshTokens[token]; exists {
+				rt.Revoked = true
+			}
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) ListUserRefreshTokens(ctx context.Context, userID, clientID string) ([]*RefreshToken, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var result []*RefreshToken
+	if tokens, ok := s.userTokens[userID]; ok {
+		for _, token := range tokens {
+			if rt, exists := s.refreshTokens[token]; exists {
+				if clientID == "" || rt.ClientID == clientID {
+					if !rt.Revoked && time.Now().Before(rt.ExpiresAt) {
+						result = append(result, rt)
+					}
+				}
+			}
+		}
+	}
+	return result, nil
+}
+
 func (s *MemoryStore) cleanupLoop() {
 	ticker := time.NewTicker(5 * time.Minute)
 	for range ticker.C {
@@ -146,15 +248,22 @@ func (s *MemoryStore) cleanup() {
 			delete(s.codes, code)
 		}
 	}
+	for token, rt := range s.refreshTokens {
+		if now.After(rt.ExpiresAt) {
+			delete(s.refreshTokens, token)
+		}
+	}
 }
 
 // RedisStore Redis 存储
 type RedisStore struct {
-	client        RedisClient
-	sessionPrefix string
-	codePrefix    string
-	sessionTTL    time.Duration
-	codeTTL       time.Duration
+	client             RedisClient
+	sessionPrefix      string
+	codePrefix         string
+	refreshTokenPrefix string
+	userTokenPrefix    string
+	sessionTTL         time.Duration
+	codeTTL            time.Duration
 }
 
 // RedisClient Redis 客户端接口
@@ -162,15 +271,19 @@ type RedisClient interface {
 	Set(ctx context.Context, key string, value any, expiration time.Duration) error
 	Get(ctx context.Context, key string) (string, error)
 	Del(ctx context.Context, keys ...string) error
+	SAdd(ctx context.Context, key string, members ...any) error
+	SMembers(ctx context.Context, key string) ([]string, error)
 }
 
 // RedisStoreConfig Redis 存储配置
 type RedisStoreConfig struct {
-	Client        RedisClient
-	SessionPrefix string
-	CodePrefix    string
-	SessionTTL    time.Duration
-	CodeTTL       time.Duration
+	Client             RedisClient
+	SessionPrefix      string
+	CodePrefix         string
+	RefreshTokenPrefix string
+	UserTokenPrefix    string
+	SessionTTL         time.Duration
+	CodeTTL            time.Duration
 }
 
 // NewRedisStore 创建 Redis 存储
@@ -183,6 +296,14 @@ func NewRedisStore(cfg *RedisStoreConfig) *RedisStore {
 	if codePrefix == "" {
 		codePrefix = "auth:code:"
 	}
+	refreshTokenPrefix := cfg.RefreshTokenPrefix
+	if refreshTokenPrefix == "" {
+		refreshTokenPrefix = "auth:rt:"
+	}
+	userTokenPrefix := cfg.UserTokenPrefix
+	if userTokenPrefix == "" {
+		userTokenPrefix = "auth:user:rt:"
+	}
 	sessionTTL := cfg.SessionTTL
 	if sessionTTL == 0 {
 		sessionTTL = 10 * time.Minute
@@ -192,11 +313,13 @@ func NewRedisStore(cfg *RedisStoreConfig) *RedisStore {
 		codeTTL = 5 * time.Minute
 	}
 	return &RedisStore{
-		client:        cfg.Client,
-		sessionPrefix: sessionPrefix,
-		codePrefix:    codePrefix,
-		sessionTTL:    sessionTTL,
-		codeTTL:       codeTTL,
+		client:             cfg.Client,
+		sessionPrefix:      sessionPrefix,
+		codePrefix:         codePrefix,
+		refreshTokenPrefix: refreshTokenPrefix,
+		userTokenPrefix:    userTokenPrefix,
+		sessionTTL:         sessionTTL,
+		codeTTL:            codeTTL,
 	}
 }
 
@@ -273,4 +396,84 @@ func (s *RedisStore) MarkAuthCodeUsed(ctx context.Context, code string) error {
 
 func (s *RedisStore) DeleteAuthCode(ctx context.Context, code string) error {
 	return s.client.Del(ctx, s.codePrefix+code)
+}
+
+func (s *RedisStore) SaveRefreshToken(ctx context.Context, token *RefreshToken) error {
+	data, err := json.Marshal(token)
+	if err != nil {
+		return err
+	}
+	ttl := time.Until(token.ExpiresAt)
+	if ttl < 0 {
+		ttl = time.Second
+	}
+	if err := s.client.Set(ctx, s.refreshTokenPrefix+token.Token, string(data), ttl); err != nil {
+		return err
+	}
+	return s.client.SAdd(ctx, s.userTokenPrefix+token.UserID, token.Token)
+}
+
+func (s *RedisStore) GetRefreshToken(ctx context.Context, token string) (*RefreshToken, error) {
+	data, err := s.client.Get(ctx, s.refreshTokenPrefix+token)
+	if err != nil {
+		return nil, ErrRefreshTokenNotFound
+	}
+	var rt RefreshToken
+	if err := json.Unmarshal([]byte(data), &rt); err != nil {
+		return nil, err
+	}
+	if time.Now().After(rt.ExpiresAt) {
+		return nil, ErrRefreshTokenExpired
+	}
+	if rt.Revoked {
+		return nil, ErrRefreshTokenRevoked
+	}
+	return &rt, nil
+}
+
+func (s *RedisStore) RevokeRefreshToken(ctx context.Context, token string) error {
+	data, err := s.client.Get(ctx, s.refreshTokenPrefix+token)
+	if err != nil {
+		return nil
+	}
+	var rt RefreshToken
+	if err := json.Unmarshal([]byte(data), &rt); err != nil {
+		return err
+	}
+	rt.Revoked = true
+	newData, _ := json.Marshal(rt)
+	remaining := time.Until(rt.ExpiresAt)
+	if remaining < 0 {
+		remaining = time.Second
+	}
+	return s.client.Set(ctx, s.refreshTokenPrefix+token, string(newData), remaining)
+}
+
+func (s *RedisStore) RevokeUserRefreshTokens(ctx context.Context, userID string) error {
+	tokens, err := s.client.SMembers(ctx, s.userTokenPrefix+userID)
+	if err != nil {
+		return nil
+	}
+	for _, token := range tokens {
+		_ = s.RevokeRefreshToken(ctx, token)
+	}
+	return nil
+}
+
+func (s *RedisStore) ListUserRefreshTokens(ctx context.Context, userID, clientID string) ([]*RefreshToken, error) {
+	tokens, err := s.client.SMembers(ctx, s.userTokenPrefix+userID)
+	if err != nil {
+		return nil, nil
+	}
+	var result []*RefreshToken
+	for _, token := range tokens {
+		rt, err := s.GetRefreshToken(ctx, token)
+		if err != nil {
+			continue
+		}
+		if clientID == "" || rt.ClientID == clientID {
+			result = append(result, rt)
+		}
+	}
+	return result, nil
 }

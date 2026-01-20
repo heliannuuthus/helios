@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/internal/logger"
+	"github.com/heliannuuthus/helios/pkg/logger"
 	"gorm.io/gorm"
 )
 
@@ -52,7 +52,13 @@ func (s *Service) Authorize(ctx context.Context, req *AuthorizeRequest) (*Author
 		return nil, NewError(ErrInvalidRequest, "invalid redirect_uri")
 	}
 
-	// 3. 创建会话
+	// 3. 获取客户端允许的 IDPs 配置
+	idpConfigs, err := s.getIDPConfigs(client)
+	if err != nil {
+		return nil, NewError(ErrServerError, "failed to get idp configs")
+	}
+
+	// 4. 创建会话
 	sessionID := GenerateSessionID()
 	session := &Session{
 		ID:                  sessionID,
@@ -74,7 +80,51 @@ func (s *Service) Authorize(ctx context.Context, req *AuthorizeRequest) (*Author
 
 	return &AuthorizeResponse{
 		SessionID: sessionID,
+		IDPs:      idpConfigs,
 	}, nil
+}
+
+// getIDPConfigs 获取客户端允许的 IDPs 配置（从配置文件读取）
+func (s *Service) getIDPConfigs(client *Client) ([]IDPConfig, error) {
+	// 根据域返回该域下所有支持的 IDPs
+	var idps []IDP
+	switch client.Domain {
+	case DomainCIAM:
+		idps = []IDP{IDPWechatMP, IDPTTMP, IDPAlipayMP}
+	case DomainPIAM:
+		idps = []IDP{IDPWecom, IDPGithub, IDPGoogle}
+	default:
+		return nil, fmt.Errorf("unknown domain: %s", client.Domain)
+	}
+
+	// 构建配置列表
+	configs := make([]IDPConfig, 0, len(idps))
+	for _, idp := range idps {
+		idpConfig := IDPConfig{
+			Type:  string(idp),
+			Extra: make(map[string]interface{}),
+		}
+
+		// 根据 IDP 类型添加客户端 ID（如果需要）
+		switch idp {
+		case IDPWechatMP:
+			if appid := config.GetString("idps.wxmp.appid"); appid != "" {
+				idpConfig.ClientID = appid
+			}
+		case IDPTTMP:
+			if appid := config.GetString("idps.tt.appid"); appid != "" {
+				idpConfig.ClientID = appid
+			}
+		case IDPAlipayMP:
+			if appid := config.GetString("idps.alipay.appid"); appid != "" {
+				idpConfig.ClientID = appid
+			}
+		}
+
+		configs = append(configs, idpConfig)
+	}
+
+	return configs, nil
 }
 
 // ============= Login =============
@@ -85,72 +135,86 @@ func (s *Service) Login(ctx context.Context, sessionID string, req *LoginRequest
 	session, err := s.store.GetSession(ctx, sessionID)
 	if err != nil {
 		if errors.Is(err, ErrSessionNotFound) || errors.Is(err, ErrSessionExpired) {
+			// Session 过期或不存在，返回特定错误码供 handler 返回 412
 			return nil, NewError(ErrInvalidRequest, "session not found or expired")
 		}
 		return nil, NewError(ErrServerError, err.Error())
 	}
 
-	// 2. 获取客户端并验证 IDP
+	// 2. 解析 connection 为 IDP
+	idp := IDP(req.Connection)
+	if idp == "" {
+		return nil, NewError(ErrInvalidRequest, "connection is required")
+	}
+
+	// 3. 获取客户端并验证 IDP
 	client, err := s.getClient(session.ClientID)
 	if err != nil {
 		return nil, NewError(ErrInvalidClient, "client not found")
 	}
 
-	if !client.ValidateIDP(req.IDP) {
-		return nil, NewError(ErrInvalidRequest, fmt.Sprintf("idp %s not allowed for this client", req.IDP))
+	if !client.ValidateIDP(idp) {
+		return nil, NewError(ErrInvalidRequest, fmt.Sprintf("idp %s not allowed for this client", idp))
 	}
 
-	// 3. 调用 IDP 换取用户信息
-	idpResult, err := s.idpManager.Exchange(ctx, req.IDP, req.Code)
+	// 4. 从 data 中获取认证凭证（根据 connection 类型不同）
+	// OAuth2 connection（如 wechat:mp）需要 code
+	code, ok := req.Data["code"]
+	if !ok || code == "" {
+		return nil, NewError(ErrInvalidRequest, "code is required in data for oauth2 connection")
+	}
+
+	// 5. 调用 IDP 换取用户信息
+	idpResult, err := s.idpManager.Exchange(ctx, idp, code)
 	if err != nil {
-		logger.Errorf("[Auth] IDP 认证失败 - IDP: %s, Error: %v", req.IDP, err)
+		logger.Errorf("[Auth] IDP 认证失败 - IDP: %s, Error: %v", idp, err)
 		return nil, NewError(ErrAccessDenied, fmt.Sprintf("idp auth failed: %v", err))
 	}
 
-	// 4. 查找或创建用户
-	user, err := s.findOrCreateUser(ctx, req.IDP, idpResult)
+	// 6. 查找或创建用户（C 端 IDP 允许自动创建）
+	user, err := s.findOrCreateUser(ctx, idp, idpResult)
 	if err != nil {
 		return nil, NewError(ErrServerError, fmt.Sprintf("user management failed: %v", err))
 	}
 
-	// 5. 更新会话
-	session.UserID = user.ID
-	session.IDP = req.IDP
+	// 7. 更新会话
+	session.UserID = user.OpenID
+	session.IDP = idp
 	if err := s.store.UpdateSession(ctx, session); err != nil {
 		return nil, NewError(ErrServerError, "failed to update session")
 	}
 
-	// 6. 生成授权码
-	code := GenerateAuthorizationCode()
-	authCode := &AuthorizationCode{
-		Code:                code,
+	// 8. 生成授权码
+	authCode := GenerateAuthorizationCode()
+	authCodeObj := &AuthorizationCode{
+		Code:                authCode,
 		ClientID:            session.ClientID,
 		RedirectURI:         session.RedirectURI,
 		CodeChallenge:       session.CodeChallenge,
 		CodeChallengeMethod: string(session.CodeChallengeMethod),
 		Scope:               session.Scope,
-		UserID:              user.ID,
+		UserID:              user.OpenID,
 		CreatedAt:           time.Now(),
 		ExpiresAt:           time.Now().Add(5 * time.Minute),
 	}
 
-	if err := s.store.SaveAuthCode(ctx, authCode); err != nil {
+	if err := s.store.SaveAuthCode(ctx, authCodeObj); err != nil {
 		return nil, NewError(ErrServerError, "failed to save authorization code")
 	}
 
-	// 7. 删除会话
+	// 9. 删除会话
 	_ = s.store.DeleteSession(ctx, sessionID)
 
-	// 8. 构建响应
-	redirectURI := session.RedirectURI + "?code=" + url.QueryEscape(code)
+	// 10. 构建响应
+	redirectURI := session.RedirectURI + "?code=" + url.QueryEscape(authCode)
 	if session.State != "" {
 		redirectURI += "&state=" + url.QueryEscape(session.State)
 	}
 
-	logger.Infof("[Auth] 登录成功 - UserID: %s, IDP: %s", user.ID, req.IDP)
+	logger.Infof("[Auth] 登录成功 - OpenID: %s, IDP: %s", user.OpenID, idp)
 
 	return &LoginResponse{
-		Code:        code,
+		Code:        authCode,
 		RedirectURI: redirectURI,
 	}, nil
 }
@@ -197,7 +261,7 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 	}
 
 	// 6. 获取用户和客户端
-	user, err := s.getUserByID(authCode.UserID)
+	user, err := s.getUserByOpenID(authCode.UserID)
 	if err != nil {
 		return nil, NewError(ErrServerError, "user not found")
 	}
@@ -212,9 +276,9 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 }
 
 func (s *Service) exchangeRefreshToken(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
-	// 1. 获取 Refresh Token
-	var refreshToken RefreshToken
-	if err := s.db.Where("token = ? AND revoked = ?", req.RefreshToken, false).First(&refreshToken).Error; err != nil {
+	// 1. 从 Store 获取 Refresh Token
+	refreshToken, err := s.store.GetRefreshToken(ctx, req.RefreshToken)
+	if err != nil {
 		return nil, NewError(ErrInvalidGrant, "invalid refresh token")
 	}
 
@@ -229,7 +293,7 @@ func (s *Service) exchangeRefreshToken(ctx context.Context, req *TokenRequest) (
 	}
 
 	// 4. 获取用户和客户端
-	user, err := s.getUserByID(refreshToken.UserID)
+	user, err := s.getUserByOpenID(refreshToken.UserID)
 	if err != nil {
 		return nil, NewError(ErrServerError, "user not found")
 	}
@@ -247,9 +311,9 @@ func (s *Service) exchangeRefreshToken(ctx context.Context, req *TokenRequest) (
 
 	var token string
 	if user.Domain == DomainCIAM {
-		token, err = s.tokenManager.CreateIDToken(user.ID, client.ID, user.Domain, user.Name, user.Picture, accessTTL)
+		token, err = s.tokenManager.CreateIDToken(user.OpenID, client.ClientID, user.Domain, user.Name, user.Picture, accessTTL)
 	} else {
-		token, err = s.tokenManager.CreateAccessToken(user.ID, client.ID, user.Domain, accessTTL)
+		token, err = s.tokenManager.CreateAccessToken(user.OpenID, client.ClientID, user.Domain, accessTTL)
 	}
 	if err != nil {
 		return nil, NewError(ErrServerError, "failed to create token")
@@ -274,24 +338,19 @@ func (s *Service) exchangeRefreshToken(ctx context.Context, req *TokenRequest) (
 
 // RevokeToken 撤销 Token
 func (s *Service) RevokeToken(ctx context.Context, token string) error {
-	result := s.db.Model(&RefreshToken{}).Where("token = ?", token).Update("revoked", true)
-	if result.Error != nil {
-		return result.Error
-	}
-	return nil
+	return s.store.RevokeRefreshToken(ctx, token)
 }
 
 // RevokeAllTokens 撤销用户所有 Token
-func (s *Service) RevokeAllTokens(userID string) int64 {
-	result := s.db.Model(&RefreshToken{}).Where("user_id = ?", userID).Update("revoked", true)
-	return result.RowsAffected
+func (s *Service) RevokeAllTokens(ctx context.Context, userID string) error {
+	return s.store.RevokeUserRefreshTokens(ctx, userID)
 }
 
 // ============= UserInfo =============
 
 // GetUserInfo 获取用户信息
-func (s *Service) GetUserInfo(userID string) (*UserInfoResponse, error) {
-	user, err := s.getUserByID(userID)
+func (s *Service) GetUserInfo(openid string) (*UserInfoResponse, error) {
+	user, err := s.getUserByOpenID(openid)
 	if err != nil {
 		return nil, err
 	}
@@ -303,8 +362,8 @@ func (s *Service) GetUserInfo(userID string) (*UserInfoResponse, error) {
 }
 
 // UpdateUserInfo 更新用户信息
-func (s *Service) UpdateUserInfo(userID string, req *UpdateUserInfoRequest) (*UserInfoResponse, error) {
-	user, err := s.getUserByID(userID)
+func (s *Service) UpdateUserInfo(openid string, req *UpdateUserInfoRequest) (*UserInfoResponse, error) {
+	user, err := s.getUserByOpenID(openid)
 	if err != nil {
 		return nil, err
 	}
@@ -323,23 +382,22 @@ func (s *Service) UpdateUserInfo(userID string, req *UpdateUserInfoRequest) (*Us
 		}
 	}
 
-	return s.GetUserInfo(userID)
+	return s.GetUserInfo(openid)
 }
 
 // ============= Helper Methods =============
 
 func (s *Service) getClient(clientID string) (*Client, error) {
 	var client Client
-	if err := s.db.Preload("RedirectURIs").Preload("AllowedIDPs").
-		Where("id = ?", clientID).First(&client).Error; err != nil {
+	if err := s.db.Where("client_id = ?", clientID).First(&client).Error; err != nil {
 		return nil, err
 	}
 	return &client, nil
 }
 
-func (s *Service) getUserByID(userID string) (*User, error) {
+func (s *Service) getUserByOpenID(openid string) (*User, error) {
 	var user User
-	if err := s.db.Where("id = ?", userID).First(&user).Error; err != nil {
+	if err := s.db.Where("openid = ?", openid).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -348,18 +406,18 @@ func (s *Service) getUserByID(userID string) (*User, error) {
 func (s *Service) findOrCreateUser(ctx context.Context, idp IDP, result *IDPResult) (*User, error) {
 	domain := idp.GetDomain()
 
-	// 1. 查找已有身份
+	// 1. 查找已有身份（通过 idp 和 t_openid）
 	var identity UserIdentity
-	err := s.db.Where("idp = ? AND provider_id = ?", idp, result.ProviderID).First(&identity).Error
+	err := s.db.Where("idp = ? AND t_openid = ?", idp, result.ProviderID).First(&identity).Error
 
 	if err == nil {
 		// 找到身份，获取用户
 		var user User
-		if err := s.db.Where("id = ?", identity.UserID).First(&user).Error; err != nil {
+		if err := s.db.Where("openid = ?", identity.OpenID).First(&user).Error; err != nil {
 			return nil, err
 		}
 		s.db.Model(&user).Update("last_login_at", time.Now())
-		logger.Infof("[Auth] 找到已有用户 - UserID: %s, IDP: %s", user.ID, idp)
+		logger.Infof("[Auth] 找到已有用户 - OpenID: %s, IDP: %s", user.OpenID, idp)
 		return &user, nil
 	}
 
@@ -375,7 +433,7 @@ func (s *Service) findOrCreateUser(ctx context.Context, idp IDP, result *IDPResu
 	// 3. 创建新用户
 	now := time.Now()
 	user := User{
-		ID:          GenerateUserID(),
+		OpenID:      GenerateOpenID(),
 		Domain:      domain,
 		Name:        generateRandomName(),
 		Picture:     generateRandomAvatar(result.ProviderID),
@@ -390,13 +448,12 @@ func (s *Service) findOrCreateUser(ctx context.Context, idp IDP, result *IDPResu
 		}
 
 		identity := UserIdentity{
-			UserID:     user.ID,
-			IDP:        idp,
-			ProviderID: result.ProviderID,
-			UnionID:    result.UnionID,
-			RawData:    result.RawData,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			OpenID:    user.OpenID,
+			IDP:       idp,
+			TOpenID:   result.ProviderID,
+			RawData:   result.RawData,
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
 
 		return tx.Create(&identity).Error
@@ -406,7 +463,7 @@ func (s *Service) findOrCreateUser(ctx context.Context, idp IDP, result *IDPResu
 		return nil, err
 	}
 
-	logger.Infof("[Auth] 创建新用户 - UserID: %s, IDP: %s", user.ID, idp)
+	logger.Infof("[Auth] 创建新用户 - OpenID: %s, IDP: %s", user.OpenID, idp)
 	return &user, nil
 }
 
@@ -431,28 +488,29 @@ func (s *Service) generateTokens(ctx context.Context, client *Client, user *User
 	var err error
 	if user.Domain == DomainCIAM {
 		// C 端用户使用 ID Token
-		resp.IDToken, err = s.tokenManager.CreateIDToken(user.ID, client.ID, user.Domain, user.Name, user.Picture, accessTTL)
+		resp.IDToken, err = s.tokenManager.CreateIDToken(user.OpenID, client.ClientID, user.Domain, user.Name, user.Picture, accessTTL)
 	} else {
 		// B 端用户使用 Access Token
-		resp.AccessToken, err = s.tokenManager.CreateAccessToken(user.ID, client.ID, user.Domain, accessTTL)
+		resp.AccessToken, err = s.tokenManager.CreateAccessToken(user.OpenID, client.ClientID, user.Domain, accessTTL)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("create token: %w", err)
 	}
 
-	// 创建 Refresh Token
-	s.cleanupOldRefreshTokens(user.ID, client.ID)
+	// 清理旧的 Refresh Token
+	s.cleanupOldRefreshTokens(ctx, user.OpenID, client.ClientID)
 
+	// 创建新的 Refresh Token
 	refreshToken := &RefreshToken{
 		Token:     GenerateRefreshTokenValue(),
-		UserID:    user.ID,
-		ClientID:  client.ID,
+		UserID:    user.OpenID,
+		ClientID:  client.ClientID,
 		Scope:     scope,
 		ExpiresAt: now.Add(refreshTTL),
 		CreatedAt: now,
 	}
 
-	if err := s.db.Create(refreshToken).Error; err != nil {
+	if err := s.store.SaveRefreshToken(ctx, refreshToken); err != nil {
 		return nil, fmt.Errorf("create refresh token: %w", err)
 	}
 
@@ -461,20 +519,21 @@ func (s *Service) generateTokens(ctx context.Context, client *Client, user *User
 	return resp, nil
 }
 
-func (s *Service) cleanupOldRefreshTokens(userID, clientID string) {
+func (s *Service) cleanupOldRefreshTokens(ctx context.Context, userID, clientID string) {
 	maxTokens := config.GetInt("auth.max-refresh-token")
 	if maxTokens <= 0 {
 		maxTokens = 10
 	}
 
-	var tokens []RefreshToken
-	s.db.Where("user_id = ? AND client_id = ? AND revoked = ?", userID, clientID, false).
-		Order("created_at DESC").
-		Find(&tokens)
+	tokens, err := s.store.ListUserRefreshTokens(ctx, userID, clientID)
+	if err != nil {
+		return
+	}
 
 	if len(tokens) >= maxTokens {
-		for _, t := range tokens[maxTokens-1:] {
-			s.db.Model(&t).Update("revoked", true)
+		// 撤销多余的 token（保留最新的 maxTokens-1 个）
+		for i := maxTokens - 1; i < len(tokens); i++ {
+			_ = s.store.RevokeRefreshToken(ctx, tokens[i].Token)
 		}
 	}
 }

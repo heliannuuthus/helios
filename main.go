@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/internal/logger"
+	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/internal/middleware"
-	"github.com/heliannuuthus/helios/internal/oss"
+	"github.com/heliannuuthus/helios/pkg/oss"
 
 	_ "github.com/heliannuuthus/helios/docs" // swagger docs
 
@@ -32,7 +32,11 @@ func main() {
 	config.Load()
 
 	// 初始化日志
-	logger.Init()
+	logger.InitWithConfig(logger.Config{
+		Format: config.GetString("log.format"),
+		Level:  config.GetString("log.level"),
+		Debug:  config.GetBool("app.debug"),
+	})
 	defer logger.Sync()
 
 	// 初始化 OSS（如果配置了）
@@ -83,15 +87,6 @@ func main() {
 	// Swagger 文档
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Zwei 路由组（小程序相关）
-	zweiGroup := r.Group("/zwei")
-	{
-		// Zwei 认证路由（OIDC 风格）
-		authGroup := zweiGroup.Group("/auth")
-		{
-			authGroup.POST("/authorize", app.ZweiHandler.Authorize) // OIDC 授权端点
-		}
-	}
 
 	// Auth 路由（OAuth2.1 风格）
 	authGroup := r.Group("/auth")

@@ -5,41 +5,60 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/internal/logger"
+	"github.com/heliannuuthus/helios/pkg/logger"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
 
-var db *gorm.DB
+var (
+	zweiDB *gorm.DB // Zwei 数据源（业务数据）
+	authDB *gorm.DB // Auth 数据源（认证数据）
+)
 
-// Init 初始化数据库连接
-func Init() *gorm.DB {
-	if db != nil {
-		return db
-	}
-
+// connectDB 连接数据库的通用方法
+func connectDB(dataSource string) (*gorm.DB, error) {
 	// 从配置读取 MySQL 连接信息
-	host := config.GetString("database.host")
+	host := config.GetString(fmt.Sprintf("database.%s.host", dataSource))
 	if host == "" {
-		host = "localhost"
+		host = config.GetString("database.host") // 兼容旧配置
+		if host == "" {
+			host = "localhost"
+		}
 	}
-	port := config.GetInt("database.port")
+	port := config.GetInt(fmt.Sprintf("database.%s.port", dataSource))
 	if port == 0 {
-		port = 3306
+		port = config.GetInt("database.port") // 兼容旧配置
+		if port == 0 {
+			port = 3306
+		}
 	}
-	user := config.GetString("database.user")
+	user := config.GetString(fmt.Sprintf("database.%s.user", dataSource))
 	if user == "" {
-		user = "zwei"
+		user = config.GetString("database.user") // 兼容旧配置
+		if user == "" {
+			user = "zwei"
+		}
 	}
-	password := config.GetString("database.password")
+	password := config.GetString(fmt.Sprintf("database.%s.password", dataSource))
 	if password == "" {
-		password = "zwei"
+		password = config.GetString("database.password") // 兼容旧配置
+		if password == "" {
+			password = "zwei"
+		}
 	}
-	database := config.GetString("database.name")
+	database := config.GetString(fmt.Sprintf("database.%s.name", dataSource))
 	if database == "" {
-		database = "zwei"
+		// 如果没有指定，使用默认值
+		if dataSource == "zwei" {
+			database = config.GetString("database.name")
+			if database == "" {
+				database = "zwei"
+			}
+		} else if dataSource == "auth" {
+			database = "auth"
+		}
 	}
 
 	// 构建 MySQL DSN
@@ -61,18 +80,17 @@ func Init() *gorm.DB {
 		},
 	)
 
-	var err error
-	db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: gormLog,
 	})
 	if err != nil {
-		logger.Fatalf("连接数据库失败: %v", err)
+		return nil, fmt.Errorf("连接数据库失败 (%s): %v", dataSource, err)
 	}
 
 	// 配置连接池
 	sqlDB, err := db.DB()
 	if err != nil {
-		logger.Fatalf("获取数据库连接失败: %v", err)
+		return nil, fmt.Errorf("获取数据库连接失败 (%s): %v", dataSource, err)
 	}
 
 	// 设置连接池参数
@@ -80,14 +98,62 @@ func Init() *gorm.DB {
 	sqlDB.SetMaxOpenConns(30)           // 最大打开连接数
 	sqlDB.SetConnMaxLifetime(time.Hour) // 连接最大生存时间
 
-	logger.Info("数据库连接成功")
-	return db
+	logger.Infof("数据库连接成功 (%s): %s@%s:%d/%s", dataSource, user, host, port, database)
+	return db, nil
 }
 
-// Get 获取数据库连接
-func Get() *gorm.DB {
-	if db == nil {
-		return Init()
+// Init 初始化所有数据库连接
+func Init() {
+	InitZwei()
+	InitAuth()
+}
+
+// InitZwei 初始化 Zwei 数据源（业务数据）
+func InitZwei() *gorm.DB {
+	if zweiDB != nil {
+		return zweiDB
 	}
-	return db
+
+	var err error
+	zweiDB, err = connectDB("zwei")
+	if err != nil {
+		logger.Fatalf("%v", err)
+	}
+	return zweiDB
+}
+
+// InitAuth 初始化 Auth 数据源（认证数据）
+func InitAuth() *gorm.DB {
+	if authDB != nil {
+		return authDB
+	}
+
+	var err error
+	authDB, err = connectDB("auth")
+	if err != nil {
+		logger.Fatalf("%v", err)
+	}
+	return authDB
+}
+
+// GetZwei 获取 Zwei 数据库连接
+func GetZwei() *gorm.DB {
+	if zweiDB == nil {
+		return InitZwei()
+	}
+	return zweiDB
+}
+
+// GetAuth 获取 Auth 数据库连接
+func GetAuth() *gorm.DB {
+	if authDB == nil {
+		return InitAuth()
+	}
+	return authDB
+}
+
+// Get 获取数据库连接（兼容旧代码，返回 Zwei 数据源）
+// Deprecated: 请使用 GetZwei() 或 GetAuth() 明确指定数据源
+func Get() *gorm.DB {
+	return GetZwei()
 }

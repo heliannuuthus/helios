@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/heliannuuthus/helios/internal/idp/alipay"
-	"github.com/heliannuuthus/helios/internal/idp/tt"
-	"github.com/heliannuuthus/helios/internal/idp/wechat"
+	"github.com/heliannuuthus/helios/internal/auth/idp/alipay"
+	"github.com/heliannuuthus/helios/internal/auth/idp/tt"
+	"github.com/heliannuuthus/helios/internal/auth/idp/wechat"
 )
 
 // IDPResult IDP 认证结果
