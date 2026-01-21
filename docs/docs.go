@@ -61,7 +61,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/types.RecipeListItem"
+                                "$ref": "#/definitions/home.RecipeListItem"
                             }
                         }
                     }
@@ -92,7 +92,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/types.RecipeListItem"
+                                "$ref": "#/definitions/home.RecipeListItem"
                             }
                         }
                     }
@@ -171,7 +171,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/types.RecipeListItem"
+                                "$ref": "#/definitions/recipe.RecipeListItem"
                             }
                         }
                     }
@@ -490,119 +490,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/revoke": {
-            "post": {
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "撤销 token",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "要撤销的 refresh_token",
-                        "name": "token",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/auth.OAuth2Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/revoke-all": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "登出所有设备",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/stats": {
-            "get": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "description": "获取当前用户的收藏数和浏览历史数",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "获取用户统计数据",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/auth.StatsResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/api/tags": {
             "get": {
                 "description": "获取标签列表，支持通过查询参数过滤。所有类型（cuisine/flavor/scene/taboo/allergy）都统一使用此接口",
@@ -883,72 +770,6 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/token": {
-            "post": {
-                "description": "支持 authorization_code（微信登录）和 refresh_token 两种 grant_type",
-                "consumes": [
-                    "application/x-www-form-urlencoded"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "获取/刷新 token",
-                "parameters": [
-                    {
-                        "enum": [
-                            "authorization_code",
-                            "refresh_token"
-                        ],
-                        "type": "string",
-                        "description": "授权类型",
-                        "name": "grant_type",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "微信登录 code（grant_type=authorization_code 时必填）",
-                        "name": "code",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "刷新令牌（grant_type=refresh_token 时必填）",
-                        "name": "refresh_token",
-                        "in": "formData"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/auth.TokenResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/auth.OAuth2Error"
-                        }
-                    },
-                    "412": {
-                        "description": "refresh_token 无效或已过期",
-                        "schema": {
-                            "$ref": "#/definitions/auth.OAuth2Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/auth.OAuth2Error"
                         }
                     }
                 }
@@ -1510,12 +1331,91 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/user/profile": {
+        "/auth/authorize": {
             "get": {
+                "description": "OAuth2.1/OIDC 授权端点，创建认证会话，设置 auth-session Cookie，然后重定向到登录页面",
+                "tags": [
+                    "auth"
+                ],
+                "summary": "创建认证会话并重定向到登录页面",
+                "parameters": [
+                    {
+                        "enum": [
+                            "code"
+                        ],
+                        "type": "string",
+                        "description": "响应类型，必须为 code",
+                        "name": "response_type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "客户端 ID",
+                        "name": "client_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "重定向 URI",
+                        "name": "redirect_uri",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "PKCE Code Challenge",
+                        "name": "code_challenge",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "S256"
+                        ],
+                        "type": "string",
+                        "description": "PKCE 方法，必须为 S256",
+                        "name": "code_challenge_method",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态参数",
+                        "name": "state",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "授权范围",
+                        "name": "scope",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "302": {
+                        "description": "重定向到登录页面"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/auth.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/introspect": {
+            "post": {
                 "security": [
                     {
                         "Bearer": []
                     }
+                ],
+                "description": "验证 Token 并返回完整元数据（需要 Service JWT 认证）",
+                "consumes": [
+                    "application/x-www-form-urlencoded"
                 ],
                 "produces": [
                     "application/json"
@@ -1523,30 +1423,238 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "获取当前用户信息",
+                "summary": "Token 内省",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Access Token",
+                        "name": "token",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/auth.UserProfile"
+                            "$ref": "#/definitions/auth.IntrospectResponse"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/auth.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "description": "使用 connection（IDP）和对应的 data 完成登录，返回授权码。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "认证登录",
+                "parameters": [
+                    {
+                        "description": "登录请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/auth.LoginRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/auth.LoginResponse"
                         }
                     },
-                    "404": {
-                        "description": "Not Found",
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/auth.Error"
+                        }
+                    },
+                    "412": {
+                        "description": "Session 过期",
+                        "schema": {
+                            "$ref": "#/definitions/auth.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "撤销用户所有 Token",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "登出",
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/auth.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/revoke": {
+            "post": {
+                "description": "撤销 Refresh Token",
+                "consumes": [
+                    "application/x-www-form-urlencoded"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "撤销 Token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Token",
+                        "name": "token",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/auth/token": {
+            "post": {
+                "description": "OAuth2 Token 端点",
+                "consumes": [
+                    "application/x-www-form-urlencoded"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "获取 Token",
+                "parameters": [
+                    {
+                        "enum": [
+                            "authorization_code",
+                            "refresh_token"
+                        ],
+                        "type": "string",
+                        "description": "授权类型",
+                        "name": "grant_type",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "授权码",
+                        "name": "code",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "重定向 URI",
+                        "name": "redirect_uri",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "客户端 ID",
+                        "name": "client_id",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "PKCE 验证器",
+                        "name": "code_verifier",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Refresh Token",
+                        "name": "refresh_token",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/auth.TokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/auth.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/userinfo": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "根据 Token 的 scope 返回用户信息（敏感信息脱敏）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "获取用户信息",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/auth.UserInfoResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/auth.Error"
                         }
                     }
                 }
@@ -1557,6 +1665,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
+                "description": "更新当前用户信息",
                 "consumes": [
                     "application/json"
                 ],
@@ -1566,7 +1675,7 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "更新当前用户信息",
+                "summary": "更新用户信息",
                 "parameters": [
                     {
                         "description": "更新请求",
@@ -1574,7 +1683,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/auth.UpdateProfileRequest"
+                            "$ref": "#/definitions/auth.UpdateUserInfoRequest"
                         }
                     }
                 ],
@@ -1582,108 +1691,51 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/auth.UserProfile"
+                            "$ref": "#/definitions/auth.UserInfoResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/auth.Error"
                         }
                     },
                     "401": {
                         "description": "Unauthorized",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/auth.Error"
                         }
                     }
                 }
             }
         },
-        "/api/{idp}/profile": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
+        "/idps": {
+            "get": {
+                "description": "根据 client_id 获取可用的认证源（Connection）配置，包括 Capture 配置",
                 "tags": [
                     "auth"
                 ],
-                "summary": "更新平台相关用户信息",
+                "summary": "获取认证源配置",
                 "parameters": [
                     {
-                        "enum": [
-                            "wechat:mp",
-                            "tt:mp",
-                            "alipay:mp"
-                        ],
                         "type": "string",
-                        "description": "身份提供方",
-                        "name": "idp",
-                        "in": "path",
+                        "description": "客户端 ID",
+                        "name": "client_id",
+                        "in": "query",
                         "required": true
-                    },
-                    {
-                        "description": "更新请求",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/auth.IdpProfileRequest"
-                        }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/auth.UserProfile"
+                            "$ref": "#/definitions/auth.IDPsResponse"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/auth.OAuth2Error"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/auth.Error"
                         }
                     }
                 }
@@ -1691,15 +1743,24 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "auth.IdpProfileRequest": {
+        "auth.CaptureConfig": {
             "type": "object",
             "properties": {
-                "phone_code": {
+                "required": {
+                    "description": "是否需要人机验证",
+                    "type": "boolean"
+                },
+                "site_key": {
+                    "description": "站点密钥（前端使用）",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "验证类型：captcha/turnstile/hcaptcha",
                     "type": "string"
                 }
             }
         },
-        "auth.OAuth2Error": {
+        "auth.Error": {
             "type": "object",
             "properties": {
                 "error": {
@@ -1710,14 +1771,118 @@ const docTemplate = `{
                 }
             }
         },
-        "auth.StatsResponse": {
+        "auth.IDPConfig": {
             "type": "object",
             "properties": {
-                "favorites": {
+                "allowed_scopes": {
+                    "description": "该 connection 允许的 scopes",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "capture": {
+                    "description": "人机验证配置",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/auth.CaptureConfig"
+                        }
+                    ]
+                },
+                "client_id": {
+                    "description": "IDP 的客户端 ID",
+                    "type": "string"
+                },
+                "extra": {
+                    "description": "其他配置信息",
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "type": {
+                    "description": "Connection（IDP）类型",
+                    "type": "string"
+                }
+            }
+        },
+        "auth.IDPsResponse": {
+            "type": "object",
+            "properties": {
+                "idps": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/auth.IDPConfig"
+                    }
+                }
+            }
+        },
+        "auth.IntrospectResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "aud": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "exp": {
                     "type": "integer"
                 },
-                "history": {
+                "iat": {
                     "type": "integer"
+                },
+                "iss": {
+                    "type": "string"
+                },
+                "nickname": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "picture": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string"
+                },
+                "sub": {
+                    "type": "string"
+                }
+            }
+        },
+        "auth.LoginRequest": {
+            "type": "object",
+            "required": [
+                "connection",
+                "data"
+            ],
+            "properties": {
+                "connection": {
+                    "description": "身份提供方（IDP）",
+                    "type": "string"
+                },
+                "data": {
+                    "description": "Connection 需要的数据",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "auth.LoginResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "授权码",
+                    "type": "string"
+                },
+                "redirect_uri": {
+                    "description": "重定向 URI",
+                    "type": "string"
                 }
             }
         },
@@ -1731,6 +1896,11 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "refresh_token": {
+                    "description": "只有 offline_access 时返回",
+                    "type": "string"
+                },
+                "scope": {
+                    "description": "实际授予的 scope",
                     "type": "string"
                 },
                 "token_type": {
@@ -1738,43 +1908,37 @@ const docTemplate = `{
                 }
             }
         },
-        "auth.UpdateProfileRequest": {
+        "auth.UpdateUserInfoRequest": {
             "type": "object",
             "properties": {
-                "avatar": {
-                    "type": "string",
-                    "maxLength": 512
-                },
-                "gender": {
-                    "type": "integer",
-                    "enum": [
-                        0,
-                        1,
-                        2
-                    ]
-                },
                 "nickname": {
                     "type": "string",
                     "maxLength": 64
+                },
+                "picture": {
+                    "type": "string",
+                    "maxLength": 512
                 }
             }
         },
-        "auth.UserProfile": {
+        "auth.UserInfoResponse": {
             "type": "object",
             "properties": {
-                "avatar": {
+                "email": {
+                    "description": "脱敏",
                     "type": "string"
-                },
-                "gender": {
-                    "type": "integer"
                 },
                 "nickname": {
                     "type": "string"
                 },
-                "openid": {
+                "phone": {
+                    "description": "脱敏",
                     "type": "string"
                 },
-                "phone": {
+                "picture": {
+                    "type": "string"
+                },
+                "sub": {
                     "type": "string"
                 }
             }
@@ -1819,7 +1983,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "recipe": {
-                    "$ref": "#/definitions/types.RecipeListItem"
+                    "$ref": "#/definitions/favorite.RecipeListItem"
                 },
                 "recipe_id": {
                     "type": "string"
@@ -1862,11 +2026,63 @@ const docTemplate = `{
                 }
             }
         },
+        "favorite.RecipeListItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "difficulty": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_path": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tags": {
+                    "$ref": "#/definitions/favorite.TagsGrouped"
+                },
+                "total_time_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "favorite.TagsGrouped": {
+            "type": "object",
+            "properties": {
+                "cuisines": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "flavors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scenes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "history.HistoryListItem": {
             "type": "object",
             "properties": {
                 "recipe": {
-                    "$ref": "#/definitions/types.RecipeListItem"
+                    "$ref": "#/definitions/history.RecipeListItem"
                 },
                 "recipe_id": {
                     "type": "string"
@@ -1912,6 +2128,58 @@ const docTemplate = `{
                 }
             }
         },
+        "history.RecipeListItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "difficulty": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_path": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tags": {
+                    "$ref": "#/definitions/history.TagsGrouped"
+                },
+                "total_time_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "history.TagsGrouped": {
+            "type": "object",
+            "properties": {
+                "cuisines": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "flavors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scenes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "home.BannerItem": {
             "type": "object",
             "properties": {
@@ -1929,6 +2197,58 @@ const docTemplate = `{
                 },
                 "title": {
                     "type": "string"
+                }
+            }
+        },
+        "home.RecipeListItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "difficulty": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_path": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tags": {
+                    "$ref": "#/definitions/home.TagsGrouped"
+                },
+                "total_time_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "home.TagsGrouped": {
+            "type": "object",
+            "properties": {
+                "cuisines": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "flavors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scenes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -2169,6 +2489,35 @@ const docTemplate = `{
                 }
             }
         },
+        "recipe.RecipeListItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "difficulty": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_path": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tags": {
+                    "$ref": "#/definitions/recipe.TagsGrouped"
+                },
+                "total_time_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
         "recipe.RecipeResponse": {
             "type": "object",
             "properties": {
@@ -2224,7 +2573,7 @@ const docTemplate = `{
                     }
                 },
                 "tags": {
-                    "$ref": "#/definitions/types.TagsGrouped"
+                    "$ref": "#/definitions/recipe.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
@@ -2319,12 +2668,31 @@ const docTemplate = `{
                 }
             }
         },
+        "recipe.TagsGrouped": {
+            "type": "object",
+            "properties": {
+                "cuisines": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "flavors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scenes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "recommend.ContextRequest": {
             "type": "object",
-            "required": [
-                "latitude",
-                "longitude"
-            ],
             "properties": {
                 "latitude": {
                     "type": "number"
@@ -2391,7 +2759,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tags": {
-                    "$ref": "#/definitions/types.TagsGrouped"
+                    "$ref": "#/definitions/recommend.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
@@ -2439,6 +2807,29 @@ const docTemplate = `{
                 "summary": {
                     "description": "LLM 生成的一句话整体评价",
                     "type": "string"
+                }
+            }
+        },
+        "recommend.TagsGrouped": {
+            "type": "object",
+            "properties": {
+                "cuisines": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "flavors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scenes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -2527,58 +2918,6 @@ const docTemplate = `{
                 }
             }
         },
-        "types.RecipeListItem": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "difficulty": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "image_path": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tags": {
-                    "$ref": "#/definitions/types.TagsGrouped"
-                },
-                "total_time_minutes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "types.TagsGrouped": {
-            "type": "object",
-            "properties": {
-                "cuisines": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "flavors": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scenes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "upload.UploadImageResponse": {
             "type": "object",
             "properties": {
@@ -2605,8 +2944,8 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "localhost:18000",
 	BasePath:         "/api",
 	Schemes:          []string{},
-	Title:            "Choosy API",
-	Description:      "菜谱管理系统后端 API",
+	Title:            "Helios API",
+	Description:      "Helios 统一后端 API - 提供认证、业务和身份与访问管理服务",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",
