@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"zwei-backend/internal/config"
+	"github.com/heliannuuthus/helios/internal/config"
 
 	"github.com/gin-gonic/gin"
 )
