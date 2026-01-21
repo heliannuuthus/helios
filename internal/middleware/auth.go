@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"zwei-backend/internal/auth"
-	"zwei-backend/internal/logger"
+	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/pkg/logger"
 
 	"github.com/gin-gonic/gin"
 )

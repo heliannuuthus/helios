@@ -14,12 +14,42 @@ format = "console"  # console, json
 host = "0.0.0.0"
 port = 18000
 
+# 数据库配置
+# 支持配置多个数据源，如果未指定则使用 database.* 的默认值
 [database]
-host = "localhost"      # MySQL 主机地址
-port = 3306             # MySQL 端口
-user = "zwei"         # MySQL 用户名
-password = ""           # MySQL 密码
-name = "zwei"         # 数据库名称
+host = "localhost"      # MySQL 主机地址（默认值）
+port = 3306             # MySQL 端口（默认值）
+user = "zwei"           # MySQL 用户名（默认值）
+password = ""           # MySQL 密码（默认值）
+name = "zwei"           # 数据库名称（默认值，仅用于 CIAM）
+
+# Zwei 数据源（业务数据：用户、菜谱、收藏等）
+[database.zwei]
+host = "localhost"      # 如果未指定，使用 database.host
+port = 3306             # 如果未指定，使用 database.port
+user = "zwei"           # 如果未指定，使用 database.user
+password = ""           # 如果未指定，使用 database.password
+name = "zwei"           # 数据库名称
+
+# Auth 数据源（认证数据：客户端、用户、令牌等）
+[database.auth]
+host = "localhost"      # 如果未指定，使用 database.host
+port = 3306             # 如果未指定，使用 database.port
+user = "zwei"           # 如果未指定，使用 database.user
+password = ""           # 如果未指定，使用 database.password
+name = "auth"           # 数据库名称
+
+# Redis 配置（用于存储 session、authorization_code、refresh_token）
+[redis]
+host = "localhost"      # Redis 主机地址
+port = 6379             # Redis 端口
+password = ""           # Redis 密码（如果未设置密码则留空）
+db = 0                  # Redis 数据库编号（0-15）
+# 前缀配置（可选）
+# session-prefix = "auth:session:"
+# code-prefix = "auth:code:"
+# refresh-token-prefix = "auth:rt:"
+# user-token-prefix = "auth:user:rt:"
 
 [cors]
 origins = ["*"]
@@ -64,6 +94,20 @@ audience = "zwei"
 expires-in = 7200           # access_token 过期时间(秒)，2小时
 refresh-expires-in = 365     # refresh_token 过期时间(天)，1年
 max-refresh-token = 10       # 每用户最大 refresh_token 数
+service-url = "http://localhost:18000"  # Auth 服务地址（zwei 模块调用时使用）
+
+# 域配置（Domain 配置，密钥使用 python3 scripts/genkeys.py 生成）
+[auth.domains.ciam]
+name = "Customer Identity"           # 域名称
+description = "C端用户身份域"         # 域描述
+sign-key = "ed25519:base64_encoded_sign_key"      # 签名密钥（格式：算法:base64密钥）
+encrypt-key = "aes256:base64_encoded_encrypt_key"  # 加密密钥（格式：算法:base64密钥）
+
+[auth.domains.piam]
+name = "Partner Identity"           # 域名称
+description = "B端用户身份域"         # 域描述
+sign-key = "ed25519:base64_encoded_sign_key"      # 签名密钥（格式：算法:base64密钥）
+encrypt-key = "aes256:base64_encoded_encrypt_key"  # 加密密钥（格式：算法:base64密钥）
 
 # KMS 密钥配置（使用 python3 scripts/genkeys.py 生成）
 [kms.token]
