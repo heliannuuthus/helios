@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/heliannuuthus/helios/internal/auth/cache"
 	pkgtoken "github.com/heliannuuthus/helios/pkg/token"
@@ -15,116 +14,68 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwt"
 )
 
-// Issuer Token 签发器
-type Issuer struct {
-	issuerName string
-	cache      *cache.HermesCache
+// signer 内部签名器
+type signer struct {
+	cache *cache.HermesCache
 }
 
-// NewIssuer 创建 Token 签发器
-func NewIssuer(issuerName string, hermesCache *cache.HermesCache) *Issuer {
-	return &Issuer{
-		issuerName: issuerName,
-		cache:      hermesCache,
+// Sign 签名 JWT Token
+// 通过 clientID 获取 Application -> domainID -> Domain -> SignKey
+func (s *signer) Sign(ctx context.Context, token jwt.Token, clientID string) ([]byte, error) {
+	// 1. 获取应用信息
+	app, err := s.cache.GetApplication(ctx, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get application: %w", err)
 	}
+
+	// 2. 获取域签名密钥
+	domainWithKey, err := s.cache.GetDomain(ctx, app.DomainID)
+	if err != nil {
+		return nil, fmt.Errorf("get domain: %w", err)
+	}
+
+	// 3. 解析签名密钥
+	signKey, err := jwk.ParseKey(domainWithKey.SignKey)
+	if err != nil {
+		return nil, fmt.Errorf("parse sign key: %w", err)
+	}
+
+	// 4. 签名
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.EdDSA(), signKey))
+	if err != nil {
+		return nil, fmt.Errorf("sign token: %w", err)
+	}
+
+	return signed, nil
 }
 
-// GetIssuerName 返回签发者名称
-func (i *Issuer) GetIssuerName() string {
-	return i.issuerName
+// encryptor 内部加密器
+type encryptor struct {
+	cache *cache.HermesCache
 }
 
-// IssueUserToken 签发用户访问令牌
-// clientID: 应用 ID
-// audience: 服务 ID（用于获取加密密钥）
-// domain: 域 ID（用于获取签名密钥）
-func (i *Issuer) IssueUserToken(
-	ctx context.Context,
-	clientID, audience, domain, scope string,
-	ttl time.Duration,
-	user *pkgtoken.Claims,
-) (string, error) {
-	// 获取服务加密密钥
-	svcWithKey, err := i.cache.GetServiceWithKey(ctx, audience)
+// Encrypt 加密用户信息
+// 通过 audience 获取 Service -> Key
+func (e *encryptor) Encrypt(ctx context.Context, claims *pkgtoken.Claims, audience string) (string, error) {
+	// 1. 获取服务加密密钥
+	svcWithKey, err := e.cache.GetServiceWithKey(ctx, audience)
 	if err != nil {
 		return "", fmt.Errorf("get service key: %w", err)
 	}
 
-	// 获取域签名密钥
-	domainWithKey, err := i.cache.GetDomain(ctx, domain)
-	if err != nil {
-		return "", fmt.Errorf("get domain key: %w", err)
-	}
-
-	// 构建 token
-	uat := NewUserAccessToken(i.issuerName, clientID, audience, scope, ttl, user)
-	return i.issue(uat, svcWithKey.Key, domainWithKey.SignKey)
-}
-
-// IssueServiceToken 签发服务访问令牌（M2M，无用户信息）
-func (i *Issuer) IssueServiceToken(
-	ctx context.Context,
-	clientID, audience, domain, scope string,
-	ttl time.Duration,
-) (string, error) {
-	// 获取域签名密钥
-	domainWithKey, err := i.cache.GetDomain(ctx, domain)
-	if err != nil {
-		return "", fmt.Errorf("get domain key: %w", err)
-	}
-
-	// 构建 token（ServiceAccessToken 不需要加密密钥）
-	sat := NewServiceAccessToken(i.issuerName, clientID, audience, scope, ttl)
-	return i.issue(sat, nil, domainWithKey.SignKey)
-}
-
-// issue 内部签发方法
-func (i *Issuer) issue(accessToken AccessToken, encryptKey, signKey []byte) (string, error) {
-	// 解析签名密钥
-	signer, err := jwk.ParseKey(signKey)
-	if err != nil {
-		return "", fmt.Errorf("parse sign key: %w", err)
-	}
-
-	// 构建 JWT Token
-	token, err := accessToken.Build()
-	if err != nil {
-		return "", fmt.Errorf("build token: %w", err)
-	}
-
-	// 如果是 UserAccessToken，需要加密用户信息到 sub
-	if uat, ok := accessToken.(*UserAccessToken); ok && uat.GetUser() != nil {
-		if encryptKey == nil {
-			return "", errors.New("encrypt key required for UserAccessToken")
-		}
-		encryptedSub, err := i.encryptClaims(uat.GetUser(), encryptKey)
-		if err != nil {
-			return "", fmt.Errorf("encrypt user claims: %w", err)
-		}
-		_ = token.Set(jwt.SubjectKey, encryptedSub)
-	}
-
-	// 签名
-	signed, err := jwt.Sign(token, jwt.WithKey(jwa.EdDSA(), signer))
-	if err != nil {
-		return "", fmt.Errorf("sign token: %w", err)
-	}
-
-	return string(signed), nil
-}
-
-// encryptClaims 加密用户信息
-func (i *Issuer) encryptClaims(claims *pkgtoken.Claims, encryptKey []byte) (string, error) {
+	// 2. 序列化 claims
 	data, err := json.Marshal(claims)
 	if err != nil {
 		return "", fmt.Errorf("marshal claims: %w", err)
 	}
 
-	key, err := jwk.Import(encryptKey)
+	// 3. 导入密钥
+	key, err := jwk.Import(svcWithKey.Key)
 	if err != nil {
 		return "", fmt.Errorf("import encrypt key: %w", err)
 	}
 
+	// 4. 加密
 	encrypted, err := jwe.Encrypt(data,
 		jwe.WithKey(jwa.DIRECT(), key),
 		jwe.WithContentEncryption(jwa.A256GCM()),
@@ -136,26 +87,84 @@ func (i *Issuer) encryptClaims(claims *pkgtoken.Claims, encryptKey []byte) (stri
 	return string(encrypted), nil
 }
 
-// decryptClaims 解密用户信息
-func (i *Issuer) decryptClaims(encryptedSub string, decryptKey []byte) (*pkgtoken.Claims, error) {
-	key, err := jwk.Import(decryptKey)
+// Issuer Token 签发器
+type Issuer struct {
+	issuerName string
+	cache      *cache.HermesCache
+	signer     *signer
+	encryptor  *encryptor
+}
+
+// NewIssuer 创建 Token 签发器
+func NewIssuer(issuerName string, hermesCache *cache.HermesCache) *Issuer {
+	return &Issuer{
+		issuerName: issuerName,
+		cache:      hermesCache,
+		signer:     &signer{cache: hermesCache},
+		encryptor:  &encryptor{cache: hermesCache},
+	}
+}
+
+// GetIssuerName 返回签发者名称
+func (i *Issuer) GetIssuerName() string {
+	return i.issuerName
+}
+
+// Issue 签发 token
+// 通过 switch 类型断言识别 UAT 或 SAT，执行不同的签发逻辑
+func (i *Issuer) Issue(ctx context.Context, accessToken AccessToken) (string, error) {
+	switch t := accessToken.(type) {
+	case *UserAccessToken:
+		return i.issueUserToken(ctx, t)
+	case *ServiceAccessToken:
+		return i.issueServiceToken(ctx, t)
+	default:
+		return "", errors.New("unsupported token type")
+	}
+}
+
+// issueUserToken 签发用户访问令牌
+func (i *Issuer) issueUserToken(ctx context.Context, uat *UserAccessToken) (string, error) {
+	// 1. 构建 JWT
+	token, err := uat.Build()
 	if err != nil {
-		return nil, fmt.Errorf("import decrypt key: %w", err)
+		return "", fmt.Errorf("build token: %w", err)
 	}
 
-	decrypted, err := jwe.Decrypt([]byte(encryptedSub),
-		jwe.WithKey(jwa.DIRECT(), key),
-	)
+	// 2. 加密 user claims 到 sub
+	if uat.GetUser() == nil {
+		return "", errors.New("user claims required for UserAccessToken")
+	}
+	encryptedSub, err := i.encryptor.Encrypt(ctx, uat.GetUser(), uat.GetAudience())
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("encrypt user claims: %w", err)
+	}
+	_ = token.Set(jwt.SubjectKey, encryptedSub)
+
+	// 3. 签名
+	signed, err := i.signer.Sign(ctx, token, uat.GetClientID())
+	if err != nil {
+		return "", fmt.Errorf("sign token: %w", err)
 	}
 
-	var claims pkgtoken.Claims
-	if err := json.Unmarshal(decrypted, &claims); err != nil {
-		return nil, err
+	return string(signed), nil
+}
+
+// issueServiceToken 签发服务访问令牌
+func (i *Issuer) issueServiceToken(ctx context.Context, sat *ServiceAccessToken) (string, error) {
+	// 1. 构建 JWT（无 sub）
+	token, err := sat.Build()
+	if err != nil {
+		return "", fmt.Errorf("build token: %w", err)
 	}
 
-	return &claims, nil
+	// 2. 签名
+	signed, err := i.signer.Sign(ctx, token, sat.GetClientID())
+	if err != nil {
+		return "", fmt.Errorf("sign token: %w", err)
+	}
+
+	return string(signed), nil
 }
 
 // VerifyAccessToken 验证 Access Token
@@ -237,6 +246,28 @@ func (i *Issuer) VerifyAccessToken(ctx context.Context, tokenString string) (*Id
 		Email:    claims.Email,
 		Phone:    claims.Phone,
 	}, nil
+}
+
+// decryptClaims 解密用户信息
+func (i *Issuer) decryptClaims(encryptedSub string, decryptKey []byte) (*pkgtoken.Claims, error) {
+	key, err := jwk.Import(decryptKey)
+	if err != nil {
+		return nil, fmt.Errorf("import decrypt key: %w", err)
+	}
+
+	decrypted, err := jwe.Decrypt([]byte(encryptedSub),
+		jwe.WithKey(jwa.DIRECT(), key),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var claims pkgtoken.Claims
+	if err := json.Unmarshal(decrypted, &claims); err != nil {
+		return nil, err
+	}
+
+	return &claims, nil
 }
 
 // ParseAccessTokenUnverified 解析 Token 但不验证（用于获取 claims）

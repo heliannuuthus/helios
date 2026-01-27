@@ -238,7 +238,7 @@ func NewError(code, description string) *Error {
 type Session struct {
 	ID                  string              `json:"id"`
 	ClientID            string              `json:"client_id"`
-	Audience            string              `json:"audience"`     // 目标服务 ID
+	Audience            string              `json:"audience"` // 目标服务 ID
 	RedirectURI         string              `json:"redirect_uri"`
 	CodeChallenge       string              `json:"code_challenge"`
 	CodeChallengeMethod CodeChallengeMethod `json:"code_challenge_method"`

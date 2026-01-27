@@ -71,12 +71,12 @@ func GetKeyPrefix(cacheType string) string {
 
 	// 默认前缀映射
 	defaultPrefixes := map[string]string{
-		"domain":                      "domain:",
-		"application":                 "app:",
-		"service":                     "svc:",
-		"user":                        "user:",
+		"domain":                       "domain:",
+		"application":                  "app:",
+		"service":                      "svc:",
+		"user":                         "user:",
 		"application-service-relation": "app-svc-rel:",
-		"relationship":                "rel:",
+		"relationship":                 "rel:",
 	}
 
 	if keyPrefix := v.GetString(prefix + "key-prefix"); keyPrefix != "" {

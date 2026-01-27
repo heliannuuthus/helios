@@ -805,15 +805,15 @@ func (s *Service) generateTokens(ctx context.Context, client *Client, user *User
 	}
 
 	// 5. 创建 Access Token
-	accessToken, err := s.issuer.IssueUserToken(
-		ctx,
-		client.ClientID,      // cli
-		audience,             // aud
-		string(client.Domain), // domain
+	uat := token.NewUserAccessToken(
+		s.issuer.GetIssuerName(),
+		client.ClientID,
+		audience,
 		scope,
 		accessTTL,
 		userClaims,
 	)
+	accessToken, err := s.issuer.Issue(ctx, uat)
 	if err != nil {
 		return nil, fmt.Errorf("create token: %w", err)
 	}

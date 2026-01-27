@@ -13,13 +13,13 @@ import (
 // UserAccessToken 用户访问令牌
 // 包含用户身份信息，sub 字段为加密的用户信息（JWE）
 type UserAccessToken struct {
-	issuer    string            // 签发者
-	clientID  string            // cli - 应用 ID
-	audience  string            // aud - 服务 ID
-	scope     string            // 授权范围
-	ttl       time.Duration     // 有效期
-	notBefore time.Time         // 生效时间
-	user      *pkgtoken.Claims  // 用户信息（根据 scope 填充）
+	issuer    string           // 签发者
+	clientID  string           // cli - 应用 ID
+	audience  string           // aud - 服务 ID
+	scope     string           // 授权范围
+	ttl       time.Duration    // 有效期
+	notBefore time.Time        // 生效时间
+	user      *pkgtoken.Claims // 用户信息（根据 scope 填充）
 }
 
 // NewUserAccessToken 创建 UserAccessToken
