@@ -4,66 +4,27 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/heliannuuthus/helios/internal/auth/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	pkgtoken "github.com/heliannuuthus/helios/pkg/token"
 
 	"github.com/gin-gonic/gin"
 )
 
-// AuthMiddleware 认证中间件（可选认证，旧版兼容）
+// AuthMiddleware 认证中间件（可选认证）
+// Deprecated: 使用 OptionalToken 替代
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authorization := c.GetHeader("Authorization")
-		if authorization == "" {
-			c.Next()
-			return
-		}
-
-		tokenStr := authorization
-		if strings.HasPrefix(authorization, "Bearer ") {
-			tokenStr = authorization[7:]
-		}
-
-		identity, err := token.VerifyAccessTokenGlobal(tokenStr)
-		if err == nil && identity != nil {
-			logger.Infof("[Auth] 可选认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID)
-			c.Set("user", identity)
-		}
-
+		logger.Warnf("[Auth] AuthMiddleware is deprecated, use OptionalToken instead")
 		c.Next()
 	}
 }
 
-// RequireAuth 要求认证中间件（旧版兼容）
+// RequireAuth 要求认证中间件
+// Deprecated: 使用 RequireToken 替代
 func RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authorization := c.GetHeader("Authorization")
-		if authorization == "" {
-			logger.Debugf("[Auth] 请求未携带 Authorization 头 - Path: %s, IP: %s", c.Request.URL.Path, c.ClientIP())
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "未登录或登录已过期"})
-			return
-		}
-
-		tokenStr := authorization
-		if strings.HasPrefix(authorization, "Bearer ") {
-			tokenStr = authorization[7:]
-		}
-
-		identity, err := token.VerifyAccessTokenGlobal(tokenStr)
-		if err != nil || identity == nil {
-			logger.Warnf("[Auth] Token 验证失败 - Path: %s, IP: %s, Error: %v, TokenPreview: %s...",
-				c.Request.URL.Path,
-				c.ClientIP(),
-				err,
-				tokenPreview(tokenStr, 20))
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "未登录或登录已过期"})
-			return
-		}
-
-		logger.Infof("[Auth] 认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID)
-		c.Set("user", identity)
-		c.Next()
+		logger.Warnf("[Auth] RequireAuth is deprecated, use RequireToken instead")
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "deprecated middleware"})
 	}
 }
 

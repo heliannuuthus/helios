@@ -11,19 +11,19 @@ import (
 
 // Middleware 认证中间件
 type Middleware struct {
-	issuer *token.Issuer
+	verifier *token.Verifier
 }
 
 // NewMiddleware 创建中间件
-func NewMiddleware(issuer *token.Issuer) *Middleware {
-	return &Middleware{issuer: issuer}
+func NewMiddleware(verifier *token.Verifier) *Middleware {
+	return &Middleware{verifier: verifier}
 }
 
 // RequireAuth 要求认证
 func (m *Middleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := m.extractToken(c)
-		if token == "" {
+		tokenStr := m.extractToken(c)
+		if tokenStr == "" {
 			c.Header("WWW-Authenticate", "Bearer")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, Error{
 				Code:        ErrInvalidToken,
@@ -33,7 +33,7 @@ func (m *Middleware) RequireAuth() gin.HandlerFunc {
 		}
 
 		// 验证 Access Token
-		identity, err := m.issuer.VerifyAccessToken(c.Request.Context(), token)
+		identity, err := m.verifier.VerifyAccessToken(c.Request.Context(), tokenStr)
 		if err != nil {
 			c.Header("WWW-Authenticate", "Bearer error=\"invalid_token\"")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, Error{
@@ -51,14 +51,14 @@ func (m *Middleware) RequireAuth() gin.HandlerFunc {
 // OptionalAuth 可选认证
 func (m *Middleware) OptionalAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := m.extractToken(c)
-		if token == "" {
+		tokenStr := m.extractToken(c)
+		if tokenStr == "" {
 			c.Next()
 			return
 		}
 
 		// 验证 Access Token
-		identity, err := m.issuer.VerifyAccessToken(c.Request.Context(), token)
+		identity, err := m.verifier.VerifyAccessToken(c.Request.Context(), tokenStr)
 		if err == nil && identity != nil {
 			c.Set("identity", identity)
 		}

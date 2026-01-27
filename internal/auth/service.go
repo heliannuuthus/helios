@@ -26,6 +26,7 @@ type Service struct {
 	db          *gorm.DB
 	store       Store
 	issuer      *token.Issuer
+	verifier    *token.Verifier
 	idpManager  *IDPManager
 	hermesCache *cache.HermesCache
 }
@@ -33,13 +34,14 @@ type Service struct {
 // NewService 创建认证服务
 func NewService(db *gorm.DB, hermesSvc *hermes.Service) (*Service, error) {
 	hermesCache := cache.NewHermesCache(hermesSvc)
-	issuerName := config.GetString("auth.issuer")
-	issuer := token.NewIssuer(issuerName, hermesCache)
+	issuer := token.NewIssuer(hermesCache)
+	verifier := token.NewVerifier(hermesCache)
 
 	return &Service{
 		db:          db,
 		store:       NewMemoryStore(), // TODO: 支持 Redis
 		issuer:      issuer,
+		verifier:    verifier,
 		idpManager:  NewIDPManager(),
 		hermesCache: hermesCache,
 	}, nil
@@ -492,13 +494,13 @@ func (s *Service) Introspect(ctx context.Context, tokenString string, serviceJWT
 	_ = serviceID // 暂时未使用，后续可用于日志
 
 	// 3. 解析 Access Token（不验证，因为可能已过期）
-	aud, iss, exp, iat, scope, err := s.issuer.ParseAccessTokenUnverified(tokenString)
+	aud, iss, exp, iat, scope, err := s.verifier.ParseAccessTokenUnverified(tokenString)
 	if err != nil {
 		return &IntrospectResponse{Active: false}, nil
 	}
 
 	// 4. 验证 Token 签名和有效性
-	identity, err := s.issuer.VerifyAccessToken(ctx, tokenString)
+	identity, err := s.verifier.VerifyAccessToken(ctx, tokenString)
 	if err != nil {
 		return &IntrospectResponse{Active: false}, nil
 	}
@@ -574,7 +576,7 @@ func (s *Service) verifyServiceJWT(tokenString string) (serviceID string, jti st
 	}
 
 	// 验证 JWT 签名
-	verifiedServiceID, verifiedJti, verifyErr := s.issuer.VerifyServiceJWT(tokenString, svc.Key)
+	verifiedServiceID, verifiedJti, verifyErr := s.verifier.VerifyServiceJWT(tokenString, svc.Key)
 	if verifyErr != nil {
 		return "", "", fmt.Errorf("verify service jwt: %w", verifyErr)
 	}
