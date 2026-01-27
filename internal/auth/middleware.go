@@ -32,8 +32,8 @@ func (m *Middleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		// 验证 Access Token（统一使用 access_token）
-		identity, err := m.issuer.VerifyAccessToken(token)
+		// 验证 Access Token
+		identity, err := m.issuer.VerifyAccessToken(c.Request.Context(), token)
 		if err != nil {
 			c.Header("WWW-Authenticate", "Bearer error=\"invalid_token\"")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, Error{
@@ -58,7 +58,7 @@ func (m *Middleware) OptionalAuth() gin.HandlerFunc {
 		}
 
 		// 验证 Access Token
-		identity, err := m.issuer.VerifyAccessToken(token)
+		identity, err := m.issuer.VerifyAccessToken(c.Request.Context(), token)
 		if err == nil && identity != nil {
 			c.Set("identity", identity)
 		}
