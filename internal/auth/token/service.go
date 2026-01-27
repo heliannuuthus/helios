@@ -15,7 +15,7 @@ import (
 )
 
 // Service Token 服务
-// 负责签发 UAT/SAT、验证 CAT/ServiceJWT、解析 token
+// 负责签发 UAT/SAT、验证 CAT
 type Service struct {
 	issuerName string
 	cache      *cache.HermesCache
@@ -94,9 +94,9 @@ func (s *Service) issueServiceToken(ctx context.Context, sat *ServiceAccessToken
 
 // ============= 验证 =============
 
-// CATClaims 验证 CAT/ServiceJWT 后返回的信息
+// CATClaims 验证 CAT 后返回的信息
 type CATClaims struct {
-	ClientID string // 应用或服务 ID（sub）
+	ClientID string // 应用 ID（sub）
 	Audience string // 目标服务（aud）
 	JTI      string // JWT ID
 }
@@ -139,87 +139,20 @@ func (s *Service) VerifyCAT(ctx context.Context, tokenString string) (*CATClaims
 		return nil, fmt.Errorf("verify token: %w", err)
 	}
 
-	return s.extractCATClaims(token, clientID), nil
-}
-
-// VerifyServiceJWT 验证 Service JWT（用于 introspect）
-func (s *Service) VerifyServiceJWT(ctx context.Context, tokenString string) (*CATClaims, error) {
-	// 1. 解析 token 获取 sub
-	unverified, err := jwt.Parse([]byte(tokenString), jwt.WithVerify(false))
-	if err != nil {
-		return nil, fmt.Errorf("parse token: %w", err)
+	// 4. 提取信息
+	audVal, ok := token.Audience()
+	var audience string
+	if ok && len(audVal) > 0 {
+		audience = audVal[0]
 	}
 
-	serviceID, ok := unverified.Subject()
-	if !ok || serviceID == "" {
-		return nil, errors.New("missing sub (service_id)")
-	}
+	jti, _ := token.JwtID()
 
-	// 2. 获取服务密钥
-	svc, err := s.cache.GetService(ctx, serviceID)
-	if err != nil {
-		return nil, fmt.Errorf("get service: %w", err)
-	}
-
-	// 3. 验证签名
-	key, err := jwk.Import(svc.Key)
-	if err != nil {
-		return nil, fmt.Errorf("import service key: %w", err)
-	}
-
-	token, err := jwt.Parse([]byte(tokenString),
-		jwt.WithKey(jwa.HS256(), key),
-		jwt.WithValidate(true),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("verify token: %w", err)
-	}
-
-	return s.extractCATClaims(token, serviceID), nil
-}
-
-// ============= 解析 =============
-
-// TokenInfo 解析 Token 后的信息（不含验证）
-type TokenInfo struct {
-	Issuer   string
-	Audience string
-	ClientID string
-	Scope    string
-	Sub      string // 可能是加密的用户信息
-	Exp      int64
-	Iat      int64
-}
-
-// Parse 解析 Access Token（不验证）
-func (s *Service) Parse(tokenString string) (*TokenInfo, error) {
-	token, err := jwt.Parse([]byte(tokenString), jwt.WithVerify(false))
-	if err != nil {
-		return nil, fmt.Errorf("parse token: %w", err)
-	}
-
-	info := &TokenInfo{}
-
-	if audVal, ok := token.Audience(); ok && len(audVal) > 0 {
-		info.Audience = audVal[0]
-	}
-	if issVal, ok := token.Issuer(); ok {
-		info.Issuer = issVal
-	}
-	if expVal, ok := token.Expiration(); ok {
-		info.Exp = expVal.Unix()
-	}
-	if iatVal, ok := token.IssuedAt(); ok {
-		info.Iat = iatVal.Unix()
-	}
-	_ = token.Get("scope", &info.Scope)
-	_ = token.Get("cli", &info.ClientID)
-
-	if sub, ok := token.Subject(); ok {
-		info.Sub = sub
-	}
-
-	return info, nil
+	return &CATClaims{
+		ClientID: clientID,
+		Audience: audience,
+		JTI:      jti,
+	}, nil
 }
 
 // ============= 内部方法 =============
@@ -278,53 +211,4 @@ func (s *Service) encrypt(ctx context.Context, uat *UserAccessToken) (string, er
 	}
 
 	return string(encrypted), nil
-}
-
-// extractCATClaims 提取 CAT claims
-func (s *Service) extractCATClaims(token jwt.Token, id string) *CATClaims {
-	audVal, ok := token.Audience()
-	var audience string
-	if ok && len(audVal) > 0 {
-		audience = audVal[0]
-	}
-
-	jti, _ := token.JwtID()
-
-	return &CATClaims{
-		ClientID: id,
-		Audience: audience,
-		JTI:      jti,
-	}
-}
-
-// ============= 兼容旧接口 =============
-
-// Issuer 类型别名，兼容旧代码
-// Deprecated: 使用 Service 替代
-type Issuer = Service
-
-// NewIssuer 兼容旧代码
-// Deprecated: 使用 NewService 替代
-func NewIssuer(hermesCache *cache.HermesCache) *Issuer {
-	return NewService(hermesCache)
-}
-
-// ClientAccessTokenClaims 类型别名
-// Deprecated: 使用 CATClaims 替代
-type ClientAccessTokenClaims = CATClaims
-
-// VerifyClientAccessToken 兼容旧代码
-// Deprecated: 使用 VerifyCAT 替代
-func (s *Service) VerifyClientAccessToken(ctx context.Context, tokenString string) (*CATClaims, error) {
-	return s.VerifyCAT(ctx, tokenString)
-}
-
-// AccessTokenInfo 类型别名
-// Deprecated: 使用 TokenInfo 替代
-type AccessTokenInfo = TokenInfo
-
-// ParseAccessTokenUnverified 兼容旧代码
-// Deprecated: 使用 Parse 替代
-func (s *Service) ParseAccessTokenUnverified(tokenString string) (*TokenInfo, error) {
-	return s.Parse(tokenString)
 }

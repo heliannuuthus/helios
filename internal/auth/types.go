@@ -157,26 +157,6 @@ type TokenResponse struct {
 	Scope        string `json:"scope"` // 实际授予的 scope
 }
 
-// IntrospectRequest Token 内省请求
-type IntrospectRequest struct {
-	Token string `form:"token" binding:"required"`
-}
-
-// IntrospectResponse Token 内省响应
-type IntrospectResponse struct {
-	Active   bool   `json:"active"`
-	Sub      string `json:"sub,omitempty"`
-	Aud      string `json:"aud,omitempty"`
-	Iss      string `json:"iss,omitempty"`
-	Exp      int64  `json:"exp,omitempty"`
-	Iat      int64  `json:"iat,omitempty"`
-	Scope    string `json:"scope,omitempty"`
-	Nickname string `json:"nickname,omitempty"`
-	Picture  string `json:"picture,omitempty"`
-	Email    string `json:"email,omitempty"`
-	Phone    string `json:"phone,omitempty"`
-}
-
 // RevokeRequest 撤销请求
 type RevokeRequest struct {
 	Token    string `form:"token" binding:"required"`

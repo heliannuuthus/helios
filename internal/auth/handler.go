@@ -302,47 +302,6 @@ func (h *Handler) IDPs(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// Introspect POST /auth/introspect
-// @Summary Token 内省
-// @Description 验证 Token 并返回完整元数据（需要 Service JWT 认证）
-// @Tags auth
-// @Accept x-www-form-urlencoded
-// @Produce json
-// @Security Bearer
-// @Param token formData string true "Access Token"
-// @Success 200 {object} IntrospectResponse
-// @Failure 401 {object} Error
-// @Router /auth/introspect [post]
-func (h *Handler) Introspect(c *gin.Context) {
-	// 1. 获取 Service JWT
-	authHeader := c.GetHeader("Authorization")
-	if !strings.HasPrefix(authHeader, "Bearer ") {
-		h.errorResponse(c, http.StatusUnauthorized, NewError(ErrInvalidClient, "missing service jwt"))
-		return
-	}
-	serviceJWT := authHeader[7:]
-
-	// 2. 获取 Token
-	var req IntrospectRequest
-	if err := c.ShouldBind(&req); err != nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, err.Error()))
-		return
-	}
-
-	// 3. 调用服务
-	resp, err := h.service.Introspect(c.Request.Context(), req.Token, serviceJWT)
-	if err != nil {
-		if authErr, ok := err.(*Error); ok {
-			h.errorResponse(c, http.StatusUnauthorized, authErr)
-		} else {
-			h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, err.Error()))
-		}
-		return
-	}
-
-	c.JSON(http.StatusOK, resp)
-}
-
 func (h *Handler) errorResponse(c *gin.Context, status int, err *Error) {
 	c.JSON(status, err)
 }

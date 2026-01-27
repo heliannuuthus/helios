@@ -475,48 +475,6 @@ func (s *Service) RevokeAllTokens(ctx context.Context, userID string) error {
 	return s.store.RevokeUserRefreshTokens(ctx, userID)
 }
 
-// ============= Introspect =============
-
-// Introspect Token 内省
-// Service 调用此接口查询 token 信息，auth 服务只解析不验证
-// UAT/SAT 的验证由 Service 自己使用 pkg/token/Interpreter 完成
-func (s *Service) Introspect(ctx context.Context, tokenString string, serviceJWT string) (*IntrospectResponse, error) {
-	// 1. 验证 Service JWT（验证调用者身份）
-	serviceClaims, err := s.tokenSvc.VerifyServiceJWT(ctx, serviceJWT)
-	if err != nil {
-		return nil, NewError(ErrInvalidClient, fmt.Sprintf("invalid service jwt: %v", err))
-	}
-
-	// 2. 检查 jti 防重放（TODO: 实现 Redis 存储）
-	_ = serviceClaims.JTI
-
-	// 3. 解析 Access Token（不验证，Service 自己会验证）
-	tokenInfo, err := s.tokenSvc.Parse(tokenString)
-	if err != nil {
-		return &IntrospectResponse{Active: false}, nil
-	}
-
-	// 4. 检查 token 是否过期
-	if tokenInfo.Exp < time.Now().Unix() {
-		return &IntrospectResponse{Active: false}, nil
-	}
-
-	// 5. 构建响应
-	resp := &IntrospectResponse{
-		Active: true,
-		Sub:    tokenInfo.Sub, // 加密的用户信息或空
-		Aud:    tokenInfo.Audience,
-		Iss:    tokenInfo.Issuer,
-		Exp:    tokenInfo.Exp,
-		Iat:    tokenInfo.Iat,
-		Scope:  tokenInfo.Scope,
-	}
-
-	logger.Infof("[Auth] Token 内省成功 - ServiceID: %s, Audience: %s", serviceClaims.ClientID, tokenInfo.Audience)
-
-	return resp, nil
-}
-
 // ============= UserInfo =============
 
 // GetUserInfo 获取用户信息（根据 scope 返回，脱敏）
