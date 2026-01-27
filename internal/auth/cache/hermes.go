@@ -25,7 +25,7 @@ func NewHermesCache(svc *hermes.Service) *HermesCache {
 }
 
 // GetService 获取 Service（含解密密钥）
-func (h *HermesCache) GetService(ctx context.Context, serviceID string) (*Service, error) {
+func (h *HermesCache) GetService(ctx context.Context, serviceID string) (*models.ServiceWithKey, error) {
 	keyPrefix := GetKeyPrefix("service")
 	cacheKey := keyPrefix + serviceID
 
@@ -47,7 +47,7 @@ func (h *HermesCache) GetService(ctx context.Context, serviceID string) (*Servic
 }
 
 // GetApplication 获取 Application（含解密密钥）
-func (h *HermesCache) GetApplication(ctx context.Context, appID string) (*Application, error) {
+func (h *HermesCache) GetApplication(ctx context.Context, appID string) (*models.ApplicationWithKey, error) {
 	keyPrefix := GetKeyPrefix("application")
 	cacheKey := keyPrefix + appID
 
@@ -69,7 +69,7 @@ func (h *HermesCache) GetApplication(ctx context.Context, appID string) (*Applic
 }
 
 // GetDomain 获取 Domain（含签名密钥）
-func (h *HermesCache) GetDomain(ctx context.Context, domainID string) (*Domain, error) {
+func (h *HermesCache) GetDomain(ctx context.Context, domainID string) (*models.DomainWithKey, error) {
 	keyPrefix := GetKeyPrefix("domain")
 	cacheKey := keyPrefix + domainID
 

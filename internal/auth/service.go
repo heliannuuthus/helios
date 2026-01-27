@@ -13,6 +13,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/auth/token"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/kms"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -409,7 +410,7 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 		return nil, NewError(ErrServerError, "failed to mark code as used")
 	}
 
-	// 6. 获取用户和客户端
+	// 6. 获取用户、应用和服务
 	user, err := s.getUserByOpenID(authCode.UserID)
 	if err != nil {
 		return nil, NewError(ErrServerError, "user not found")
@@ -420,8 +421,13 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 		return nil, NewError(ErrInvalidClient, "application not found")
 	}
 
+	svc, err := s.hermesCache.GetService(ctx, authCode.Audience)
+	if err != nil {
+		return nil, NewError(ErrInvalidRequest, "service not found")
+	}
+
 	// 7. 生成 Token（使用授权码中的 scope 和 audience）
-	return s.generateTokens(ctx, app, user, authCode.Audience, authCode.Scope)
+	return s.generateTokens(ctx, app, svc, user, authCode.Scope)
 }
 
 func (s *Service) exchangeRefreshToken(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
@@ -441,7 +447,7 @@ func (s *Service) exchangeRefreshToken(ctx context.Context, req *TokenRequest) (
 		return nil, NewError(ErrInvalidGrant, "client_id mismatch")
 	}
 
-	// 4. 获取用户和客户端
+	// 4. 获取用户、应用和服务
 	user, err := s.getUserByOpenID(refreshToken.UserID)
 	if err != nil {
 		return nil, NewError(ErrServerError, "user not found")
@@ -452,8 +458,13 @@ func (s *Service) exchangeRefreshToken(ctx context.Context, req *TokenRequest) (
 		return nil, NewError(ErrInvalidClient, "application not found")
 	}
 
+	svc, err := s.hermesCache.GetService(ctx, refreshToken.Audience)
+	if err != nil {
+		return nil, NewError(ErrInvalidRequest, "service not found")
+	}
+
 	// 5. 生成新的 Access Token（使用 refresh token 中的 scope 和 audience）
-	tokenResp, err := s.generateTokens(ctx, app, user, refreshToken.Audience, refreshToken.Scope)
+	tokenResp, err := s.generateTokens(ctx, app, svc, user, refreshToken.Scope)
 	if err != nil {
 		return nil, err
 	}
@@ -624,25 +635,16 @@ func (s *Service) findOrCreateUser(idp IDP, result *IDPResult) (*User, error) {
 	return &user, nil
 }
 
-func (s *Service) generateTokens(ctx context.Context, app *cache.Application, user *User, audience string, scope string) (*TokenResponse, error) {
+func (s *Service) generateTokens(
+	ctx context.Context,
+	app *models.ApplicationWithKey,
+	svc *models.ServiceWithKey,
+	user *User,
+	scope string,
+) (*TokenResponse, error) {
 	now := time.Now()
 
-	// 1. 验证 Application-Service 关系
-	hasRelation, err := s.hermesCache.CheckApplicationServiceRelation(ctx, app.AppID, audience)
-	if err != nil {
-		return nil, fmt.Errorf("check application service relation: %w", err)
-	}
-	if !hasRelation {
-		return nil, NewError(ErrAccessDenied, fmt.Sprintf("application %s has no access to service %s", app.AppID, audience))
-	}
-
-	// 2. 获取 Service 配置（用于 TTL）
-	svc, err := s.hermesCache.GetService(ctx, audience)
-	if err != nil {
-		return nil, fmt.Errorf("get service: %w", err)
-	}
-
-	// 3. 计算 TTL（优先使用服务配置，最后使用全局配置）
+	// 1. 计算 TTL（优先使用服务配置，最后使用全局配置）
 	accessTTL := time.Duration(svc.AccessTokenExpiresIn) * time.Second
 	if accessTTL == 0 {
 		accessTTL = time.Duration(config.GetInt("auth.expires-in")) * time.Second
@@ -653,7 +655,7 @@ func (s *Service) generateTokens(ctx context.Context, app *cache.Application, us
 		refreshTTL = time.Duration(config.GetInt("auth.refresh-expires-in")) * 24 * time.Hour
 	}
 
-	// 4. 解析 scope，确定要包含哪些用户信息
+	// 2. 解析 scope，确定要包含哪些用户信息
 	scopes := ParseScopes(scope)
 
 	// 构建用户 Claims（根据 scope 填充）
@@ -679,11 +681,11 @@ func (s *Service) generateTokens(ctx context.Context, app *cache.Application, us
 		}
 	}
 
-	// 5. 创建 Access Token
+	// 3. 创建 Access Token
 	uat := token.NewUserAccessToken(
 		s.tokenSvc.GetIssuerName(),
 		app.AppID,
-		audience,
+		svc.ServiceID,
 		scope,
 		accessTTL,
 		userClaims,
@@ -700,7 +702,7 @@ func (s *Service) generateTokens(ctx context.Context, app *cache.Application, us
 		Scope:       scope,
 	}
 
-	// 6. 只有 scope 包含 offline_access 时才返回 refresh_token
+	// 4. 只有 scope 包含 offline_access 时才返回 refresh_token
 	if ContainsScope(scopes, ScopeOfflineAccess) {
 		// 清理旧的 Refresh Token
 		s.cleanupOldRefreshTokens(ctx, user.OpenID, app.AppID)
@@ -710,7 +712,7 @@ func (s *Service) generateTokens(ctx context.Context, app *cache.Application, us
 			Token:     GenerateRefreshTokenValue(),
 			UserID:    user.OpenID,
 			ClientID:  app.AppID,
-			Audience:  audience,
+			Audience:  svc.ServiceID,
 			Scope:     scope,
 			ExpiresAt: now.Add(refreshTTL),
 			CreatedAt: now,
