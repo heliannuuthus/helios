@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/heliannuuthus/helios/internal/auth/token"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/pkg/kms"
@@ -23,14 +24,14 @@ import (
 type Service struct {
 	db           *gorm.DB
 	store        Store
-	tokenManager *TokenManager
+	tokenManager *token.Manager
 	idpManager   *IDPManager
 	hermesCache  *HermesCache
 }
 
 // NewService 创建认证服务
 func NewService(db *gorm.DB, hermesSvc *hermes.Service) (*Service, error) {
-	tokenManager, err := NewTokenManager()
+	tokenManager, err := token.NewManager()
 	if err != nil {
 		return nil, fmt.Errorf("create token manager: %w", err)
 	}
@@ -74,7 +75,7 @@ func (s *Service) Authorize(ctx context.Context, req *AuthorizeRequest) (string,
 	}
 
 	// 5. 创建会话
-	sessionID := GenerateSessionID()
+	sessionID := token.GenerateSessionID()
 	session := &Session{
 		ID:                  sessionID,
 		ClientID:            req.ClientID,
@@ -286,7 +287,7 @@ func (s *Service) Login(ctx context.Context, sessionID string, req *LoginRequest
 	}
 
 	// 10. 生成授权码
-	authCode := GenerateAuthorizationCode()
+	authCode := token.GenerateAuthorizationCode()
 	authCodeObj := &AuthorizationCode{
 		Code:                authCode,
 		ClientID:            session.ClientID,
@@ -400,7 +401,7 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 	}
 
 	// 4. 验证 PKCE
-	if !VerifyCodeChallenge(CodeChallengeMethod(authCode.CodeChallengeMethod), authCode.CodeChallenge, req.CodeVerifier) {
+	if !token.VerifyCodeChallenge(token.CodeChallengeMethod(authCode.CodeChallengeMethod), authCode.CodeChallenge, req.CodeVerifier) {
 		return nil, NewError(ErrInvalidGrant, "invalid code_verifier")
 	}
 
@@ -799,7 +800,7 @@ func (s *Service) generateTokens(ctx context.Context, client *Client, user *User
 	scopes := ParseScopes(scope)
 
 	// 构建 SubjectClaims（加密到 sub）
-	subjectClaims := &SubjectClaims{
+	subjectClaims := &token.SubjectClaims{
 		OpenID: user.OpenID,
 	}
 

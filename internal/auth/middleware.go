@@ -4,16 +4,18 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/heliannuuthus/helios/internal/auth/token"
+
 	"github.com/gin-gonic/gin"
 )
 
 // Middleware 认证中间件
 type Middleware struct {
-	tokenManager *TokenManager
+	tokenManager *token.Manager
 }
 
 // NewMiddleware 创建中间件
-func NewMiddleware(tokenManager *TokenManager) *Middleware {
+func NewMiddleware(tokenManager *token.Manager) *Middleware {
 	return &Middleware{tokenManager: tokenManager}
 }
 
@@ -94,9 +96,9 @@ func (m *Middleware) extractToken(c *gin.Context) string {
 }
 
 // GetIdentity 从上下文获取用户身份
-func GetIdentity(c *gin.Context) *Identity {
+func GetIdentity(c *gin.Context) *token.Identity {
 	if identity, exists := c.Get("identity"); exists {
-		return identity.(*Identity)
+		return identity.(*token.Identity)
 	}
 	return nil
 }

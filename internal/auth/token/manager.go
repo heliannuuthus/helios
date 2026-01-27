@@ -1,11 +1,8 @@
-package auth
+package token
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,25 +15,17 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwt"
 )
 
-// Token 验证错误
-var (
-	ErrUnsupportedAudience = errors.New("unsupported audience")
-	ErrTokenExpired        = errors.New("token expired")
-	ErrInvalidSignature    = errors.New("invalid signature")
-	ErrMissingClaims       = errors.New("missing required claims")
-)
-
-// TokenManager Token 管理器
+// Manager Token 管理器
 // 支持 token 的签发（Auth 模块使用）
-type TokenManager struct {
+type Manager struct {
 	issuer     string
 	signingKey jwk.Key // 默认签名密钥（用于旧接口兼容）
 	encryptKey jwk.Key // 默认加密密钥（用于旧接口兼容）
 }
 
-// NewTokenManager 创建 Token 管理器
-func NewTokenManager() (*TokenManager, error) {
-	tm := &TokenManager{
+// NewManager 创建 Token 管理器
+func NewManager() (*Manager, error) {
+	tm := &Manager{
 		issuer: config.GetString("auth.issuer"),
 	}
 
@@ -74,7 +63,7 @@ func NewTokenManager() (*TokenManager, error) {
 // CreateAccessToken 创建 Access Token（兼容旧接口）
 // sub 字段包含加密的用户信息（openid, nickname, picture, email, phone）
 // Deprecated: 使用 CreateAccessTokenV2 替代
-func (tm *TokenManager) CreateAccessToken(claims *SubjectClaims, clientID string, scope string, ttl time.Duration) (string, error) {
+func (tm *Manager) CreateAccessToken(claims *SubjectClaims, clientID string, scope string, ttl time.Duration) (string, error) {
 	now := time.Now()
 
 	// 加密 sub（用户信息）
@@ -94,8 +83,8 @@ func (tm *TokenManager) CreateAccessToken(claims *SubjectClaims, clientID string
 
 	// JTI
 	jtiBytes := make([]byte, 16)
-	_, _ = rand.Read(jtiBytes)
-	_ = token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes))
+	_, _ = randRead(jtiBytes)
+	_ = token.Set(jwt.JwtIDKey, hexEncodeToString(jtiBytes))
 
 	// scope
 	_ = token.Set("scope", scope)
@@ -111,7 +100,7 @@ func (tm *TokenManager) CreateAccessToken(claims *SubjectClaims, clientID string
 
 // CreateAccessTokenV2 创建 Access Token（新版本）
 // Deprecated: 使用 Issuer.Issue 替代
-func (tm *TokenManager) CreateAccessTokenV2(
+func (tm *Manager) CreateAccessTokenV2(
 	claims *SubjectClaims,
 	clientID string,
 	audience string,
@@ -125,7 +114,7 @@ func (tm *TokenManager) CreateAccessTokenV2(
 }
 
 // VerifyAccessToken 验证 Access Token，返回完整身份信息
-func (tm *TokenManager) VerifyAccessToken(tokenString string) (*Identity, error) {
+func (tm *Manager) VerifyAccessToken(tokenString string) (*Identity, error) {
 	// 验证签名
 	token, err := jwt.Parse([]byte(tokenString),
 		jwt.WithKey(jwa.EdDSA(), tm.signingKey),
@@ -162,7 +151,7 @@ func (tm *TokenManager) VerifyAccessToken(tokenString string) (*Identity, error)
 }
 
 // ParseAccessTokenUnverified 解析 Token 但不验证（用于获取 claims）
-func (tm *TokenManager) ParseAccessTokenUnverified(tokenString string) (aud string, iss string, exp int64, iat int64, scope string, err error) {
+func (tm *Manager) ParseAccessTokenUnverified(tokenString string) (aud string, iss string, exp int64, iat int64, scope string, err error) {
 	token, parseErr := jwt.Parse([]byte(tokenString), jwt.WithVerify(false))
 	if parseErr != nil {
 		err = parseErr
@@ -186,7 +175,7 @@ func (tm *TokenManager) ParseAccessTokenUnverified(tokenString string) (aud stri
 }
 
 // encryptSubjectClaims 加密用户信息
-func (tm *TokenManager) encryptSubjectClaims(claims *SubjectClaims) (string, error) {
+func (tm *Manager) encryptSubjectClaims(claims *SubjectClaims) (string, error) {
 	if tm.encryptKey == nil {
 		// 没有加密密钥则返回 JSON
 		data, err := json.Marshal(claims)
@@ -213,7 +202,7 @@ func (tm *TokenManager) encryptSubjectClaims(claims *SubjectClaims) (string, err
 }
 
 // decryptSubjectClaims 解密用户信息
-func (tm *TokenManager) decryptSubjectClaims(encryptedSub string) (*SubjectClaims, error) {
+func (tm *Manager) decryptSubjectClaims(encryptedSub string) (*SubjectClaims, error) {
 	var data []byte
 
 	if tm.encryptKey == nil {
@@ -238,7 +227,7 @@ func (tm *TokenManager) decryptSubjectClaims(encryptedSub string) (*SubjectClaim
 }
 
 // VerifyServiceJWT 验证 Service JWT（用于 introspect）
-func (tm *TokenManager) VerifyServiceJWT(tokenString string, serviceKey []byte) (serviceID string, jti string, err error) {
+func (tm *Manager) VerifyServiceJWT(tokenString string, serviceKey []byte) (serviceID string, jti string, err error) {
 	// 使用 HMAC 验证
 	key, err := jwk.Import(serviceKey)
 	if err != nil {
@@ -263,33 +252,9 @@ func (tm *TokenManager) VerifyServiceJWT(tokenString string, serviceKey []byte) 
 	return sub, jtiVal, nil
 }
 
-// GenerateAuthorizationCode 生成授权码
-func GenerateAuthorizationCode() string {
-	bytes := make([]byte, 32)
-	_, _ = rand.Read(bytes)
-	return base64.RawURLEncoding.EncodeToString(bytes)
-}
-
-// GenerateSessionID 生成会话 ID
-func GenerateSessionID() string {
-	bytes := make([]byte, 16)
-	_, _ = rand.Read(bytes)
-	return base64.RawURLEncoding.EncodeToString(bytes)
-}
-
-// VerifyCodeChallenge 验证 PKCE（只支持 S256）
-func VerifyCodeChallenge(method CodeChallengeMethod, challenge, verifier string) bool {
-	if method != CodeChallengeMethodS256 {
-		return false
-	}
-	hash := sha256.Sum256([]byte(verifier))
-	computed := base64.RawURLEncoding.EncodeToString(hash[:])
-	return computed == challenge
-}
-
-// VerifyAccessToken 兼容旧接口（全局函数）
-func VerifyAccessToken(tokenString string) (*Identity, error) {
-	tm, err := NewTokenManager()
+// VerifyAccessTokenGlobal 兼容旧接口（全局函数）
+func VerifyAccessTokenGlobal(tokenString string) (*Identity, error) {
+	tm, err := NewManager()
 	if err != nil {
 		return nil, err
 	}
@@ -396,4 +361,3 @@ func decryptSubjectClaimsLegacy(encryptedSub string, decryptKey jwk.Key) (*Subje
 
 	return &claims, nil
 }
-

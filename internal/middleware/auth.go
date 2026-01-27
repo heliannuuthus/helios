@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/auth/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/pkg/token"
+	pkgtoken "github.com/heliannuuthus/helios/pkg/token"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,9 +25,9 @@ func AuthMiddleware() gin.HandlerFunc {
 			tokenStr = authorization[7:]
 		}
 
-		identity, err := auth.VerifyAccessToken(tokenStr)
+		identity, err := token.VerifyAccessTokenGlobal(tokenStr)
 		if err == nil && identity != nil {
-			logger.Infof("[Auth] 可选认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID)
+			logger.Infof("[Auth] 可选认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID())
 			c.Set("user", identity)
 		}
 
@@ -50,7 +50,7 @@ func RequireAuth() gin.HandlerFunc {
 			tokenStr = authorization[7:]
 		}
 
-		identity, err := auth.VerifyAccessToken(tokenStr)
+		identity, err := token.VerifyAccessTokenGlobal(tokenStr)
 		if err != nil || identity == nil {
 			logger.Warnf("[Auth] Token 验证失败 - Path: %s, IP: %s, Error: %v, TokenPreview: %s...",
 				c.Request.URL.Path,
@@ -61,7 +61,7 @@ func RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		logger.Infof("[Auth] 认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID)
+		logger.Infof("[Auth] 认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID())
 		c.Set("user", identity)
 		c.Next()
 	}
@@ -76,7 +76,7 @@ func tokenPreview(tokenStr string, length int) string {
 }
 
 // RequireToken 新版本认证中间件（使用 token.Verifier）
-func RequireToken(v *token.Verifier) gin.HandlerFunc {
+func RequireToken(v *pkgtoken.Verifier) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
 		if authorization == "" {
@@ -108,7 +108,7 @@ func RequireToken(v *token.Verifier) gin.HandlerFunc {
 }
 
 // OptionalToken 新版本可选认证中间件（使用 token.Verifier）
-func OptionalToken(v *token.Verifier) gin.HandlerFunc {
+func OptionalToken(v *pkgtoken.Verifier) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
 		if authorization == "" {
