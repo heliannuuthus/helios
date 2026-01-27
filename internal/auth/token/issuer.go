@@ -58,7 +58,7 @@ type encryptor struct {
 // 通过 audience 获取 Service -> Key
 func (e *encryptor) Encrypt(ctx context.Context, claims *pkgtoken.Claims, audience string) (string, error) {
 	// 1. 获取服务加密密钥
-	svcWithKey, err := e.cache.GetServiceWithKey(ctx, audience)
+	svc, err := e.cache.GetService(ctx, audience)
 	if err != nil {
 		return "", fmt.Errorf("get service key: %w", err)
 	}
@@ -70,7 +70,7 @@ func (e *encryptor) Encrypt(ctx context.Context, claims *pkgtoken.Claims, audien
 	}
 
 	// 3. 导入密钥
-	key, err := jwk.Import(svcWithKey.Key)
+	key, err := jwk.Import(svc.Key)
 	if err != nil {
 		return "", fmt.Errorf("import encrypt key: %w", err)
 	}
@@ -188,7 +188,7 @@ func (i *Issuer) VerifyAccessToken(ctx context.Context, tokenString string) (*Id
 	}
 
 	// 2. 获取服务加密密钥（用于解密 sub）
-	svcWithKey, err := i.cache.GetServiceWithKey(ctx, audience)
+	svc, err := i.cache.GetService(ctx, audience)
 	if err != nil {
 		return nil, fmt.Errorf("get service key: %w", err)
 	}
@@ -227,7 +227,7 @@ func (i *Issuer) VerifyAccessToken(ctx context.Context, tokenString string) (*Id
 	}
 
 	// 8. 解密 sub
-	claims, err := i.decryptClaims(encryptedSub, svcWithKey.Key)
+	claims, err := i.decryptClaims(encryptedSub, svc.Key)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt sub: %w", err)
 	}

@@ -13,9 +13,9 @@ import (
 // 配置从全局 viper 动态读取，支持热更新
 // 每个 cache 类型都有独立的配置前缀：auth.cache.{type}.{config-key}
 type Manager struct {
-	domainCache                     *ristretto.Cache[string, *DomainWithKey]
-	applicationCache                *ristretto.Cache[string, *ApplicationWithKey]
-	serviceCache                    *ristretto.Cache[string, *ServiceWithKey]
+	domainCache                     *ristretto.Cache[string, *Domain]
+	applicationCache                *ristretto.Cache[string, *Application]
+	serviceCache                    *ristretto.Cache[string, *Service]
 	applicationServiceRelationCache *ristretto.Cache[string, []models.ApplicationServiceRelation]
 	relationshipCache               *ristretto.Cache[string, []models.Relationship]
 }
@@ -99,7 +99,7 @@ func NewManager() *Manager {
 
 	// 创建 Domain cache
 	maxCost, numCounters, bufferItems := getCacheConfig("domain")
-	domainCache, err := ristretto.NewCache(&ristretto.Config[string, *DomainWithKey]{
+	domainCache, err := ristretto.NewCache(&ristretto.Config[string, *Domain]{
 		NumCounters: numCounters,
 		MaxCost:     maxCost,
 		BufferItems: bufferItems,
@@ -112,7 +112,7 @@ func NewManager() *Manager {
 
 	// 创建 Application cache
 	maxCost, numCounters, bufferItems = getCacheConfig("application")
-	applicationCache, err := ristretto.NewCache(&ristretto.Config[string, *ApplicationWithKey]{
+	applicationCache, err := ristretto.NewCache(&ristretto.Config[string, *Application]{
 		NumCounters: numCounters,
 		MaxCost:     maxCost,
 		BufferItems: bufferItems,
@@ -125,7 +125,7 @@ func NewManager() *Manager {
 
 	// 创建 Service cache
 	maxCost, numCounters, bufferItems = getCacheConfig("service")
-	serviceCache, err := ristretto.NewCache(&ristretto.Config[string, *ServiceWithKey]{
+	serviceCache, err := ristretto.NewCache(&ristretto.Config[string, *Service]{
 		NumCounters: numCounters,
 		MaxCost:     maxCost,
 		BufferItems: bufferItems,
@@ -187,7 +187,7 @@ func (cm *Manager) Close() {
 // ==================== Domain Cache ====================
 
 // GetDomain 从缓存获取 Domain
-func (cm *Manager) GetDomain(key string) (*DomainWithKey, bool) {
+func (cm *Manager) GetDomain(key string) (*Domain, bool) {
 	if cm.domainCache == nil {
 		return nil, false
 	}
@@ -195,7 +195,7 @@ func (cm *Manager) GetDomain(key string) (*DomainWithKey, bool) {
 }
 
 // SetDomain 设置 Domain 到缓存
-func (cm *Manager) SetDomain(key string, value *DomainWithKey) {
+func (cm *Manager) SetDomain(key string, value *Domain) {
 	if cm.domainCache != nil {
 		ttl := GetTTL("domain")
 		cm.domainCache.SetWithTTL(key, value, 1, ttl)
@@ -205,7 +205,7 @@ func (cm *Manager) SetDomain(key string, value *DomainWithKey) {
 // ==================== Application Cache ====================
 
 // GetApplication 从缓存获取 Application
-func (cm *Manager) GetApplication(key string) (*ApplicationWithKey, bool) {
+func (cm *Manager) GetApplication(key string) (*Application, bool) {
 	if cm.applicationCache == nil {
 		return nil, false
 	}
@@ -213,7 +213,7 @@ func (cm *Manager) GetApplication(key string) (*ApplicationWithKey, bool) {
 }
 
 // SetApplication 设置 Application 到缓存
-func (cm *Manager) SetApplication(key string, value *ApplicationWithKey) {
+func (cm *Manager) SetApplication(key string, value *Application) {
 	if cm.applicationCache != nil {
 		ttl := GetTTL("application")
 		cm.applicationCache.SetWithTTL(key, value, 1, ttl)
@@ -223,7 +223,7 @@ func (cm *Manager) SetApplication(key string, value *ApplicationWithKey) {
 // ==================== Service Cache ====================
 
 // GetService 从缓存获取 Service
-func (cm *Manager) GetService(key string) (*ServiceWithKey, bool) {
+func (cm *Manager) GetService(key string) (*Service, bool) {
 	if cm.serviceCache == nil {
 		return nil, false
 	}
@@ -231,7 +231,7 @@ func (cm *Manager) GetService(key string) (*ServiceWithKey, bool) {
 }
 
 // SetService 设置 Service 到缓存
-func (cm *Manager) SetService(key string, value *ServiceWithKey) {
+func (cm *Manager) SetService(key string, value *Service) {
 	if cm.serviceCache != nil {
 		ttl := GetTTL("service")
 		cm.serviceCache.SetWithTTL(key, value, 1, ttl)

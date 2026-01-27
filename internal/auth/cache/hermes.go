@@ -26,8 +26,8 @@ func NewHermesCache(svc *hermes.Service) *HermesCache {
 	}
 }
 
-// GetServiceWithKey 获取带解密密钥的 Service
-func (h *HermesCache) GetServiceWithKey(ctx context.Context, serviceID string) (*ServiceWithKey, error) {
+// GetService 获取 Service（含解密密钥）
+func (h *HermesCache) GetService(ctx context.Context, serviceID string) (*Service, error) {
 	keyPrefix := GetKeyPrefix("service")
 	cacheKey := keyPrefix + serviceID
 
@@ -43,12 +43,12 @@ func (h *HermesCache) GetServiceWithKey(ctx context.Context, serviceID string) (
 	}
 
 	// 解密密钥
-	key, err := h.decryptKey(svc)
+	key, err := h.decryptServiceKey(svc)
 	if err != nil {
 		return nil, err
 	}
 
-	result := &ServiceWithKey{Service: *svc, Key: key}
+	result := &Service{Service: *svc, Key: key}
 
 	// 存入缓存
 	h.manager.SetService(cacheKey, result)
@@ -56,8 +56,8 @@ func (h *HermesCache) GetServiceWithKey(ctx context.Context, serviceID string) (
 	return result, nil
 }
 
-// GetApplication 获取 Application（含密钥）
-func (h *HermesCache) GetApplication(ctx context.Context, appID string) (*ApplicationWithKey, error) {
+// GetApplication 获取 Application（含解密密钥）
+func (h *HermesCache) GetApplication(ctx context.Context, appID string) (*Application, error) {
 	keyPrefix := GetKeyPrefix("application")
 	cacheKey := keyPrefix + appID
 
@@ -91,7 +91,7 @@ func (h *HermesCache) GetApplication(ctx context.Context, appID string) (*Applic
 		}
 	}
 
-	result := &ApplicationWithKey{Application: *app, Key: key}
+	result := &Application{Application: *app, Key: key}
 
 	// 存入缓存
 	h.manager.SetApplication(cacheKey, result)
@@ -99,33 +99,8 @@ func (h *HermesCache) GetApplication(ctx context.Context, appID string) (*Applic
 	return result, nil
 }
 
-// GetService 获取 Service（不解密）
-func (h *HermesCache) GetService(ctx context.Context, serviceID string) (*models.Service, error) {
-	keyPrefix := GetKeyPrefix("service")
-	cacheKey := keyPrefix + serviceID
-
-	// 尝试从缓存获取（需要从 ServiceWithKey 中提取）
-	if cached, ok := h.manager.GetService(cacheKey); ok {
-		svc := cached.Service
-		return &svc, nil
-	}
-
-	// 查库
-	svc, err := h.svc.GetService(ctx, serviceID)
-	if err != nil {
-		return nil, err
-	}
-
-	// 存入缓存（作为 ServiceWithKey，但这里只存 Service 部分）
-	key, _ := h.decryptKey(svc)
-	result := &ServiceWithKey{Service: *svc, Key: key}
-	h.manager.SetService(cacheKey, result)
-
-	return svc, nil
-}
-
-// GetDomain 获取 Domain（含密钥）
-func (h *HermesCache) GetDomain(ctx context.Context, domainID string) (*DomainWithKey, error) {
+// GetDomain 获取 Domain（含签名密钥）
+func (h *HermesCache) GetDomain(ctx context.Context, domainID string) (*Domain, error) {
 	keyPrefix := GetKeyPrefix("domain")
 	cacheKey := keyPrefix + domainID
 
@@ -140,21 +115,15 @@ func (h *HermesCache) GetDomain(ctx context.Context, domainID string) (*DomainWi
 		return nil, err
 	}
 
-	// 获取密钥
+	// 获取签名密钥
 	signKey, err := config.GetDomainSignKey(domainID)
 	if err != nil {
 		return nil, err
 	}
 
-	encryptKey, err := config.GetDomainEncryptKey(domainID)
-	if err != nil {
-		return nil, err
-	}
-
-	result := &DomainWithKey{
-		Domain:     *domain,
-		SignKey:    signKey,
-		EncryptKey: encryptKey,
+	result := &Domain{
+		Domain:  *domain,
+		SignKey: signKey,
 	}
 
 	// 存入缓存
@@ -163,8 +132,8 @@ func (h *HermesCache) GetDomain(ctx context.Context, domainID string) (*DomainWi
 	return result, nil
 }
 
-// decryptKey 解密 Service 密钥
-func (h *HermesCache) decryptKey(svc *models.Service) ([]byte, error) {
+// decryptServiceKey 解密 Service 密钥
+func (h *HermesCache) decryptServiceKey(svc *models.Service) ([]byte, error) {
 	domainKey, err := config.GetDomainEncryptKey(svc.DomainID)
 	if err != nil {
 		return nil, err

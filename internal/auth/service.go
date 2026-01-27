@@ -568,13 +568,13 @@ func (s *Service) verifyServiceJWT(tokenString string) (serviceID string, jti st
 	jtiVal, _ := token.JwtID()
 
 	// 从缓存获取带解密密钥的 Service
-	svcWithKey, err := s.hermesCache.GetServiceWithKey(context.Background(), sub)
+	svc, err := s.hermesCache.GetService(context.Background(), sub)
 	if err != nil {
 		return "", "", fmt.Errorf("service not found: %w", err)
 	}
 
 	// 验证 JWT 签名
-	verifiedServiceID, verifiedJti, verifyErr := s.issuer.VerifyServiceJWT(tokenString, svcWithKey.Key)
+	verifiedServiceID, verifiedJti, verifyErr := s.issuer.VerifyServiceJWT(tokenString, svc.Key)
 	if verifyErr != nil {
 		return "", "", fmt.Errorf("verify service jwt: %w", verifyErr)
 	}
