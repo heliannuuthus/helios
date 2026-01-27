@@ -24,7 +24,7 @@ import (
 type Service struct {
 	db          *gorm.DB
 	store       Store
-	issuer      *token.Issuer
+	tokenSvc    *token.Service
 	idpManager  *IDPManager
 	hermesCache *cache.HermesCache
 }
@@ -32,12 +32,12 @@ type Service struct {
 // NewService 创建认证服务
 func NewService(db *gorm.DB, hermesSvc *hermes.Service) (*Service, error) {
 	hermesCache := cache.NewHermesCache(hermesSvc)
-	issuer := token.NewIssuer(hermesCache)
+	tokenSvc := token.NewService(hermesCache)
 
 	return &Service{
 		db:          db,
 		store:       NewMemoryStore(), // TODO: 支持 Redis
-		issuer:      issuer,
+		tokenSvc:    tokenSvc,
 		idpManager:  NewIDPManager(),
 		hermesCache: hermesCache,
 	}, nil
@@ -482,7 +482,7 @@ func (s *Service) RevokeAllTokens(ctx context.Context, userID string) error {
 // UAT/SAT 的验证由 Service 自己使用 pkg/token/Interpreter 完成
 func (s *Service) Introspect(ctx context.Context, tokenString string, serviceJWT string) (*IntrospectResponse, error) {
 	// 1. 验证 Service JWT（验证调用者身份）
-	serviceClaims, err := s.issuer.VerifyServiceJWT(ctx, serviceJWT)
+	serviceClaims, err := s.tokenSvc.VerifyServiceJWT(ctx, serviceJWT)
 	if err != nil {
 		return nil, NewError(ErrInvalidClient, fmt.Sprintf("invalid service jwt: %v", err))
 	}
@@ -491,7 +491,7 @@ func (s *Service) Introspect(ctx context.Context, tokenString string, serviceJWT
 	_ = serviceClaims.JTI
 
 	// 3. 解析 Access Token（不验证，Service 自己会验证）
-	tokenInfo, err := s.issuer.ParseAccessTokenUnverified(tokenString)
+	tokenInfo, err := s.tokenSvc.Parse(tokenString)
 	if err != nil {
 		return &IntrospectResponse{Active: false}, nil
 	}
@@ -736,14 +736,14 @@ func (s *Service) generateTokens(ctx context.Context, client *Client, user *User
 
 	// 5. 创建 Access Token
 	uat := token.NewUserAccessToken(
-		s.issuer.GetIssuerName(),
+		s.tokenSvc.GetIssuerName(),
 		client.ClientID,
 		audience,
 		scope,
 		accessTTL,
 		userClaims,
 	)
-	accessToken, err := s.issuer.Issue(ctx, uat)
+	accessToken, err := s.tokenSvc.Issue(ctx, uat)
 	if err != nil {
 		return nil, fmt.Errorf("create token: %w", err)
 	}

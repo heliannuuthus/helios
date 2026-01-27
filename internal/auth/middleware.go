@@ -11,12 +11,12 @@ import (
 
 // Middleware 认证中间件（用于验证 CAT/ServiceJWT）
 type Middleware struct {
-	issuer *token.Issuer
+	tokenSvc *token.Service
 }
 
 // NewMiddleware 创建中间件
-func NewMiddleware(issuer *token.Issuer) *Middleware {
-	return &Middleware{issuer: issuer}
+func NewMiddleware(tokenSvc *token.Service) *Middleware {
+	return &Middleware{tokenSvc: tokenSvc}
 }
 
 // RequireClientAuth 要求客户端认证（验证 CAT）
@@ -32,8 +32,8 @@ func (m *Middleware) RequireClientAuth() gin.HandlerFunc {
 			return
 		}
 
-		// 验证 ClientAccessToken
-		claims, err := m.issuer.VerifyClientAccessToken(c.Request.Context(), tokenStr)
+		// 验证 CAT
+		claims, err := m.tokenSvc.VerifyCAT(c.Request.Context(), tokenStr)
 		if err != nil {
 			c.Header("WWW-Authenticate", "Bearer error=\"invalid_token\"")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, Error{
@@ -62,7 +62,7 @@ func (m *Middleware) RequireServiceAuth() gin.HandlerFunc {
 		}
 
 		// 验证 ServiceJWT
-		claims, err := m.issuer.VerifyServiceJWT(c.Request.Context(), tokenStr)
+		claims, err := m.tokenSvc.VerifyServiceJWT(c.Request.Context(), tokenStr)
 		if err != nil {
 			c.Header("WWW-Authenticate", "Bearer error=\"invalid_token\"")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, Error{
@@ -87,17 +87,17 @@ func (m *Middleware) extractToken(c *gin.Context) string {
 }
 
 // GetClientClaims 从上下文获取客户端信息
-func GetClientClaims(c *gin.Context) *token.ClientAccessTokenClaims {
+func GetClientClaims(c *gin.Context) *token.CATClaims {
 	if claims, exists := c.Get("client_claims"); exists {
-		return claims.(*token.ClientAccessTokenClaims)
+		return claims.(*token.CATClaims)
 	}
 	return nil
 }
 
 // GetServiceClaims 从上下文获取服务信息
-func GetServiceClaims(c *gin.Context) *token.ClientAccessTokenClaims {
+func GetServiceClaims(c *gin.Context) *token.CATClaims {
 	if claims, exists := c.Get("service_claims"); exists {
-		return claims.(*token.ClientAccessTokenClaims)
+		return claims.(*token.CATClaims)
 	}
 	return nil
 }
