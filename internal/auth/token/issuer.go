@@ -1,15 +1,14 @@
 package token
 
 import (
-	"crypto/rand"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/heliannuuthus/helios/internal/config"
+	pkgtoken "github.com/heliannuuthus/helios/pkg/token"
 	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jwe"
 	"github.com/lestrrat-go/jwx/v3/jwk"
@@ -17,7 +16,6 @@ import (
 )
 
 // Issuer Token 签发器
-// 集成 encryptor + signer，负责 token 的签发和验证
 type Issuer struct {
 	issuerName string  // issuer 字符串
 	signingKey jwk.Key // 默认签名密钥（用于旧接口兼容）
@@ -61,94 +59,79 @@ func NewIssuer() (*Issuer, error) {
 	return i, nil
 }
 
-// Issue 签发 token（新版本）
-// 使用服务密钥加密用户信息，使用域密钥签名
-// - claims: 用户信息
-// - clientID: 应用 ID（存储在 cli 字段）
-// - audience: 服务 ID（存储在 aud 字段）
-// - serviceEncryptKey: 服务加密密钥（用于加密 sub）
-// - signKey: 域签名密钥（用于签名 JWT）
-// - scope: 授权范围
-// - ttl: token 有效期
-func (i *Issuer) Issue(
-	claims *SubjectClaims,
-	clientID string,
-	audience string,
-	serviceEncryptKey jwk.Key,
-	signKey jwk.Key,
-	scope string,
-	ttl time.Duration,
-) (string, error) {
-	now := time.Now()
+// GetIssuerName 返回签发者名称
+func (i *Issuer) GetIssuerName() string {
+	return i.issuerName
+}
 
-	// 使用服务密钥加密 sub（用户信息）
-	encryptedSub, err := i.encryptSubjectClaims(claims, serviceEncryptKey)
+// Issue 签发 token（新版本）
+// 使用 AccessToken 接口构建 token，通过 Encryptor 加密用户信息，通过 Signer 签名
+func (i *Issuer) Issue(accessToken AccessToken, encryptor Encryptor, signer Signer) (string, error) {
+	// 构建 JWT Token
+	token, err := accessToken.Build()
 	if err != nil {
-		return "", fmt.Errorf("encrypt sub: %w", err)
+		return "", fmt.Errorf("build token: %w", err)
 	}
 
-	// 创建 JWT
-	token := jwt.New()
-	_ = token.Set(jwt.IssuerKey, i.issuerName)
-	_ = token.Set(jwt.SubjectKey, encryptedSub)
-	_ = token.Set(jwt.AudienceKey, audience) // aud = service_id
-	_ = token.Set("cli", clientID)           // cli = client_id
-	_ = token.Set(jwt.IssuedAtKey, now.Unix())
-	_ = token.Set(jwt.ExpirationKey, now.Add(ttl).Unix())
-	_ = token.Set(jwt.NotBeforeKey, now.Unix())
+	// 如果是 UserAccessToken，需要加密用户信息到 sub
+	if uat, ok := accessToken.(*UserAccessToken); ok && uat.GetUser() != nil {
+		encryptedSub, err := encryptor.EncryptClaims(uat.GetUser())
+		if err != nil {
+			return "", fmt.Errorf("encrypt user claims: %w", err)
+		}
+		_ = token.Set(jwt.SubjectKey, encryptedSub)
+	}
 
-	// JTI
-	jtiBytes := make([]byte, 16)
-	_, _ = rand.Read(jtiBytes)
-	_ = token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes))
-
-	// scope
-	_ = token.Set("scope", scope)
-
-	// 使用域签名密钥签名
-	signedToken, err := jwt.Sign(token, jwt.WithKey(jwa.EdDSA(), signKey))
+	// 签名
+	signed, err := signer.Sign(token)
 	if err != nil {
 		return "", fmt.Errorf("sign token: %w", err)
 	}
 
-	return string(signedToken), nil
+	return string(signed), nil
 }
+
+// IssueUserToken 签发用户访问令牌的便捷方法
+func (i *Issuer) IssueUserToken(
+	clientID, audience, scope string,
+	ttl time.Duration,
+	user *pkgtoken.Claims,
+	encryptor Encryptor,
+	signer Signer,
+) (string, error) {
+	uat := NewUserAccessToken(i.issuerName, clientID, audience, scope, ttl, user)
+	return i.Issue(uat, encryptor, signer)
+}
+
+// IssueServiceToken 签发服务访问令牌的便捷方法
+func (i *Issuer) IssueServiceToken(
+	clientID, audience, scope string,
+	ttl time.Duration,
+	signer Signer,
+) (string, error) {
+	sat := NewServiceAccessToken(i.issuerName, clientID, audience, scope, ttl)
+	// ServiceAccessToken 不需要加密
+	return i.Issue(sat, NewNopEncryptor(), signer)
+}
+
+// ========== 向后兼容的方法 ==========
 
 // IssueWithDefaults 使用默认密钥签发 token（旧版兼容）
 // Deprecated: 使用 Issue 替代
 func (i *Issuer) IssueWithDefaults(claims *SubjectClaims, clientID string, scope string, ttl time.Duration) (string, error) {
-	now := time.Now()
-
-	// 加密 sub（用户信息）
-	encryptedSub, err := i.encryptSubjectClaims(claims, i.encryptKey)
-	if err != nil {
-		return "", fmt.Errorf("encrypt sub: %w", err)
+	user := &pkgtoken.Claims{
+		OpenID:   claims.OpenID,
+		Nickname: claims.Nickname,
+		Picture:  claims.Picture,
+		Email:    claims.Email,
+		Phone:    claims.Phone,
 	}
 
-	// 创建 JWT
-	token := jwt.New()
-	_ = token.Set(jwt.IssuerKey, i.issuerName)
-	_ = token.Set(jwt.SubjectKey, encryptedSub)
-	_ = token.Set(jwt.AudienceKey, clientID)
-	_ = token.Set(jwt.IssuedAtKey, now.Unix())
-	_ = token.Set(jwt.ExpirationKey, now.Add(ttl).Unix())
-	_ = token.Set(jwt.NotBeforeKey, now.Unix())
+	encryptor := NewJWEEncryptor(i.encryptKey)
+	signer := NewEdDSASigner(i.signingKey)
 
-	// JTI
-	jtiBytes := make([]byte, 16)
-	_, _ = rand.Read(jtiBytes)
-	_ = token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes))
-
-	// scope
-	_ = token.Set("scope", scope)
-
-	// 签名
-	signedToken, err := jwt.Sign(token, jwt.WithKey(jwa.EdDSA(), i.signingKey))
-	if err != nil {
-		return "", fmt.Errorf("sign token: %w", err)
-	}
-
-	return string(signedToken), nil
+	uat := NewUserAccessToken(i.issuerName, clientID, clientID, scope, ttl, user)
+	return i.Issue(uat, encryptor, signer)
 }
 
 // VerifyAccessToken 验证 Access Token，返回完整身份信息（旧版兼容）
@@ -179,7 +162,7 @@ func (i *Issuer) VerifyAccessToken(tokenString string) (*Identity, error) {
 	_ = token.Get("scope", &scope)
 
 	return &Identity{
-		UserID:   claims.OpenID,
+		OpenID:   claims.OpenID,
 		Scope:    scope,
 		Nickname: claims.Nickname,
 		Picture:  claims.Picture,
@@ -236,29 +219,6 @@ func (i *Issuer) VerifyServiceJWT(tokenString string, serviceKey []byte) (servic
 	jtiVal, _ := token.JwtID()
 
 	return sub, jtiVal, nil
-}
-
-// encryptSubjectClaims 使用指定密钥加密用户信息
-func (i *Issuer) encryptSubjectClaims(claims *SubjectClaims, encryptKey jwk.Key) (string, error) {
-	data, err := json.Marshal(claims)
-	if err != nil {
-		return "", err
-	}
-
-	if encryptKey == nil {
-		// 没有加密密钥则返回 JSON
-		return string(data), nil
-	}
-
-	encrypted, err := jwe.Encrypt(data,
-		jwe.WithKey(jwa.DIRECT(), encryptKey),
-		jwe.WithContentEncryption(jwa.A256GCM()),
-	)
-	if err != nil {
-		return "", err
-	}
-
-	return string(encrypted), nil
 }
 
 // decryptSubjectClaims 解密用户信息

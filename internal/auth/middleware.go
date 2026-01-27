@@ -106,7 +106,7 @@ func GetIdentity(c *gin.Context) *token.Identity {
 // GetUserID 从上下文获取用户 ID
 func GetUserID(c *gin.Context) string {
 	if identity := GetIdentity(c); identity != nil {
-		return identity.UserID
+		return identity.OpenID
 	}
 	return ""
 }

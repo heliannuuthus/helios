@@ -27,7 +27,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		identity, err := token.VerifyAccessTokenGlobal(tokenStr)
 		if err == nil && identity != nil {
-			logger.Infof("[Auth] 可选认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID())
+			logger.Infof("[Auth] 可选认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID)
 			c.Set("user", identity)
 		}
 
@@ -61,7 +61,7 @@ func RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		logger.Infof("[Auth] 认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID())
+		logger.Infof("[Auth] 认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID)
 		c.Set("user", identity)
 		c.Next()
 	}
@@ -75,8 +75,8 @@ func tokenPreview(tokenStr string, length int) string {
 	return tokenStr[:length]
 }
 
-// RequireToken 新版本认证中间件（使用 token.Verifier）
-func RequireToken(v *pkgtoken.Verifier) gin.HandlerFunc {
+// RequireToken 新版本认证中间件（使用 token.Interpreter）
+func RequireToken(v *pkgtoken.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
 		if authorization == "" {
@@ -90,7 +90,7 @@ func RequireToken(v *pkgtoken.Verifier) gin.HandlerFunc {
 			tokenStr = authorization[7:]
 		}
 
-		identity, err := v.Verify(c.Request.Context(), tokenStr)
+		identity, err := v.Interpret(c.Request.Context(), tokenStr)
 		if err != nil {
 			logger.Warnf("[Auth] Token 验证失败 - Path: %s, IP: %s, Error: %v, TokenPreview: %s...",
 				c.Request.URL.Path,
@@ -101,14 +101,14 @@ func RequireToken(v *pkgtoken.Verifier) gin.HandlerFunc {
 			return
 		}
 
-		logger.Infof("[Auth] 认证成功 - Path: %s, UserID: %s", c.Request.URL.Path, identity.UserID)
+		logger.Infof("[Auth] 认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID)
 		c.Set("user", identity)
 		c.Next()
 	}
 }
 
-// OptionalToken 新版本可选认证中间件（使用 token.Verifier）
-func OptionalToken(v *pkgtoken.Verifier) gin.HandlerFunc {
+// OptionalToken 新版本可选认证中间件（使用 token.Interpreter）
+func OptionalToken(v *pkgtoken.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
 		if authorization == "" {
@@ -121,9 +121,9 @@ func OptionalToken(v *pkgtoken.Verifier) gin.HandlerFunc {
 			tokenStr = authorization[7:]
 		}
 
-		identity, err := v.Verify(c.Request.Context(), tokenStr)
+		identity, err := v.Interpret(c.Request.Context(), tokenStr)
 		if err == nil && identity != nil {
-			logger.Infof("[Auth] 可选认证成功 - Path: %s, UserID: %s", c.Request.URL.Path, identity.UserID)
+			logger.Infof("[Auth] 可选认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID)
 			c.Set("user", identity)
 		}
 

@@ -2,8 +2,8 @@ package token
 
 import (
 	"errors"
-	"strings"
-	"time"
+
+	pkgtoken "github.com/heliannuuthus/helios/pkg/token"
 )
 
 // Token 验证错误
@@ -14,47 +14,16 @@ var (
 	ErrMissingClaims       = errors.New("missing required claims")
 )
 
-// SubjectClaims sub 字段解密后的内容
-type SubjectClaims struct {
-	OpenID   string `json:"openid"`
-	Nickname string `json:"nickname,omitempty"`
-	Picture  string `json:"picture,omitempty"`
-	Email    string `json:"email,omitempty"`
-	Phone    string `json:"phone,omitempty"`
-}
+// Claims 类型别名（使用 pkg/token 中的定义）
+type Claims = pkgtoken.Claims
 
-// Identity Token 解析后的身份信息
-type Identity struct {
-	UserID   string    `json:"sub"`
-	ClientID string    `json:"cli,omitempty"`      // 应用 ID（新版本 token）
-	Audience string    `json:"aud,omitempty"`      // 服务 ID（新版本 token）
-	Scope    string    `json:"scope"`
-	Nickname string    `json:"nickname,omitempty"`
-	Picture  string    `json:"picture,omitempty"`
-	Email    string    `json:"email,omitempty"`
-	Phone    string    `json:"phone,omitempty"`
-	Issuer   string    `json:"iss,omitempty"`      // 签发者
-	IssuedAt time.Time `json:"iat,omitempty"`      // 签发时间
-	ExpireAt time.Time `json:"exp,omitempty"`      // 过期时间
-}
+// SubjectClaims 类型别名（向后兼容）
+// Deprecated: 使用 Claims 替代
+type SubjectClaims = pkgtoken.Claims
 
-// GetOpenID 兼容旧接口
-func (i *Identity) GetOpenID() string {
-	return i.UserID
-}
+// Identity 类型别名（向后兼容）
+// Deprecated: 使用 Claims 替代
+type Identity = pkgtoken.Claims
 
-// OpenID 兼容旧接口
-func (i *Identity) OpenID() string {
-	return i.UserID
-}
-
-// HasScope 检查是否包含某个 scope
-func (i *Identity) HasScope(scope string) bool {
-	scopes := strings.Fields(i.Scope)
-	for _, s := range scopes {
-		if s == scope {
-			return true
-		}
-	}
-	return false
-}
+// AccessToken 类型别名（使用 pkg/token 中的定义）
+type AccessToken = pkgtoken.AccessToken

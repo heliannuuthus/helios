@@ -208,7 +208,7 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
-	if err := h.service.RevokeAllTokens(c.Request.Context(), identity.UserID); err != nil {
+	if err := h.service.RevokeAllTokens(c.Request.Context(), identity.OpenID); err != nil {
 		h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, "failed to revoke tokens"))
 		return
 	}

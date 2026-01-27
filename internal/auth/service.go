@@ -505,7 +505,7 @@ func (s *Service) Introspect(ctx context.Context, tokenString string, serviceJWT
 	}
 
 	// 5. 获取用户完整信息
-	user, err := s.getUserByOpenID(identity.UserID)
+	user, err := s.getUserByOpenID(identity.OpenID)
 	if err != nil {
 		return &IntrospectResponse{Active: false}, nil
 	}
@@ -522,7 +522,7 @@ func (s *Service) Introspect(ctx context.Context, tokenString string, serviceJWT
 	// 7. 构建响应（完整信息，未脱敏）
 	resp := &IntrospectResponse{
 		Active:   true,
-		Sub:      identity.UserID,
+		Sub:      identity.OpenID,
 		Aud:      aud,
 		Iss:      iss,
 		Exp:      exp,
@@ -548,7 +548,7 @@ func (s *Service) Introspect(ctx context.Context, tokenString string, serviceJWT
 		resp.Phone = phone
 	}
 
-	logger.Infof("[Auth] Token 内省成功 - ServiceID: %s, UserID: %s", serviceID, identity.UserID)
+	logger.Infof("[Auth] Token 内省成功 - ServiceID: %s, UserID: %s", serviceID, identity.OpenID)
 
 	return resp, nil
 }
@@ -592,13 +592,13 @@ func (s *Service) verifyServiceJWT(tokenString string) (serviceID string, jti st
 
 // GetUserInfo 获取用户信息（根据 scope 返回，脱敏）
 func (s *Service) GetUserInfo(identity *Identity) (*UserInfoResponse, error) {
-	user, err := s.getUserByOpenID(identity.UserID)
+	user, err := s.getUserByOpenID(identity.OpenID)
 	if err != nil {
 		return nil, err
 	}
 
 	resp := &UserInfoResponse{
-		Sub: identity.UserID,
+		Sub: identity.OpenID,
 	}
 
 	scopes := ParseScopes(identity.Scope)
@@ -640,7 +640,7 @@ func (s *Service) GetUserInfo(identity *Identity) (*UserInfoResponse, error) {
 
 // UpdateUserInfo 更新用户信息
 func (s *Service) UpdateUserInfo(identity *Identity, req *UpdateUserInfoRequest) (*UserInfoResponse, error) {
-	user, err := s.getUserByOpenID(identity.UserID)
+	user, err := s.getUserByOpenID(identity.OpenID)
 	if err != nil {
 		return nil, err
 	}
@@ -768,16 +768,16 @@ func (s *Service) generateTokens(ctx context.Context, client *Client, user *User
 		return nil, fmt.Errorf("get domain: %w", err)
 	}
 
-	// 将服务密钥转换为 JWK
-	serviceEncryptKey, err := jwk.Import(svcWithKey.Key)
+	// 创建加密器（使用服务密钥加密用户信息）
+	encryptor, err := token.NewJWEEncryptorFromBytes(svcWithKey.Key)
 	if err != nil {
-		return nil, fmt.Errorf("import service key: %w", err)
+		return nil, fmt.Errorf("create encryptor: %w", err)
 	}
 
-	// 将域签名密钥转换为 JWK
-	signKey, err := jwk.ParseKey(domainWithKey.SignKey)
+	// 创建签名器（使用域签名密钥）
+	signer, err := token.NewEdDSASignerFromBytes(domainWithKey.SignKey)
 	if err != nil {
-		return nil, fmt.Errorf("parse sign key: %w", err)
+		return nil, fmt.Errorf("create signer: %w", err)
 	}
 
 	// 3. 计算 TTL（优先使用服务配置，其次使用客户端配置，最后使用全局配置）
@@ -800,38 +800,38 @@ func (s *Service) generateTokens(ctx context.Context, client *Client, user *User
 	// 4. 解析 scope，确定要包含哪些用户信息
 	scopes := ParseScopes(scope)
 
-	// 构建 SubjectClaims（加密到 sub）
-	subjectClaims := &token.SubjectClaims{
+	// 构建用户 Claims（根据 scope 填充）
+	userClaims := &token.Claims{
 		OpenID: user.OpenID,
 	}
 
 	// 根据 scope 添加用户信息
 	if ContainsScope(scopes, ScopeProfile) {
-		subjectClaims.Nickname = user.Name
-		subjectClaims.Picture = user.Picture
+		userClaims.Nickname = user.Name
+		userClaims.Picture = user.Picture
 	}
 
 	if ContainsScope(scopes, ScopeEmail) && user.Email != nil {
-		subjectClaims.Email = *user.Email
+		userClaims.Email = *user.Email
 	}
 
 	if ContainsScope(scopes, ScopePhone) && user.PhoneCipher != nil {
 		// 解密手机号
 		phone, err := kms.DecryptPhone(*user.PhoneCipher, user.OpenID)
 		if err == nil {
-			subjectClaims.Phone = phone
+			userClaims.Phone = phone
 		}
 	}
 
-	// 5. 创建 Access Token（使用新版本 API）
-	accessToken, err := s.issuer.Issue(
-		subjectClaims,
+	// 5. 创建 Access Token（使用新接口）
+	accessToken, err := s.issuer.IssueUserToken(
 		client.ClientID, // cli
 		audience,        // aud
-		serviceEncryptKey,
-		signKey,
 		scope,
 		accessTTL,
+		userClaims,
+		encryptor,
+		signer,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create token: %w", err)

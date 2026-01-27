@@ -11,30 +11,30 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwt"
 )
 
-// Explainer Token 解释器
+// Interpreter Token 解释器
 // 负责验证和解释 token，提取身份信息
-type Explainer struct {
+type Interpreter struct {
 	publicKeyProvider KeyProvider // 获取公钥（验签）
 	secretProvider    KeyProvider // 获取解密密钥
 }
 
-// NewExplainer 创建解释器
+// NewInterpreter 创建解释器
 // publicKeyProvider: 公钥提供者（根据 client_id 获取域公钥）
 // secretProvider: 解密密钥提供者（根据 audience 获取对称密钥）
-func NewExplainer(publicKeyProvider, secretProvider KeyProvider) *Explainer {
-	return &Explainer{
+func NewInterpreter(publicKeyProvider, secretProvider KeyProvider) *Interpreter {
+	return &Interpreter{
 		publicKeyProvider: publicKeyProvider,
 		secretProvider:    secretProvider,
 	}
 }
 
-// Explain 验证并解释 token，返回身份信息
+// Interpret 验证并解释 token，返回身份信息
 // 流程：
 // 1. 解析 JWT 获取 cli（client_id）和 aud（audience）
 // 2. 从 secretProvider 获取 aud 对应的解密密钥
 // 3. 从 publicKeyProvider 获取 cli 对应的公钥
 // 4. 验证签名 + 解密 sub
-func (e *Explainer) Explain(ctx context.Context, tokenString string) (*Identity, error) {
+func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (*Claims, error) {
 	// 1. 解析 JWT（不验证）获取 claims
 	token, err := jwt.Parse([]byte(tokenString), jwt.WithVerify(false))
 	if err != nil {
@@ -55,13 +55,13 @@ func (e *Explainer) Explain(ctx context.Context, tokenString string) (*Identity,
 	}
 
 	// 2. 获取解密密钥
-	decryptKey, err := e.secretProvider.Get(ctx, audience)
+	decryptKey, err := i.secretProvider.Get(ctx, audience)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrUnsupportedAudience, err)
 	}
 
 	// 3. 获取域公钥验证签名
-	publicKey, err := e.publicKeyProvider.Get(ctx, clientID)
+	publicKey, err := i.publicKeyProvider.Get(ctx, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("get public key: %w", err)
 	}
@@ -81,7 +81,7 @@ func (e *Explainer) Explain(ctx context.Context, tokenString string) (*Identity,
 		return nil, fmt.Errorf("%w: missing sub", ErrMissingClaims)
 	}
 
-	claims, err := decryptSubjectClaims(encryptedSub, decryptKey)
+	userClaims, err := decryptUserClaims(encryptedSub, decryptKey)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt sub: %w", err)
 	}
@@ -94,23 +94,23 @@ func (e *Explainer) Explain(ctx context.Context, tokenString string) (*Identity,
 	issuedAt, _ := token.IssuedAt()
 	expireAt, _ := token.Expiration()
 
-	return &Identity{
-		UserID:   claims.OpenID,
-		ClientID: clientID,
-		Audience: audience,
-		Scope:    scope,
-		Nickname: claims.Nickname,
-		Picture:  claims.Picture,
-		Email:    claims.Email,
-		Phone:    claims.Phone,
+	return &Claims{
 		Issuer:   issuer,
+		Audience: audience,
 		IssuedAt: issuedAt,
 		ExpireAt: expireAt,
+		ClientID: clientID,
+		Scope:    scope,
+		OpenID:   userClaims.OpenID,
+		Nickname: userClaims.Nickname,
+		Picture:  userClaims.Picture,
+		Email:    userClaims.Email,
+		Phone:    userClaims.Phone,
 	}, nil
 }
 
-// decryptSubjectClaims 使用指定密钥解密用户信息
-func decryptSubjectClaims(encryptedSub string, decryptKey jwk.Key) (*SubjectClaims, error) {
+// decryptUserClaims 使用指定密钥解密用户信息
+func decryptUserClaims(encryptedSub string, decryptKey jwk.Key) (*Claims, error) {
 	var data []byte
 
 	if decryptKey == nil {
@@ -126,7 +126,7 @@ func decryptSubjectClaims(encryptedSub string, decryptKey jwk.Key) (*SubjectClai
 		data = decrypted
 	}
 
-	var claims SubjectClaims
+	var claims Claims
 	if err := json.Unmarshal(data, &claims); err != nil {
 		return nil, err
 	}
@@ -134,18 +134,44 @@ func decryptSubjectClaims(encryptedSub string, decryptKey jwk.Key) (*SubjectClai
 	return &claims, nil
 }
 
+// ========== 向后兼容别名 ==========
+
+// Explainer 类型别名（向后兼容）
+// Deprecated: 使用 Interpreter 替代
+type Explainer = Interpreter
+
+// NewExplainer 向后兼容
+// Deprecated: 使用 NewInterpreter 替代
+func NewExplainer(publicKeyProvider, secretProvider KeyProvider) *Explainer {
+	return NewInterpreter(publicKeyProvider, secretProvider)
+}
+
+// Explain 向后兼容
+// Deprecated: 使用 Interpret 替代
+func (i *Interpreter) Explain(ctx context.Context, tokenString string) (*Claims, error) {
+	return i.Interpret(ctx, tokenString)
+}
+
 // Verifier 类型别名（向后兼容）
-// Deprecated: 使用 Explainer 替代
-type Verifier = Explainer
+// Deprecated: 使用 Interpreter 替代
+type Verifier = Interpreter
 
 // NewVerifier 向后兼容
-// Deprecated: 使用 NewExplainer 替代
+// Deprecated: 使用 NewInterpreter 替代
 func NewVerifier(publicKeyProvider, secretProvider KeyProvider) *Verifier {
-	return NewExplainer(publicKeyProvider, secretProvider)
+	return NewInterpreter(publicKeyProvider, secretProvider)
 }
 
 // Verify 向后兼容
-// Deprecated: 使用 Explain 替代
-func (e *Explainer) Verify(ctx context.Context, tokenString string) (*Identity, error) {
-	return e.Explain(ctx, tokenString)
+// Deprecated: 使用 Interpret 替代
+func (i *Interpreter) Verify(ctx context.Context, tokenString string) (*Claims, error) {
+	return i.Interpret(ctx, tokenString)
 }
+
+// Identity 类型别名（向后兼容）
+// Deprecated: 使用 Claims 替代
+type Identity = Claims
+
+// SubjectClaims 类型别名（向后兼容）
+// Deprecated: 使用 Claims 替代
+type SubjectClaims = Claims
