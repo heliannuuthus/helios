@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -85,7 +86,9 @@ type Store interface {
 // GenerateRefreshTokenValue 生成刷新令牌值
 func GenerateRefreshTokenValue() string {
 	b := make([]byte, 32)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("generate refresh token value failed: %v", err))
+	}
 	return hex.EncodeToString(b)
 }
 

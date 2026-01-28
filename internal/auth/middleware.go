@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/heliannuuthus/helios/internal/auth/token"
-
 	"github.com/gin-gonic/gin"
+
+	"github.com/heliannuuthus/helios/internal/auth/token"
 )
 
 // Middleware 认证中间件（用于验证 CAT/ServiceJWT）
@@ -48,7 +48,7 @@ func (m *Middleware) RequireClientAuth() gin.HandlerFunc {
 	}
 }
 
-func (m *Middleware) extractToken(c *gin.Context) string {
+func (*Middleware) extractToken(c *gin.Context) string {
 	// 从 Authorization header
 	auth := c.GetHeader("Authorization")
 	if strings.HasPrefix(auth, "Bearer ") {
@@ -60,16 +60,9 @@ func (m *Middleware) extractToken(c *gin.Context) string {
 // GetClientClaims 从上下文获取客户端信息
 func GetClientClaims(c *gin.Context) *token.CATClaims {
 	if claims, exists := c.Get("client_claims"); exists {
-		return claims.(*token.CATClaims)
-	}
-	return nil
-}
-
-// GetClaims 从上下文获取用户身份信息
-// 用于 userinfo 等需要用户身份的端点
-func GetClaims(c *gin.Context) *token.Claims {
-	if claims, exists := c.Get("user"); exists {
-		return claims.(*token.Claims)
+		if catClaims, ok := claims.(*token.CATClaims); ok {
+			return catClaims
+		}
 	}
 	return nil
 }

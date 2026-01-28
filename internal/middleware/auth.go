@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/heliannuuthus/helios/pkg/auth/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
-
-	"github.com/gin-gonic/gin"
 )
 
 // AuthMiddleware 认证中间件（可选认证）

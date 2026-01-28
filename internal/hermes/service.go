@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"time"
 
+	"gorm.io/gorm"
+
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/database"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/kms"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	"gorm.io/gorm"
 )
 
 // Service 管理服务
@@ -31,7 +32,7 @@ func NewService() *Service {
 // ==================== Domain 相关 ====================
 
 // GetDomain 获取域（从配置读取，不含密钥）
-func (s *Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
+func (*Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
 	domainConfig, err := config.GetDomainConfig(domainID)
 	if err != nil {
 		return nil, fmt.Errorf("获取域失败: %w", err)
@@ -73,7 +74,7 @@ func (s *Service) GetDomainWithKey(ctx context.Context, domainID string) (*model
 }
 
 // ListDomains 列出所有域（从配置读取）
-func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
+func (*Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 	authConfig := config.GetAuthConfig()
 	if authConfig == nil {
 		return nil, fmt.Errorf("auth 配置未初始化")
@@ -105,7 +106,7 @@ func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 // ==================== Service 相关 ====================
 
 // generateServiceKey 生成服务密钥并加密
-func (s *Service) generateServiceKey(domainID string) (string, error) {
+func (*Service) generateServiceKey(domainID string) (string, error) {
 	// 生成 AES-256 密钥
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -278,7 +279,10 @@ func (s *Service) generateApplicationKey(domainID, appID string) (string, error)
 func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateRequest) (*models.Application, error) {
 	var redirectURIs *string
 	if len(req.RedirectURIs) > 0 {
-		urisJSON, _ := json.Marshal(req.RedirectURIs)
+		urisJSON, err := json.Marshal(req.RedirectURIs)
+		if err != nil {
+			return nil, fmt.Errorf("marshal redirect uris: %w", err)
+		}
 		urisStr := string(urisJSON)
 		redirectURIs = &urisStr
 	}

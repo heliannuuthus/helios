@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/internal/auth"
-	"github.com/heliannuuthus/helios/internal/auth/models"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/pkg/oss"
 )

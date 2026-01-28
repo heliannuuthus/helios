@@ -2,9 +2,11 @@ package store
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/heliannuuthus/helios/pkg/json"
+	"github.com/heliannuuthus/helios/pkg/logger"
 	pkgstore "github.com/heliannuuthus/helios/pkg/store"
 )
 
@@ -130,7 +132,10 @@ func (s *RedisStore) MarkAuthCodeUsed(ctx context.Context, code string) error {
 		return err
 	}
 	authCode.Used = true
-	data, _ := json.Marshal(authCode)
+	data, err := json.Marshal(authCode)
+	if err != nil {
+		return fmt.Errorf("marshal auth code: %w", err)
+	}
 	remaining := time.Until(authCode.ExpiresAt)
 	if remaining < 0 {
 		remaining = time.Second
@@ -185,7 +190,10 @@ func (s *RedisStore) RevokeRefreshToken(ctx context.Context, token string) error
 		return err
 	}
 	rt.Revoked = true
-	newData, _ := json.Marshal(rt)
+	newData, err := json.Marshal(rt)
+	if err != nil {
+		return fmt.Errorf("marshal refresh token: %w", err)
+	}
 	remaining := time.Until(rt.ExpiresAt)
 	if remaining < 0 {
 		remaining = time.Second
@@ -199,7 +207,9 @@ func (s *RedisStore) RevokeUserRefreshTokens(ctx context.Context, userID string)
 		return nil
 	}
 	for _, token := range tokens {
-		_ = s.RevokeRefreshToken(ctx, token)
+		if err := s.RevokeRefreshToken(ctx, token); err != nil {
+			logger.Warnf("[RedisStore] revoke refresh token failed: %v", err)
+		}
 	}
 	return nil
 }

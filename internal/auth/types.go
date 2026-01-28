@@ -114,7 +114,7 @@ type CaptureConfig struct {
 
 // IDPsResponse IDPs 列表响应
 type IDPsResponse struct {
-	IDPs []IDPConfig `json:"idps"`
+	IDPs interface{} `json:"idps"` // ConnectionConfig 或 IDPConfig 数组
 }
 
 // LoginRequest 登录请求

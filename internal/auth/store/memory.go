@@ -27,7 +27,7 @@ func NewMemoryStore() *MemoryStore {
 	return store
 }
 
-func (s *MemoryStore) SaveSession(ctx context.Context, session *Session) error {
+func (s *MemoryStore) SaveSession(_ context.Context, session *Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sessions[session.ID] = session
@@ -47,7 +47,7 @@ func (s *MemoryStore) GetSession(ctx context.Context, sessionID string) (*Sessio
 	return session, nil
 }
 
-func (s *MemoryStore) UpdateSession(ctx context.Context, session *Session) error {
+func (s *MemoryStore) UpdateSession(_ context.Context, session *Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sessions[session.ID] = session

@@ -2,6 +2,7 @@ package models
 
 import (
 	"github.com/heliannuuthus/helios/pkg/json"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // ApplicationWithKey 带解密密钥的 Application
@@ -16,7 +17,10 @@ func (a *ApplicationWithKey) GetRedirectURIs() []string {
 		return nil
 	}
 	var uris []string
-	_ = json.Unmarshal([]byte(*a.RedirectURIs), &uris)
+	if err := json.Unmarshal([]byte(*a.RedirectURIs), &uris); err != nil {
+		logger.Warnf("[Application] unmarshal redirect uris failed: %v", err)
+		return nil
+	}
 	return uris
 }
 

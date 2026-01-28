@@ -41,10 +41,11 @@ type Claims struct {
 	ExpireAt time.Time `json:"exp,omitempty"`
 
 	// 自定义字段
-	ClientID string `json:"cli,omitempty"` // 应用 ID
-	Scope    string `json:"scope,omitempty"`
+	ClientID string `json:"cli,omitempty"`   // 应用 ID
+	Scope    string `json:"scope,omitempty"` // 授权范围
+	Subject  string `json:"sub,omitempty"`   // 加密的 subject（验签后填充，解密后清空）
 
-	// 用户信息（根据 scope 决定是否填充）
+	// 用户信息（解密后填充，验签后为空）
 	OpenID   string `json:"openid,omitempty"`
 	Nickname string `json:"nickname,omitempty"`
 	Picture  string `json:"picture,omitempty"`

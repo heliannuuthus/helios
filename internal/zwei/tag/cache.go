@@ -4,10 +4,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/heliannuuthus/helios/internal/zwei/models"
-
 	"github.com/dgraph-io/ristretto/v2"
 	"gorm.io/gorm"
+
+	"github.com/heliannuuthus/helios/internal/zwei/models"
 )
 
 const (

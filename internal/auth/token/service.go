@@ -5,27 +5,28 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/heliannuuthus/helios/internal/auth/cache"
-	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/lestrrat-go/jwx/v3/jwa"
 	"github.com/lestrrat-go/jwx/v3/jwe"
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/lestrrat-go/jwx/v3/jwt"
+
+	"github.com/heliannuuthus/helios/internal/auth/cache"
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/pkg/json"
 )
 
 // Service Token 服务
 // 负责签发 UAT/SAT、验证 CAT
 type Service struct {
 	issuerName string
-	cache      *cache.HermesCache
+	cache      *cache.Manager
 }
 
 // NewService 创建 Token 服务
-func NewService(hermesCache *cache.HermesCache) *Service {
+func NewService(cacheManager *cache.Manager) *Service {
 	return &Service{
 		issuerName: config.GetIssuer(),
-		cache:      hermesCache,
+		cache:      cacheManager,
 	}
 }
 
