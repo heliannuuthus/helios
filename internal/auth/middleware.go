@@ -65,28 +65,11 @@ func GetClientClaims(c *gin.Context) *token.CATClaims {
 	return nil
 }
 
-// ============= 以下是兼容旧接口的代码，已废弃 =============
-
-// GetIdentity 从上下文获取用户身份（兼容旧接口）
-// Deprecated: auth 模块不再验证 UAT/SAT，请使用 pkg/token/Interpreter
-func GetIdentity(c *gin.Context) *token.Identity {
-	if identity, exists := c.Get("identity"); exists {
-		return identity.(*token.Identity)
+// GetClaims 从上下文获取用户身份信息
+// 用于 userinfo 等需要用户身份的端点
+func GetClaims(c *gin.Context) *token.Claims {
+	if claims, exists := c.Get("user"); exists {
+		return claims.(*token.Claims)
 	}
 	return nil
-}
-
-// GetUserID 从上下文获取用户 ID（兼容旧接口）
-// Deprecated: auth 模块不再验证 UAT/SAT
-func GetUserID(c *gin.Context) string {
-	if identity := GetIdentity(c); identity != nil {
-		return identity.OpenID
-	}
-	return ""
-}
-
-// GetDomain 从上下文获取域（兼容旧接口）
-// Deprecated: Domain 信息已从 Token 中移除
-func GetDomain(c *gin.Context) Domain {
-	return ""
 }

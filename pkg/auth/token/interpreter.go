@@ -109,48 +109,6 @@ func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (*Claim
 	}, nil
 }
 
-// ========== 向后兼容别名 ==========
-
-// Explainer 类型别名（向后兼容）
-// Deprecated: 使用 Interpreter 替代
-type Explainer = Interpreter
-
-// NewExplainer 向后兼容
-// Deprecated: 使用 NewInterpreter 替代
-func NewExplainer(publicKeyProvider, secretProvider KeyProvider) *Explainer {
-	return NewInterpreter(publicKeyProvider, secretProvider)
-}
-
-// Explain 向后兼容
-// Deprecated: 使用 Interpret 替代
-func (i *Interpreter) Explain(ctx context.Context, tokenString string) (*Claims, error) {
-	return i.Interpret(ctx, tokenString)
-}
-
-// Verifier 类型别名（向后兼容）
-// Deprecated: 使用 Interpreter 替代
-type Verifier = Interpreter
-
-// NewVerifier 向后兼容
-// Deprecated: 使用 NewInterpreter 替代
-func NewVerifier(publicKeyProvider, secretProvider KeyProvider) *Verifier {
-	return NewInterpreter(publicKeyProvider, secretProvider)
-}
-
-// Verify 向后兼容
-// Deprecated: 使用 Interpret 替代
-func (i *Interpreter) Verify(ctx context.Context, tokenString string) (*Claims, error) {
-	return i.Interpret(ctx, tokenString)
-}
-
-// Identity 类型别名（向后兼容）
-// Deprecated: 使用 Claims 替代
-type Identity = Claims
-
-// SubjectClaims 类型别名（向后兼容）
-// Deprecated: 使用 Claims 替代
-type SubjectClaims = Claims
-
 // decryptUserClaims 使用指定密钥解密用户信息
 func decryptUserClaims(encryptedSub string, decryptKey jwk.Key) (*Claims, error) {
 	var data []byte

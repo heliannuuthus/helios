@@ -71,7 +71,7 @@ func (h *Handler) AddFavorite(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Identity)
+	identity := user.(*auth.Claims)
 	openID := identity.GetOpenID()
 
 	var req FavoriteRequest
@@ -106,7 +106,7 @@ func (h *Handler) RemoveFavorite(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Identity)
+	identity := user.(*auth.Claims)
 	openID := identity.GetOpenID()
 	recipeID := c.Param("recipe_id")
 
@@ -133,7 +133,7 @@ func (h *Handler) CheckFavorite(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Identity)
+	identity := user.(*auth.Claims)
 	openID := identity.GetOpenID()
 	recipeID := c.Param("recipe_id")
 
@@ -166,7 +166,7 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Identity)
+	identity := user.(*auth.Claims)
 	openID := identity.GetOpenID()
 
 	category := c.Query("category")
@@ -235,7 +235,7 @@ func (h *Handler) BatchCheckFavorites(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Identity)
+	identity := user.(*auth.Claims)
 	openID := identity.GetOpenID()
 
 	var req BatchCheckRequest

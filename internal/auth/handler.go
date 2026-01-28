@@ -202,13 +202,13 @@ func (h *Handler) Revoke(c *gin.Context) {
 // @Failure 401 {object} Error
 // @Router /auth/logout [post]
 func (h *Handler) Logout(c *gin.Context) {
-	identity := GetIdentity(c)
-	if identity == nil {
+	claims := GetClaims(c)
+	if claims == nil {
 		h.errorResponse(c, http.StatusUnauthorized, NewError(ErrInvalidToken, "not authenticated"))
 		return
 	}
 
-	if err := h.service.RevokeAllTokens(c.Request.Context(), identity.OpenID); err != nil {
+	if err := h.service.RevokeAllTokens(c.Request.Context(), claims.OpenID); err != nil {
 		h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, "failed to revoke tokens"))
 		return
 	}
@@ -225,13 +225,13 @@ func (h *Handler) Logout(c *gin.Context) {
 // @Failure 401 {object} Error
 // @Router /auth/userinfo [get]
 func (h *Handler) UserInfo(c *gin.Context) {
-	identity := GetIdentity(c)
-	if identity == nil {
+	claims := GetClaims(c)
+	if claims == nil {
 		h.errorResponse(c, http.StatusUnauthorized, NewError(ErrInvalidToken, "not authenticated"))
 		return
 	}
 
-	resp, err := h.service.GetUserInfo(identity)
+	resp, err := h.service.GetUserInfo(claims)
 	if err != nil {
 		h.errorResponse(c, http.StatusNotFound, NewError(ErrServerError, "user not found"))
 		return
@@ -253,8 +253,8 @@ func (h *Handler) UserInfo(c *gin.Context) {
 // @Failure 401 {object} Error
 // @Router /auth/userinfo [put]
 func (h *Handler) UpdateUserInfo(c *gin.Context) {
-	identity := GetIdentity(c)
-	if identity == nil {
+	claims := GetClaims(c)
+	if claims == nil {
 		h.errorResponse(c, http.StatusUnauthorized, NewError(ErrInvalidToken, "not authenticated"))
 		return
 	}
@@ -265,7 +265,7 @@ func (h *Handler) UpdateUserInfo(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.service.UpdateUserInfo(identity, &req)
+	resp, err := h.service.UpdateUserInfo(claims, &req)
 	if err != nil {
 		h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, err.Error()))
 		return

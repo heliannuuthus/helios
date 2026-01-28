@@ -213,11 +213,8 @@ func NewError(code, description string) *Error {
 
 // ============= Type Aliases =============
 
-// SubjectClaims sub 字段解密后的内容（类型别名，实际定义在 token 包）
-type SubjectClaims = token.SubjectClaims
-
-// Identity Token 解析后的身份信息（类型别名，实际定义在 token 包）
-type Identity = token.Identity
+// Claims Token 解析后的身份信息（类型别名，实际定义在 token 包）
+type Claims = token.Claims
 
 // ============= Scope Helpers =============
 

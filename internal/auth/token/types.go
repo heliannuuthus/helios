@@ -17,13 +17,5 @@ var (
 // Claims 类型别名（使用 pkg/auth/token 中的定义）
 type Claims = pkgtoken.Claims
 
-// SubjectClaims 类型别名（向后兼容）
-// Deprecated: 使用 Claims 替代
-type SubjectClaims = pkgtoken.Claims
-
-// Identity 类型别名（向后兼容）
-// Deprecated: 使用 Claims 替代
-type Identity = pkgtoken.Claims
-
 // AccessToken 类型别名（使用 pkg/auth/token 中的定义）
 type AccessToken = pkgtoken.AccessToken

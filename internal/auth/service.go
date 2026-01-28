@@ -491,7 +491,7 @@ func (s *Service) RevokeAllTokens(ctx context.Context, userID string) error {
 // ============= UserInfo =============
 
 // GetUserInfo 获取用户信息（根据 scope 返回，脱敏）
-func (s *Service) GetUserInfo(identity *Identity) (*UserInfoResponse, error) {
+func (s *Service) GetUserInfo(identity *Claims) (*UserInfoResponse, error) {
 	user, err := s.getUserByOpenID(identity.OpenID)
 	if err != nil {
 		return nil, err
@@ -539,7 +539,7 @@ func (s *Service) GetUserInfo(identity *Identity) (*UserInfoResponse, error) {
 }
 
 // UpdateUserInfo 更新用户信息
-func (s *Service) UpdateUserInfo(identity *Identity, req *UpdateUserInfoRequest) (*UserInfoResponse, error) {
+func (s *Service) UpdateUserInfo(identity *Claims, req *UpdateUserInfoRequest) (*UserInfoResponse, error) {
 	user, err := s.getUserByOpenID(identity.OpenID)
 	if err != nil {
 		return nil, err
