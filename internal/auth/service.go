@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/internal/auth/cache"
+	"github.com/heliannuuthus/helios/internal/auth/store"
 	"github.com/heliannuuthus/helios/internal/auth/token"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes"
@@ -24,7 +25,7 @@ import (
 // Service 认证服务
 type Service struct {
 	db          *gorm.DB
-	store       Store
+	store       store.Store
 	tokenSvc    *token.Service
 	idpManager  *IDPManager
 	hermesCache *cache.HermesCache
@@ -37,7 +38,7 @@ func NewService(db *gorm.DB, hermesSvc *hermes.Service) (*Service, error) {
 
 	return &Service{
 		db:          db,
-		store:       NewMemoryStore(), // TODO: 支持 Redis
+		store:       store.NewMemoryStore(), // TODO: 支持 Redis
 		tokenSvc:    tokenSvc,
 		idpManager:  NewIDPManager(),
 		hermesCache: hermesCache,
@@ -75,13 +76,13 @@ func (s *Service) Authorize(ctx context.Context, req *AuthorizeRequest) (string,
 
 	// 5. 创建会话
 	sessionID := GenerateSessionID()
-	session := &Session{
+	session := &store.Session{
 		ID:                  sessionID,
 		ClientID:            req.ClientID,
 		Audience:            req.Audience,
 		RedirectURI:         req.RedirectURI,
 		CodeChallenge:       req.CodeChallenge,
-		CodeChallengeMethod: req.CodeChallengeMethod,
+		CodeChallengeMethod: string(req.CodeChallengeMethod),
 		State:               req.State,
 		Scope:               req.Scope,
 		CreatedAt:           time.Now(),
@@ -193,7 +194,7 @@ func (s *Service) Login(ctx context.Context, sessionID string, req *LoginRequest
 	// 1. 获取会话
 	session, err := s.store.GetSession(ctx, sessionID)
 	if err != nil {
-		if errors.Is(err, ErrSessionNotFound) || errors.Is(err, ErrSessionExpired) {
+		if errors.Is(err, store.ErrSessionNotFound) || errors.Is(err, store.ErrSessionExpired) {
 			// Session 过期或不存在，返回特定错误码供 handler 返回 412
 			return nil, NewError(ErrInvalidRequest, "session not found or expired")
 		}
@@ -280,7 +281,7 @@ func (s *Service) Login(ctx context.Context, sessionID string, req *LoginRequest
 
 	// 9. 更新会话
 	session.UserID = user.OpenID
-	session.IDP = idp
+	session.IDP = string(idp)
 	session.GrantedScope = grantedScopeStr
 	if err := s.store.UpdateSession(ctx, session); err != nil {
 		return nil, NewError(ErrServerError, "failed to update session")
@@ -288,13 +289,13 @@ func (s *Service) Login(ctx context.Context, sessionID string, req *LoginRequest
 
 	// 10. 生成授权码
 	authCode := GenerateAuthorizationCode()
-	authCodeObj := &AuthorizationCode{
+	authCodeObj := &store.AuthorizationCode{
 		Code:                authCode,
 		ClientID:            session.ClientID,
 		Audience:            session.Audience, // 目标服务 ID
 		RedirectURI:         session.RedirectURI,
 		CodeChallenge:       session.CodeChallenge,
-		CodeChallengeMethod: string(session.CodeChallengeMethod),
+		CodeChallengeMethod: session.CodeChallengeMethod,
 		Scope:               grantedScopeStr, // 使用实际授予的 scope
 		UserID:              user.OpenID,
 		CreatedAt:           time.Now(),
@@ -708,8 +709,8 @@ func (s *Service) generateTokens(
 		s.cleanupOldRefreshTokens(ctx, user.OpenID, app.AppID)
 
 		// 创建新的 Refresh Token
-		refreshToken := &RefreshToken{
-			Token:     GenerateRefreshTokenValue(),
+		refreshToken := &store.RefreshToken{
+			Token:     store.GenerateRefreshTokenValue(),
 			UserID:    user.OpenID,
 			ClientID:  app.AppID,
 			Audience:  svc.ServiceID,

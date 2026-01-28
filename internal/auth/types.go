@@ -3,7 +3,6 @@ package auth
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/heliannuuthus/helios/internal/auth/token"
 )
@@ -212,42 +211,7 @@ func NewError(code, description string) *Error {
 	return &Error{Code: code, Description: description}
 }
 
-// ============= Internal Types =============
-
-// Session 认证会话
-type Session struct {
-	ID                  string              `json:"id"`
-	ClientID            string              `json:"client_id"`
-	Audience            string              `json:"audience"` // 目标服务 ID
-	RedirectURI         string              `json:"redirect_uri"`
-	CodeChallenge       string              `json:"code_challenge"`
-	CodeChallengeMethod CodeChallengeMethod `json:"code_challenge_method"`
-	State               string              `json:"state"`
-	Scope               string              `json:"scope"`
-	Connection          string              `json:"connection,omitempty"` // 用户选择的 connection
-	CreatedAt           time.Time           `json:"created_at"`
-	ExpiresAt           time.Time           `json:"expires_at"`
-
-	// 登录后填充
-	UserID       string `json:"user_id,omitempty"`
-	IDP          IDP    `json:"idp,omitempty"`
-	GrantedScope string `json:"granted_scope,omitempty"` // 实际授予的 scope
-}
-
-// AuthorizationCode 授权码
-type AuthorizationCode struct {
-	Code                string    `json:"code"`
-	ClientID            string    `json:"client_id"`
-	Audience            string    `json:"audience"` // 目标服务 ID
-	RedirectURI         string    `json:"redirect_uri"`
-	CodeChallenge       string    `json:"code_challenge"`
-	CodeChallengeMethod string    `json:"code_challenge_method"`
-	Scope               string    `json:"scope"` // 实际授予的 scope
-	UserID              string    `json:"user_id"`
-	CreatedAt           time.Time `json:"created_at"`
-	ExpiresAt           time.Time `json:"expires_at"`
-	Used                bool      `json:"used"`
-}
+// ============= Type Aliases =============
 
 // SubjectClaims sub 字段解密后的内容（类型别名，实际定义在 token 包）
 type SubjectClaims = token.SubjectClaims
