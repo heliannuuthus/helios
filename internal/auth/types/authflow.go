@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/internal/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/json"
 )
 
 // FlowState 认证流程状态
@@ -16,6 +17,7 @@ const (
 	FlowStateAuthenticated FlowState = "authenticated" // 已认证（用户已验证）
 	FlowStateAuthorized    FlowState = "authorized"    // 已授权（权限已计算）
 	FlowStateCompleted     FlowState = "completed"     // 已完成（授权码已生成）
+	FlowStateFailed        FlowState = "failed"        // 已失败（发生错误）
 )
 
 // AuthFlow 认证流程上下文
@@ -44,6 +46,17 @@ type AuthFlow struct {
 
 	// 授权结果
 	GrantedScopes []string `json:"granted_scopes,omitempty"`
+
+	// 错误状态（发生错误时填充）
+	Error *FlowError `json:"error,omitempty"`
+}
+
+// FlowError 流程错误信息
+type FlowError struct {
+	HTTPStatus  int            `json:"http_status"`
+	Code        string         `json:"code"`
+	Description string         `json:"description,omitempty"`
+	Data        map[string]any `json:"data,omitempty"`
 }
 
 // AuthRequest 认证请求参数
@@ -58,8 +71,114 @@ type AuthRequest struct {
 	State               string `json:"state,omitempty" form:"state"`
 	Scope               string `json:"scope,omitempty" form:"scope"`
 
-	// 扩展参数
-	Params map[string]any `json:"params,omitempty"`
+	// 扩展参数 - 序列化时平铺到顶层
+	Params map[string]any `json:"-" form:"-"`
+}
+
+// authRequestAlias 用于避免 MarshalJSON/UnmarshalJSON 递归
+type authRequestAlias AuthRequest
+
+// 标准字段名集合，用于区分扩展参数
+var authRequestKnownFields = map[string]bool{
+	"response_type":         true,
+	"client_id":             true,
+	"audience":              true,
+	"redirect_uri":          true,
+	"code_challenge":        true,
+	"code_challenge_method": true,
+	"state":                 true,
+	"scope":                 true,
+}
+
+// MarshalJSON 自定义序列化，将 Params 平铺到顶层
+func (r AuthRequest) MarshalJSON() ([]byte, error) {
+	// 先序列化标准字段
+	alias := authRequestAlias(r)
+	data, err := json.Marshal(alias)
+	if err != nil {
+		return nil, err
+	}
+
+	// 如果没有扩展参数，直接返回
+	if len(r.Params) == 0 {
+		return data, nil
+	}
+
+	// 解析为 map 以便合并
+	var result map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
+	// 合并扩展参数（平铺到顶层）
+	for k, v := range r.Params {
+		// 不覆盖标准字段
+		if !authRequestKnownFields[k] {
+			result[k] = v
+		}
+	}
+
+	return json.Marshal(result)
+}
+
+// UnmarshalJSON 自定义反序列化，提取已知字段，剩余放入 Params
+func (r *AuthRequest) UnmarshalJSON(data []byte) error {
+	// 先解析标准字段
+	var alias authRequestAlias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return err
+	}
+	*r = AuthRequest(alias)
+
+	// 解析所有字段
+	var allFields map[string]any
+	if err := json.Unmarshal(data, &allFields); err != nil {
+		return err
+	}
+
+	// 提取扩展参数（非标准字段）
+	r.Params = make(map[string]any)
+	for k, v := range allFields {
+		if !authRequestKnownFields[k] {
+			r.Params[k] = v
+		}
+	}
+
+	// 如果没有扩展参数，设为 nil
+	if len(r.Params) == 0 {
+		r.Params = nil
+	}
+
+	return nil
+}
+
+// Get 获取扩展参数
+func (r *AuthRequest) Get(key string) (any, bool) {
+	if r.Params == nil {
+		return nil, false
+	}
+	v, ok := r.Params[key]
+	return v, ok
+}
+
+// GetString 获取字符串类型的扩展参数
+func (r *AuthRequest) GetString(key string) string {
+	v, ok := r.Get(key)
+	if !ok {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
+}
+
+// Set 设置扩展参数
+func (r *AuthRequest) Set(key string, value any) {
+	if r.Params == nil {
+		r.Params = make(map[string]any)
+	}
+	r.Params[key] = value
 }
 
 // ParseScopes 解析 scope 字符串为列表
@@ -106,11 +225,12 @@ type AuthorizationCode struct {
 	Used      bool      `json:"used"`
 }
 
-// ConnectionConfig Connection 配置
+// ConnectionConfig Connection 配置（返回给前端的公开配置）
 type ConnectionConfig struct {
-	Type          string                 `json:"type"`                     // wechat:mp, tt:mp, email 等
+	ID            string                 `json:"id"`                       // 唯一标识（如 "wechat-mp-prod"）
+	ProviderType  string                 `json:"provider_type"`            // IDP 类型（如 "wechat:mp"）
 	Name          string                 `json:"name,omitempty"`           // 显示名称
-	ClientID      string                 `json:"client_id,omitempty"`      // IDP 的 AppID
+	ClientID      string                 `json:"client_id,omitempty"`      // IDP 的 AppID（公开）
 	AllowedScopes []string               `json:"allowed_scopes,omitempty"` // 允许的 scope
 	Capture       *CaptureConfig         `json:"capture,omitempty"`        // 人机验证配置
 	Extra         map[string]interface{} `json:"extra,omitempty"`          // 其他配置
@@ -190,4 +310,39 @@ func (f *AuthFlow) SetAuthorized(grantedScopes []string) {
 // SetCompleted 设置为已完成状态
 func (f *AuthFlow) SetCompleted() {
 	f.State = FlowStateCompleted
+}
+
+// AuthErrorInterface 定义 AuthError 的接口，用于解耦
+type AuthErrorInterface interface {
+	error
+	GetHTTPStatus() int
+	GetCode() string
+	GetDescription() string
+	GetData() map[string]any
+}
+
+// SetError 设置错误状态并阻断流程
+func (f *AuthFlow) SetError(httpStatus int, code, description string, data map[string]any) {
+	f.State = FlowStateFailed
+	f.Error = &FlowError{
+		HTTPStatus:  httpStatus,
+		Code:        code,
+		Description: description,
+		Data:        data,
+	}
+}
+
+// Fail 使用 AuthError 设置错误状态
+func (f *AuthFlow) Fail(err AuthErrorInterface) {
+	f.SetError(err.GetHTTPStatus(), err.GetCode(), err.GetDescription(), err.GetData())
+}
+
+// HasError 检查是否有错误
+func (f *AuthFlow) HasError() bool {
+	return f.Error != nil || f.State == FlowStateFailed
+}
+
+// GetError 获取错误信息
+func (f *AuthFlow) GetError() *FlowError {
+	return f.Error
 }

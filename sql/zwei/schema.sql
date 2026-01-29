@@ -7,8 +7,6 @@
 -- 创建 zwei 数据库（如果不存在）
 CREATE DATABASE IF NOT EXISTS `zwei` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- 授予用户权限（MYSQL_USER 环境变量创建的用户，默认用户名是 helios）
--- 注意：如果修改了 MYSQL_USER，需要同步修改这里的用户名
 GRANT ALL PRIVILEGES ON `zwei`.* TO 'helios'@'%';
 FLUSH PRIVILEGES;
 

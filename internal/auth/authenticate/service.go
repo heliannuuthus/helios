@@ -2,25 +2,19 @@ package authenticate
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/heliannuuthus/helios/internal/auth/cache"
+	autherrors "github.com/heliannuuthus/helios/internal/auth/errors"
 	"github.com/heliannuuthus/helios/internal/auth/idp"
 	"github.com/heliannuuthus/helios/internal/auth/types"
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
-)
-
-// 错误定义
-var (
-	ErrFlowNotFound       = errors.New("auth flow not found")
-	ErrFlowExpired        = errors.New("auth flow expired")
-	ErrFlowStateInvalid   = errors.New("auth flow state invalid")
-	ErrUnsupportedAuth    = errors.New("unsupported authentication type")
-	ErrConnectionNotFound = errors.New("connection not found in flow")
 )
 
 // Service 认证服务
@@ -29,9 +23,6 @@ type Service struct {
 	cache          *cache.Manager
 	idpRegistry    *idp.Registry
 	authenticators []Authenticator
-
-	// 配置
-	flowTTL time.Duration
 }
 
 // ServiceConfig 服务配置
@@ -39,20 +30,13 @@ type ServiceConfig struct {
 	Cache       *cache.Manager
 	IDPRegistry *idp.Registry
 	EmailSender EmailSender
-	FlowTTL     time.Duration
 }
 
 // NewService 创建认证服务
 func NewService(cfg *ServiceConfig) *Service {
-	flowTTL := cfg.FlowTTL
-	if flowTTL == 0 {
-		flowTTL = 10 * time.Minute
-	}
-
 	s := &Service{
 		cache:       cfg.Cache,
 		idpRegistry: cfg.IDPRegistry,
-		flowTTL:     flowTTL,
 	}
 
 	// 注册认证器
@@ -67,75 +51,106 @@ func NewService(cfg *ServiceConfig) *Service {
 // ==================== AuthFlow 管理 ====================
 
 // CreateFlow 创建认证流程
-func (s *Service) CreateFlow(ctx context.Context, req *types.AuthRequest) (*types.AuthFlow, error) {
+// 错误信息会存储在返回的 flow.Error 中，调用方通过 flow.HasError() 检查
+func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) *types.AuthFlow {
+	ctx := c.Request.Context()
+
+	// 从配置获取 Flow 过期时间（秒转为 Duration）
+	flowExpiresIn := time.Duration(config.GetAuthCookieMaxAge()) * time.Second
+
+	// 先创建 flow，后续错误都记录在 flow 中
+	flow := types.NewAuthFlow(req, flowExpiresIn)
+
 	// 1. 验证 response_type
 	if req.ResponseType != "code" {
-		return nil, errors.New("response_type must be 'code'")
+		flow.Fail(autherrors.NewInvalidRequest("response_type must be 'code'"))
+		return flow
 	}
 
 	// 2. 获取 Application
 	app, err := s.cache.GetApplication(ctx, req.ClientID)
 	if err != nil {
-		return nil, fmt.Errorf("application not found: %w", err)
+		flow.Fail(autherrors.NewClientNotFoundf("application not found: %s", req.ClientID))
+		return flow
+	}
+	flow.Application = app
+
+	// 3. 验证请求来源（应用侧跨域验证）
+	if err := validateOrigin(c, app); err != nil {
+		flow.Fail(err)
+		return flow
 	}
 
-	// 3. 验证重定向 URI
+	// 4. 验证重定向 URI
 	if !app.ValidateRedirectURI(req.RedirectURI) {
-		return nil, errors.New("invalid redirect_uri")
+		flow.Fail(autherrors.NewInvalidRequest("invalid redirect_uri"))
+		return flow
 	}
 
-	// 4. 获取 Service
+	// 5. 获取 Service
 	svc, err := s.cache.GetService(ctx, req.Audience)
 	if err != nil {
-		return nil, fmt.Errorf("service not found: %w", err)
+		flow.Fail(autherrors.NewServiceNotFoundf("service not found: %s", req.Audience))
+		return flow
 	}
-
-	// 5. 验证 Application-Service 关系
-	hasRelation, err := s.cache.CheckAppServiceRelation(ctx, req.ClientID, req.Audience)
-	if err != nil {
-		return nil, fmt.Errorf("check relation failed: %w", err)
-	}
-	if !hasRelation {
-		return nil, fmt.Errorf("application %s has no access to service %s", req.ClientID, req.Audience)
-	}
-
-	// 6. 创建 AuthFlow
-	flow := types.NewAuthFlow(req, s.flowTTL)
-	flow.Application = app
 	flow.Service = svc
 
-	// 7. 构建 ConnectionMap
-	flow.ConnectionMap = s.buildConnectionMap(app.DomainID)
+	// 6. 验证 Application-Service 关系
+	hasRelation, err := s.cache.CheckAppServiceRelation(ctx, req.ClientID, req.Audience)
+	if err != nil {
+		flow.Fail(autherrors.NewServerError("check relation failed"))
+		return flow
+	}
+	if !hasRelation {
+		flow.Fail(autherrors.NewAccessDeniedf("application %s has no access to service %s", req.ClientID, req.Audience))
+		return flow
+	}
 
-	// 8. 保存到缓存
+	// 7. 获取应用配置的登录方式
+	allowedIDPs := app.GetAllowedIDPs()
+	if len(allowedIDPs) == 0 {
+		flow.Fail(autherrors.NewNoConnectionAvailable(""))
+		return flow
+	}
+
+	// 8. 构建 ConnectionMap（使用应用配置的 IDP）
+	flow.ConnectionMap = s.setConnections(allowedIDPs)
+
+	// 9. 保存到缓存
 	if err := s.SaveFlow(ctx, flow); err != nil {
-		return nil, fmt.Errorf("save flow failed: %w", err)
+		flow.Fail(autherrors.NewServerError("save flow failed"))
+		return flow
 	}
 
 	logger.Infof("[Authenticate] 创建认证流程 - FlowID: %s, ClientID: %s", flow.ID, req.ClientID)
 
-	return flow, nil
+	return flow
 }
 
 // GetAndValidateFlow 获取并验证 AuthFlow
-func (s *Service) GetAndValidateFlow(ctx context.Context, flowID string) (*types.AuthFlow, error) {
+// 错误信息存储在返回的 flow.Error 中
+func (s *Service) GetAndValidateFlow(ctx context.Context, flowID string) *types.AuthFlow {
 	flow, err := s.GetFlow(ctx, flowID)
 	if err != nil {
-		return nil, err
+		// 创建空 flow 来存储错误
+		flow = &types.AuthFlow{ID: flowID}
+		flow.Fail(autherrors.NewFlowNotFound("session not found"))
+		return flow
 	}
 
 	if flow.IsExpired() {
-		return nil, ErrFlowExpired
+		flow.Fail(autherrors.NewFlowExpired("session expired"))
+		return flow
 	}
 
-	return flow, nil
+	return flow
 }
 
 // GetFlow 获取 AuthFlow
 func (s *Service) GetFlow(ctx context.Context, flowID string) (*types.AuthFlow, error) {
 	data, err := s.cache.GetAuthFlow(ctx, flowID)
 	if err != nil {
-		return nil, ErrFlowNotFound
+		return nil, autherrors.NewFlowNotFound("session not found")
 	}
 
 	var flow types.AuthFlow
@@ -153,12 +168,7 @@ func (s *Service) SaveFlow(ctx context.Context, flow *types.AuthFlow) error {
 		return fmt.Errorf("marshal flow failed: %w", err)
 	}
 
-	ttl := time.Until(flow.ExpiresAt)
-	if ttl <= 0 {
-		ttl = s.flowTTL
-	}
-
-	return s.cache.SaveAuthFlow(ctx, flow.ID, data, ttl)
+	return s.cache.SaveAuthFlow(ctx, flow.ID, data)
 }
 
 // DeleteFlow 删除 AuthFlow（设置短 TTL）
@@ -172,12 +182,12 @@ func (s *Service) DeleteFlow(ctx context.Context, flowID string) error {
 func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, connection string, data map[string]any) (*AuthResult, error) {
 	// 1. 验证 flow 状态
 	if !flow.CanAuthenticate() {
-		return nil, ErrFlowStateInvalid
+		return nil, autherrors.NewFlowInvalid("flow state does not allow authentication")
 	}
 
 	// 2. 验证 connection 是否在 ConnectionMap 中
 	if _, ok := flow.ConnectionMap[connection]; !ok {
-		return nil, ErrConnectionNotFound
+		return nil, autherrors.NewInvalidRequest("connection not found in flow")
 	}
 
 	// 3. 选择认证器
@@ -189,7 +199,7 @@ func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, connec
 		}
 	}
 	if authenticator == nil {
-		return nil, ErrUnsupportedAuth
+		return nil, autherrors.NewInvalidRequest("unsupported authentication type")
 	}
 
 	// 4. 执行认证
@@ -223,44 +233,25 @@ func (s *Service) SendEmailCode(ctx context.Context, email string) error {
 			return emailAuth.SendCode(ctx, email)
 		}
 	}
-	return errors.New("email authenticator not configured")
+	return autherrors.NewServerError("email authenticator not configured")
 }
 
 // ==================== 辅助方法 ====================
 
-// buildConnectionMap 构建 ConnectionMap
-func (s *Service) buildConnectionMap(domainID string) map[string]*types.ConnectionConfig {
+// setConnections 根据应用配置的 IDP 列表构建 ConnectionMap
+func (s *Service) setConnections(allowedIDPs []string) map[string]*types.ConnectionConfig {
 	connectionMap := make(map[string]*types.ConnectionConfig)
 
-	// 根据域确定可用的 IDP
-	var idpTypes []string
-	switch domainID {
-	case "ciam":
-		idpTypes = []string{idp.TypeWechatMP, idp.TypeTTMP, idp.TypeAlipayMP}
-	case "piam":
-		idpTypes = []string{idp.TypeWecom, idp.TypeGithub, idp.TypeGoogle}
-	default:
-		idpTypes = []string{idp.TypeWechatMP, idp.TypeTTMP, idp.TypeAlipayMP}
-	}
-
-	// 从配置读取每个 IDP 的配置
-	for _, idpType := range idpTypes {
-		if !s.idpRegistry.Has(idpType) {
+	for _, idpType := range allowedIDPs {
+		// 检查 IDP 是否在 Registry 中注册
+		if idpType != "email" && !s.idpRegistry.Has(idpType) {
+			logger.Warnf("[Authenticate] IDP %s not registered in registry", idpType)
 			continue
 		}
 
 		cfg := s.getConnectionConfig(idpType)
 		if cfg != nil {
 			connectionMap[idpType] = cfg
-		}
-	}
-
-	// 添加邮箱验证码（如果配置了）
-	if config.GetBool("idps.email.enabled") {
-		connectionMap["email"] = &types.ConnectionConfig{
-			Type:          "email",
-			Name:          "邮箱验证码",
-			AllowedScopes: config.GetStringSlice("idps.email.allowed_scopes"),
 		}
 	}
 
@@ -295,26 +286,49 @@ func (s *Service) getConnectionConfig(idpType string) *types.ConnectionConfig {
 		return nil
 	}
 
-	appID := config.GetString(configPrefix + ".appid")
+	authCfg := config.Auth()
+	appID := authCfg.GetString(configPrefix + ".appid")
 	if appID == "" {
 		return nil
 	}
 
-	cfg := &types.ConnectionConfig{
-		Type:          idpType,
+	connCfg := &types.ConnectionConfig{
+		ID:            idpType,
+		ProviderType:  idpType,
 		Name:          name,
 		ClientID:      appID,
-		AllowedScopes: config.GetStringSlice(configPrefix + ".allowed_scopes"),
+		AllowedScopes: authCfg.GetStringSlice(configPrefix + ".allowed_scopes"),
 	}
 
 	// 人机验证配置
-	if config.GetBool(configPrefix + ".capture.required") {
-		cfg.Capture = &types.CaptureConfig{
+	if authCfg.GetBool(configPrefix + ".capture.required") {
+		connCfg.Capture = &types.CaptureConfig{
 			Required: true,
-			Type:     config.GetString(configPrefix + ".capture.type"),
-			SiteKey:  config.GetString(configPrefix + ".capture.site_key"),
+			Type:     authCfg.GetString(configPrefix + ".capture.type"),
+			SiteKey:  authCfg.GetString(configPrefix + ".capture.site_key"),
 		}
 	}
 
-	return cfg
+	return connCfg
+}
+
+// validateOrigin 验证请求来源是否允许
+// 从 gin.Context 获取 Origin/Referer header，验证是否在应用的允许列表中
+func validateOrigin(c *gin.Context, app *models.ApplicationWithKey) *autherrors.AuthError {
+	origin := c.GetHeader("Origin")
+	if origin == "" {
+		origin = c.GetHeader("Referer")
+	}
+
+	// 没有 Origin 头，跳过验证
+	if origin == "" {
+		return nil
+	}
+
+	// 验证 Origin 是否在允许列表中
+	if !app.ValidateOrigin(origin) {
+		return autherrors.NewInvalidOriginf("origin %s not allowed for application %s", origin, app.AppID)
+	}
+
+	return nil
 }

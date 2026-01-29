@@ -43,7 +43,7 @@ func (a *IDPAuthenticator) Authenticate(ctx context.Context, connection string, 
 		return nil, errors.New("code is required")
 	}
 
-	// 调用 IDP Exchange
+	// 调用 IDP Exchange（使用变长参数）
 	result, err := provider.Exchange(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("idp exchange failed: %w", err)

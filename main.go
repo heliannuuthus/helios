@@ -27,24 +27,27 @@ import (
 // @description 输入 "Bearer {token}"
 
 func main() {
-	// 加载配置
+	// 加载所有配置
 	config.Load()
+
+	// 使用 Zwei 配置初始化日志（通用配置）
+	cfg := config.Zwei()
 
 	// 初始化日志
 	logger.InitWithConfig(logger.Config{
-		Format: config.GetString("log.format"),
-		Level:  config.GetString("log.level"),
-		Debug:  config.GetBool("app.debug"),
+		Format: cfg.GetString("log.format"),
+		Level:  cfg.GetString("log.level"),
+		Debug:  cfg.GetBool("app.debug"),
 	})
 	defer logger.Sync()
 
 	// 初始化 OSS（如果配置了）
-	if config.GetString("oss.endpoint") != "" {
+	if cfg.GetString("oss.endpoint") != "" {
 		if err := oss.Init(); err != nil {
 			logger.Warnf("OSS 初始化失败（将跳过图片上传功能）: %v", err)
 		} else {
 			// 初始化 STS（如果配置了）
-			if config.GetString("oss.role-arn") != "" {
+			if cfg.GetString("oss.role-arn") != "" {
 				if err := oss.InitSTS(); err != nil {
 					logger.Warnf("OSS STS 初始化失败（将使用主账号凭证）: %v", err)
 				}
@@ -59,7 +62,7 @@ func main() {
 	}
 
 	// 设置 Gin 模式
-	if !config.GetBool("app.debug") {
+	if !cfg.GetBool("app.debug") {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
@@ -73,8 +76,8 @@ func main() {
 	// 根路径
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
-			"message": config.GetString("app.name"),
-			"version": config.GetString("app.version"),
+			"message": cfg.GetString("app.name"),
+			"version": cfg.GetString("app.version"),
 		})
 	})
 
@@ -269,7 +272,7 @@ func main() {
 	}
 
 	// 启动服务器
-	addr := fmt.Sprintf("%s:%d", config.GetString("server.host"), config.GetInt("server.port"))
+	addr := fmt.Sprintf("%s:%d", cfg.GetString("server.host"), cfg.GetInt("server.port"))
 	logger.Infof("服务启动: http://%s", addr)
 	logger.Infof("API 文档: http://%s/swagger/index.html", addr)
 

@@ -215,14 +215,15 @@ func addReasoningEnabled(req *openai.ChatCompletionRequest, enabled bool) {
 
 // NewService 创建推荐服务
 func NewService(db *gorm.DB) *Service {
+	cfg := config.Zwei()
 	// 配置 OpenRouter 客户端
-	apiKey := config.GetString("openrouter.api-key")
+	apiKey := cfg.GetString("openrouter.api-key")
 	clientConfig := openai.DefaultConfig(apiKey)
 	clientConfig.BaseURL = "https://openrouter.ai/api/v1"
 
 	return &Service{
 		db:        db,
-		amap:      amap.NewClient(config.GetString("amap.api-key")),
+		amap:      amap.NewClient(cfg.GetString("amap.api-key")),
 		llmClient: openai.NewClientWithConfig(clientConfig),
 	}
 }
@@ -451,7 +452,7 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 	// 5. 调用 LLM（支持多轮对话和 function calling）
 	logger.Infof("[Recommend] 调用 LLM - Prompt 长度: %d", len(prompt))
 
-	model := config.GetString("openrouter.model")
+	model := config.Zwei().GetString("openrouter.model")
 	if model == "" {
 		return nil, fmt.Errorf("未配置 openrouter.model，请在配置文件中设置模型")
 	}

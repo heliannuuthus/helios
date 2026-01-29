@@ -19,7 +19,7 @@ var (
 // GetDBEncKey 获取数据库加密密钥
 func GetDBEncKey() ([]byte, error) {
 	dbOnce.Do(func() {
-		keyStr := config.GetString("kms.database.enc-key")
+		keyStr := config.Auth().GetString("kms.database.enc-key")
 		if keyStr == "" {
 			dbErr = errors.New("kms.database.enc-key 未配置")
 			return

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"time"
 
 	"github.com/heliannuuthus/helios/internal/auth/cache"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -16,15 +15,13 @@ import (
 type EmailAuthenticator struct {
 	cache  *cache.Manager
 	sender EmailSender
-	otpTTL time.Duration
 }
 
 // NewEmailAuthenticator 创建邮箱认证器
-func NewEmailAuthenticator(cache *cache.Manager, sender EmailSender) *EmailAuthenticator {
+func NewEmailAuthenticator(cm *cache.Manager, sender EmailSender) *EmailAuthenticator {
 	return &EmailAuthenticator{
-		cache:  cache,
+		cache:  cm,
 		sender: sender,
-		otpTTL: 5 * time.Minute,
 	}
 }
 
@@ -71,14 +68,15 @@ func (a *EmailAuthenticator) SendCode(ctx context.Context, email string) error {
 		return fmt.Errorf("generate otp failed: %w", err)
 	}
 
-	// 保存到缓存
-	if err := a.cache.SaveOTP(ctx, a.otpKey(email), code, a.otpTTL); err != nil {
+	// 保存到缓存（TTL 由 cache 配置管理）
+	if err := a.cache.SaveOTP(ctx, a.otpKey(email), code); err != nil {
 		return fmt.Errorf("save otp failed: %w", err)
 	}
 
 	// 发送邮件
+	otpExpiresIn := cache.GetOTPExpiresIn()
 	subject := "验证码"
-	body := fmt.Sprintf("您的验证码是：%s，有效期 %d 分钟。", code, int(a.otpTTL.Minutes()))
+	body := fmt.Sprintf("您的验证码是：%s，有效期 %d 分钟。", code, int(otpExpiresIn.Minutes()))
 	if err := a.sender.Send(ctx, email, subject, body); err != nil {
 		return fmt.Errorf("send email failed: %w", err)
 	}

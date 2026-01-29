@@ -2,10 +2,15 @@ package idp
 
 // IDP 类型常量
 const (
-	// CIAM 域
+	// CIAM 域 - 小程序
 	TypeWechatMP = "wechat:mp" // 微信小程序
 	TypeTTMP     = "tt:mp"     // 抖音小程序
 	TypeAlipayMP = "alipay:mp" // 支付宝小程序
+
+	// CIAM 域 - Web 授权
+	TypeWechatWeb = "wechat:web" // 微信网页授权
+	TypeAlipayWeb = "alipay:web" // 支付宝网页授权
+	TypeTTWeb     = "tt:web"     // 抖音网页授权
 
 	// PIAM 域
 	TypeWecom  = "wecom"  // 企业微信

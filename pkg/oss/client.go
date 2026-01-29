@@ -20,19 +20,14 @@ var (
 
 // getOSSEndpoint 根据环境变量获取 OSS endpoint（内网或公网）
 func getOSSEndpoint() string {
-	endpoint := config.GetString("oss.endpoint")
+	cfg := config.Zwei()
+	endpoint := cfg.GetString("oss.endpoint")
 	if endpoint == "" {
 		return ""
 	}
 
-	// 检查是否使用内网（优先级：环境变量 APP_ENV > 配置 app.env）
-	// 环境变量 APP_ENV（Dockerfile 设置的 ENV APP_ENV）
-	appEnv := config.V().GetString("APP_ENV")
-	if appEnv == "" {
-		// 尝试从配置读取
-		appEnv = config.GetString("app.env")
-	}
-
+	// 检查是否使用内网（从配置 app.env 读取）
+	appEnv := cfg.GetString("app.env")
 	useInternal := appEnv == "prod"
 
 	if !useInternal {
@@ -53,10 +48,11 @@ func getOSSEndpoint() string {
 
 // Init 初始化 OSS 客户端
 func Init() error {
+	cfg := config.Zwei()
 	endpoint := getOSSEndpoint()
-	accessKeyID := config.GetString("oss.access-key-id")
-	accessKeySecret := config.GetString("oss.access-key-secret")
-	bucketName := config.GetString("oss.bucket")
+	accessKeyID := cfg.GetString("oss.access-key-id")
+	accessKeySecret := cfg.GetString("oss.access-key-secret")
+	bucketName := cfg.GetString("oss.bucket")
 
 	if endpoint == "" || accessKeyID == "" || accessKeySecret == "" || bucketName == "" {
 		return fmt.Errorf("OSS 配置不完整，请检查 config.toml 中的 [oss] 配置")
@@ -145,7 +141,7 @@ func UploadImageWithSTS(objectKey string, reader io.Reader, credentials *STSCred
 	}
 
 	endpoint := getOSSEndpoint()
-	bucketName := config.GetString("oss.bucket")
+	bucketName := config.Zwei().GetString("oss.bucket")
 
 	// 使用 STS 凭证创建临时客户端
 	stsClient, err := oss.New(endpoint, credentials.AccessKeyID, credentials.AccessKeySecret,
@@ -172,11 +168,12 @@ func UploadImageWithSTS(objectKey string, reader io.Reader, credentials *STSCred
 
 // buildObjectURL 构建对象 URL
 func buildObjectURL(objectKey string) string {
-	domain := config.GetString("oss.domain")
+	cfg := config.Zwei()
+	domain := cfg.GetString("oss.domain")
 	if domain == "" {
 		// 如果没有配置自定义域名，使用 OSS 默认域名
-		endpoint := config.GetString("oss.endpoint")
-		bucketName := config.GetString("oss.bucket")
+		endpoint := cfg.GetString("oss.endpoint")
+		bucketName := cfg.GetString("oss.bucket")
 		domain = fmt.Sprintf("https://%s.%s", bucketName, endpoint)
 	} else {
 		// 如果配置了自定义域名，确保有协议前缀

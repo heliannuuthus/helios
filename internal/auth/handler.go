@@ -8,12 +8,31 @@ import (
 	"github.com/heliannuuthus/helios/internal/auth/authenticate"
 	"github.com/heliannuuthus/helios/internal/auth/authorize"
 	"github.com/heliannuuthus/helios/internal/auth/cache"
+	autherrors "github.com/heliannuuthus/helios/internal/auth/errors"
 	"github.com/heliannuuthus/helios/internal/auth/idp"
 	"github.com/heliannuuthus/helios/internal/auth/token"
 	"github.com/heliannuuthus/helios/internal/auth/types"
+	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
+)
+
+const (
+	// AuthSessionCookie Auth 会话 Cookie 名称
+	AuthSessionCookie = "auth-session"
+)
+
+// AuthStage 认证阶段
+type AuthStage string
+
+const (
+	StageLogin    AuthStage = "login"    // 登录阶段
+	StageConsent  AuthStage = "consent"  // 授权同意阶段
+	StageMFA      AuthStage = "mfa"      // MFA 验证阶段
+	StageCallback AuthStage = "callback" // IDP 回调阶段
+	StageComplete AuthStage = "complete" // 完成阶段（重定向回应用）
+	StageError    AuthStage = "error"    // 错误阶段
 )
 
 // Handler 认证处理器（编排层）
@@ -44,39 +63,34 @@ func NewHandler(cfg *HandlerConfig) *Handler {
 func (h *Handler) Authorize(c *gin.Context) {
 	var req types.AuthRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, err.Error()))
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
 
-	// 创建 AuthFlow
-	flow, err := h.authenticateSvc.CreateFlow(c.Request.Context(), &req)
-	if err != nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, err.Error()))
-		return
-	}
+	// 创建 AuthFlow（错误存储在 flow.Error 中）
+	flow := h.authenticateSvc.CreateFlow(c, &req)
 
 	// 设置 Cookie（flowID 作为 session）
-	c.SetCookie("auth-session", flow.ID, 600, "/", "", false, true)
+	setAuthSessionCookie(c, flow.ID)
 
-	// 重定向到登录页面
-	loginURL := "/login"
-	c.Redirect(http.StatusFound, loginURL)
+	// 根据 flow 状态决定下一步（包括错误处理）
+	forwardNext(c, flow)
 }
 
 // GetConnections GET /auth/connections
 // 获取可用的 Connection 配置
 func (h *Handler) GetConnections(c *gin.Context) {
 	// 从 Cookie 获取 flowID
-	flowID, err := c.Cookie("auth-session")
+	flowID, err := getAuthSessionCookie(c)
 	if err != nil || flowID == "" {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, "missing auth-session cookie"))
+		h.errorResponse(c, autherrors.NewInvalidRequest("missing auth-session cookie"))
 		return
 	}
 
 	// 获取 AuthFlow
-	flow, err := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
-	if err != nil {
-		h.errorResponse(c, http.StatusPreconditionFailed, NewError(ErrInvalidRequest, "session not found or expired"))
+	flow := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
+	if flow.HasError() {
+		h.flowErrorResponse(c, flow)
 		return
 	}
 
@@ -93,23 +107,23 @@ func (h *Handler) GetConnections(c *gin.Context) {
 func (h *Handler) Login(c *gin.Context) {
 	var req types.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, err.Error()))
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
 
 	// 从 Cookie 获取 flowID
-	flowID, err := c.Cookie("auth-session")
+	flowID, err := getAuthSessionCookie(c)
 	if err != nil || flowID == "" {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, "missing auth-session cookie"))
+		h.errorResponse(c, autherrors.NewInvalidRequest("missing auth-session cookie"))
 		return
 	}
 
 	ctx := c.Request.Context()
 
 	// 1. 获取 AuthFlow
-	flow, err := h.authenticateSvc.GetAndValidateFlow(ctx, flowID)
-	if err != nil {
-		h.errorResponse(c, http.StatusPreconditionFailed, NewError(ErrInvalidRequest, "session not found or expired"))
+	flow := h.authenticateSvc.GetAndValidateFlow(ctx, flowID)
+	if flow.HasError() {
+		h.flowErrorResponse(c, flow)
 		return
 	}
 
@@ -122,7 +136,7 @@ func (h *Handler) Login(c *gin.Context) {
 	authResult, err := h.authenticateSvc.Authenticate(ctx, flow, req.Connection, data)
 	if err != nil {
 		logger.Errorf("[Handler] 认证失败: %v", err)
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrAccessDenied, err.Error()))
+		h.errorResponse(c, autherrors.NewAccessDenied(err.Error()))
 		return
 	}
 
@@ -138,17 +152,17 @@ func (h *Handler) Login(c *gin.Context) {
 	user, isNewUser, err := h.cache.FindOrCreateUser(ctx, userReq)
 	if err != nil {
 		logger.Errorf("[Handler] 查找/创建用户失败: %v", err)
-		h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, "user management failed"))
+		h.errorResponse(c, autherrors.NewServerError("user management failed"))
 		return
 	}
 
 	// 4. 更新 flow
 	flow.SetAuthenticated(req.Connection, authResult.ProviderID, user, isNewUser)
 
-	// 5. 准备授权
+	// 5. 准备授权（检查身份要求）
 	if err := h.authorizeSvc.PrepareAuthorization(ctx, flow); err != nil {
 		logger.Errorf("[Handler] 准备授权失败: %v", err)
-		h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, err.Error()))
+		h.errorResponse(c, err)
 		return
 	}
 
@@ -156,7 +170,7 @@ func (h *Handler) Login(c *gin.Context) {
 	authCode, err := h.authorizeSvc.GenerateAuthCode(ctx, flow)
 	if err != nil {
 		logger.Errorf("[Handler] 生成授权码失败: %v", err)
-		h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, err.Error()))
+		h.errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
 	}
 
@@ -177,7 +191,7 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	// 清除 Cookie
-	c.SetCookie("auth-session", "", -1, "/", "", false, true)
+	clearAuthSessionCookie(c)
 
 	c.JSON(http.StatusOK, LoginResponse{
 		Code:        authCode.Code,
@@ -190,13 +204,13 @@ func (h *Handler) Login(c *gin.Context) {
 func (h *Handler) Token(c *gin.Context) {
 	var req authorize.TokenRequest
 	if err := c.ShouldBind(&req); err != nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, err.Error()))
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
 
 	resp, err := h.authorizeSvc.ExchangeToken(c.Request.Context(), &req)
 	if err != nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidGrant, err.Error()))
+		h.errorResponse(c, autherrors.NewInvalidGrant(err.Error()))
 		return
 	}
 
@@ -208,7 +222,7 @@ func (h *Handler) Token(c *gin.Context) {
 func (h *Handler) Revoke(c *gin.Context) {
 	var req RevokeRequest
 	if err := c.ShouldBind(&req); err != nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, err.Error()))
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
 
@@ -224,12 +238,12 @@ func (h *Handler) Revoke(c *gin.Context) {
 func (h *Handler) Logout(c *gin.Context) {
 	claims := GetClaims(c)
 	if claims == nil {
-		h.errorResponse(c, http.StatusUnauthorized, NewError(ErrInvalidToken, "not authenticated"))
+		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
 
 	if err := h.authorizeSvc.RevokeAllTokens(c.Request.Context(), claims.OpenID); err != nil {
-		h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, "failed to revoke tokens"))
+		h.errorResponse(c, autherrors.NewServerError("failed to revoke tokens"))
 		return
 	}
 
@@ -241,13 +255,13 @@ func (h *Handler) Logout(c *gin.Context) {
 func (h *Handler) UserInfo(c *gin.Context) {
 	claims := GetClaims(c)
 	if claims == nil {
-		h.errorResponse(c, http.StatusUnauthorized, NewError(ErrInvalidToken, "not authenticated"))
+		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
 
 	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), claims.OpenID, claims.Scope)
 	if err != nil {
-		h.errorResponse(c, http.StatusNotFound, NewError(ErrServerError, "user not found"))
+		h.errorResponse(c, autherrors.NewUserNotFound("user not found"))
 		return
 	}
 
@@ -259,13 +273,13 @@ func (h *Handler) UserInfo(c *gin.Context) {
 func (h *Handler) UpdateUserInfo(c *gin.Context) {
 	claims := GetClaims(c)
 	if claims == nil {
-		h.errorResponse(c, http.StatusUnauthorized, NewError(ErrInvalidToken, "not authenticated"))
+		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
 
 	var req UpdateUserInfoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, err.Error()))
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
 
@@ -274,7 +288,7 @@ func (h *Handler) UpdateUserInfo(c *gin.Context) {
 	// 返回更新后的用户信息
 	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), claims.OpenID, claims.Scope)
 	if err != nil {
-		h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, err.Error()))
+		h.errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
 	}
 
@@ -286,13 +300,13 @@ func (h *Handler) UpdateUserInfo(c *gin.Context) {
 func (h *Handler) JWKS(c *gin.Context) {
 	clientID := c.Query("client_id")
 	if clientID == "" {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, "client_id is required"))
+		h.errorResponse(c, autherrors.NewInvalidRequest("client_id is required"))
 		return
 	}
 
 	jwks, err := h.authorizeSvc.GetJWKS(c.Request.Context(), clientID)
 	if err != nil {
-		h.errorResponse(c, http.StatusNotFound, NewError(ErrServerError, err.Error()))
+		h.errorResponse(c, autherrors.NewClientNotFound(err.Error()))
 		return
 	}
 
@@ -306,12 +320,12 @@ func (h *Handler) SendEmailCode(c *gin.Context) {
 		Email string `json:"email" binding:"required,email"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, err.Error()))
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
 
 	if err := h.authenticateSvc.SendEmailCode(c.Request.Context(), req.Email); err != nil {
-		h.errorResponse(c, http.StatusInternalServerError, NewError(ErrServerError, err.Error()))
+		h.errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
 	}
 
@@ -322,7 +336,7 @@ func (h *Handler) SendEmailCode(c *gin.Context) {
 // 获取可用的身份提供方列表
 func (h *Handler) IDPs(c *gin.Context) {
 	// 尝试从 Cookie 获取 flowID
-	flowID, err := c.Cookie("auth-session")
+	flowID, err := getAuthSessionCookie(c)
 	if err != nil {
 		flowID = "" // Cookie 不存在时使用空字符串
 	}
@@ -331,8 +345,8 @@ func (h *Handler) IDPs(c *gin.Context) {
 
 	if flowID != "" {
 		// 如果有 flow，从 flow 获取
-		flow, err := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
-		if err == nil {
+		flow := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
+		if !flow.HasError() {
 			connections = h.authenticateSvc.GetAvailableConnections(flow)
 		}
 	}
@@ -341,14 +355,14 @@ func (h *Handler) IDPs(c *gin.Context) {
 		// 如果没有 flow，根据 client_id 获取
 		clientID := c.Query("client_id")
 		if clientID == "" {
-			h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, "client_id is required"))
+			h.errorResponse(c, autherrors.NewInvalidRequest("client_id is required"))
 			return
 		}
 
 		// 获取应用信息
 		app, err := h.cache.GetApplication(c.Request.Context(), clientID)
 		if err != nil {
-			h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidClient, "application not found"))
+			h.errorResponse(c, autherrors.NewClientNotFound("application not found"))
 			return
 		}
 
@@ -381,30 +395,30 @@ func (h *Handler) IDPs(c *gin.Context) {
 func (h *Handler) LoginWithPreCheck(c *gin.Context) {
 	var req types.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, err.Error()))
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
 
 	// 从 Cookie 获取 flowID
-	flowID, err := c.Cookie("auth-session")
+	flowID, err := getAuthSessionCookie(c)
 	if err != nil || flowID == "" {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, "missing auth-session cookie"))
+		h.errorResponse(c, autherrors.NewInvalidRequest("missing auth-session cookie"))
 		return
 	}
 
 	ctx := c.Request.Context()
 
 	// 1. 获取 AuthFlow
-	flow, err := h.authenticateSvc.GetAndValidateFlow(ctx, flowID)
-	if err != nil {
-		h.errorResponse(c, http.StatusPreconditionFailed, NewError(ErrInvalidRequest, "session not found or expired"))
+	flow := h.authenticateSvc.GetAndValidateFlow(ctx, flowID)
+	if flow.HasError() {
+		h.flowErrorResponse(c, flow)
 		return
 	}
 
 	// 2. 获取 connection 配置
 	connectionConfig := flow.ConnectionMap[req.Connection]
 	if connectionConfig == nil {
-		h.errorResponse(c, http.StatusBadRequest, NewError(ErrInvalidRequest, "invalid connection"))
+		h.errorResponse(c, autherrors.NewInvalidRequest("invalid connection"))
 		return
 	}
 
@@ -423,8 +437,23 @@ func (h *Handler) LoginWithPreCheck(c *gin.Context) {
 	h.Login(c)
 }
 
-func (h *Handler) errorResponse(c *gin.Context, status int, err *Error) {
-	c.JSON(status, err)
+// errorResponse 统一错误响应
+func (h *Handler) errorResponse(c *gin.Context, err error) {
+	authErr := autherrors.ToAuthError(err)
+	c.JSON(authErr.HTTPStatus, authErr)
+}
+
+// flowErrorResponse 从 AuthFlow 中提取错误并响应
+func (h *Handler) flowErrorResponse(c *gin.Context, flow *types.AuthFlow) {
+	if flow.Error == nil {
+		h.errorResponse(c, autherrors.NewServerError("unknown error"))
+		return
+	}
+	c.JSON(flow.Error.HTTPStatus, map[string]any{
+		"error":             flow.Error.Code,
+		"error_description": flow.Error.Description,
+		"data":              flow.Error.Data,
+	})
 }
 
 // checkPreAuthRequirement 检查前置认证需求
@@ -457,6 +486,140 @@ func (h *Handler) handleInteractionRequired(c *gin.Context, require string, conn
 }
 
 // ==================== 辅助函数 ====================
+
+// setAuthSessionCookie 设置 Auth 会话 Cookie
+func setAuthSessionCookie(c *gin.Context, value string) {
+	c.SetCookie(AuthSessionCookie, value,
+		config.GetAuthCookieMaxAge(),
+		config.GetAuthCookiePath(),
+		config.GetAuthCookieDomain(),
+		config.GetAuthCookieSecure(),
+		config.GetAuthCookieHTTPOnly())
+}
+
+// clearAuthSessionCookie 清除 Auth 会话 Cookie
+func clearAuthSessionCookie(c *gin.Context) {
+	c.SetCookie(AuthSessionCookie, "", -1,
+		config.GetAuthCookiePath(),
+		config.GetAuthCookieDomain(),
+		config.GetAuthCookieSecure(),
+		config.GetAuthCookieHTTPOnly())
+}
+
+// getAuthSessionCookie 获取 Auth 会话 Cookie
+func getAuthSessionCookie(c *gin.Context) (string, error) {
+	return c.Cookie(AuthSessionCookie)
+}
+
+// ==================== 重定向控制 ====================
+
+// forwardNext 根据 AuthFlow 状态决定下一步重定向
+//
+// OAuth 2.0 重定向状态码规范 (RFC 6749):
+//   - 302 Found: 临时重定向，用于 GET 请求后的重定向（如 /authorize -> /login）
+//   - 303 See Other: POST 请求后重定向到 GET（如表单提交后跳转，防止重复提交）
+//
+// 根据 flow.State 决定跳转目标:
+//   - initialized -> login（需要登录）
+//   - authenticated -> consent（需要授权同意，如果需要的话）
+//   - authorized -> complete（跳转回应用）
+//   - failed -> error（显示错误）
+//
+// 注意: 301 永久重定向不应用于 OAuth，会被浏览器缓存导致问题
+func forwardNext(c *gin.Context, flow *types.AuthFlow) {
+	var targetURL string
+
+	// 如果有错误，跳转到错误页面
+	if flow.HasError() {
+		targetURL = config.GetAuthEndpointError()
+		targetURL += "?error=" + flow.Error.Code
+		if flow.Error.Description != "" {
+			targetURL += "&error_description=" + flow.Error.Description
+		}
+		redirect(c, targetURL)
+		return
+	}
+
+	// 根据 flow 状态决定下一步
+	switch flow.State {
+	case types.FlowStateInitialized:
+		// 需要登录
+		targetURL = config.GetAuthEndpointLogin()
+
+	case types.FlowStateAuthenticated:
+		// 已认证，检查是否需要授权同意
+		// TODO: 根据 prompt 参数和首次授权判断是否需要 consent 页面
+		// 目前直接跳过 consent
+		targetURL = config.GetAuthEndpointConsent()
+
+	case types.FlowStateAuthorized, types.FlowStateCompleted:
+		// 已授权/已完成，准备跳转回应用
+		// 这种情况通常由 forwardToApp 处理，这里作为兜底
+		targetURL = flow.Request.RedirectURI
+
+	default:
+		// 默认跳转到登录
+		targetURL = config.GetAuthEndpointLogin()
+	}
+
+	redirect(c, targetURL)
+}
+
+// forwardToStage 跳转到指定阶段（用于强制跳转到特定页面）
+func forwardToStage(c *gin.Context, stage AuthStage) {
+	var targetURL string
+	switch stage {
+	case StageLogin:
+		targetURL = config.GetAuthEndpointLogin()
+	case StageConsent:
+		targetURL = config.GetAuthEndpointConsent()
+	case StageMFA:
+		targetURL = config.GetAuthEndpointMFA()
+	case StageCallback:
+		targetURL = config.GetAuthEndpointCallback()
+	case StageError:
+		targetURL = config.GetAuthEndpointError()
+	default:
+		targetURL = config.GetAuthEndpointLogin()
+	}
+	redirect(c, targetURL)
+}
+
+// redirect 执行重定向，根据请求方法选择状态码
+func redirect(c *gin.Context, targetURL string) {
+	// 根据请求方法选择合适的重定向状态码
+	// GET 请求 -> 302 Found
+	// POST/PUT/DELETE 请求 -> 303 See Other（防止表单重复提交）
+	statusCode := http.StatusFound // 302
+	if c.Request.Method != http.MethodGet {
+		statusCode = http.StatusSeeOther // 303
+	}
+	c.Redirect(statusCode, targetURL)
+}
+
+// forwardToApp 重定向回应用（授权完成后）
+//
+// 使用 302 Found 重定向回 redirect_uri，携带授权码和 state
+func forwardToApp(c *gin.Context, redirectURI, code, state string) {
+	targetURL := redirectURI + "?code=" + code
+	if state != "" {
+		targetURL += "&state=" + state
+	}
+
+	// 授权完成后始终使用 302，因为这是从 POST /login 完成后的跳转
+	// 但实际返回给前端的是 JSON，前端再执行跳转
+	// 如果是服务端直接重定向，使用 302
+	c.Redirect(http.StatusFound, targetURL)
+}
+
+// forwardError 重定向到错误页面
+func forwardError(c *gin.Context, errorCode, errorDesc string) {
+	targetURL := config.GetAuthEndpointError() + "?error=" + errorCode
+	if errorDesc != "" {
+		targetURL += "&error_description=" + errorDesc
+	}
+	redirect(c, targetURL)
+}
 
 // GetClaims 从上下文获取用户 Claims
 func GetClaims(c *gin.Context) *token.Claims {

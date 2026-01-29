@@ -84,7 +84,7 @@ func (h *Handler) GetHotRecipes(c *gin.Context) {
 func (h *Handler) loadBannersFromConfig() []BannerItem {
 	var banners []BannerItem
 
-	bannersConfig := config.Get("home.banners")
+	bannersConfig := config.Zwei().Get("home.banners")
 	if bannersConfig == nil {
 		return banners
 	}

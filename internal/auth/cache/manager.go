@@ -42,21 +42,11 @@ type Manager struct {
 	applicationCache *ristretto.Cache[string, *models.ApplicationWithKey]
 	serviceCache     *ristretto.Cache[string, *models.ServiceWithKey]
 	relationCache    *ristretto.Cache[string, []models.ApplicationServiceRelation]
+	appServiceCache  *ristretto.Cache[string, bool] // 复合 key 缓存：app_id:service_id -> bool
 	userCache        *ristretto.Cache[string, *models.UserWithDecrypted]
 
 	// Redis 客户端（用于分布式数据）
 	redis pkgstore.RedisClient
-
-	// Key 前缀
-	authFlowPrefix     string
-	authCodePrefix     string
-	refreshTokenPrefix string
-	userTokenPrefix    string
-	otpPrefix          string
-
-	// TTL 配置
-	authFlowTTL time.Duration
-	authCodeTTL time.Duration
 }
 
 // ManagerConfig 配置
@@ -64,15 +54,6 @@ type ManagerConfig struct {
 	HermesSvc *hermes.Service
 	UserSvc   *hermes.UserService
 	Redis     pkgstore.RedisClient
-
-	// 可选配置
-	AuthFlowPrefix     string
-	AuthCodePrefix     string
-	RefreshTokenPrefix string
-	UserTokenPrefix    string
-	OTPPrefix          string
-	AuthFlowTTL        time.Duration
-	AuthCodeTTL        time.Duration
 }
 
 // NewManager 创建缓存管理器
@@ -81,35 +62,12 @@ func NewManager(cfg *ManagerConfig) *Manager {
 		hermesSvc: cfg.HermesSvc,
 		userSvc:   cfg.UserSvc,
 		redis:     cfg.Redis,
-
-		authFlowPrefix:     defaultString(cfg.AuthFlowPrefix, "auth:flow:"),
-		authCodePrefix:     defaultString(cfg.AuthCodePrefix, "auth:code:"),
-		refreshTokenPrefix: defaultString(cfg.RefreshTokenPrefix, "auth:rt:"),
-		userTokenPrefix:    defaultString(cfg.UserTokenPrefix, "auth:user:rt:"),
-		otpPrefix:          defaultString(cfg.OTPPrefix, "auth:otp:"),
-
-		authFlowTTL: defaultDuration(cfg.AuthFlowTTL, 10*time.Minute),
-		authCodeTTL: defaultDuration(cfg.AuthCodeTTL, 5*time.Minute),
 	}
 
 	// 创建本地缓存
 	cm.initLocalCaches()
 
 	return cm
-}
-
-func defaultString(val, def string) string {
-	if val == "" {
-		return def
-	}
-	return val
-}
-
-func defaultDuration(val, def time.Duration) time.Duration {
-	if val == 0 {
-		return def
-	}
-	return val
 }
 
 // initLocalCaches 初始化本地缓存
@@ -166,6 +124,19 @@ func (cm *Manager) initLocalCaches() {
 		cm.relationCache = relationCache
 	}
 
+	// App-Service 复合 key 缓存（用于快速查询 app_id + service_id）
+	maxCost, numCounters, bufferItems = getCacheConfig("app-service")
+	appServiceCache, err := ristretto.NewCache(&ristretto.Config[string, bool]{
+		NumCounters: numCounters,
+		MaxCost:     maxCost,
+		BufferItems: bufferItems,
+	})
+	if err != nil {
+		logger.Errorf("[Manager] 创建 App-Service 缓存失败: %v", err)
+	} else {
+		cm.appServiceCache = appServiceCache
+	}
+
 	// User cache
 	maxCost, numCounters, bufferItems = getCacheConfig("user")
 	userCache, err := ristretto.NewCache(&ristretto.Config[string, *models.UserWithDecrypted]{
@@ -193,6 +164,9 @@ func (cm *Manager) Close() {
 	}
 	if cm.relationCache != nil {
 		cm.relationCache.Close()
+	}
+	if cm.appServiceCache != nil {
+		cm.appServiceCache.Close()
 	}
 	if cm.userCache != nil {
 		cm.userCache.Close()
@@ -279,20 +253,38 @@ func (cm *Manager) GetDomain(ctx context.Context, domainID string) (*models.Doma
 	return result, nil
 }
 
-// CheckAppServiceRelation 检查应用是否有权访问服务
+// CheckAppServiceRelation 检查应用是否有权访问服务（使用复合 key 缓存优化）
 func (cm *Manager) CheckAppServiceRelation(ctx context.Context, appID, serviceID string) (bool, error) {
+	// 1. 先查复合 key 缓存
+	cacheKey := appID + ":" + serviceID
+	if cm.appServiceCache != nil {
+		if cached, ok := cm.appServiceCache.Get(cacheKey); ok {
+			return cached, nil
+		}
+	}
+
+	// 2. 查数据库（通过 hermes 服务）
 	relations, err := cm.GetAppServiceRelations(ctx, appID)
 	if err != nil {
 		return false, err
 	}
 
+	// 3. 检查关系是否存在
+	exists := false
 	for _, rel := range relations {
 		if rel.ServiceID == serviceID {
-			return true, nil
+			exists = true
+			break
 		}
 	}
 
-	return false, nil
+	// 4. 存入复合 key 缓存
+	if cm.appServiceCache != nil {
+		ttl := GetTTL("app-service")
+		cm.appServiceCache.SetWithTTL(cacheKey, exists, 1, ttl)
+	}
+
+	return exists, nil
 }
 
 // GetAppServiceRelations 获取应用可访问的服务关系
@@ -367,6 +359,22 @@ func (cm *Manager) GetUserByIdentity(ctx context.Context, idp, providerID string
 	return result, nil
 }
 
+// GetUserIdentities 获取用户已绑定的身份类型列表
+func (cm *Manager) GetUserIdentities(ctx context.Context, openID string) ([]string, error) {
+	// 从 UserService 获取用户的身份绑定信息
+	identities, err := cm.userSvc.GetIdentities(ctx, openID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 提取 IDP 类型列表
+	idpTypes := make([]string, 0, len(identities))
+	for _, identity := range identities {
+		idpTypes = append(idpTypes, identity.IDP)
+	}
+	return idpTypes, nil
+}
+
 // FindOrCreateUser 查找或创建用户
 func (cm *Manager) FindOrCreateUser(ctx context.Context, req *models.FindOrCreateUserRequest) (*models.UserWithDecrypted, bool, error) {
 	user, isNew, err := cm.userSvc.FindOrCreate(ctx, req)
@@ -403,16 +411,16 @@ type AuthFlow struct {
 }
 
 // SaveAuthFlow 保存 AuthFlow
-func (cm *Manager) SaveAuthFlow(ctx context.Context, flowID string, data []byte, ttl time.Duration) error {
-	if ttl == 0 {
-		ttl = cm.authFlowTTL
-	}
-	return cm.redis.Set(ctx, cm.authFlowPrefix+flowID, string(data), ttl)
+func (cm *Manager) SaveAuthFlow(ctx context.Context, flowID string, data []byte) error {
+	prefix := GetKeyPrefix("auth_flow")
+	expiresIn := GetAuthFlowExpiresIn()
+	return cm.redis.Set(ctx, prefix+flowID, string(data), expiresIn)
 }
 
 // GetAuthFlow 获取 AuthFlow
 func (cm *Manager) GetAuthFlow(ctx context.Context, flowID string) ([]byte, error) {
-	data, err := cm.redis.Get(ctx, cm.authFlowPrefix+flowID)
+	prefix := GetKeyPrefix("auth_flow")
+	data, err := cm.redis.Get(ctx, prefix+flowID)
 	if err != nil {
 		return nil, ErrAuthFlowNotFound
 	}
@@ -421,12 +429,13 @@ func (cm *Manager) GetAuthFlow(ctx context.Context, flowID string) ([]byte, erro
 
 // DeleteAuthFlow 删除 AuthFlow（设置短 TTL 让其自然过期）
 func (cm *Manager) DeleteAuthFlow(ctx context.Context, flowID string) error {
+	prefix := GetKeyPrefix("auth_flow")
 	// 设置 5 秒后过期，而不是立即删除
-	data, err := cm.redis.Get(ctx, cm.authFlowPrefix+flowID)
+	data, err := cm.redis.Get(ctx, prefix+flowID)
 	if err != nil {
 		return nil // 不存在就算了
 	}
-	return cm.redis.Set(ctx, cm.authFlowPrefix+flowID, data, 5*time.Second)
+	return cm.redis.Set(ctx, prefix+flowID, data, 5*time.Second)
 }
 
 // ==================== AuthCode（Redis）====================
@@ -443,20 +452,24 @@ type AuthorizationCode struct {
 
 // SaveAuthCode 保存授权码
 func (cm *Manager) SaveAuthCode(ctx context.Context, code *AuthorizationCode) error {
+	prefix := GetKeyPrefix("auth_code")
+	expiresIn := GetAuthCodeExpiresIn()
+
 	data, err := json.Marshal(code)
 	if err != nil {
 		return err
 	}
 	ttl := time.Until(code.ExpiresAt)
 	if ttl <= 0 {
-		ttl = cm.authCodeTTL
+		ttl = expiresIn
 	}
-	return cm.redis.Set(ctx, cm.authCodePrefix+code.Code, string(data), ttl)
+	return cm.redis.Set(ctx, prefix+code.Code, string(data), ttl)
 }
 
 // GetAuthCode 获取授权码
 func (cm *Manager) GetAuthCode(ctx context.Context, code string) (*AuthorizationCode, error) {
-	data, err := cm.redis.Get(ctx, cm.authCodePrefix+code)
+	prefix := GetKeyPrefix("auth_code")
+	data, err := cm.redis.Get(ctx, prefix+code)
 	if err != nil {
 		return nil, ErrAuthCodeNotFound
 	}
@@ -479,6 +492,7 @@ func (cm *Manager) GetAuthCode(ctx context.Context, code string) (*Authorization
 
 // MarkAuthCodeUsed 标记授权码已使用
 func (cm *Manager) MarkAuthCodeUsed(ctx context.Context, code string) error {
+	prefix := GetKeyPrefix("auth_code")
 	authCode, err := cm.GetAuthCode(ctx, code)
 	if err != nil {
 		return err
@@ -495,19 +509,22 @@ func (cm *Manager) MarkAuthCodeUsed(ctx context.Context, code string) error {
 		remaining = time.Second
 	}
 
-	return cm.redis.Set(ctx, cm.authCodePrefix+code, string(data), remaining)
+	return cm.redis.Set(ctx, prefix+code, string(data), remaining)
 }
 
 // ==================== OTP（Redis）====================
 
 // SaveOTP 保存验证码
-func (cm *Manager) SaveOTP(ctx context.Context, key, code string, ttl time.Duration) error {
-	return cm.redis.Set(ctx, cm.otpPrefix+key, code, ttl)
+func (cm *Manager) SaveOTP(ctx context.Context, key, code string) error {
+	prefix := GetKeyPrefix("otp")
+	expiresIn := GetOTPExpiresIn()
+	return cm.redis.Set(ctx, prefix+key, code, expiresIn)
 }
 
 // GetOTP 获取验证码
 func (cm *Manager) GetOTP(ctx context.Context, key string) (string, error) {
-	code, err := cm.redis.Get(ctx, cm.otpPrefix+key)
+	prefix := GetKeyPrefix("otp")
+	code, err := cm.redis.Get(ctx, prefix+key)
 	if err != nil {
 		return "", ErrOTPNotFound
 	}
@@ -516,7 +533,8 @@ func (cm *Manager) GetOTP(ctx context.Context, key string) (string, error) {
 
 // DeleteOTP 删除验证码
 func (cm *Manager) DeleteOTP(ctx context.Context, key string) error {
-	return cm.redis.Del(ctx, cm.otpPrefix+key)
+	prefix := GetKeyPrefix("otp")
+	return cm.redis.Del(ctx, prefix+key)
 }
 
 // VerifyOTP 验证并删除验证码
@@ -552,6 +570,9 @@ func (r *RefreshToken) IsValid() bool {
 
 // SaveRefreshToken 保存刷新令牌
 func (cm *Manager) SaveRefreshToken(ctx context.Context, token *RefreshToken) error {
+	rtPrefix := GetKeyPrefix("refresh_token")
+	userPrefix := GetKeyPrefix("user_token")
+
 	data, err := json.Marshal(token)
 	if err != nil {
 		return err
@@ -562,17 +583,18 @@ func (cm *Manager) SaveRefreshToken(ctx context.Context, token *RefreshToken) er
 		ttl = time.Second
 	}
 
-	if err := cm.redis.Set(ctx, cm.refreshTokenPrefix+token.Token, string(data), ttl); err != nil {
+	if err := cm.redis.Set(ctx, rtPrefix+token.Token, string(data), ttl); err != nil {
 		return err
 	}
 
 	// 添加到用户的 token 集合
-	return cm.redis.SAdd(ctx, cm.userTokenPrefix+token.UserID, token.Token)
+	return cm.redis.SAdd(ctx, userPrefix+token.UserID, token.Token)
 }
 
 // GetRefreshToken 获取刷新令牌
 func (cm *Manager) GetRefreshToken(ctx context.Context, token string) (*RefreshToken, error) {
-	data, err := cm.redis.Get(ctx, cm.refreshTokenPrefix+token)
+	prefix := GetKeyPrefix("refresh_token")
+	data, err := cm.redis.Get(ctx, prefix+token)
 	if err != nil {
 		return nil, ErrRefreshTokenNotFound
 	}
@@ -595,7 +617,8 @@ func (cm *Manager) GetRefreshToken(ctx context.Context, token string) (*RefreshT
 
 // RevokeRefreshToken 撤销刷新令牌
 func (cm *Manager) RevokeRefreshToken(ctx context.Context, token string) error {
-	data, err := cm.redis.Get(ctx, cm.refreshTokenPrefix+token)
+	prefix := GetKeyPrefix("refresh_token")
+	data, err := cm.redis.Get(ctx, prefix+token)
 	if err != nil {
 		return nil
 	}
@@ -616,12 +639,13 @@ func (cm *Manager) RevokeRefreshToken(ctx context.Context, token string) error {
 		remaining = time.Second
 	}
 
-	return cm.redis.Set(ctx, cm.refreshTokenPrefix+token, string(newData), remaining)
+	return cm.redis.Set(ctx, prefix+token, string(newData), remaining)
 }
 
 // RevokeUserRefreshTokens 撤销用户所有刷新令牌
 func (cm *Manager) RevokeUserRefreshTokens(ctx context.Context, userID string) error {
-	tokens, err := cm.redis.SMembers(ctx, cm.userTokenPrefix+userID)
+	prefix := GetKeyPrefix("user_token")
+	tokens, err := cm.redis.SMembers(ctx, prefix+userID)
 	if err != nil {
 		return nil
 	}
@@ -637,7 +661,8 @@ func (cm *Manager) RevokeUserRefreshTokens(ctx context.Context, userID string) e
 
 // ListUserRefreshTokens 列出用户的刷新令牌
 func (cm *Manager) ListUserRefreshTokens(ctx context.Context, userID, clientID string) ([]*RefreshToken, error) {
-	tokens, err := cm.redis.SMembers(ctx, cm.userTokenPrefix+userID)
+	prefix := GetKeyPrefix("user_token")
+	tokens, err := cm.redis.SMembers(ctx, prefix+userID)
 	if err != nil {
 		return nil, nil
 	}
@@ -658,9 +683,9 @@ func (cm *Manager) ListUserRefreshTokens(ctx context.Context, userID, clientID s
 
 // ==================== 辅助函数 ====================
 
-// getCacheConfig 从全局 viper 获取指定 cache 类型的配置
+// getCacheConfig 从 Auth 配置获取指定 cache 类型的配置
 func getCacheConfig(cacheType string) (maxCost int64, numCounters int64, bufferItems int64) {
-	v := config.V()
+	cfg := config.Auth()
 	prefix := "auth.cache." + cacheType + "."
 
 	// 默认值
@@ -668,19 +693,19 @@ func getCacheConfig(cacheType string) (maxCost int64, numCounters int64, bufferI
 	defaultNumCounters := int64(10000)
 	defaultBufferItems := int64(64)
 
-	if val := v.GetInt64(prefix + "cache-size"); val > 0 {
+	if val := cfg.GetInt64(prefix + "cache-size"); val > 0 {
 		maxCost = val
 	} else {
 		maxCost = defaultMaxCost
 	}
 
-	if val := v.GetInt64(prefix + "num-counters"); val > 0 {
+	if val := cfg.GetInt64(prefix + "num-counters"); val > 0 {
 		numCounters = val
 	} else {
 		numCounters = defaultNumCounters
 	}
 
-	if val := v.GetInt64(prefix + "buffer-items"); val > 0 {
+	if val := cfg.GetInt64(prefix + "buffer-items"); val > 0 {
 		bufferItems = val
 	} else {
 		bufferItems = defaultBufferItems
@@ -689,38 +714,15 @@ func getCacheConfig(cacheType string) (maxCost int64, numCounters int64, bufferI
 	return maxCost, numCounters, bufferItems
 }
 
-// GetTTL 从全局 viper 获取指定 cache 类型的 TTL
+// GetTTL 从 Auth 配置获取指定 cache 类型的 TTL
 func GetTTL(cacheType string) time.Duration {
-	v := config.V()
+	cfg := config.Auth()
 	prefix := "auth.cache." + cacheType + "."
 	defaultTTL := 2 * time.Minute
 
-	if ttl := v.GetDuration(prefix + "ttl"); ttl > 0 {
+	if ttl := cfg.GetDuration(prefix + "ttl"); ttl > 0 {
 		return ttl
 	}
 	return defaultTTL
 }
 
-// GetKeyPrefix 从全局 viper 获取指定 cache 类型的 key 前缀
-func GetKeyPrefix(cacheType string) string {
-	v := config.V()
-	prefix := "auth.cache." + cacheType + "."
-
-	defaultPrefixes := map[string]string{
-		"domain":                       "domain:",
-		"application":                  "app:",
-		"service":                      "svc:",
-		"user":                         "user:",
-		"application-service-relation": "app-svc-rel:",
-	}
-
-	if keyPrefix := v.GetString(prefix + "key-prefix"); keyPrefix != "" {
-		return keyPrefix
-	}
-
-	if defaultPrefix, ok := defaultPrefixes[cacheType]; ok {
-		return defaultPrefix
-	}
-
-	return cacheType + ":"
-}

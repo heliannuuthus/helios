@@ -22,8 +22,9 @@ const (
 // CORS 中间件
 func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		cfg := config.Zwei()
 		origin := c.GetHeader(headerOrigin)
-		origins := config.GetStringSlice("cors.origins")
+		origins := cfg.GetStringSlice("cors.origins")
 
 		// 检查 origin 是否在允许列表中
 		allowAll := false
@@ -47,7 +48,7 @@ func CORS() gin.HandlerFunc {
 
 		// 允许的方法
 		methods := defaultAllowMethods
-		allowMethods := config.GetStringSlice("cors.allow_methods")
+		allowMethods := cfg.GetStringSlice("cors.allow_methods")
 		if len(allowMethods) > 0 && allowMethods[0] != wildcard {
 			methods = ""
 			for i, m := range allowMethods {
@@ -61,7 +62,7 @@ func CORS() gin.HandlerFunc {
 
 		// 允许的头
 		headers := defaultAllowHeaders
-		allowHeaders := config.GetStringSlice("cors.allow_headers")
+		allowHeaders := cfg.GetStringSlice("cors.allow_headers")
 		if len(allowHeaders) > 0 && allowHeaders[0] != wildcard {
 			headers = ""
 			for i, h := range allowHeaders {
@@ -74,7 +75,7 @@ func CORS() gin.HandlerFunc {
 		c.Header(headerAllowHeaders, headers)
 
 		// 允许携带凭证
-		if config.GetBool("cors.allow_credentials") {
+		if cfg.GetBool("cors.allow_credentials") {
 			c.Header(headerAllowCredentials, "true")
 		}
 

@@ -89,12 +89,28 @@ verify-key = ""  # 支付宝公钥（PKCS8 DER Base64，上传应用公钥后支
 
 # 认证配置
 [auth]
-issuer = "zwei.heliannuuthus.com"
-endpoint = "https://zwei.heliannuuthus.com"  # Auth 服务端点（用于验证 token，/pubkeys?client_id= 路径自动拼接）
+issuer = "https://auth.heliannuuthus.com/api"  # OIDC issuer URL
+endpoint = "https://auth.heliannuuthus.com"    # Auth 服务端点
 expires-in = 7200           # access_token 过期时间(秒)，2小时
-refresh-expires-in = 365     # refresh_token 过期时间(天)，1年
-max-refresh-token = 10       # 每用户最大 refresh_token 数
-service-url = "http://localhost:18000"  # Auth 服务地址（zwei 模块调用时使用）
+refresh-expires-in = 365    # refresh_token 过期时间(天)，1年
+max-refresh-token = 10      # 每用户最大 refresh_token 数
+service-url = "http://localhost:18000"  # Auth 服务地址（内部调用）
+
+# Cookie 配置（Auth 模块登录会话）
+[auth.cookie]
+domain = ""                 # Cookie 域名（留空则从 issuer 自动提取）
+path = "/"                  # Cookie 路径
+secure = true               # 是否仅 HTTPS
+http-only = true            # 是否仅 HTTP（防 XSS）
+max-age = 600               # 最大存活时间（秒），默认 10 分钟
+
+# 端点配置（Auth 模块登录页面路径）
+[auth.endpoints]
+login = "/login"            # 登录页面
+consent = "/consent"        # 授权同意页面
+mfa = "/mfa"                # MFA 验证页面
+error = "/error"            # 错误页面
+callback = "/callback"      # IDP 回调路径
 
 # 支持的 audience 及其解密密钥（用于后端服务验证 token）
 # 每个 key 是 audience（服务 ID），value 是 base64url 编码的 JWK JSON

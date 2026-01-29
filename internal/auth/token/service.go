@@ -25,7 +25,7 @@ type Service struct {
 // NewService 创建 Token 服务
 func NewService(cacheManager *cache.Manager) *Service {
 	return &Service{
-		issuerName: config.GetIssuer(),
+		issuerName: config.GetAuthIssuer(),
 		cache:      cacheManager,
 	}
 }

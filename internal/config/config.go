@@ -3,79 +3,76 @@ package config
 import (
 	"errors"
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 )
 
+// Cfg 配置实例包装器
+type Cfg struct {
+	*viper.Viper
+	name     string
+	snapshot map[string]any
+}
+
+// 三个模块的配置单例
 var (
-	v        *viper.Viper
-	mu       sync.RWMutex
-	snapshot map[string]any // 配置快照，用于检测变更
+	zweiCfg   *Cfg
+	hermesCfg *Cfg
+	authCfg   *Cfg
 )
 
-// Load 加载配置
-func Load() {
-	if v != nil {
-		return
-	}
+// newCfg 创建新的配置实例
+func newCfg(name, configFile string) *Cfg {
+	v := viper.New()
 
-	v = viper.New()
-
-	// 设置配置文件
-	v.SetConfigName("config")
+	v.SetConfigName(configFile)
 	v.SetConfigType("toml")
 	v.AddConfigPath(".")
 	v.AddConfigPath("./config")
 
 	// 设置环境变量前缀和自动绑定
-	v.SetEnvPrefix("CHOOSY")
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	prefix := strings.ToUpper(name)
+	v.SetEnvPrefix(prefix)
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	v.AutomaticEnv()
-
-	// 特殊处理：APP_ENV 环境变量（不带前缀，直接读取）
-	// Dockerfile 设置的 ENV APP_ENV=prod 会直接作为环境变量
-	// 也支持 CHOOSY_APP_ENV（通过 AutomaticEnv 自动绑定）
-	if appEnv := os.Getenv("APP_ENV"); appEnv != "" {
-		v.Set("APP_ENV", appEnv)
-	}
 
 	// 读取配置文件
 	if err := v.ReadInConfig(); err != nil {
 		var configFileNotFoundErr viper.ConfigFileNotFoundError
 		if !errors.As(err, &configFileNotFoundErr) {
-			panic("读取配置文件失败: " + err.Error())
+			panic(fmt.Sprintf("[%s] 读取配置文件失败: %s", name, err.Error()))
 		}
-		panic("配置文件不存在，请创建 config.toml")
+		panic(fmt.Sprintf("[%s] 配置文件 %s.toml 不存在", name, configFile))
 	}
 
-	// 保存初始快照
-	snapshot = v.AllSettings()
+	cfg := &Cfg{
+		Viper:    v,
+		name:     name,
+		snapshot: v.AllSettings(),
+	}
 
 	// 启用热更新
 	v.WatchConfig()
 	v.OnConfigChange(func(e fsnotify.Event) {
-		mu.Lock()
-		defer mu.Unlock()
-
 		newSettings := v.AllSettings()
-		changes := detectChanges("", snapshot, newSettings)
+		changes := detectChanges("", cfg.snapshot, newSettings)
 
 		if len(changes) > 0 {
-			fmt.Printf("[config] 配置热更新: %s\n", e.Name)
+			fmt.Printf("[%s] 配置热更新: %s\n", name, e.Name)
 			for _, change := range changes {
-				fmt.Printf("[config]   %s (已更新)\n", change.Key)
+				fmt.Printf("[%s]   %s (已更新)\n", name, change.Key)
 			}
 		}
 
-		// 更新快照
-		snapshot = newSettings
+		cfg.snapshot = newSettings
 	})
+
+	fmt.Printf("[%s] 配置加载成功: %s\n", name, v.ConfigFileUsed())
+	return cfg
 }
 
 // Change 配置变更
@@ -89,7 +86,6 @@ type Change struct {
 func detectChanges(prefix string, old, new map[string]any) []Change {
 	var changes []Change
 
-	// 检查新增和修改的 key
 	for k, newVal := range new {
 		key := k
 		if prefix != "" {
@@ -102,7 +98,6 @@ func detectChanges(prefix string, old, new map[string]any) []Change {
 			continue
 		}
 
-		// 递归检查嵌套 map
 		if newMap, ok := newVal.(map[string]any); ok {
 			if oldMap, ok := oldVal.(map[string]any); ok {
 				changes = append(changes, detectChanges(key, oldMap, newMap)...)
@@ -110,13 +105,11 @@ func detectChanges(prefix string, old, new map[string]any) []Change {
 			}
 		}
 
-		// 值比较
 		if !reflect.DeepEqual(oldVal, newVal) {
 			changes = append(changes, Change{Key: key, OldValue: oldVal, NewValue: newVal})
 		}
 	}
 
-	// 检查删除的 key
 	for k, oldVal := range old {
 		key := k
 		if prefix != "" {
@@ -131,21 +124,67 @@ func detectChanges(prefix string, old, new map[string]any) []Change {
 	return changes
 }
 
-// V 返回 viper 实例
-func V() *viper.Viper {
-	if v == nil {
-		Load()
-	}
-	return v
+// Load 加载所有配置
+func Load() {
+	LoadZwei()
+	LoadHermes()
+	LoadAuth()
 }
 
-// 便捷方法（viper 内部已线程安全）
-func GetString(key string) string                     { return V().GetString(key) }
-func GetInt(key string) int                           { return V().GetInt(key) }
-func GetInt64(key string) int64                       { return V().GetInt64(key) }
-func GetBool(key string) bool                         { return V().GetBool(key) }
-func GetStringSlice(key string) []string              { return V().GetStringSlice(key) }
-func GetStringMap(key string) map[string]any          { return V().GetStringMap(key) }
-func GetStringMapString(key string) map[string]string { return V().GetStringMapString(key) }
-func GetDuration(key string) time.Duration            { return V().GetDuration(key) }
-func Get(key string) any                              { return V().Get(key) }
+// LoadZwei 加载 Zwei 配置
+func LoadZwei() {
+	if zweiCfg != nil {
+		return
+	}
+	zweiCfg = newCfg("zwei", "zwei.config")
+}
+
+// LoadHermes 加载 Hermes 配置
+func LoadHermes() {
+	if hermesCfg != nil {
+		return
+	}
+	hermesCfg = newCfg("hermes", "hermes.config")
+}
+
+// LoadAuth 加载 Auth 配置
+func LoadAuth() {
+	if authCfg != nil {
+		return
+	}
+	authCfg = newCfg("auth", "auth.config")
+}
+
+// Zwei 返回 Zwei 配置单例
+func Zwei() *Cfg {
+	if zweiCfg == nil {
+		LoadZwei()
+	}
+	return zweiCfg
+}
+
+// Hermes 返回 Hermes 配置单例
+func Hermes() *Cfg {
+	if hermesCfg == nil {
+		LoadHermes()
+	}
+	return hermesCfg
+}
+
+// Auth 返回 Auth 配置单例
+func Auth() *Cfg {
+	if authCfg == nil {
+		LoadAuth()
+	}
+	return authCfg
+}
+
+// Name 返回配置名称
+func (c *Cfg) Name() string {
+	return c.name
+}
+
+// GetDuration 获取 Duration 类型配置（覆盖 viper 的方法以支持热更新）
+func (c *Cfg) GetDuration(key string) time.Duration {
+	return c.Viper.GetDuration(key)
+}

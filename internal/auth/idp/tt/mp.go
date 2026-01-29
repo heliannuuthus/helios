@@ -12,32 +12,42 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/heliannuuthus/helios/internal/auth/idp"
+	"github.com/heliannuuthus/helios/internal/auth/types"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// Provider 抖音小程序 Provider
-type Provider struct {
+// MPProvider 抖音小程序 Provider
+type MPProvider struct {
 	appID     string
 	appSecret string
 }
 
-// NewProvider 创建抖音 Provider
-func NewProvider() *Provider {
-	return &Provider{
-		appID:     config.GetString("idps.tt.appid"),
-		appSecret: config.GetString("idps.tt.secret"),
+// NewMPProvider 创建抖音小程序 Provider
+func NewMPProvider() *MPProvider {
+	cfg := config.Auth()
+	return &MPProvider{
+		appID:     cfg.GetString("idps.tt.appid"),
+		appSecret: cfg.GetString("idps.tt.secret"),
 	}
 }
 
 // Type 返回 IDP 类型
-func (p *Provider) Type() string {
+func (p *MPProvider) Type() string {
 	return idp.TypeTTMP
 }
 
-// Exchange 用 code 换取用户信息
-func (p *Provider) Exchange(ctx context.Context, code string) (*idp.ExchangeResult, error) {
+// Exchange 用授权码换取用户信息
+func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.ExchangeResult, error) {
+	if len(params) < 1 {
+		return nil, errors.New("code is required")
+	}
+	code, ok := params[0].(string)
+	if !ok {
+		return nil, errors.New("code must be a string")
+	}
+
 	if p.appID == "" || p.appSecret == "" {
 		return nil, errors.New("TT 小程序 IdP 未配置")
 	}
@@ -130,8 +140,42 @@ func (p *Provider) Exchange(ctx context.Context, code string) (*idp.ExchangeResu
 	}, nil
 }
 
-// GetPhoneNumber 获取抖音手机号
-func (p *Provider) GetPhoneNumber(ctx context.Context, code string) (string, error) {
+// FetchAdditionalInfo 补充获取用户信息
+func (p *MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, params ...any) (*idp.AdditionalInfo, error) {
+	switch infoType {
+	case "phone":
+		if len(params) < 1 {
+			return nil, errors.New("phone code is required")
+		}
+		code, ok := params[0].(string)
+		if !ok {
+			return nil, errors.New("phone code must be a string")
+		}
+		phone, err := p.getPhoneNumber(ctx, code)
+		if err != nil {
+			return nil, err
+		}
+		return &idp.AdditionalInfo{
+			Type:  "phone",
+			Value: phone,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported info type: %s", infoType)
+	}
+}
+
+// ToPublicConfig 转换为前端可用的公开配置
+func (p *MPProvider) ToPublicConfig() *types.ConnectionConfig {
+	return &types.ConnectionConfig{
+		ID:           "tt-mp",
+		ProviderType: idp.TypeTTMP,
+		Name:         "抖音小程序",
+		ClientID:     p.appID,
+	}
+}
+
+// getPhoneNumber 获取抖音手机号（内部方法）
+func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, error) {
 	if p.appID == "" || p.appSecret == "" {
 		return "", errors.New("TT 小程序配置缺失")
 	}
@@ -184,7 +228,7 @@ func (p *Provider) GetPhoneNumber(ctx context.Context, code string) (string, err
 }
 
 // getAccessToken 获取 TT access_token
-func (p *Provider) getAccessToken(ctx context.Context) (string, error) {
+func (p *MPProvider) getAccessToken(ctx context.Context) (string, error) {
 	if p.appID == "" || p.appSecret == "" {
 		return "", errors.New("TT 小程序配置缺失")
 	}

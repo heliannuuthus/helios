@@ -14,8 +14,8 @@ services:
       - helios_mysql_data:/var/lib/mysql
       - helios_mysql_logs:/var/log/mysql
       # 挂载 SQL 初始化文件
-      - ./sql/auth/schema.sql:/docker-entrypoint-initdb.d/01-auth-schema.sql:ro
-      - ./sql/auth/init.sql:/docker-entrypoint-initdb.d/02-auth-init.sql:ro
+      - ./sql/hermes/schema.sql:/docker-entrypoint-initdb.d/01-hermes-schema.sql:ro
+      - ./sql/hermes/init.sql:/docker-entrypoint-initdb.d/02-hermes-init.sql:ro
       - ./sql/zwei/schema.sql:/docker-entrypoint-initdb.d/03-zwei-schema.sql:ro
       - ./sql/zwei/init.sql:/docker-entrypoint-initdb.d/04-zwei-init.sql:ro
       # 挂载 MySQL 配置

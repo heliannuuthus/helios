@@ -1,46 +1,70 @@
 package config
 
-import "time"
-
-// HermesCacheConfig Hermes 缓存配置
-type HermesCacheConfig struct {
-	MaxSize     int64         `mapstructure:"max-size"`     // 最大缓存条目数
-	NumCounters int64         `mapstructure:"num-counters"` // 计数器数量
-	BufferItems int64         `mapstructure:"buffer-items"` // 缓冲区大小
-	TTL         time.Duration `mapstructure:"ttl"`          // 缓存过期时间
-}
-
-// 默认值
+// Hermes 配置 Key 常量
 const (
-	defaultHermesCacheMaxSize     = 1000
-	defaultHermesCacheNumCounters = 10000
-	defaultHermesCacheBufferItems = 64
-	defaultHermesCacheTTL         = 2 * time.Minute
+	// App 配置
+	HermesAppDebug   = "app.debug"
+	HermesAppName    = "app.name"
+	HermesAppVersion = "app.version"
+	HermesAppEnv     = "app.env"
+
+	// Server 配置
+	HermesServerHost = "server.host"
+	HermesServerPort = "server.port"
+
+	// Database 配置
+	HermesDBHost     = "database.host"
+	HermesDBPort     = "database.port"
+	HermesDBUser     = "database.user"
+	HermesDBPassword = "database.password"
+	HermesDBName     = "database.name"
+
+	// Database Pool 配置
+	HermesDBPoolMaxIdleConns    = "database.pool.max-idle-conns"
+	HermesDBPoolMaxOpenConns    = "database.pool.max-open-conns"
+	HermesDBPoolConnMaxLifetime = "database.pool.conn-max-lifetime"
+	HermesDBPoolConnMaxIdleTime = "database.pool.conn-max-idle-time"
+
+	// Database Timeout 配置
+	HermesDBTimeoutConnect = "database.timeout.connect"
+	HermesDBTimeoutRead    = "database.timeout.read"
+	HermesDBTimeoutWrite   = "database.timeout.write"
+
+	// Log 配置
+	HermesLogLevel  = "log.level"
+	HermesLogFormat = "log.format"
+
+	// CORS 配置
+	HermesCORSOrigins          = "cors.origins"
+	HermesCORSAllowCredentials = "cors.allow_credentials"
+	HermesCORSAllowMethods     = "cors.allow_methods"
+	HermesCORSAllowHeaders     = "cors.allow_headers"
+
+	// Auth Domains 配置（hermes 需要读取域配置来处理身份数据）
+	HermesAuthDomains = "auth.domains"
 )
 
-// GetHermesCacheConfig 获取 Hermes 缓存配置
-func GetHermesCacheConfig() *HermesCacheConfig {
-	cfg := &HermesCacheConfig{
-		MaxSize:     defaultHermesCacheMaxSize,
-		NumCounters: defaultHermesCacheNumCounters,
-		BufferItems: defaultHermesCacheBufferItems,
-		TTL:         defaultHermesCacheTTL,
-	}
+// Hermes 配置默认值
+const (
+	DefaultHermesDBHost             = "localhost"
+	DefaultHermesDBPort             = 3306
+	DefaultHermesDBUser             = "root"
+	DefaultHermesDBPoolMaxIdleConns = 10
+	DefaultHermesDBPoolMaxOpenConns = 30
+	DefaultHermesDBTimeoutConnect   = "10s"
+	DefaultHermesDBTimeoutRead      = "30s"
+	DefaultHermesDBTimeoutWrite     = "30s"
+	DefaultHermesDBPoolConnMaxLife  = "1h"
+	DefaultHermesServerHost         = "0.0.0.0"
+	DefaultHermesServerPort         = 18000
+)
 
-	v := V()
+// GetHermesDomainSignKey 获取域签名密钥
+func GetHermesDomainSignKey(domainID string) string {
+	return Hermes().GetString(HermesAuthDomains + "." + domainID + ".sign-key")
+}
 
-	if maxSize := v.GetInt64("hermes.cache.max-size"); maxSize > 0 {
-		cfg.MaxSize = maxSize
-	}
-	if numCounters := v.GetInt64("hermes.cache.num-counters"); numCounters > 0 {
-		cfg.NumCounters = numCounters
-	}
-	if bufferItems := v.GetInt64("hermes.cache.buffer-items"); bufferItems > 0 {
-		cfg.BufferItems = bufferItems
-	}
-	if ttl := v.GetDuration("hermes.cache.ttl"); ttl > 0 {
-		cfg.TTL = ttl
-	}
-
-	return cfg
+// GetHermesDomainEncryptKey 获取域加密密钥
+func GetHermesDomainEncryptKey(domainID string) string {
+	return Hermes().GetString(HermesAuthDomains + "." + domainID + ".encrypt-key")
 }

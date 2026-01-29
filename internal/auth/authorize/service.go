@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwk"
 
 	"github.com/heliannuuthus/helios/internal/auth/cache"
+	autherrors "github.com/heliannuuthus/helios/internal/auth/errors"
 	"github.com/heliannuuthus/helios/internal/auth/token"
 	"github.com/heliannuuthus/helios/internal/auth/types"
 	"github.com/heliannuuthus/helios/internal/config"
@@ -21,18 +21,6 @@ import (
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/kms"
 	"github.com/heliannuuthus/helios/pkg/logger"
-)
-
-// 错误定义
-var (
-	ErrInvalidGrant     = errors.New("invalid grant")
-	ErrInvalidCode      = errors.New("invalid authorization code")
-	ErrCodeExpired      = errors.New("authorization code expired")
-	ErrCodeUsed         = errors.New("authorization code already used")
-	ErrInvalidVerifier  = errors.New("invalid code verifier")
-	ErrClientMismatch   = errors.New("client_id mismatch")
-	ErrRedirectMismatch = errors.New("redirect_uri mismatch")
-	ErrFlowNotFound     = errors.New("auth flow not found")
 )
 
 // Service 授权服务
@@ -77,13 +65,18 @@ func defaultDuration(val, def time.Duration) time.Duration {
 // ==================== 授权准备 ====================
 
 // PrepareAuthorization 准备授权
-// 计算 scope 交集，更新 AuthFlow.GrantedScopes
+// 计算 scope 交集，检查身份要求，更新 AuthFlow.GrantedScopes
 func (s *Service) PrepareAuthorization(ctx context.Context, flow *types.AuthFlow) error {
 	if flow.User == nil {
-		return errors.New("user not set in flow")
+		return autherrors.NewFlowInvalid("user not set in flow")
 	}
 
-	// 1. 获取请求的 scope
+	// 1. 检查服务的身份要求
+	if err := s.checkIdentityRequirements(ctx, flow); err != nil {
+		return err
+	}
+
+	// 2. 获取请求的 scope
 	requestedScopes := flow.Request.ParseScopes()
 
 	// 确保包含 openid
@@ -98,7 +91,7 @@ func (s *Service) PrepareAuthorization(ctx context.Context, flow *types.AuthFlow
 		requestedScopes = append([]string{ScopeOpenID}, requestedScopes...)
 	}
 
-	// 2. 获取 connection 允许的 scope
+	// 3. 获取 connection 允许的 scope
 	connectionConfig := flow.ConnectionMap[flow.Connection]
 	if connectionConfig == nil {
 		return fmt.Errorf("connection %s not found in flow", flow.Connection)
@@ -109,10 +102,10 @@ func (s *Service) PrepareAuthorization(ctx context.Context, flow *types.AuthFlow
 		allowedScopes = []string{ScopeOpenID}
 	}
 
-	// 3. 计算交集
+	// 4. 计算交集
 	grantedScopes := scopeIntersection(requestedScopes, allowedScopes)
 
-	// 4. 检查是否有有效的 scope
+	// 5. 检查是否有有效的 scope
 	hasValidScope := false
 	for _, scope := range grantedScopes {
 		if scope != ScopeOpenID {
@@ -125,12 +118,68 @@ func (s *Service) PrepareAuthorization(ctx context.Context, flow *types.AuthFlow
 		logger.Warnf("[Authorize] 没有有效的 scope - Requested: %v, Allowed: %v", requestedScopes, allowedScopes)
 	}
 
-	// 5. 更新 flow
+	// 6. 更新 flow
 	flow.SetAuthorized(grantedScopes)
 
 	logger.Infof("[Authorize] 准备授权完成 - FlowID: %s, GrantedScopes: %v", flow.ID, grantedScopes)
 
 	return nil
+}
+
+// checkIdentityRequirements 检查服务的身份要求
+func (s *Service) checkIdentityRequirements(ctx context.Context, flow *types.AuthFlow) error {
+	if flow.Service == nil {
+		return nil
+	}
+
+	// 获取服务要求的身份类型
+	requiredIdentities := flow.Service.GetRequiredIdentities()
+	if len(requiredIdentities) == 0 {
+		return nil // 不限制
+	}
+
+	// 获取用户已绑定的身份
+	userIdentities, err := s.getUserIdentities(ctx, flow.User.OpenID)
+	if err != nil {
+		logger.Warnf("[Authorize] 获取用户身份失败: %v", err)
+		return autherrors.NewServerError("failed to check identity requirements")
+	}
+
+	// 检查是否缺少必要的身份
+	missingIdentities := s.findMissingIdentities(requiredIdentities, userIdentities)
+	if len(missingIdentities) > 0 {
+		logger.Infof("[Authorize] 用户 %s 缺少必要身份: %v", flow.User.OpenID, missingIdentities)
+		return autherrors.NewIdentityRequired(missingIdentities)
+	}
+
+	return nil
+}
+
+// getUserIdentities 获取用户已绑定的身份类型列表
+func (s *Service) getUserIdentities(ctx context.Context, openID string) ([]string, error) {
+	// 通过 cache manager 获取用户身份
+	// 这里需要调用 hermes 服务获取用户的身份绑定信息
+	identities, err := s.cache.GetUserIdentities(ctx, openID)
+	if err != nil {
+		return nil, err
+	}
+	return identities, nil
+}
+
+// findMissingIdentities 找出缺少的身份类型
+func (s *Service) findMissingIdentities(required, existing []string) []string {
+	existingSet := make(map[string]bool)
+	for _, id := range existing {
+		existingSet[id] = true
+	}
+
+	var missing []string
+	for _, req := range required {
+		if !existingSet[req] {
+			missing = append(missing, req)
+		}
+	}
+	return missing
 }
 
 // GenerateAuthCode 生成授权码
@@ -185,13 +234,13 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 	// 1. 获取授权码
 	authCode, err := s.cache.GetAuthCode(ctx, req.Code)
 	if err != nil {
-		return nil, ErrInvalidCode
+		return nil, autherrors.NewInvalidGrant("invalid authorization code")
 	}
 
 	// 2. 获取 AuthFlow
 	flowData, err := s.cache.GetAuthFlow(ctx, authCode.FlowID)
 	if err != nil {
-		return nil, ErrFlowNotFound
+		return nil, autherrors.NewFlowNotFound("session not found")
 	}
 
 	var flow types.AuthFlow
@@ -201,17 +250,17 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 
 	// 3. 验证 client_id
 	if req.ClientID != flow.Request.ClientID {
-		return nil, ErrClientMismatch
+		return nil, autherrors.NewInvalidGrant("client_id mismatch")
 	}
 
 	// 4. 验证 redirect_uri
 	if req.RedirectURI != flow.Request.RedirectURI {
-		return nil, ErrRedirectMismatch
+		return nil, autherrors.NewInvalidGrant("redirect_uri mismatch")
 	}
 
 	// 5. 验证 PKCE
 	if !verifyCodeChallenge(flow.Request.CodeChallengeMethod, flow.Request.CodeChallenge, req.CodeVerifier) {
-		return nil, ErrInvalidVerifier
+		return nil, autherrors.NewInvalidGrant("invalid code verifier")
 	}
 
 	// 6. 标记授权码已使用
@@ -227,12 +276,12 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 	// 1. 获取 refresh token
 	rt, err := s.cache.GetRefreshToken(ctx, req.RefreshToken)
 	if err != nil {
-		return nil, ErrInvalidGrant
+		return nil, autherrors.NewInvalidGrant("invalid refresh token")
 	}
 
 	// 2. 验证 client_id
 	if req.ClientID != rt.ClientID {
-		return nil, ErrClientMismatch
+		return nil, autherrors.NewInvalidGrant("client_id mismatch")
 	}
 
 	// 3. 获取用户、应用、服务信息
@@ -354,7 +403,7 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 }
 
 func (s *Service) cleanupOldRefreshTokens(ctx context.Context, userID, clientID string) {
-	maxTokens := config.GetInt("auth.max-refresh-token")
+	maxTokens := config.Auth().GetInt("auth.max-refresh-token")
 	if maxTokens <= 0 {
 		maxTokens = 10
 	}

@@ -9,14 +9,6 @@ package main
 import (
 	"github.com/google/wire"
 	"github.com/heliannuuthus/helios/internal/auth"
-	"github.com/heliannuuthus/helios/internal/auth/authenticate"
-	"github.com/heliannuuthus/helios/internal/auth/authorize"
-	"github.com/heliannuuthus/helios/internal/auth/cache"
-	"github.com/heliannuuthus/helios/internal/auth/idp"
-	"github.com/heliannuuthus/helios/internal/auth/idp/alipay"
-	"github.com/heliannuuthus/helios/internal/auth/idp/tt"
-	"github.com/heliannuuthus/helios/internal/auth/idp/wechat"
-	"github.com/heliannuuthus/helios/internal/auth/token"
 	"github.com/heliannuuthus/helios/internal/database"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/upload"
@@ -27,7 +19,6 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
-	"gorm.io/gorm"
 )
 
 import (
@@ -38,7 +29,6 @@ import (
 
 // InitializeApp 初始化应用（由 wire 生成）
 func InitializeApp() (*App, error) {
-	db := provideDB()
 	handler := provideRecipeHandler()
 	service := provideHermesService()
 	authHandler, err := provideAuthHandler(service)
@@ -54,7 +44,6 @@ func InitializeApp() (*App, error) {
 	preferenceHandler := providePreferenceHandler()
 	hermesHandler := provideHermesHandler(service)
 	app := &App{
-		DB:                db,
 		RecipeHandler:     handler,
 		AuthHandler:       authHandler,
 		FavoriteHandler:   favoriteHandler,
@@ -105,64 +94,25 @@ func provideHermesService() *hermes.Service {
 	return hermes.NewService()
 }
 
-// 认证模块 Handler（依赖 hermes.Service）
+// 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
 func provideAuthHandler(hermesService *hermes.Service) (*auth.Handler, error) {
-	// 创建 UserService
-	userSvc := hermes.NewUserService(database.GetAuth())
-
-	// 创建 CacheManager
-	cacheManager := cache.NewManager(&cache.ManagerConfig{
+	userSvc := hermes.NewUserService(database.GetHermes())
+	return auth.Initialize(&auth.InitConfig{
 		HermesSvc: hermesService,
 		UserSvc:   userSvc,
-		Redis:     nil, // TODO: 配置 Redis 客户端
 	})
-
-	// 创建 IDP Registry 并注册所有 Provider
-	idpRegistry := idp.NewRegistry()
-	idpRegistry.Register(wechat.NewProvider())
-	idpRegistry.Register(tt.NewProvider())
-	idpRegistry.Register(alipay.NewProvider())
-
-	// 创建 Token Service
-	tokenSvc := token.NewService(cacheManager)
-
-	// 创建 Authenticate Service
-	authenticateSvc := authenticate.NewService(&authenticate.ServiceConfig{
-		Cache:       cacheManager,
-		IDPRegistry: idpRegistry,
-		EmailSender: authenticate.NewNoopSender(), // TODO: 配置真实邮件发送器
-	})
-
-	// 创建 Authorize Service
-	authorizeSvc := authorize.NewService(&authorize.ServiceConfig{
-		Cache:    cacheManager,
-		TokenSvc: tokenSvc,
-	})
-
-	// 创建 Handler
-	return auth.NewHandler(&auth.HandlerConfig{
-		AuthenticateSvc: authenticateSvc,
-		AuthorizeSvc:    authorizeSvc,
-		Cache:           cacheManager,
-	}), nil
 }
 
 func provideUploadHandler() *upload.Handler {
-	return upload.NewHandler(database.GetAuth())
+	return upload.NewHandler(database.GetHermes())
 }
 
 func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
 	return hermes.NewHandler(hermesService)
 }
 
-// provideDB 提供默认数据库连接（用于 App.DB 字段，保持兼容性）
-func provideDB() *gorm.DB {
-	return database.Get()
-}
-
 // ProviderSet 提供者集合
-var ProviderSet = wire.NewSet(
-	provideDB, recipe.NewService, favorite.NewService, history.NewService, preference.NewService, tag.NewService, recommend.NewService, provideRecipeHandler,
+var ProviderSet = wire.NewSet(recipe.NewService, favorite.NewService, history.NewService, preference.NewService, tag.NewService, recommend.NewService, provideRecipeHandler,
 	provideFavoriteHandler,
 	provideHistoryHandler,
 	providePreferenceHandler,
@@ -179,7 +129,6 @@ var ProviderSet = wire.NewSet(
 
 // App 应用依赖容器
 type App struct {
-	DB                *gorm.DB
 	RecipeHandler     *recipe.Handler
 	AuthHandler       *auth.Handler
 	FavoriteHandler   *favorite.Handler

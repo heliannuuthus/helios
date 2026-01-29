@@ -25,7 +25,7 @@ type Service struct {
 // NewService 创建管理服务
 func NewService() *Service {
 	return &Service{
-		db: database.GetAuth(),
+		db: database.GetHermes(),
 	}
 }
 
@@ -33,19 +33,20 @@ func NewService() *Service {
 
 // GetDomain 获取域（从配置读取，不含密钥）
 func (*Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
-	domainConfig, err := config.GetDomainConfig(domainID)
-	if err != nil {
-		return nil, fmt.Errorf("获取域失败: %w", err)
+	// 检查域配置是否存在
+	signKey := config.GetHermesDomainSignKey(domainID)
+	if signKey == "" {
+		return nil, fmt.Errorf("域 %s 配置不存在", domainID)
 	}
 
-	name := domainConfig.Name
+	name := config.Hermes().GetString(config.HermesAuthDomains + "." + domainID + ".name")
 	if name == "" {
 		name = domainID
 	}
 
 	var description *string
-	if domainConfig.Description != "" {
-		description = &domainConfig.Description
+	if desc := config.Hermes().GetString(config.HermesAuthDomains + "." + domainID + ".description"); desc != "" {
+		description = &desc
 	}
 
 	domain := &models.Domain{
@@ -64,8 +65,8 @@ func (s *Service) GetDomainWithKey(ctx context.Context, domainID string) (*model
 		return nil, err
 	}
 
-	// 获取签名密钥
-	signKey, err := config.GetDomainSignKey(domainID)
+	// 获取签名密钥（解码后的字节）
+	signKey, err := config.GetAuthDomainSignKeyBytes(domainID)
 	if err != nil {
 		return nil, fmt.Errorf("获取域签名密钥失败: %w", err)
 	}
@@ -75,21 +76,22 @@ func (s *Service) GetDomainWithKey(ctx context.Context, domainID string) (*model
 
 // ListDomains 列出所有域（从配置读取）
 func (*Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
-	authConfig := config.GetAuthConfig()
-	if authConfig == nil {
-		return nil, fmt.Errorf("auth 配置未初始化")
+	// 从配置读取 auth.domains 下的所有域
+	domainsMap := config.Hermes().GetStringMap(config.HermesAuthDomains)
+	if len(domainsMap) == 0 {
+		return nil, fmt.Errorf("auth.domains 配置为空")
 	}
 
-	domains := make([]models.Domain, 0, len(authConfig.Domains))
-	for domainID, domainConfig := range authConfig.Domains {
-		name := domainConfig.Name
+	domains := make([]models.Domain, 0, len(domainsMap))
+	for domainID := range domainsMap {
+		name := config.Hermes().GetString(config.HermesAuthDomains + "." + domainID + ".name")
 		if name == "" {
 			name = domainID
 		}
 
 		var description *string
-		if domainConfig.Description != "" {
-			description = &domainConfig.Description
+		if desc := config.Hermes().GetString(config.HermesAuthDomains + "." + domainID + ".description"); desc != "" {
+			description = &desc
 		}
 
 		domain := models.Domain{
@@ -114,7 +116,7 @@ func (*Service) generateServiceKey(domainID string) (string, error) {
 	}
 
 	// 获取域加密密钥
-	domainEncryptKey, err := config.GetDomainEncryptKey(domainID)
+	domainEncryptKey, err := config.GetAuthDomainEncryptKeyBytes(domainID)
 	if err != nil {
 		return "", fmt.Errorf("获取域加密密钥失败: %w", err)
 	}
@@ -188,7 +190,7 @@ func (s *Service) GetServiceWithKey(ctx context.Context, serviceID string) (*mod
 
 // decryptServiceKey 解密服务密钥
 func (s *Service) decryptServiceKey(svc *models.Service) ([]byte, error) {
-	domainKey, err := config.GetDomainEncryptKey(svc.DomainID)
+	domainKey, err := config.GetAuthDomainEncryptKeyBytes(svc.DomainID)
 	if err != nil {
 		return nil, fmt.Errorf("获取域加密密钥失败: %w", err)
 	}
@@ -261,7 +263,7 @@ func (s *Service) generateApplicationKey(domainID, appID string) (string, error)
 	}
 
 	// 获取域加密密钥
-	domainEncryptKey, err := config.GetDomainEncryptKey(domainID)
+	domainEncryptKey, err := config.GetAuthDomainEncryptKeyBytes(domainID)
 	if err != nil {
 		return "", fmt.Errorf("获取域加密密钥失败: %w", err)
 	}
@@ -345,7 +347,7 @@ func (s *Service) decryptApplicationKey(app *models.Application) ([]byte, error)
 		return nil, nil
 	}
 
-	domainKey, err := config.GetDomainEncryptKey(app.DomainID)
+	domainKey, err := config.GetAuthDomainEncryptKeyBytes(app.DomainID)
 	if err != nil {
 		return nil, fmt.Errorf("获取域加密密钥失败: %w", err)
 	}

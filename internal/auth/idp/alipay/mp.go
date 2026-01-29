@@ -2,44 +2,39 @@ package alipay
 
 import (
 	"context"
-	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/tidwall/gjson"
 
 	"github.com/heliannuuthus/helios/internal/auth/idp"
+	"github.com/heliannuuthus/helios/internal/auth/types"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// Provider 支付宝小程序 Provider
-type Provider struct {
+// MPProvider 支付宝小程序 Provider
+type MPProvider struct {
 	appID      string
 	privateKey *rsa.PrivateKey
 	publicKey  *rsa.PublicKey // 支付宝公钥，用于验签
 }
 
-// NewProvider 创建支付宝 Provider
-func NewProvider() *Provider {
-	p := &Provider{
-		appID: config.GetString("idps.alipay.appid"),
+// NewMPProvider 创建支付宝小程序 Provider
+func NewMPProvider() *MPProvider {
+	cfg := config.Auth()
+	p := &MPProvider{
+		appID: cfg.GetString("idps.alipay.appid"),
 	}
 
 	// 解析私钥
-	privateKeyData := config.GetString("idps.alipay.secret")
+	privateKeyData := cfg.GetString("idps.alipay.secret")
 	if privateKeyData != "" {
 		privateKey, err := parsePrivateKey(privateKeyData)
 		if err != nil {
@@ -50,7 +45,7 @@ func NewProvider() *Provider {
 	}
 
 	// 解析公钥（可选，用于验签）
-	publicKeyData := config.GetString("idps.alipay.verify-key")
+	publicKeyData := cfg.GetString("idps.alipay.verify-key")
 	if publicKeyData != "" {
 		publicKey, err := parsePublicKey(publicKeyData)
 		if err != nil {
@@ -64,12 +59,20 @@ func NewProvider() *Provider {
 }
 
 // Type 返回 IDP 类型
-func (*Provider) Type() string {
+func (*MPProvider) Type() string {
 	return idp.TypeAlipayMP
 }
 
-// Exchange 用 code 换取用户信息
-func (p *Provider) Exchange(ctx context.Context, code string) (*idp.ExchangeResult, error) {
+// Exchange 用授权码换取用户信息
+func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.ExchangeResult, error) {
+	if len(params) < 1 {
+		return nil, errors.New("code is required")
+	}
+	code, ok := params[0].(string)
+	if !ok {
+		return nil, errors.New("code must be a string")
+	}
+
 	if p.appID == "" || p.privateKey == nil {
 		return nil, errors.New("支付宝小程序 IdP 未配置")
 	}
@@ -78,7 +81,7 @@ func (p *Provider) Exchange(ctx context.Context, code string) (*idp.ExchangeResu
 
 	// 构建请求参数
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	params := map[string]string{
+	reqParams := map[string]string{
 		"app_id":     p.appID,
 		"method":     "alipay.system.oauth.token",
 		"format":     "JSON",
@@ -91,18 +94,18 @@ func (p *Provider) Exchange(ctx context.Context, code string) (*idp.ExchangeResu
 	}
 
 	// 构建签名字符串
-	signContent := buildSignContent(params)
+	signContent := buildSignContent(reqParams)
 	logger.Debugf("[Alipay] 待签名字符串: %s", signContent)
 	sign, err := signWithRSA2(p.privateKey, signContent)
 	if err != nil {
 		logger.Errorf("[Alipay] 签名失败: %v", err)
 		return nil, fmt.Errorf("签名失败: %w", err)
 	}
-	params["sign"] = sign
+	reqParams["sign"] = sign
 
 	// 构建 POST 请求
 	form := url.Values{}
-	for k, v := range params {
+	for k, v := range reqParams {
 		form.Add(k, v)
 	}
 
@@ -182,127 +185,18 @@ func (p *Provider) Exchange(ctx context.Context, code string) (*idp.ExchangeResu
 	}, nil
 }
 
-// GetPhoneNumber 获取支付宝手机号
-func (*Provider) GetPhoneNumber(ctx context.Context, code string) (string, error) {
-	logger.Warnf("[Alipay] 支付宝获取手机号暂未实现")
-	return "", errors.New("支付宝获取手机号暂未实现")
+// FetchAdditionalInfo 补充获取用户信息
+func (*MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, params ...any) (*idp.AdditionalInfo, error) {
+	logger.Warnf("[Alipay] 支付宝获取 %s 暂未实现", infoType)
+	return nil, fmt.Errorf("Alipay does not support fetching %s yet", infoType)
 }
 
-// ==================== 辅助函数 ====================
-
-// parsePrivateKey 解析 RSA 私钥（支持 PEM 和 DER Base64 格式）
-func parsePrivateKey(privateKeyData string) (*rsa.PrivateKey, error) {
-	var keyBytes []byte
-	var err error
-
-	// 尝试解析为 PEM 格式
-	block, _ := pem.Decode([]byte(privateKeyData))
-	if block != nil {
-		keyBytes = block.Bytes
-	} else {
-		// 尝试解析为 DER Base64 格式
-		keyBytes, err = base64.StdEncoding.DecodeString(privateKeyData)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode private key (not PEM or Base64): %w", err)
-		}
+// ToPublicConfig 转换为前端可用的公开配置
+func (p *MPProvider) ToPublicConfig() *types.ConnectionConfig {
+	return &types.ConnectionConfig{
+		ID:           "alipay-mp",
+		ProviderType: idp.TypeAlipayMP,
+		Name:         "支付宝小程序",
+		ClientID:     p.appID,
 	}
-
-	// 尝试 PKCS8 格式
-	key, err := x509.ParsePKCS8PrivateKey(keyBytes)
-	if err == nil {
-		priv, ok := key.(*rsa.PrivateKey)
-		if !ok {
-			return nil, errors.New("not an RSA private key")
-		}
-		return priv, nil
-	}
-
-	// 尝试 PKCS1 格式
-	priv, err := x509.ParsePKCS1PrivateKey(keyBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key (tried PKCS8 and PKCS1): %w", err)
-	}
-
-	return priv, nil
-}
-
-// parsePublicKey 解析 RSA 公钥（支持 PEM 和 DER Base64 格式）
-func parsePublicKey(publicKeyData string) (*rsa.PublicKey, error) {
-	var keyBytes []byte
-	var err error
-
-	// 尝试解析为 PEM 格式
-	block, _ := pem.Decode([]byte(publicKeyData))
-	if block != nil {
-		keyBytes = block.Bytes
-	} else {
-		// 尝试解析为 DER Base64 格式
-		keyBytes, err = base64.StdEncoding.DecodeString(publicKeyData)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode public key (not PEM or Base64): %w", err)
-		}
-	}
-
-	pub, err := x509.ParsePKIXPublicKey(keyBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse public key: %w", err)
-	}
-
-	rsaPub, ok := pub.(*rsa.PublicKey)
-	if !ok {
-		return nil, errors.New("not an RSA public key")
-	}
-
-	return rsaPub, nil
-}
-
-// buildSignContent 构建待签名字符串
-func buildSignContent(params map[string]string) string {
-	keys := make([]string, 0, len(params))
-	for k, v := range params {
-		if k == "sign" || v == "" {
-			continue
-		}
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	items := make([]string, 0, len(keys))
-	for _, k := range keys {
-		items = append(items, fmt.Sprintf("%s=%s", k, params[k]))
-	}
-	return strings.Join(items, "&")
-}
-
-// signWithRSA2 使用 RSA2 算法签名
-func signWithRSA2(privateKey *rsa.PrivateKey, data string) (string, error) {
-	h := sha256.New()
-	h.Write([]byte(data))
-	hashed := h.Sum(nil)
-
-	sigBytes, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hashed)
-	if err != nil {
-		return "", fmt.Errorf("failed to sign: %w", err)
-	}
-
-	return base64.StdEncoding.EncodeToString(sigBytes), nil
-}
-
-// verifySign 验证支付宝响应签名
-func verifySign(publicKey *rsa.PublicKey, signData, sign string) error {
-	signBytes, err := base64.StdEncoding.DecodeString(sign)
-	if err != nil {
-		return fmt.Errorf("failed to decode sign: %w", err)
-	}
-
-	h := sha256.New()
-	h.Write([]byte(signData))
-	hashed := h.Sum(nil)
-
-	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed, signBytes)
-	if err != nil {
-		return fmt.Errorf("signature verification failed: %w", err)
-	}
-
-	return nil
 }

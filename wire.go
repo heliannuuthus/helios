@@ -4,6 +4,8 @@
 package main
 
 import (
+	"github.com/google/wire"
+
 	"github.com/heliannuuthus/helios/internal/auth"
 	"github.com/heliannuuthus/helios/internal/database"
 	"github.com/heliannuuthus/helios/internal/hermes"
@@ -15,9 +17,6 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
-
-	"github.com/google/wire"
-	"gorm.io/gorm"
 )
 
 // 业务模块 Handler（使用 Zwei 数据库）
@@ -54,31 +53,25 @@ func provideHermesService() *hermes.Service {
 	return hermes.NewService()
 }
 
-// 认证模块 Handler（使用 Auth 数据库，依赖 hermes.Service）
+// 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
 func provideAuthHandler(hermesService *hermes.Service) (*auth.Handler, error) {
-	authService, err := auth.NewService(database.GetAuth(), hermesService)
-	if err != nil {
-		return nil, err
-	}
-	return auth.NewHandler(authService), nil
+	userSvc := hermes.NewUserService(database.GetHermes())
+	return auth.Initialize(&auth.InitConfig{
+		HermesSvc: hermesService,
+		UserSvc:   userSvc,
+	})
 }
 
 func provideUploadHandler() *upload.Handler {
-	return upload.NewHandler(database.GetAuth())
+	return upload.NewHandler(database.GetHermes())
 }
 
 func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
 	return hermes.NewHandler(hermesService)
 }
 
-// provideDB 提供默认数据库连接（用于 App.DB 字段，保持兼容性）
-func provideDB() *gorm.DB {
-	return database.Get()
-}
-
 // ProviderSet 提供者集合
 var ProviderSet = wire.NewSet(
-	provideDB, // 默认数据库连接
 	// 业务模块（使用 Zwei 数据库）
 	recipe.NewService,
 	favorite.NewService,
@@ -93,17 +86,16 @@ var ProviderSet = wire.NewSet(
 	provideTagHandler,
 	provideRecommendHandler,
 	provideHomeHandler,
-	// Hermes 模块（使用 Auth 数据库，提供给 auth 复用）
+	// Hermes 模块（使用 Hermes 数据库，提供给 auth 复用）
 	provideHermesService,
 	provideHermesHandler,
-	// 认证模块（使用 Auth 数据库，依赖 hermes.Service）
+	// 认证模块（使用 Hermes 数据库，依赖 hermes.Service）
 	provideAuthHandler,
 	provideUploadHandler,
 )
 
 // App 应用依赖容器
 type App struct {
-	DB                *gorm.DB
 	RecipeHandler     *recipe.Handler
 	AuthHandler       *auth.Handler
 	FavoriteHandler   *favorite.Handler
@@ -113,7 +105,7 @@ type App struct {
 	RecommendHandler  *recommend.Handler
 	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
-	HermesHandler *hermes.Handler
+	HermesHandler     *hermes.Handler
 }
 
 // InitializeApp 初始化应用（由 wire 生成）

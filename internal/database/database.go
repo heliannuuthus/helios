@@ -4,109 +4,83 @@ import (
 	"fmt"
 	"time"
 
-	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"github.com/heliannuuthus/helios/internal/config"
+	pkgdb "github.com/heliannuuthus/helios/pkg/database"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 var (
-	zweiDB *gorm.DB // Zwei 数据源（业务数据）
-	authDB *gorm.DB // Auth 数据源（认证数据）
+	zweiDB   *gorm.DB // Zwei 数据源（业务数据）
+	hermesDB *gorm.DB // Hermes 数据源（身份与访问管理数据）
 )
 
-// connectDB 连接数据库的通用方法
-func connectDB(dataSource string) (*gorm.DB, error) {
-	// 从配置读取 MySQL 连接信息
-	host := config.GetString(fmt.Sprintf("database.%s.host", dataSource))
+// buildDSN 从配置构建 MySQL DSN
+func buildDSN(cfg *config.Cfg, hostKey, portKey, userKey, passwordKey, nameKey, timeoutConnectKey, timeoutReadKey, timeoutWriteKey string) string {
+	host := cfg.GetString(hostKey)
 	if host == "" {
-		host = config.GetString("database.host") // 兼容旧配置
-		if host == "" {
-			host = "localhost"
-		}
+		host = "localhost"
 	}
-	port := config.GetInt(fmt.Sprintf("database.%s.port", dataSource))
+	port := cfg.GetInt(portKey)
 	if port == 0 {
-		port = config.GetInt("database.port") // 兼容旧配置
-		if port == 0 {
-			port = 3306
-		}
+		port = 3306
 	}
-	user := config.GetString(fmt.Sprintf("database.%s.user", dataSource))
+	user := cfg.GetString(userKey)
 	if user == "" {
-		user = config.GetString("database.user") // 兼容旧配置
-		if user == "" {
-			user = "zwei"
-		}
+		user = "root"
 	}
-	password := config.GetString(fmt.Sprintf("database.%s.password", dataSource))
-	if password == "" {
-		password = config.GetString("database.password") // 兼容旧配置
-		if password == "" {
-			password = "zwei"
-		}
+	password := cfg.GetString(passwordKey)
+	database := cfg.GetString(nameKey)
+
+	// 超时配置
+	connectTimeout := cfg.GetDuration(timeoutConnectKey)
+	if connectTimeout == 0 {
+		connectTimeout = 10 * time.Second
 	}
-	database := config.GetString(fmt.Sprintf("database.%s.name", dataSource))
-	if database == "" {
-		// 如果没有指定，使用默认值
-		switch dataSource {
-		case "zwei":
-			database = config.GetString("database.name")
-			if database == "" {
-				database = "zwei"
-			}
-		case "auth":
-			database = "auth"
-		}
+	readTimeout := cfg.GetDuration(timeoutReadKey)
+	if readTimeout == 0 {
+		readTimeout = 30 * time.Second
+	}
+	writeTimeout := cfg.GetDuration(timeoutWriteKey)
+	if writeTimeout == 0 {
+		writeTimeout = 30 * time.Second
 	}
 
-	// 构建 MySQL DSN
-	// 添加连接超时和读写超时参数，避免 unexpected EOF
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s",
-		user, password, host, port, database)
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&timeout=%s&readTimeout=%s&writeTimeout=%s",
+		user, password, host, port, database,
+		connectTimeout.String(), readTimeout.String(), writeTimeout.String())
+}
 
-	// 配置 GORM 日志（只打印错误）
-	logLevel := gormlogger.Error
+// buildOptions 从配置构建连接池选项
+func buildOptions(cfg *config.Cfg, maxIdleKey, maxOpenKey, maxLifetimeKey, maxIdleTimeKey, slowThresholdKey string) []pkgdb.Option {
+	var opts []pkgdb.Option
 
-	// 使用 zap 作为 GORM 的日志
-	gormLog := gormlogger.New(
-		logger.GormWriter(),
-		gormlogger.Config{
-			SlowThreshold:             200 * time.Millisecond,
-			LogLevel:                  logLevel,
-			IgnoreRecordNotFoundError: true,
-			Colorful:                  true,
-		},
-	)
+	opts = append(opts, pkgdb.WithLogWriter(logger.GormWriter()))
 
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
-		Logger: gormLog,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("连接数据库失败 (%s): %w", dataSource, err)
+	if maxIdleConns := cfg.GetInt(maxIdleKey); maxIdleConns > 0 {
+		opts = append(opts, pkgdb.WithMaxIdleConns(maxIdleConns))
+	}
+	if maxOpenConns := cfg.GetInt(maxOpenKey); maxOpenConns > 0 {
+		opts = append(opts, pkgdb.WithMaxOpenConns(maxOpenConns))
+	}
+	if connMaxLifetime := cfg.GetDuration(maxLifetimeKey); connMaxLifetime > 0 {
+		opts = append(opts, pkgdb.WithConnMaxLifetime(connMaxLifetime))
+	}
+	if connMaxIdleTime := cfg.GetDuration(maxIdleTimeKey); connMaxIdleTime > 0 {
+		opts = append(opts, pkgdb.WithConnMaxIdleTime(connMaxIdleTime))
+	}
+	if slowThreshold := cfg.GetDuration(slowThresholdKey); slowThreshold > 0 {
+		opts = append(opts, pkgdb.WithSlowThreshold(slowThreshold))
 	}
 
-	// 配置连接池
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("获取数据库连接失败 (%s): %w", dataSource, err)
-	}
-
-	// 设置连接池参数
-	sqlDB.SetMaxIdleConns(10)           // 最大空闲连接数
-	sqlDB.SetMaxOpenConns(30)           // 最大打开连接数
-	sqlDB.SetConnMaxLifetime(time.Hour) // 连接最大生存时间
-
-	logger.Infof("数据库连接成功 (%s): %s@%s:%d/%s", dataSource, user, host, port, database)
-	return db, nil
+	return opts
 }
 
 // Init 初始化所有数据库连接
 func Init() {
 	InitZwei()
-	InitAuth()
+	InitHermes()
 }
 
 // InitZwei 初始化 Zwei 数据源（业务数据）
@@ -115,26 +89,75 @@ func InitZwei() *gorm.DB {
 		return zweiDB
 	}
 
+	cfg := config.Zwei()
+	dsn := buildDSN(cfg,
+		config.ZweiDBHost,
+		config.ZweiDBPort,
+		config.ZweiDBUser,
+		config.ZweiDBPassword,
+		config.ZweiDBName,
+		config.ZweiDBTimeoutConnect,
+		config.ZweiDBTimeoutRead,
+		config.ZweiDBTimeoutWrite,
+	)
+	opts := buildOptions(cfg,
+		config.ZweiDBPoolMaxIdleConns,
+		config.ZweiDBPoolMaxOpenConns,
+		config.ZweiDBPoolConnMaxLifetime,
+		config.ZweiDBPoolConnMaxIdleTime,
+		"database.slow-threshold",
+	)
 	var err error
-	zweiDB, err = connectDB("zwei")
+	zweiDB, err = pkgdb.Connect(dsn, opts...)
 	if err != nil {
-		logger.Fatalf("%v", err)
+		logger.Fatalf("连接 Zwei 数据库失败: %v", err)
 	}
+
+	logger.Infof("数据库连接成功 (zwei): %s@%s:%d/%s",
+		cfg.GetString(config.ZweiDBUser),
+		cfg.GetString(config.ZweiDBHost),
+		cfg.GetInt(config.ZweiDBPort),
+		cfg.GetString(config.ZweiDBName))
 	return zweiDB
 }
 
-// InitAuth 初始化 Auth 数据源（认证数据）
-func InitAuth() *gorm.DB {
-	if authDB != nil {
-		return authDB
+// InitHermes 初始化 Hermes 数据源（身份与访问管理数据）
+func InitHermes() *gorm.DB {
+	if hermesDB != nil {
+		return hermesDB
 	}
 
+	cfg := config.Hermes()
+	dsn := buildDSN(cfg,
+		config.HermesDBHost,
+		config.HermesDBPort,
+		config.HermesDBUser,
+		config.HermesDBPassword,
+		config.HermesDBName,
+		config.HermesDBTimeoutConnect,
+		config.HermesDBTimeoutRead,
+		config.HermesDBTimeoutWrite,
+	)
+	opts := buildOptions(cfg,
+		config.HermesDBPoolMaxIdleConns,
+		config.HermesDBPoolMaxOpenConns,
+		config.HermesDBPoolConnMaxLifetime,
+		config.HermesDBPoolConnMaxIdleTime,
+		"database.slow-threshold",
+	)
+
 	var err error
-	authDB, err = connectDB("auth")
+	hermesDB, err = pkgdb.Connect(dsn, opts...)
 	if err != nil {
-		logger.Fatalf("%v", err)
+		logger.Fatalf("连接 Hermes 数据库失败: %v", err)
 	}
-	return authDB
+
+	logger.Infof("数据库连接成功 (hermes): %s@%s:%d/%s",
+		cfg.GetString(config.HermesDBUser),
+		cfg.GetString(config.HermesDBHost),
+		cfg.GetInt(config.HermesDBPort),
+		cfg.GetString(config.HermesDBName))
+	return hermesDB
 }
 
 // GetZwei 获取 Zwei 数据库连接
@@ -145,16 +168,16 @@ func GetZwei() *gorm.DB {
 	return zweiDB
 }
 
-// GetAuth 获取 Auth 数据库连接
-func GetAuth() *gorm.DB {
-	if authDB == nil {
-		return InitAuth()
+// GetHermes 获取 Hermes 数据库连接
+func GetHermes() *gorm.DB {
+	if hermesDB == nil {
+		return InitHermes()
 	}
-	return authDB
+	return hermesDB
 }
 
-// Get 获取数据库连接（兼容旧代码，返回 Zwei 数据源）
-// Deprecated: 请使用 GetZwei() 或 GetAuth() 明确指定数据源
-func Get() *gorm.DB {
-	return GetZwei()
+// GetAuth 获取 Auth 数据库连接（兼容旧代码，返回 Hermes 数据源）
+// Deprecated: 请使用 GetHermes()
+func GetAuth() *gorm.DB {
+	return GetHermes()
 }
