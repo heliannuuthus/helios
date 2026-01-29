@@ -73,9 +73,9 @@ func InitWithConfig(cfg Config) {
 // Sync 刷新日志缓冲
 func Sync() {
 	if Log != nil {
-		if err := Log.Sync(); err != nil {
-			// 忽略同步错误，因为日志系统不应该因为同步失败而崩溃
-		}
+		// 忽略同步错误，因为日志系统不应该因为同步失败而崩溃
+		// 常见的错误是 "sync /dev/stdout: invalid argument"，这在某些终端是正常的
+		_ = Log.Sync()
 	}
 }
 

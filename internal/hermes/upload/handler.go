@@ -58,7 +58,11 @@ func (h *Handler) UploadImage(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Claims)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
+		return
+	}
 
 	// 解析表单
 	var req UploadImageRequest
@@ -124,7 +128,11 @@ func (h *Handler) UploadImage(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "读取文件失败"})
 		return
 	}
-	defer fileSrc.Close()
+	defer func() {
+		if closeErr := fileSrc.Close(); closeErr != nil {
+			logger.Warnf("[Upload] close file source failed: %v", closeErr)
+		}
+	}()
 
 	fileData, err := io.ReadAll(fileSrc)
 	if err != nil {

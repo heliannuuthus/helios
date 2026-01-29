@@ -385,7 +385,10 @@ func (s *Service) UpdateApplication(ctx context.Context, appID string, req *Appl
 		updates["name"] = *req.Name
 	}
 	if len(req.RedirectURIs) > 0 {
-		urisJSON, _ := json.Marshal(req.RedirectURIs)
+		urisJSON, err := json.Marshal(req.RedirectURIs)
+		if err != nil {
+			return fmt.Errorf("序列化 redirect_uris 失败: %w", err)
+		}
 		updates["redirect_uris"] = string(urisJSON)
 	}
 

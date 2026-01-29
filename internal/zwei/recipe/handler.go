@@ -178,7 +178,11 @@ func (h *Handler) CreateRecipe(c *gin.Context) {
 		return
 	}
 
-	createdRecipe, _ := h.service.GetRecipe(recipeModel.RecipeID)
+	createdRecipe, err := h.service.GetRecipe(recipeModel.RecipeID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		return
+	}
 	c.JSON(http.StatusCreated, h.toRecipeResponse(createdRecipe))
 }
 
@@ -196,15 +200,15 @@ func (h *Handler) GetRecipes(c *gin.Context) {
 	category := c.Query("category")
 	search := c.Query("search")
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "100"))
-	if limit < 1 {
-		limit = 1
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "100"))
+	if err != nil || limit < 1 {
+		limit = 100
 	} else if limit > 500 {
 		limit = 500
 	}
 
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	if offset < 0 {
+	offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if err != nil || offset < 0 {
 		offset = 0
 	}
 
@@ -349,8 +353,8 @@ func (h *Handler) UpdateRecipe(c *gin.Context) {
 		return
 	}
 
-	updatedRecipe, _ := h.service.GetRecipe(id)
-	if updatedRecipe != nil {
+	updatedRecipe, err := h.service.GetRecipe(id)
+	if err == nil && updatedRecipe != nil {
 		recipeModel = updatedRecipe
 	}
 
@@ -473,8 +477,8 @@ func (h *Handler) CreateRecipesBatch(c *gin.Context) {
 
 	responses := make([]RecipeResponse, len(created))
 	for i, r := range created {
-		recipeModel, _ := h.service.GetRecipe(r.RecipeID)
-		if recipeModel != nil {
+		recipeModel, err := h.service.GetRecipe(r.RecipeID)
+		if err == nil && recipeModel != nil {
 			responses[i] = *h.toRecipeResponse(recipeModel)
 		}
 	}

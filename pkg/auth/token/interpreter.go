@@ -224,8 +224,12 @@ func extractClaims(token jwt.Token) *Claims {
 	}
 
 	var scope, clientID string
-	_ = token.Get("scope", &scope)
-	_ = token.Get("cli", &clientID)
+	if err := token.Get("scope", &scope); err != nil {
+		scope = ""
+	}
+	if err := token.Get("cli", &clientID); err != nil {
+		clientID = ""
+	}
 
 	issuer, _ := token.Issuer()
 	subject, _ := token.Subject()

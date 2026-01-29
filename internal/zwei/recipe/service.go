@@ -81,6 +81,7 @@ func (r *categoryCacheRefresher) refresh() {
 
 		ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
 		defer cancel()
+		// 刷新失败时只记录日志，不影响主流程
 		_ = r.doRefresh(ctx)
 	}()
 }
@@ -93,6 +94,7 @@ func (r *categoryCacheRefresher) start() {
 
 	// 首次同步刷新，确保启动时有数据
 	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
+	// 首次刷新失败时只记录，不影响启动
 	_ = r.doRefresh(ctx)
 	cancel()
 
@@ -208,6 +210,7 @@ func (s *Service) GetRecipe(id string) (*models.Recipe, error) {
 		return nil, err
 	}
 
+	// 填充标签失败不影响主流程
 	_ = s.fillTagsForOne(&recipe)
 
 	return &recipe, nil
@@ -236,6 +239,7 @@ func (s *Service) GetRecipes(category, search string, limit, offset int) ([]mode
 		return nil, err
 	}
 
+	// 填充标签失败不影响主流程
 	_ = s.fillTags(recipes)
 
 	return recipes, nil
@@ -300,6 +304,7 @@ func (s *Service) GetHotRecipes(limit int, excludeIDs []string) ([]models.Recipe
 		}
 	}
 
+	// 填充标签失败不影响主流程
 	_ = s.fillTags(result)
 
 	return result, nil

@@ -65,7 +65,9 @@ func (s *Service) issueUserToken(ctx context.Context, uat *UserAccessToken) (str
 	if err != nil {
 		return "", fmt.Errorf("build token: %w", err)
 	}
-	_ = token.Set(jwt.SubjectKey, encryptedSub)
+	if err := token.Set(jwt.SubjectKey, encryptedSub); err != nil {
+		return "", fmt.Errorf("set subject: %w", err)
+	}
 
 	// 3. 签名
 	signed, err := s.sign(ctx, token, uat.GetClientID())

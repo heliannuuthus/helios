@@ -565,8 +565,8 @@ func forwardNext(c *gin.Context, flow *types.AuthFlow) {
 	redirect(c, targetURL)
 }
 
-// forwardToStage 跳转到指定阶段（用于强制跳转到特定页面）
-func forwardToStage(c *gin.Context, stage AuthStage) {
+// ForwardToStage 跳转到指定阶段（用于强制跳转到特定页面）
+func ForwardToStage(c *gin.Context, stage AuthStage) {
 	var targetURL string
 	switch stage {
 	case StageLogin:
@@ -597,10 +597,10 @@ func redirect(c *gin.Context, targetURL string) {
 	c.Redirect(statusCode, targetURL)
 }
 
-// forwardToApp 重定向回应用（授权完成后）
+// ForwardToApp 重定向回应用（授权完成后）
 //
 // 使用 302 Found 重定向回 redirect_uri，携带授权码和 state
-func forwardToApp(c *gin.Context, redirectURI, code, state string) {
+func ForwardToApp(c *gin.Context, redirectURI, code, state string) {
 	targetURL := redirectURI + "?code=" + code
 	if state != "" {
 		targetURL += "&state=" + state
@@ -612,8 +612,8 @@ func forwardToApp(c *gin.Context, redirectURI, code, state string) {
 	c.Redirect(http.StatusFound, targetURL)
 }
 
-// forwardError 重定向到错误页面
-func forwardError(c *gin.Context, errorCode, errorDesc string) {
+// ForwardError 重定向到错误页面
+func ForwardError(c *gin.Context, errorCode, errorDesc string) {
 	targetURL := config.GetAuthEndpointError() + "?error=" + errorCode
 	if errorDesc != "" {
 		targetURL += "&error_description=" + errorDesc

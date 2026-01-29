@@ -34,17 +34,33 @@ func (c *ClientAccessToken) Build() (jwt.Token, error) {
 	now := time.Now()
 
 	token := jwt.New()
-	_ = token.Set(jwt.IssuerKey, c.issuer)
-	_ = token.Set(jwt.SubjectKey, c.clientID) // sub = client_id
-	_ = token.Set(jwt.AudienceKey, c.audience)
-	_ = token.Set(jwt.IssuedAtKey, now.Unix())
-	_ = token.Set(jwt.ExpirationKey, now.Add(c.ttl).Unix())
-	_ = token.Set(jwt.NotBeforeKey, c.notBefore.Unix())
+	if err := token.Set(jwt.IssuerKey, c.issuer); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.SubjectKey, c.clientID); err != nil { // sub = client_id
+		return nil, err
+	}
+	if err := token.Set(jwt.AudienceKey, c.audience); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.IssuedAtKey, now.Unix()); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.ExpirationKey, now.Add(c.ttl).Unix()); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.NotBeforeKey, c.notBefore.Unix()); err != nil {
+		return nil, err
+	}
 
 	// JTI
 	jtiBytes := make([]byte, 16)
-	_, _ = rand.Read(jtiBytes)
-	_ = token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes))
+	if _, err := rand.Read(jtiBytes); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes)); err != nil {
+		return nil, err
+	}
 
 	return token, nil
 }

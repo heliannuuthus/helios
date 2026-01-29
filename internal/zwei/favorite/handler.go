@@ -172,15 +172,15 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 	category := c.Query("category")
 	search := c.Query("search")
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-	if limit < 1 {
-		limit = 1
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if err != nil || limit < 1 {
+		limit = 20
 	} else if limit > 100 {
 		limit = 100
 	}
 
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	if offset < 0 {
+	offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if err != nil || offset < 0 {
 		offset = 0
 	}
 

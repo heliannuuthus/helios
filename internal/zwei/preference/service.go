@@ -231,11 +231,7 @@ func (r *UpdatePreferencesRequest) Validate(tagService *tag.Service) error {
 	}
 
 	// 验证过敏选项是否存在
-	if err := validateTagValues(r.Allergies, models.TagTypeAllergy, tagService); err != nil {
-		return err
-	}
-
-	return nil
+	return validateTagValues(r.Allergies, models.TagTypeAllergy, tagService)
 }
 
 // validateTagValues 验证标签值是否存在

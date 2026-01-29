@@ -1,5 +1,6 @@
-// Package json 提供高性能 JSON 序列化/反序列化
-// 使用 goccy/go-json 替代标准库，性能提升约 2-3 倍
+// Package json provides high-performance JSON serialization/deserialization.
+// Uses goccy/go-json instead of stdlib for ~2-3x performance improvement.
+// nolint:revive // This package intentionally shadows the stdlib json package to provide a drop-in replacement.
 package json
 
 import (

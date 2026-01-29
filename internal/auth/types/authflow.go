@@ -1,3 +1,5 @@
+// Package types provides type definitions for the Auth module.
+// nolint:revive // This package name follows Go conventions for internal type packages.
 package types
 
 import (
@@ -254,14 +256,20 @@ type LoginRequest struct {
 // GenerateFlowID 生成 Flow ID
 func GenerateFlowID() string {
 	bytes := make([]byte, 16)
-	_, _ = rand.Read(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		// 如果加密随机数生成失败，使用时间戳作为备选
+		return "flow_" + hex.EncodeToString([]byte(time.Now().Format("20060102150405.000000000")))
+	}
 	return "flow_" + hex.EncodeToString(bytes)
 }
 
 // GenerateAuthorizationCode 生成授权码
 func GenerateAuthorizationCode() string {
 	bytes := make([]byte, 32)
-	_, _ = rand.Read(bytes)
+	if _, err := rand.Read(bytes); err != nil {
+		// 如果加密随机数生成失败，使用时间戳作为备选
+		return hex.EncodeToString([]byte(time.Now().Format("20060102150405.000000000")))
+	}
 	return hex.EncodeToString(bytes)
 }
 

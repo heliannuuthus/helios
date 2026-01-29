@@ -1,7 +1,9 @@
-// Package errors 提供 Auth 服务的统一错误处理
+// Package errors provides unified error handling for Auth service.
+// nolint:revive // This package name is intentional for semantic clarity within the auth module.
 package errors
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -247,7 +249,8 @@ func Wrap(err error) *AuthError {
 	if err == nil {
 		return nil
 	}
-	if ae, ok := err.(*AuthError); ok {
+	ae := &AuthError{}
+	if errors.As(err, &ae) {
 		return ae
 	}
 	return NewServerError(err.Error())
@@ -260,7 +263,8 @@ func Is(err error, code string) bool {
 	if err == nil {
 		return false
 	}
-	if ae, ok := err.(*AuthError); ok {
+	ae := &AuthError{}
+	if errors.As(err, &ae) {
 		return ae.Code == code
 	}
 	return false
@@ -268,7 +272,8 @@ func Is(err error, code string) bool {
 
 // GetHTTPStatus 从错误获取 HTTP 状态码
 func GetHTTPStatus(err error) int {
-	if ae, ok := err.(*AuthError); ok {
+	ae := &AuthError{}
+	if errors.As(err, &ae) {
 		return ae.HTTPStatus
 	}
 	return http.StatusInternalServerError
@@ -279,7 +284,8 @@ func ToAuthError(err error) *AuthError {
 	if err == nil {
 		return nil
 	}
-	if ae, ok := err.(*AuthError); ok {
+	ae := &AuthError{}
+	if errors.As(err, &ae) {
 		return ae
 	}
 	return NewServerError(err.Error())

@@ -41,20 +41,38 @@ func (u *UserAccessToken) Build() (jwt.Token, error) {
 	now := time.Now()
 
 	token := jwt.New()
-	_ = token.Set(jwt.IssuerKey, u.issuer)
-	_ = token.Set(jwt.AudienceKey, u.audience) // aud = service_id
-	_ = token.Set("cli", u.clientID)           // cli = client_id
-	_ = token.Set(jwt.IssuedAtKey, now.Unix())
-	_ = token.Set(jwt.ExpirationKey, now.Add(u.ttl).Unix())
-	_ = token.Set(jwt.NotBeforeKey, u.notBefore.Unix())
+	if err := token.Set(jwt.IssuerKey, u.issuer); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.AudienceKey, u.audience); err != nil { // aud = service_id
+		return nil, err
+	}
+	if err := token.Set("cli", u.clientID); err != nil { // cli = client_id
+		return nil, err
+	}
+	if err := token.Set(jwt.IssuedAtKey, now.Unix()); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.ExpirationKey, now.Add(u.ttl).Unix()); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.NotBeforeKey, u.notBefore.Unix()); err != nil {
+		return nil, err
+	}
 
 	// JTI
 	jtiBytes := make([]byte, 16)
-	_, _ = rand.Read(jtiBytes)
-	_ = token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes))
+	if _, err := rand.Read(jtiBytes); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes)); err != nil {
+		return nil, err
+	}
 
 	// scope
-	_ = token.Set("scope", u.scope)
+	if err := token.Set("scope", u.scope); err != nil {
+		return nil, err
+	}
 
 	// 注意：sub 字段由 Issuer 加密后设置
 

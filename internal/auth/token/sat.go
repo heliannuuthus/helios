@@ -37,20 +37,38 @@ func (s *ServiceAccessToken) Build() (jwt.Token, error) {
 	now := time.Now()
 
 	token := jwt.New()
-	_ = token.Set(jwt.IssuerKey, s.issuer)
-	_ = token.Set(jwt.AudienceKey, s.audience) // aud = service_id
-	_ = token.Set("cli", s.clientID)           // cli = client_id
-	_ = token.Set(jwt.IssuedAtKey, now.Unix())
-	_ = token.Set(jwt.ExpirationKey, now.Add(s.ttl).Unix())
-	_ = token.Set(jwt.NotBeforeKey, s.notBefore.Unix())
+	if err := token.Set(jwt.IssuerKey, s.issuer); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.AudienceKey, s.audience); err != nil { // aud = service_id
+		return nil, err
+	}
+	if err := token.Set("cli", s.clientID); err != nil { // cli = client_id
+		return nil, err
+	}
+	if err := token.Set(jwt.IssuedAtKey, now.Unix()); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.ExpirationKey, now.Add(s.ttl).Unix()); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.NotBeforeKey, s.notBefore.Unix()); err != nil {
+		return nil, err
+	}
 
 	// JTI
 	jtiBytes := make([]byte, 16)
-	_, _ = rand.Read(jtiBytes)
-	_ = token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes))
+	if _, err := rand.Read(jtiBytes); err != nil {
+		return nil, err
+	}
+	if err := token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes)); err != nil {
+		return nil, err
+	}
 
 	// scope
-	_ = token.Set("scope", s.scope)
+	if err := token.Set("scope", s.scope); err != nil {
+		return nil, err
+	}
 
 	// 无 sub 字段
 

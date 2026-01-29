@@ -137,7 +137,10 @@ func (p *Provider) getUserInfo(ctx context.Context, accessToken string) (*idp.Ex
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			logger.Warnf("[GitHub] read error response body failed: %v", readErr)
+		}
 		logger.Errorf("[GitHub] 获取用户信息失败: HTTP %d, 响应: %s", resp.StatusCode, string(bodyBytes))
 		return nil, fmt.Errorf("获取用户信息失败: HTTP %d", resp.StatusCode)
 	}

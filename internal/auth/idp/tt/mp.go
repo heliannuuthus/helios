@@ -80,7 +80,11 @@ func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.Exchange
 		logger.Errorf("[TT] 请求接口失败: %v", err)
 		return nil, fmt.Errorf("请求接口失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Warnf("[TT] close response body failed: %v", closeErr)
+		}
+	}()
 
 	// 先检查 HTTP 状态码
 	if resp.StatusCode != http.StatusOK {
@@ -199,7 +203,11 @@ func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, e
 		logger.Errorf("[TT] 请求获取手机号接口失败: %v", err)
 		return "", fmt.Errorf("请求 TT 接口失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Warnf("[TT] close phone response body failed: %v", closeErr)
+		}
+	}()
 
 	var result struct {
 		ErrNo   int    `json:"err_no"`
@@ -244,7 +252,11 @@ func (p *MPProvider) getAccessToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("请求 TT access_token 失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Warnf("[TT] close access_token response body failed: %v", closeErr)
+		}
+	}()
 
 	var result struct {
 		ErrNo   int    `json:"err_no"`

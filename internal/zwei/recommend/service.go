@@ -346,7 +346,9 @@ func (s *Service) getUserHistory(userID string) (*UserHistory, error) {
 		s.db.Where("recipe_id IN ?", favoriteIDs).Find(&recipes)
 
 		// 填充标签
-		_ = s.fillTags(recipes)
+		if err := s.fillTags(recipes); err != nil {
+			// 填充标签失败不影响主流程
+		}
 
 		for _, r := range recipes {
 			tags := make([]string, len(r.Tags))
@@ -386,7 +388,9 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 	}
 
 	// 填充标签
-	_ = s.fillTags(allRecipes)
+	if err := s.fillTags(allRecipes); err != nil {
+		// 填充标签失败不影响主流程
+	}
 
 	// 2. 构建候选菜谱列表（字段名与 JSON Schema 保持一致）
 	type CandidateRecipe struct {
@@ -420,7 +424,10 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 		}
 	}
 
-	candidatesJSON, _ := json.MarshalIndent(candidates, "", "  ")
+	candidatesJSON, err := json.MarshalIndent(candidates, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("序列化候选菜谱失败: %w", err)
+	}
 
 	// 3. 构建 Prompt
 	prompt := s.buildRecommendPrompt(recCtx, userHistory, string(candidatesJSON), limit)
@@ -539,7 +546,11 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 					}
 
 					details := s.getRecipeDetails(ids)
-					detailsJSON, _ := json.MarshalIndent(details, "", "  ")
+					detailsJSON, marshalErr := json.MarshalIndent(details, "", "  ")
+					if marshalErr != nil {
+						logger.Errorf("[Recommend] 序列化菜品详情失败: %v", marshalErr)
+						continue
+					}
 
 					messages = append(messages, openai.ChatCompletionMessage{
 						Role:       openai.ChatMessageRoleTool,
@@ -644,7 +655,9 @@ func (s *Service) getRecipeDetails(ids []string) []map[string]interface{} {
 		return []map[string]interface{}{}
 	}
 
-	_ = s.fillTags(recipes)
+	if err := s.fillTags(recipes); err != nil {
+		// 填充标签失败不影响主流程
+	}
 
 	details := make([]map[string]interface{}, len(recipes))
 	for i, r := range recipes {

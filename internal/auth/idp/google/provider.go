@@ -55,7 +55,7 @@ func (p *Provider) Exchange(ctx context.Context, params ...any) (*idp.ExchangeRe
 	}
 
 	if p.clientID == "" || p.clientSecret == "" {
-		return nil, errors.New("Google IdP 未配置")
+		return nil, errors.New("google IdP 未配置")
 	}
 
 	logger.Infof("[Google] 登录请求 - Code: %s...", code[:min(len(code), 10)])
@@ -141,7 +141,10 @@ func (p *Provider) getUserInfo(ctx context.Context, accessToken string) (*idp.Ex
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			logger.Warnf("[Google] read error response body failed: %v", readErr)
+		}
 		logger.Errorf("[Google] 获取用户信息失败: HTTP %d, 响应: %s", resp.StatusCode, string(bodyBytes))
 		return nil, fmt.Errorf("获取用户信息失败: HTTP %d", resp.StatusCode)
 	}
@@ -173,8 +176,8 @@ func (p *Provider) getUserInfo(ctx context.Context, accessToken string) (*idp.Ex
 }
 
 // FetchAdditionalInfo 补充获取用户信息
-func (*Provider) FetchAdditionalInfo(ctx context.Context, infoType string, params ...any) (*idp.AdditionalInfo, error) {
-	return nil, fmt.Errorf("Google does not support fetching %s", infoType)
+func (*Provider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...any) (*idp.AdditionalInfo, error) {
+	return nil, fmt.Errorf("google does not support fetching %s", infoType)
 }
 
 // ToPublicConfig 转换为前端可用的公开配置

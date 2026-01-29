@@ -725,4 +725,3 @@ func GetTTL(cacheType string) time.Duration {
 	}
 	return defaultTTL
 }
-

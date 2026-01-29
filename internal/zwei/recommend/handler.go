@@ -67,9 +67,9 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 		req.Timestamp = time.Now().UnixMilli()
 	}
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "6"))
-	if limit < 1 {
-		limit = 1
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "6"))
+	if err != nil || limit < 1 {
+		limit = 6
 	} else if limit > 20 {
 		limit = 20
 	}

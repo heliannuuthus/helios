@@ -186,9 +186,9 @@ func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.Exchange
 }
 
 // FetchAdditionalInfo 补充获取用户信息
-func (*MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, params ...any) (*idp.AdditionalInfo, error) {
+func (*MPProvider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...any) (*idp.AdditionalInfo, error) {
 	logger.Warnf("[Alipay] 支付宝获取 %s 暂未实现", infoType)
-	return nil, fmt.Errorf("Alipay does not support fetching %s yet", infoType)
+	return nil, fmt.Errorf("alipay does not support fetching %s yet", infoType)
 }
 
 // ToPublicConfig 转换为前端可用的公开配置
