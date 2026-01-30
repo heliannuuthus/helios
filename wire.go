@@ -6,7 +6,7 @@ package main
 import (
 	"github.com/google/wire"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
 	"github.com/heliannuuthus/helios/internal/database"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/upload"
@@ -48,15 +48,15 @@ func provideHomeHandler() *home.Handler {
 	return home.NewHandler(database.GetZwei())
 }
 
-// Hermes Service（供 auth 模块复用）
+// Hermes Service（供 aegis 模块复用）
 func provideHermesService() *hermes.Service {
 	return hermes.NewService()
 }
 
 // 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
-func provideAuthHandler(hermesService *hermes.Service) (*auth.Handler, error) {
+func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
 	userSvc := hermes.NewUserService(database.GetHermes())
-	return auth.Initialize(&auth.InitConfig{
+	return aegis.Initialize(&aegis.InitConfig{
 		HermesSvc: hermesService,
 		UserSvc:   userSvc,
 	})
@@ -86,18 +86,18 @@ var ProviderSet = wire.NewSet(
 	provideTagHandler,
 	provideRecommendHandler,
 	provideHomeHandler,
-	// Hermes 模块（使用 Hermes 数据库，提供给 auth 复用）
+	// Hermes 模块（使用 Hermes 数据库，提供给 aegis 复用）
 	provideHermesService,
 	provideHermesHandler,
 	// 认证模块（使用 Hermes 数据库，依赖 hermes.Service）
-	provideAuthHandler,
+	provideAegisHandler,
 	provideUploadHandler,
 )
 
 // App 应用依赖容器
 type App struct {
 	RecipeHandler     *recipe.Handler
-	AuthHandler       *auth.Handler
+	AegisHandler      *aegis.Handler
 	FavoriteHandler   *favorite.Handler
 	HistoryHandler    *history.Handler
 	HomeHandler       *home.Handler

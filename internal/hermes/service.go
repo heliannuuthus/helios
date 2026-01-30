@@ -289,6 +289,16 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 		redirectURIs = &urisStr
 	}
 
+	var allowedIDPs *string
+	if len(req.AllowedIDPs) > 0 {
+		idpsJSON, err := json.Marshal(req.AllowedIDPs)
+		if err != nil {
+			return nil, fmt.Errorf("marshal allowed idps: %w", err)
+		}
+		idpsStr := string(idpsJSON)
+		allowedIDPs = &idpsStr
+	}
+
 	var encryptedKey *string
 	if req.NeedKey {
 		key, err := s.generateApplicationKey(req.DomainID, req.AppID)
@@ -303,6 +313,7 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 		AppID:        req.AppID,
 		Name:         req.Name,
 		RedirectURIs: redirectURIs,
+		AllowedIDPs:  allowedIDPs,
 		EncryptedKey: encryptedKey,
 	}
 

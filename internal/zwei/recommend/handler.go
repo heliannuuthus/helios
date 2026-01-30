@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -84,7 +84,7 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 
 	// 获取用户身份（如果已登录）
 	if user, exists := c.Get("user"); exists {
-		if identity, ok := user.(*auth.Claims); ok {
+		if identity, ok := user.(*aegis.Claims); ok {
 			ctx.UserID = identity.GetOpenID()
 		}
 	}

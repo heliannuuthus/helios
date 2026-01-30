@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
 )
 
 // Handler 浏览历史处理器
@@ -59,7 +59,7 @@ func (h *Handler) AddViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
 		return
@@ -98,7 +98,7 @@ func (h *Handler) RemoveViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
 		return
@@ -127,7 +127,7 @@ func (h *Handler) ClearViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
 		return
@@ -160,7 +160,7 @@ func (h *Handler) GetViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
 		return

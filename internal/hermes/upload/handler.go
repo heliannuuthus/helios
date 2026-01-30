@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/pkg/oss"
@@ -58,7 +58,7 @@ func (h *Handler) UploadImage(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
 		return

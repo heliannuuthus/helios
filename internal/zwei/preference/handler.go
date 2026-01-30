@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -61,7 +61,7 @@ func (h *Handler) GetUserPreferences(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的用户信息"})
 		return
@@ -97,7 +97,7 @@ func (h *Handler) UpdateUserPreferences(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的用户信息"})
 		return

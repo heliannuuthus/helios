@@ -8,7 +8,7 @@ package main
 
 import (
 	"github.com/google/wire"
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
 	"github.com/heliannuuthus/helios/internal/database"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/upload"
@@ -31,7 +31,7 @@ import (
 func InitializeApp() (*App, error) {
 	handler := provideRecipeHandler()
 	service := provideHermesService()
-	authHandler, err := provideAuthHandler(service)
+	aegisHandler, err := provideAegisHandler(service)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func InitializeApp() (*App, error) {
 	hermesHandler := provideHermesHandler(service)
 	app := &App{
 		RecipeHandler:     handler,
-		AuthHandler:       authHandler,
+		AegisHandler:      aegisHandler,
 		FavoriteHandler:   favoriteHandler,
 		HistoryHandler:    historyHandler,
 		HomeHandler:       homeHandler,
@@ -89,15 +89,15 @@ func provideHomeHandler() *home.Handler {
 	return home.NewHandler(database.GetZwei())
 }
 
-// Hermes Service（供 auth 模块复用）
+// Hermes Service（供 aegis 模块复用）
 func provideHermesService() *hermes.Service {
 	return hermes.NewService()
 }
 
 // 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
-func provideAuthHandler(hermesService *hermes.Service) (*auth.Handler, error) {
+func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
 	userSvc := hermes.NewUserService(database.GetHermes())
-	return auth.Initialize(&auth.InitConfig{
+	return aegis.Initialize(&aegis.InitConfig{
 		HermesSvc: hermesService,
 		UserSvc:   userSvc,
 	})
@@ -123,14 +123,14 @@ var ProviderSet = wire.NewSet(recipe.NewService, favorite.NewService, history.Ne
 	provideHermesService,
 	provideHermesHandler,
 
-	provideAuthHandler,
+	provideAegisHandler,
 	provideUploadHandler,
 )
 
 // App 应用依赖容器
 type App struct {
 	RecipeHandler     *recipe.Handler
-	AuthHandler       *auth.Handler
+	AegisHandler      *aegis.Handler
 	FavoriteHandler   *favorite.Handler
 	HistoryHandler    *history.Handler
 	HomeHandler       *home.Handler

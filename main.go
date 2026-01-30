@@ -89,20 +89,21 @@ func main() {
 	// Swagger 文档
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Auth 路由（OAuth2.1/OIDC 风格）
-	authGroup := r.Group("/auth")
+	// Aegis 认证路由（OAuth2.1/OIDC 风格）
+	aegisGroup := r.Group("/auth")
 	{
-		authGroup.GET("/authorize", app.AuthHandler.Authorize) // 创建认证会话并重定向到登录页面
-		authGroup.POST("/login", app.AuthHandler.Login)        // IDP 登录
-		authGroup.POST("/token", app.AuthHandler.Token)        // 获取/刷新 Token
-		authGroup.POST("/revoke", app.AuthHandler.Revoke)      // 撤销 Token
-		authGroup.POST("/logout", middleware.RequireAuth(), app.AuthHandler.Logout)
-		authGroup.GET("/userinfo", middleware.RequireAuth(), app.AuthHandler.UserInfo)
-		authGroup.PUT("/userinfo", middleware.RequireAuth(), app.AuthHandler.UpdateUserInfo)
+		aegisGroup.GET("/authorize", app.AegisHandler.Authorize) // 创建认证会话并重定向到登录页面
+		aegisGroup.POST("/login", app.AegisHandler.Login)        // IDP 登录
+		aegisGroup.POST("/token", app.AegisHandler.Token)        // 获取/刷新 Token
+		aegisGroup.POST("/revoke", app.AegisHandler.Revoke)      // 撤销 Token
+		aegisGroup.POST("/check", app.AegisHandler.Check) // 关系检查（使用 CAT 认证）
+		aegisGroup.POST("/logout", middleware.RequireAuth(), app.AegisHandler.Logout)
+		aegisGroup.GET("/userinfo", middleware.RequireAuth(), app.AegisHandler.UserInfo)
+		aegisGroup.PUT("/userinfo", middleware.RequireAuth(), app.AegisHandler.UpdateUserInfo)
 	}
 
 	// IDPs 路由（获取认证源配置）
-	r.GET("/idps", app.AuthHandler.IDPs) // 获取认证源配置
+	r.GET("/idps", app.AegisHandler.IDPs) // 获取认证源配置
 
 	// API 路由
 	api := r.Group("/api")

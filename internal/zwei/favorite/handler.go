@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
 )
 
 // Handler 收藏处理器
@@ -71,7 +71,7 @@ func (h *Handler) AddFavorite(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
@@ -110,7 +110,7 @@ func (h *Handler) RemoveFavorite(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
@@ -141,7 +141,7 @@ func (h *Handler) CheckFavorite(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
@@ -178,7 +178,7 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
@@ -251,7 +251,7 @@ func (h *Handler) BatchCheckFavorites(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(*aegis.Claims)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return

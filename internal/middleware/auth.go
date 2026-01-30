@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/heliannuuthus/helios/pkg/auth/token"
+	"github.com/heliannuuthus/helios/pkg/aegis/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -62,7 +62,7 @@ func RequireToken(v *token.Interpreter) gin.HandlerFunc {
 			return
 		}
 
-		logger.Infof("[Auth] 认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID)
+		logger.Infof("[Auth] 认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.Subject)
 		c.Set("user", identity)
 		c.Next()
 	}
@@ -84,7 +84,7 @@ func OptionalToken(v *token.Interpreter) gin.HandlerFunc {
 
 		identity, err := v.Interpret(c.Request.Context(), tokenStr)
 		if err == nil && identity != nil {
-			logger.Infof("[Auth] 可选认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.OpenID)
+			logger.Infof("[Auth] 可选认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, identity.Subject)
 			c.Set("user", identity)
 		}
 
