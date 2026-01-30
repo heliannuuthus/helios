@@ -270,6 +270,7 @@ func (h *Handler) GetRecipe(c *gin.Context) {
 // @Success 200 {object} RecipeResponse
 // @Failure 404 {object} map[string]string
 // @Router /api/recipes/{recipe_id} [put]
+// nolint:gocyclo // TODO: 考虑拆分更新逻辑以降低复杂度
 func (h *Handler) UpdateRecipe(c *gin.Context) {
 	id := c.Param("recipe_id")
 

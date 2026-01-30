@@ -84,8 +84,9 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 
 	// 获取用户身份（如果已登录）
 	if user, exists := c.Get("user"); exists {
-		identity := user.(*auth.Claims)
-		ctx.UserID = identity.GetOpenID()
+		if identity, ok := user.(*auth.Claims); ok {
+			ctx.UserID = identity.GetOpenID()
+		}
 	}
 
 	// 检查每日推荐次数限制

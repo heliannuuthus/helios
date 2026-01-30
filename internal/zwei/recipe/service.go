@@ -12,6 +12,7 @@ import (
 
 	"github.com/heliannuuthus/helios/internal/zwei/models"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 const (
@@ -82,7 +83,9 @@ func (r *categoryCacheRefresher) refresh() {
 		ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
 		defer cancel()
 		// 刷新失败时只记录日志，不影响主流程
-		_ = r.doRefresh(ctx)
+		if err := r.doRefresh(ctx); err != nil {
+			logger.Errorf("[Recipe] 分类缓存刷新失败: %v", err)
+		}
 	}()
 }
 
@@ -95,7 +98,9 @@ func (r *categoryCacheRefresher) start() {
 	// 首次同步刷新，确保启动时有数据
 	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
 	// 首次刷新失败时只记录，不影响启动
-	_ = r.doRefresh(ctx)
+	if err := r.doRefresh(ctx); err != nil {
+		logger.Errorf("[Recipe] 分类缓存首次刷新失败: %v", err)
+	}
 	cancel()
 
 	// 启动定期刷新协程
@@ -157,39 +162,53 @@ func (s *Service) CreateRecipe(recipe *models.Recipe, ingredients []models.Ingre
 			return err
 		}
 
-		for i := range ingredients {
-			ingredients[i].RecipeID = recipe.RecipeID
-		}
-		if len(ingredients) > 0 {
-			if err := tx.Create(&ingredients).Error; err != nil {
-				return err
-			}
+		if err := s.saveIngredients(tx, recipe.RecipeID, ingredients); err != nil {
+			return err
 		}
 
-		for i := range steps {
-			steps[i].RecipeID = recipe.RecipeID
-		}
-		if len(steps) > 0 {
-			if err := tx.Create(&steps).Error; err != nil {
-				return err
-			}
+		if err := s.saveSteps(tx, recipe.RecipeID, steps); err != nil {
+			return err
 		}
 
-		if len(notes) > 0 {
-			additionalNotes := make([]models.AdditionalNote, len(notes))
-			for i, note := range notes {
-				additionalNotes[i] = models.AdditionalNote{
-					RecipeID: recipe.RecipeID,
-					Note:     note,
-				}
-			}
-			if err := tx.Create(&additionalNotes).Error; err != nil {
-				return err
-			}
-		}
-
-		return nil
+		return s.saveNotes(tx, recipe.RecipeID, notes)
 	})
+}
+
+// saveIngredients 保存配料列表
+func (s *Service) saveIngredients(tx *gorm.DB, recipeID string, ingredients []models.Ingredient) error {
+	if len(ingredients) == 0 {
+		return nil
+	}
+	for i := range ingredients {
+		ingredients[i].RecipeID = recipeID
+	}
+	return tx.Create(&ingredients).Error
+}
+
+// saveSteps 保存步骤列表
+func (s *Service) saveSteps(tx *gorm.DB, recipeID string, steps []models.Step) error {
+	if len(steps) == 0 {
+		return nil
+	}
+	for i := range steps {
+		steps[i].RecipeID = recipeID
+	}
+	return tx.Create(&steps).Error
+}
+
+// saveNotes 保存备注列表
+func (s *Service) saveNotes(tx *gorm.DB, recipeID string, notes []string) error {
+	if len(notes) == 0 {
+		return nil
+	}
+	additionalNotes := make([]models.AdditionalNote, len(notes))
+	for i, note := range notes {
+		additionalNotes[i] = models.AdditionalNote{
+			RecipeID: recipeID,
+			Note:     note,
+		}
+	}
+	return tx.Create(&additionalNotes).Error
 }
 
 // GetRecipe 根据 ID 获取菜谱
@@ -211,7 +230,9 @@ func (s *Service) GetRecipe(id string) (*models.Recipe, error) {
 	}
 
 	// 填充标签失败不影响主流程
-	_ = s.fillTagsForOne(&recipe)
+	if err := s.fillTagsForOne(&recipe); err != nil {
+		logger.Errorf("[Recipe] 填充标签失败 (recipe_id=%s): %v", recipe.RecipeID, err)
+	}
 
 	return &recipe, nil
 }
@@ -240,7 +261,9 @@ func (s *Service) GetRecipes(category, search string, limit, offset int) ([]mode
 	}
 
 	// 填充标签失败不影响主流程
-	_ = s.fillTags(recipes)
+	if err := s.fillTags(recipes); err != nil {
+		logger.Errorf("[Recipe] 批量填充标签失败: %v", err)
+	}
 
 	return recipes, nil
 }
@@ -305,7 +328,9 @@ func (s *Service) GetHotRecipes(limit int, excludeIDs []string) ([]models.Recipe
 	}
 
 	// 填充标签失败不影响主流程
-	_ = s.fillTags(result)
+	if err := s.fillTags(result); err != nil {
+		logger.Errorf("[Recipe] 批量填充标签失败: %v", err)
+	}
 
 	return result, nil
 }
@@ -321,60 +346,67 @@ func (s *Service) UpdateRecipe(id string, updates map[string]interface{}, ingred
 	}
 
 	return &recipe, s.db.Transaction(func(tx *gorm.DB) error {
-		if len(updates) > 0 {
-			if err := tx.Model(&recipe).Updates(updates).Error; err != nil {
+		if err := s.applyUpdates(tx, &recipe, updates); err != nil {
+			return err
+		}
+
+		if updateIngredients {
+			if err := s.replaceIngredients(tx, id, ingredients); err != nil {
 				return err
 			}
 		}
 
-		if updateIngredients {
-			tx.Where("recipe_id = ?", id).Delete(&models.Ingredient{})
-			for i := range ingredients {
-				ingredients[i].RecipeID = id
-			}
-			if len(ingredients) > 0 {
-				if err := tx.Create(&ingredients).Error; err != nil {
-					return err
-				}
-			}
-		}
-
 		if updateSteps {
-			tx.Where("recipe_id = ?", id).Delete(&models.Step{})
-			for i := range steps {
-				steps[i].RecipeID = id
-			}
-			if len(steps) > 0 {
-				if err := tx.Create(&steps).Error; err != nil {
-					return err
-				}
+			if err := s.replaceSteps(tx, id, steps); err != nil {
+				return err
 			}
 		}
 
 		if updateNotes {
-			tx.Where("recipe_id = ?", id).Delete(&models.AdditionalNote{})
-			if len(notes) > 0 {
-				additionalNotes := make([]models.AdditionalNote, len(notes))
-				for i, note := range notes {
-					additionalNotes[i] = models.AdditionalNote{
-						RecipeID: id,
-						Note:     note,
-					}
-				}
-				if err := tx.Create(&additionalNotes).Error; err != nil {
-					return err
-				}
+			if err := s.replaceNotes(tx, id, notes); err != nil {
+				return err
 			}
 		}
 
-		return tx.
-			Preload("Ingredients").
-			Preload("Steps", func(db *gorm.DB) *gorm.DB {
-				return db.Order("step ASC")
-			}).
-			Preload("AdditionalNotes").
-			First(&recipe, "recipe_id = ?", id).Error
+		return s.reloadRecipe(tx, &recipe, id)
 	})
+}
+
+// applyUpdates 应用更新字段
+func (s *Service) applyUpdates(tx *gorm.DB, recipe *models.Recipe, updates map[string]interface{}) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	return tx.Model(recipe).Updates(updates).Error
+}
+
+// replaceIngredients 替换配料列表
+func (s *Service) replaceIngredients(tx *gorm.DB, recipeID string, ingredients []models.Ingredient) error {
+	tx.Where("recipe_id = ?", recipeID).Delete(&models.Ingredient{})
+	return s.saveIngredients(tx, recipeID, ingredients)
+}
+
+// replaceSteps 替换步骤列表
+func (s *Service) replaceSteps(tx *gorm.DB, recipeID string, steps []models.Step) error {
+	tx.Where("recipe_id = ?", recipeID).Delete(&models.Step{})
+	return s.saveSteps(tx, recipeID, steps)
+}
+
+// replaceNotes 替换备注列表
+func (s *Service) replaceNotes(tx *gorm.DB, recipeID string, notes []string) error {
+	tx.Where("recipe_id = ?", recipeID).Delete(&models.AdditionalNote{})
+	return s.saveNotes(tx, recipeID, notes)
+}
+
+// reloadRecipe 重新加载菜谱及其关联数据
+func (s *Service) reloadRecipe(tx *gorm.DB, recipe *models.Recipe, id string) error {
+	return tx.
+		Preload("Ingredients").
+		Preload("Steps", func(db *gorm.DB) *gorm.DB {
+			return db.Order("step ASC")
+		}).
+		Preload("AdditionalNotes").
+		First(recipe, "recipe_id = ?", id).Error
 }
 
 // DeleteRecipe 删除菜谱

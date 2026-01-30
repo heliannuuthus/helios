@@ -65,45 +65,71 @@ func (*MPProvider) Type() string {
 
 // Exchange 用授权码换取用户信息
 func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.ExchangeResult, error) {
-	if len(params) < 1 {
-		return nil, errors.New("code is required")
-	}
-	code, ok := params[0].(string)
-	if !ok {
-		return nil, errors.New("code must be a string")
+	code, err := p.extractCode(params)
+	if err != nil {
+		return nil, err
 	}
 
-	if p.appID == "" || p.privateKey == nil {
-		return nil, errors.New("支付宝小程序 IdP 未配置")
+	if err := p.validateConfig(); err != nil {
+		return nil, err
 	}
 
 	logger.Infof("[Alipay] 登录请求 - Code: %s...", code[:min(len(code), 10)])
 
-	// 构建请求参数
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	reqParams := map[string]string{
-		"app_id":     p.appID,
-		"method":     "alipay.system.oauth.token",
-		"format":     "JSON",
-		"charset":    "utf-8",
-		"sign_type":  "RSA2",
-		"timestamp":  timestamp,
-		"version":    "1.0",
-		"grant_type": "authorization_code",
-		"code":       code,
+	// 发送请求
+	bodyStr, err := p.sendOAuthRequest(ctx, code)
+	if err != nil {
+		return nil, err
 	}
 
-	// 构建签名字符串
+	// 检查错误响应
+	if err := p.checkErrorResponse(bodyStr); err != nil {
+		return nil, err
+	}
+
+	// 验证签名
+	if err := p.verifyResponseSign(bodyStr); err != nil {
+		return nil, err
+	}
+
+	// 解析用户 ID
+	return p.parseUserID(bodyStr)
+}
+
+// extractCode 提取授权码
+func (p *MPProvider) extractCode(params []any) (string, error) {
+	if len(params) < 1 {
+		return "", errors.New("code is required")
+	}
+	code, ok := params[0].(string)
+	if !ok {
+		return "", errors.New("code must be a string")
+	}
+	return code, nil
+}
+
+// validateConfig 验证配置
+func (p *MPProvider) validateConfig() error {
+	if p.appID == "" || p.privateKey == nil {
+		return errors.New("支付宝小程序 IdP 未配置")
+	}
+	return nil
+}
+
+// sendOAuthRequest 发送 OAuth 请求
+func (p *MPProvider) sendOAuthRequest(ctx context.Context, code string) (string, error) {
+	reqParams := p.buildRequestParams(code)
+
 	signContent := buildSignContent(reqParams)
 	logger.Debugf("[Alipay] 待签名字符串: %s", signContent)
+
 	sign, err := signWithRSA2(p.privateKey, signContent)
 	if err != nil {
 		logger.Errorf("[Alipay] 签名失败: %v", err)
-		return nil, fmt.Errorf("签名失败: %w", err)
+		return "", fmt.Errorf("签名失败: %w", err)
 	}
 	reqParams["sign"] = sign
 
-	// 构建 POST 请求
 	form := url.Values{}
 	for k, v := range reqParams {
 		form.Add(k, v)
@@ -112,7 +138,7 @@ func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.Exchange
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://openapi.alipay.com/gateway.do", strings.NewReader(form.Encode()))
 	if err != nil {
 		logger.Errorf("[Alipay] 构建请求失败: %v", err)
-		return nil, fmt.Errorf("构建请求失败: %w", err)
+		return "", fmt.Errorf("构建请求失败: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded;charset=utf-8")
 
@@ -120,7 +146,7 @@ func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.Exchange
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.Errorf("[Alipay] 请求接口失败: %v", err)
-		return nil, fmt.Errorf("请求接口失败: %w", err)
+		return "", fmt.Errorf("请求接口失败: %w", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -131,46 +157,73 @@ func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.Exchange
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Errorf("[Alipay] 读取响应失败: %v", err)
-		return nil, fmt.Errorf("读取响应失败: %w", err)
+		return "", fmt.Errorf("读取响应失败: %w", err)
 	}
 
 	bodyStr := string(bodyBytes)
 	logger.Infof("[Alipay] 响应: %s", bodyStr)
+	return bodyStr, nil
+}
 
-	// 检查是否有错误响应
+// buildRequestParams 构建请求参数
+func (p *MPProvider) buildRequestParams(code string) map[string]string {
+	return map[string]string{
+		"app_id":     p.appID,
+		"method":     "alipay.system.oauth.token",
+		"format":     "JSON",
+		"charset":    "utf-8",
+		"sign_type":  "RSA2",
+		"timestamp":  time.Now().Format("2006-01-02 15:04:05"),
+		"version":    "1.0",
+		"grant_type": "authorization_code",
+		"code":       code,
+	}
+}
+
+// checkErrorResponse 检查错误响应
+func (p *MPProvider) checkErrorResponse(bodyStr string) error {
 	errorCode := gjson.Get(bodyStr, "error_response.code").String()
-	if errorCode != "" {
-		errorMsg := gjson.Get(bodyStr, "error_response.msg").String()
-		subMsg := gjson.Get(bodyStr, "error_response.sub_msg").String()
-		logger.Errorf("[Alipay] 登录失败 - Code: %s, Msg: %s, SubMsg: %s", errorCode, errorMsg, subMsg)
-		return nil, fmt.Errorf("登录失败: %s - %s", errorMsg, subMsg)
+	if errorCode == "" {
+		return nil
+	}
+	errorMsg := gjson.Get(bodyStr, "error_response.msg").String()
+	subMsg := gjson.Get(bodyStr, "error_response.sub_msg").String()
+	logger.Errorf("[Alipay] 登录失败 - Code: %s, Msg: %s, SubMsg: %s", errorCode, errorMsg, subMsg)
+	return fmt.Errorf("登录失败: %s - %s", errorMsg, subMsg)
+}
+
+// verifyResponseSign 验证响应签名
+func (p *MPProvider) verifyResponseSign(bodyStr string) error {
+	if p.publicKey == nil {
+		return nil
 	}
 
-	// 验证响应签名
-	if p.publicKey != nil {
-		respSign := gjson.Get(bodyStr, "sign").String()
-		if respSign != "" {
-			responseNode := gjson.Get(bodyStr, "alipay_system_oauth_token_response")
-			if responseNode.Exists() {
-				responseRaw := responseNode.Raw
-				err = verifySign(p.publicKey, responseRaw, respSign)
-				if err != nil {
-					logger.Errorf("[Alipay] 响应签名验证失败: %v", err)
-					return nil, fmt.Errorf("响应签名验证失败: %w", err)
-				}
-				logger.Infof("[Alipay] 响应签名验证成功")
-			}
-		}
+	respSign := gjson.Get(bodyStr, "sign").String()
+	if respSign == "" {
+		return nil
 	}
 
-	// 解析成功响应
+	responseNode := gjson.Get(bodyStr, "alipay_system_oauth_token_response")
+	if !responseNode.Exists() {
+		return nil
+	}
+
+	if err := verifySign(p.publicKey, responseNode.Raw, respSign); err != nil {
+		logger.Errorf("[Alipay] 响应签名验证失败: %v", err)
+		return fmt.Errorf("响应签名验证失败: %w", err)
+	}
+	logger.Infof("[Alipay] 响应签名验证成功")
+	return nil
+}
+
+// parseUserID 解析用户 ID
+func (p *MPProvider) parseUserID(bodyStr string) (*idp.ExchangeResult, error) {
 	responseNode := gjson.Get(bodyStr, "alipay_system_oauth_token_response")
 	if !responseNode.Exists() {
 		logger.Errorf("[Alipay] 响应中缺少 alipay_system_oauth_token_response")
 		return nil, errors.New("响应中缺少 alipay_system_oauth_token_response")
 	}
 
-	// 提取用户ID（使用 open_id 字段）
 	userID := gjson.Get(bodyStr, "alipay_system_oauth_token_response.open_id").String()
 	if userID == "" {
 		logger.Errorf("[Alipay] 响应中缺少 open_id 字段")

@@ -33,36 +33,21 @@ func NewClientAccessToken(issuer, clientID, audience string, ttl time.Duration) 
 func (c *ClientAccessToken) Build() (jwt.Token, error) {
 	now := time.Now()
 
-	token := jwt.New()
-	if err := token.Set(jwt.IssuerKey, c.issuer); err != nil {
-		return nil, err
-	}
-	if err := token.Set(jwt.SubjectKey, c.clientID); err != nil { // sub = client_id
-		return nil, err
-	}
-	if err := token.Set(jwt.AudienceKey, c.audience); err != nil {
-		return nil, err
-	}
-	if err := token.Set(jwt.IssuedAtKey, now.Unix()); err != nil {
-		return nil, err
-	}
-	if err := token.Set(jwt.ExpirationKey, now.Add(c.ttl).Unix()); err != nil {
-		return nil, err
-	}
-	if err := token.Set(jwt.NotBeforeKey, c.notBefore.Unix()); err != nil {
-		return nil, err
-	}
-
 	// JTI
 	jtiBytes := make([]byte, 16)
 	if _, err := rand.Read(jtiBytes); err != nil {
 		return nil, err
 	}
-	if err := token.Set(jwt.JwtIDKey, hex.EncodeToString(jtiBytes)); err != nil {
-		return nil, err
-	}
 
-	return token, nil
+	return jwt.NewBuilder().
+		Issuer(c.issuer).
+		Subject(c.clientID). // sub = client_id
+		Audience([]string{c.audience}).
+		IssuedAt(now).
+		Expiration(now.Add(c.ttl)).
+		NotBefore(c.notBefore).
+		JwtID(hex.EncodeToString(jtiBytes)).
+		Build()
 }
 
 // GetIssuer 返回签发者

@@ -40,21 +40,54 @@ func (p *MPProvider) Type() string {
 
 // Exchange 用授权码换取用户信息
 func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.ExchangeResult, error) {
-	if len(params) < 1 {
-		return nil, errors.New("code is required")
-	}
-	code, ok := params[0].(string)
-	if !ok {
-		return nil, errors.New("code must be a string")
+	code, err := p.extractCode(params)
+	if err != nil {
+		return nil, err
 	}
 
-	if p.appID == "" || p.appSecret == "" {
-		return nil, errors.New("TT 小程序 IdP 未配置")
+	if err := p.validateConfig(); err != nil {
+		return nil, err
 	}
 
 	logger.Infof("[TT] 登录请求 - Code: %s...", code[:min(len(code), 10)])
 
-	// 抖音 API 使用 POST 请求，body 为 JSON
+	// 发送请求
+	bodyBytes, err := p.sendSessionRequest(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+
+	// 检查错误响应
+	if err := p.checkError(bodyBytes); err != nil {
+		return nil, err
+	}
+
+	// 解析用户信息
+	return p.parseUserInfo(bodyBytes)
+}
+
+// extractCode 提取授权码
+func (p *MPProvider) extractCode(params []any) (string, error) {
+	if len(params) < 1 {
+		return "", errors.New("code is required")
+	}
+	code, ok := params[0].(string)
+	if !ok {
+		return "", errors.New("code must be a string")
+	}
+	return code, nil
+}
+
+// validateConfig 验证配置
+func (p *MPProvider) validateConfig() error {
+	if p.appID == "" || p.appSecret == "" {
+		return errors.New("TT 小程序 IdP 未配置")
+	}
+	return nil
+}
+
+// sendSessionRequest 发送会话请求
+func (p *MPProvider) sendSessionRequest(ctx context.Context, code string) ([]byte, error) {
 	reqBody := map[string]string{
 		"appid":  p.appID,
 		"secret": p.appSecret,
@@ -66,9 +99,9 @@ func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.Exchange
 		return nil, fmt.Errorf("构建请求体失败: %w", err)
 	}
 
-	reqURL := "https://developer.toutiao.com/api/apps/v2/jscode2session"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewBuffer(reqBodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://developer.toutiao.com/api/apps/v2/jscode2session",
+		bytes.NewBuffer(reqBodyBytes))
 	if err != nil {
 		logger.Errorf("[TT] 创建请求失败: %v", err)
 		return nil, fmt.Errorf("创建请求失败: %w", err)
@@ -86,43 +119,40 @@ func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.Exchange
 		}
 	}()
 
-	// 先检查 HTTP 状态码
-	if resp.StatusCode != http.StatusOK {
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			logger.Warnf("[TT] read response body failed: %v", err)
-		}
-		logger.Errorf("[TT] API 返回非 200 状态码: %d, 响应: %s", resp.StatusCode, string(bodyBytes))
-		return nil, fmt.Errorf("API 请求失败: HTTP %d", resp.StatusCode)
-	}
-
-	// 读取响应体
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Errorf("[TT] 读取响应失败: %v", err)
 		return nil, fmt.Errorf("读取响应失败: %w", err)
 	}
 
-	logger.Infof("[TT] API 原始响应: %s", string(bodyBytes))
-
-	// 使用 gjson 快速检查错误码
-	errNo := gjson.GetBytes(bodyBytes, "err_no").Int()
-	errTips := gjson.GetBytes(bodyBytes, "err_tips").String()
-
-	// 如果存在错误，直接返回
-	if errNo != 0 {
-		logger.Errorf("[TT] 登录失败 - ErrNo: %d, ErrTips: %s", errNo, errTips)
-		return nil, fmt.Errorf("登录失败: %s", errTips)
+	if resp.StatusCode != http.StatusOK {
+		logger.Errorf("[TT] API 返回非 200 状态码: %d, 响应: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("API 请求失败: HTTP %d", resp.StatusCode)
 	}
 
-	// 检查 data 字段是否存在且不为 null
+	logger.Infof("[TT] API 原始响应: %s", string(bodyBytes))
+	return bodyBytes, nil
+}
+
+// checkError 检查错误响应
+func (p *MPProvider) checkError(bodyBytes []byte) error {
+	errNo := gjson.GetBytes(bodyBytes, "err_no").Int()
+	if errNo == 0 {
+		return nil
+	}
+	errTips := gjson.GetBytes(bodyBytes, "err_tips").String()
+	logger.Errorf("[TT] 登录失败 - ErrNo: %d, ErrTips: %s", errNo, errTips)
+	return fmt.Errorf("登录失败: %s", errTips)
+}
+
+// parseUserInfo 解析用户信息
+func (p *MPProvider) parseUserInfo(bodyBytes []byte) (*idp.ExchangeResult, error) {
 	dataRaw := gjson.GetBytes(bodyBytes, "data")
 	if !dataRaw.Exists() || dataRaw.Raw == "null" {
 		logger.Errorf("[TT] 响应 data 字段为空或 null")
 		return nil, errors.New("响应 data 字段为空")
 	}
 
-	// 解析 data 字段
 	openID := gjson.GetBytes(bodyBytes, "data.openid").String()
 	unionID := gjson.GetBytes(bodyBytes, "data.unionid").String()
 

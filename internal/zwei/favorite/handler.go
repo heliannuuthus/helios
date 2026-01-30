@@ -71,7 +71,11 @@ func (h *Handler) AddFavorite(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Claims)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
+		return
+	}
 	openID := identity.GetOpenID()
 
 	var req FavoriteRequest
@@ -106,7 +110,11 @@ func (h *Handler) RemoveFavorite(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Claims)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
+		return
+	}
 	openID := identity.GetOpenID()
 	recipeID := c.Param("recipe_id")
 
@@ -133,7 +141,11 @@ func (h *Handler) CheckFavorite(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Claims)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
+		return
+	}
 	openID := identity.GetOpenID()
 	recipeID := c.Param("recipe_id")
 
@@ -166,7 +178,11 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Claims)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
+		return
+	}
 	openID := identity.GetOpenID()
 
 	category := c.Query("category")
@@ -235,7 +251,11 @@ func (h *Handler) BatchCheckFavorites(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Claims)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
+		return
+	}
 	openID := identity.GetOpenID()
 
 	var req BatchCheckRequest

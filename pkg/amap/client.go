@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/pkg/json"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // Client 高德地图客户端
@@ -65,7 +66,11 @@ func (c *Client) GetLocation(lat, lng float64) (*Location, error) {
 	if err != nil {
 		return nil, fmt.Errorf("请求高德 API 失败: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Errorf("[Amap] 关闭响应体失败: %v", err)
+		}
+	}()
 
 	var result struct {
 		Status    string `json:"status"`
@@ -126,7 +131,11 @@ func (c *Client) GetWeatherByAdcode(adcode string) (*Weather, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Errorf("[Amap] 关闭响应体失败: %v", err)
+		}
+	}()
 
 	var result struct {
 		Status string `json:"status"`

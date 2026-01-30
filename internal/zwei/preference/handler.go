@@ -61,7 +61,11 @@ func (h *Handler) GetUserPreferences(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Claims)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的用户信息"})
+		return
+	}
 	prefs, err := h.service.GetUserPreferences(identity.GetOpenID())
 	if err != nil {
 		logger.Error("获取用户偏好失败", zap.Error(err))
@@ -93,7 +97,11 @@ func (h *Handler) UpdateUserPreferences(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Claims)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的用户信息"})
+		return
+	}
 	var req UpdatePreferencesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误: " + err.Error()})

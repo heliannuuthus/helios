@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/heliannuuthus/helios/internal/config"
@@ -24,62 +26,12 @@ func CORS() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cfg := config.Zwei()
 		origin := c.GetHeader(headerOrigin)
-		origins := cfg.GetStringSlice("cors.origins")
 
-		// 检查 origin 是否在允许列表中
-		allowAll := false
-		allowed := false
-		for _, o := range origins {
-			if o == wildcard {
-				allowAll = true
-				break
-			}
-			if o == origin {
-				allowed = true
-				break
-			}
-		}
-
-		// 设置 Access-Control-Allow-Origin
-		// 注意：使用 credentials 时不能用 "*"，必须返回具体 origin
-		if origin != "" && (allowAll || allowed) {
-			c.Header(headerAllowOrigin, origin)
-		}
-
-		// 允许的方法
-		methods := defaultAllowMethods
-		allowMethods := cfg.GetStringSlice("cors.allow_methods")
-		if len(allowMethods) > 0 && allowMethods[0] != wildcard {
-			methods = ""
-			for i, m := range allowMethods {
-				if i > 0 {
-					methods += ", "
-				}
-				methods += m
-			}
-		}
-		c.Header(headerAllowMethods, methods)
-
-		// 允许的头
-		headers := defaultAllowHeaders
-		allowHeaders := cfg.GetStringSlice("cors.allow_headers")
-		if len(allowHeaders) > 0 && allowHeaders[0] != wildcard {
-			headers = ""
-			for i, h := range allowHeaders {
-				if i > 0 {
-					headers += ", "
-				}
-				headers += h
-			}
-		}
-		c.Header(headerAllowHeaders, headers)
-
-		// 允许携带凭证
-		if cfg.GetBool("cors.allow_credentials") {
-			c.Header(headerAllowCredentials, "true")
-		}
-
-		// 预检请求缓存时间
+		// 设置 CORS 头
+		setAllowOrigin(c, cfg, origin)
+		setAllowMethods(c, cfg)
+		setAllowHeaders(c, cfg)
+		setCredentials(c, cfg)
 		c.Header(headerMaxAge, defaultMaxAge)
 
 		// 处理预检请求
@@ -89,5 +41,54 @@ func CORS() gin.HandlerFunc {
 		}
 
 		c.Next()
+	}
+}
+
+// setAllowOrigin 设置允许的 Origin
+func setAllowOrigin(c *gin.Context, cfg *config.Cfg, origin string) {
+	if origin == "" {
+		return
+	}
+
+	origins := cfg.GetStringSlice("cors.origins")
+	if isOriginAllowed(origin, origins) {
+		c.Header(headerAllowOrigin, origin)
+	}
+}
+
+// isOriginAllowed 检查 origin 是否在允许列表中
+func isOriginAllowed(origin string, origins []string) bool {
+	for _, o := range origins {
+		if o == wildcard || o == origin {
+			return true
+		}
+	}
+	return false
+}
+
+// setAllowMethods 设置允许的方法
+func setAllowMethods(c *gin.Context, cfg *config.Cfg) {
+	methods := defaultAllowMethods
+	allowMethods := cfg.GetStringSlice("cors.allow_methods")
+	if len(allowMethods) > 0 && allowMethods[0] != wildcard {
+		methods = strings.Join(allowMethods, ", ")
+	}
+	c.Header(headerAllowMethods, methods)
+}
+
+// setAllowHeaders 设置允许的请求头
+func setAllowHeaders(c *gin.Context, cfg *config.Cfg) {
+	headers := defaultAllowHeaders
+	allowHeaders := cfg.GetStringSlice("cors.allow_headers")
+	if len(allowHeaders) > 0 && allowHeaders[0] != wildcard {
+		headers = strings.Join(allowHeaders, ", ")
+	}
+	c.Header(headerAllowHeaders, headers)
+}
+
+// setCredentials 设置是否允许携带凭证
+func setCredentials(c *gin.Context, cfg *config.Cfg) {
+	if cfg.GetBool("cors.allow_credentials") {
+		c.Header(headerAllowCredentials, "true")
 	}
 }
