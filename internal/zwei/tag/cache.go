@@ -4,10 +4,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/heliannuuthus/helios/internal/zwei/models"
-
-	"github.com/dgraph-io/ristretto"
+	"github.com/dgraph-io/ristretto/v2"
 	"gorm.io/gorm"
+
+	"github.com/heliannuuthus/helios/internal/zwei/models"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 
 // tagCache 标签定义缓存（使用 Ristretto + 按类型分组的索引）
 type tagCache struct {
-	cache *ristretto.Cache
+	cache *ristretto.Cache[string, any]
 	// 按类型分组的索引：map[TagType][]*Tag
 	// 使用 sync.Map 因为读多写少，读操作无锁
 	typeIndex sync.Map // map[models.TagType][]*models.Tag
@@ -39,7 +39,7 @@ var (
 func getTagCache() *tagCache {
 	cacheOnce.Do(func() {
 		// 初始化 Ristretto 缓存
-		ristrettoCache, err := ristretto.NewCache(&ristretto.Config{
+		ristrettoCache, err := ristretto.NewCache(&ristretto.Config[string, any]{
 			NumCounters: tagCacheNumCounters,
 			MaxCost:     tagCacheSize,
 			BufferItems: tagCacheBufferItems,
@@ -129,7 +129,11 @@ func (c *tagCache) GetByType(tagType models.TagType, db *gorm.DB) ([]*models.Tag
 
 	// 从索引获取（无锁读，性能最优）
 	if tags, ok := c.typeIndex.Load(tagType); ok {
-		tagList := tags.([]*models.Tag)
+		tagList, assertOk := tags.([]*models.Tag)
+		if !assertOk {
+			// 类型断言失败，重新加载
+			return c.loadTypeIndex(tagType, db)
+		}
 		if len(tagList) == 0 {
 			return []*models.Tag{}, nil
 		}
@@ -151,14 +155,15 @@ func (c *tagCache) loadTypeIndex(tagType models.TagType, db *gorm.DB) ([]*models
 	// 双重检查，避免并发重复加载
 	c.indexMu.RLock()
 	if tags, ok := c.typeIndex.Load(tagType); ok {
-		c.indexMu.RUnlock()
-		tagList := tags.([]*models.Tag)
-		result := make([]*models.Tag, len(tagList))
-		for i, tag := range tagList {
-			tagCopy := *tag
-			result[i] = &tagCopy
+		if tagList, assertOk := tags.([]*models.Tag); assertOk {
+			c.indexMu.RUnlock()
+			result := make([]*models.Tag, len(tagList))
+			for i, tag := range tagList {
+				tagCopy := *tag
+				result[i] = &tagCopy
+			}
+			return result, nil
 		}
-		return result, nil
 	}
 	c.indexMu.RUnlock()
 
@@ -168,13 +173,14 @@ func (c *tagCache) loadTypeIndex(tagType models.TagType, db *gorm.DB) ([]*models
 
 	// 再次检查（双重检查锁定模式）
 	if tags, ok := c.typeIndex.Load(tagType); ok {
-		tagList := tags.([]*models.Tag)
-		result := make([]*models.Tag, len(tagList))
-		for i, tag := range tagList {
-			tagCopy := *tag
-			result[i] = &tagCopy
+		if tagList, assertOk := tags.([]*models.Tag); assertOk {
+			result := make([]*models.Tag, len(tagList))
+			for i, tag := range tagList {
+				tagCopy := *tag
+				result[i] = &tagCopy
+			}
+			return result, nil
 		}
-		return result, nil
 	}
 
 	// 查询数据库获取该类型的所有标签
@@ -261,15 +267,20 @@ func (c *tagCache) updateTypeIndex(tag *models.Tag) {
 	var found bool
 
 	if tags != nil {
-		tagList = tags.([]*models.Tag)
-		// 检查是否已存在
-		for i, t := range tagList {
-			if t.Value == tag.Value {
-				// 更新现有标签（创建新副本）
-				tagCopy := *tag
-				tagList[i] = &tagCopy
-				found = true
-				break
+		var ok bool
+		tagList, ok = tags.([]*models.Tag)
+		if !ok {
+			tagList = nil
+		} else {
+			// 检查是否已存在
+			for i, t := range tagList {
+				if t.Value == tag.Value {
+					// 更新现有标签（创建新副本）
+					tagCopy := *tag
+					tagList[i] = &tagCopy
+					found = true
+					break
+				}
 			}
 		}
 	}
@@ -311,7 +322,10 @@ func (c *tagCache) removeFromTypeIndex(tagType models.TagType, value string) {
 		return
 	}
 
-	tagList := tags.([]*models.Tag)
+	tagList, assertOk := tags.([]*models.Tag)
+	if !assertOk {
+		return
+	}
 	for i, t := range tagList {
 		if t.Value == value {
 			// 删除该标签

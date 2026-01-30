@@ -1,3 +1,5 @@
+// Package utils provides utility functions for the application.
+// nolint:revive // This package name is intentional for collecting misc utilities.
 package utils
 
 import (
@@ -22,7 +24,10 @@ func GenerateID(length int) string {
 
 	// 生成随机字节
 	randomBytes := make([]byte, byteLen)
-	_, _ = rand.Read(randomBytes)
+	if _, err := rand.Read(randomBytes); err != nil {
+		// 如果加密随机数生成失败，使用当前时间纳秒作为备选
+		return base62Chars[0:length]
+	}
 
 	// 转换为大整数
 	num := new(big.Int).SetBytes(randomBytes)

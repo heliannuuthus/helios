@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/heliannuuthus/helios/internal/zwei/models"
-
 	"gorm.io/gorm"
+
+	"github.com/heliannuuthus/helios/internal/zwei/models"
 )
 
 // Service 浏览历史服务
@@ -93,10 +93,8 @@ func (s *Service) ClearViewHistory(openID string) error {
 
 // GetViewHistory 获取浏览历史列表
 func (s *Service) GetViewHistory(openID, category, search string, limit, offset int) ([]models.ViewHistory, int64, error) {
-	var allHistory []models.ViewHistory
-	if err := s.db.Where("user_id = ?", openID).
-		Order("viewed_at DESC").
-		Find(&allHistory).Error; err != nil {
+	allHistory, err := s.fetchUserHistory(openID)
+	if err != nil {
 		return nil, 0, err
 	}
 
@@ -104,58 +102,104 @@ func (s *Service) GetViewHistory(openID, category, search string, limit, offset 
 		return []models.ViewHistory{}, 0, nil
 	}
 
-	recipeIDs := make([]string, len(allHistory))
-	for i, h := range allHistory {
+	recipeMap, err := s.fetchHistoryRecipeMap(allHistory)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	filtered := s.filterHistory(allHistory, recipeMap, category, search)
+	total := int64(len(filtered))
+
+	return paginateHistory(filtered, offset, limit), total, nil
+}
+
+// fetchUserHistory 获取用户所有浏览历史
+func (s *Service) fetchUserHistory(openID string) ([]models.ViewHistory, error) {
+	var history []models.ViewHistory
+	err := s.db.Where("user_id = ?", openID).
+		Order("viewed_at DESC").
+		Find(&history).Error
+	return history, err
+}
+
+// fetchHistoryRecipeMap 获取菜谱映射
+func (s *Service) fetchHistoryRecipeMap(history []models.ViewHistory) (map[string]*models.Recipe, error) {
+	recipeIDs := make([]string, len(history))
+	for i, h := range history {
 		recipeIDs[i] = h.RecipeID
 	}
 
 	var recipes []models.Recipe
 	if err := s.db.Where("recipe_id IN ?", recipeIDs).Find(&recipes).Error; err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	recipeMap := make(map[string]*models.Recipe)
 	for i := range recipes {
 		recipeMap[recipes[i].RecipeID] = &recipes[i]
 	}
+	return recipeMap, nil
+}
 
+// filterHistory 筛选浏览历史
+func (s *Service) filterHistory(history []models.ViewHistory, recipeMap map[string]*models.Recipe, category, search string) []models.ViewHistory {
 	var filtered []models.ViewHistory
-	for i := range allHistory {
-		recipe, ok := recipeMap[allHistory[i].RecipeID]
+	for i := range history {
+		recipe, ok := recipeMap[history[i].RecipeID]
 		if !ok {
 			continue
 		}
 
-		if category != "" && recipe.Category != category {
+		if !matchHistoryCategory(recipe, category) {
 			continue
 		}
 
-		if search != "" {
-			searchLower := strings.ToLower(search)
-			nameLower := strings.ToLower(recipe.Name)
-			descLower := ""
-			if recipe.Description != nil {
-				descLower = strings.ToLower(*recipe.Description)
-			}
-			if !strings.Contains(nameLower, searchLower) && !strings.Contains(descLower, searchLower) {
-				continue
-			}
+		if !matchHistorySearch(recipe, search) {
+			continue
 		}
 
-		allHistory[i].Recipe = recipe
-		filtered = append(filtered, allHistory[i])
+		history[i].Recipe = recipe
+		filtered = append(filtered, history[i])
 	}
+	return filtered
+}
 
-	total := int64(len(filtered))
+// matchHistoryCategory 检查分类是否匹配
+func matchHistoryCategory(recipe *models.Recipe, category string) bool {
+	if category == "" {
+		return true
+	}
+	return recipe.Category == category
+}
 
+// matchHistorySearch 检查搜索关键词是否匹配
+func matchHistorySearch(recipe *models.Recipe, search string) bool {
+	if search == "" {
+		return true
+	}
+	searchLower := strings.ToLower(search)
+	nameLower := strings.ToLower(recipe.Name)
+	if strings.Contains(nameLower, searchLower) {
+		return true
+	}
+	if recipe.Description != nil {
+		descLower := strings.ToLower(*recipe.Description)
+		if strings.Contains(descLower, searchLower) {
+			return true
+		}
+	}
+	return false
+}
+
+// paginateHistory 分页
+func paginateHistory(items []models.ViewHistory, offset, limit int) []models.ViewHistory {
 	start := offset
-	if start > len(filtered) {
-		start = len(filtered)
+	if start > len(items) {
+		start = len(items)
 	}
 	end := start + limit
-	if end > len(filtered) {
-		end = len(filtered)
+	if end > len(items) {
+		end = len(items)
 	}
-
-	return filtered[start:end], total, nil
+	return items[start:end]
 }

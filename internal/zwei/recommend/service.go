@@ -2,21 +2,22 @@ package recommend
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/invopop/jsonschema"
+	"github.com/sashabaranov/go-openai"
+	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/zwei/models"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
 	"github.com/heliannuuthus/helios/pkg/amap"
+	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/pkg/utils"
-
-	"github.com/invopop/jsonschema"
-	"github.com/sashabaranov/go-openai"
-	"gorm.io/gorm"
 )
 
 // Service 推荐服务
@@ -214,14 +215,15 @@ func addReasoningEnabled(req *openai.ChatCompletionRequest, enabled bool) {
 
 // NewService 创建推荐服务
 func NewService(db *gorm.DB) *Service {
+	cfg := config.Zwei()
 	// 配置 OpenRouter 客户端
-	apiKey := config.GetString("openrouter.api-key")
+	apiKey := cfg.GetString("openrouter.api-key")
 	clientConfig := openai.DefaultConfig(apiKey)
 	clientConfig.BaseURL = "https://openrouter.ai/api/v1"
 
 	return &Service{
 		db:        db,
-		amap:      amap.NewClient(config.GetString("amap.api-key")),
+		amap:      amap.NewClient(cfg.GetString("amap.api-key")),
 		llmClient: openai.NewClientWithConfig(clientConfig),
 	}
 }
@@ -344,7 +346,9 @@ func (s *Service) getUserHistory(userID string) (*UserHistory, error) {
 		s.db.Where("recipe_id IN ?", favoriteIDs).Find(&recipes)
 
 		// 填充标签
-		_ = s.fillTags(recipes)
+		if err := s.fillTags(recipes); err != nil {
+			logger.Errorf("[Recommend] 填充收藏菜谱标签失败: %v", err)
+		}
 
 		for _, r := range recipes {
 			tags := make([]string, len(r.Tags))
@@ -370,35 +374,68 @@ func (s *Service) getUserHistory(userID string) (*UserHistory, error) {
 	return history, nil
 }
 
+// candidateRecipe 候选菜谱结构（用于 LLM 输入）
+type candidateRecipe struct {
+	RecipeID         string   `json:"recipe_id"`
+	Name             string   `json:"name"`
+	Category         string   `json:"category"`
+	Tags             []string `json:"tags"`
+	Description      string   `json:"description"`
+	Difficulty       int      `json:"difficulty"`
+	TotalTimeMinutes *int     `json:"total_time_minutes,omitempty"`
+}
+
 // getLLMRecommendations 使用 LLM 生成推荐
 func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *UserHistory, limit int, excludeIDs []string) (*LLMRecommendation, error) {
-	// 1. 获取候选菜谱池，排除已推荐的菜谱
+	// 1. 获取候选菜谱
+	candidatesJSON, err := s.fetchCandidates(excludeIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 构建 Prompt 和工具
+	prompt := s.buildRecommendPrompt(recCtx, userHistory, candidatesJSON, limit)
+	tools := s.buildLLMTools()
+
+	// 3. 初始化对话
+	model := config.Zwei().GetString("openrouter.model")
+	if model == "" {
+		return nil, fmt.Errorf("未配置 openrouter.model，请在配置文件中设置模型")
+	}
+
+	messages := s.initLLMMessages(prompt)
+
+	// 4. 多轮对话循环
+	return s.runLLMConversation(model, messages, tools)
+}
+
+// fetchCandidates 获取候选菜谱并序列化为 JSON
+func (s *Service) fetchCandidates(excludeIDs []string) (string, error) {
 	var allRecipes []models.Recipe
 	query := s.db.Select("recipe_id, name, category, description, difficulty, total_time_minutes")
 	if len(excludeIDs) > 0 {
 		query = query.Where("recipe_id NOT IN ?", excludeIDs)
 	}
-	err := query.Limit(500).Find(&allRecipes).Error
+	if err := query.Limit(500).Find(&allRecipes).Error; err != nil {
+		return "", err
+	}
+
+	if err := s.fillTags(allRecipes); err != nil {
+		logger.Errorf("[Recommend] 填充候选菜谱标签失败: %v", err)
+	}
+
+	candidates := s.recipesToCandidates(allRecipes)
+	candidatesJSON, err := json.MarshalIndent(candidates, "", "  ")
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("序列化候选菜谱失败: %w", err)
 	}
+	return string(candidatesJSON), nil
+}
 
-	// 填充标签
-	_ = s.fillTags(allRecipes)
-
-	// 2. 构建候选菜谱列表（字段名与 JSON Schema 保持一致）
-	type CandidateRecipe struct {
-		RecipeID         string   `json:"recipe_id"`
-		Name             string   `json:"name"`
-		Category         string   `json:"category"`
-		Tags             []string `json:"tags"`
-		Description      string   `json:"description"`
-		Difficulty       int      `json:"difficulty"`
-		TotalTimeMinutes *int     `json:"total_time_minutes,omitempty"`
-	}
-
-	candidates := make([]CandidateRecipe, len(allRecipes))
-	for i, r := range allRecipes {
+// recipesToCandidates 将菜谱列表转换为候选列表
+func (s *Service) recipesToCandidates(recipes []models.Recipe) []candidateRecipe {
+	candidates := make([]candidateRecipe, len(recipes))
+	for i, r := range recipes {
 		tags := make([]string, len(r.Tags))
 		for j, t := range r.Tags {
 			tags[j] = t.Value
@@ -407,7 +444,7 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 		if r.Description != nil {
 			desc = *r.Description
 		}
-		candidates[i] = CandidateRecipe{
+		candidates[i] = candidateRecipe{
 			RecipeID:         r.RecipeID,
 			Name:             r.Name,
 			Category:         r.Category,
@@ -417,14 +454,12 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 			TotalTimeMinutes: r.TotalTimeMinutes,
 		}
 	}
+	return candidates
+}
 
-	candidatesJSON, _ := json.MarshalIndent(candidates, "", "  ")
-
-	// 3. 构建 Prompt
-	prompt := s.buildRecommendPrompt(recCtx, userHistory, string(candidatesJSON), limit)
-
-	// 4. 定义查询菜品详情的工具（可选，某些模型不支持）
-	tools := []openai.Tool{
+// buildLLMTools 构建 LLM 工具定义
+func (s *Service) buildLLMTools() []openai.Tool {
+	return []openai.Tool{
 		{
 			Type: openai.ToolTypeFunction,
 			Function: &openai.FunctionDefinition{
@@ -436,9 +471,7 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 						"recipe_ids": map[string]interface{}{
 							"type":        "array",
 							"description": "要查询的菜品 ID 列表",
-							"items": map[string]interface{}{
-								"type": "string",
-							},
+							"items":       map[string]interface{}{"type": "string"},
 						},
 					},
 					"required": []string{"recipe_ids"},
@@ -446,16 +479,11 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 			},
 		},
 	}
+}
 
-	// 5. 调用 LLM（支持多轮对话和 function calling）
-	logger.Infof("[Recommend] 调用 LLM - Prompt 长度: %d", len(prompt))
-
-	model := config.GetString("openrouter.model")
-	if model == "" {
-		return nil, fmt.Errorf("未配置 openrouter.model，请在配置文件中设置模型")
-	}
-
-	messages := []openai.ChatCompletionMessage{
+// initLLMMessages 初始化 LLM 对话消息
+func (s *Service) initLLMMessages(prompt string) []openai.ChatCompletionMessage {
+	return []openai.ChatCompletionMessage{
 		{
 			Role:    openai.ChatMessageRoleSystem,
 			Content: "你是一个专业的美食推荐助手。请根据用户喜好、当前场景和候选菜谱，推荐最适合的菜品。推荐理由需要详细、具体、有说服力。如果需要了解菜品的详细信息，可以使用 get_recipe_details 工具查询。",
@@ -465,44 +493,21 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 			Content: prompt,
 		},
 	}
+}
+
+// runLLMConversation 运行 LLM 多轮对话
+func (s *Service) runLLMConversation(model string, messages []openai.ChatCompletionMessage, tools []openai.Tool) (*LLMRecommendation, error) {
+	logger.Infof("[Recommend] 调用 LLM - Prompt 长度: %d", len(messages[1].Content))
 
 	maxIterations := 5
 	for i := 0; i < maxIterations; i++ {
-		req := openai.ChatCompletionRequest{
-			Model:       model,
-			Messages:    messages,
-			Tools:       tools,
-			Temperature: 0.3, // MiMo-V2-Flash 推荐使用 0.3 以提高工具调用成功率
-			ResponseFormat: &openai.ChatCompletionResponseFormat{
-				Type: openai.ChatCompletionResponseFormatTypeJSONObject,
-				JSONSchema: &openai.ChatCompletionResponseFormatJSONSchema{
-					Name:        "recommendation",
-					Description: "美食推荐结果",
-					Schema:      JSONSchema{schema: recommendationSchema},
-					Strict:      true,
-				},
-			},
-		}
+		req := s.buildLLMRequest(model, messages, tools)
 
-		// 为 MiMo-V2-Flash 模型添加 reasoning_enabled: false 参数
-		// 通过反射添加自定义字段（go-openai 库不支持该字段）
-		if strings.Contains(model, "mimo-v2-flash") {
-			addReasoningEnabled(&req, false)
-		}
-
-		logger.Infof("[Recommend] LLM 请求（第 %d 轮）- Model: %s, Messages: %d",
-			i+1, req.Model, len(req.Messages))
+		logger.Infof("[Recommend] LLM 请求（第 %d 轮）- Model: %s, Messages: %d", i+1, model, len(messages))
 
 		resp, err := s.llmClient.CreateChatCompletion(context.Background(), req)
 		if err != nil {
-			if apiErr, ok := err.(*openai.APIError); ok {
-				logger.Errorf("[Recommend] LLM 调用失败 - Model: %s, APIError详情: Code=%d, HTTPStatusCode=%d, Message=%s",
-					model, apiErr.Code, apiErr.HTTPStatusCode, apiErr.Message)
-				return nil, fmt.Errorf("LLM 调用失败 (model: %s): status code: %d, message: %s",
-					model, apiErr.Code, apiErr.Message)
-			}
-			logger.Errorf("[Recommend] LLM 调用失败 - Model: %s, 错误类型: %T, 错误信息: %v", model, err, err)
-			return nil, fmt.Errorf("LLM 调用失败 (model: %s): %w", model, err)
+			return nil, s.handleLLMError(model, err)
 		}
 
 		if len(resp.Choices) == 0 {
@@ -512,72 +517,143 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 		choice := resp.Choices[0]
 		messages = append(messages, choice.Message)
 
-		// 检查是否有 function call
+		// 处理工具调用
 		if len(choice.Message.ToolCalls) > 0 {
-			logger.Infof("[Recommend] LLM 请求查询菜品详情，调用次数: %d", len(choice.Message.ToolCalls))
-			// 处理 function calls
-			for _, toolCall := range choice.Message.ToolCalls {
-				if toolCall.Function.Name == "get_recipe_details" {
-					var args map[string]interface{}
-					if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
-						logger.Errorf("[Recommend] 解析 function call 参数失败: %v", err)
-						continue
-					}
-
-					recipeIDs, ok := args["recipe_ids"].([]interface{})
-					if !ok {
-						logger.Errorf("[Recommend] recipe_ids 参数格式错误")
-						continue
-					}
-
-					ids := make([]string, len(recipeIDs))
-					for j, id := range recipeIDs {
-						ids[j] = id.(string)
-					}
-
-					details := s.getRecipeDetails(ids)
-					detailsJSON, _ := json.MarshalIndent(details, "", "  ")
-
-					messages = append(messages, openai.ChatCompletionMessage{
-						Role:       openai.ChatMessageRoleTool,
-						Content:    string(detailsJSON),
-						ToolCallID: toolCall.ID,
-					})
-				}
-			}
+			toolMessages := s.handleToolCalls(choice.Message.ToolCalls)
+			messages = append(messages, toolMessages...)
 			continue
 		}
 
-		// 没有 function call，解析最终结果
-		content := choice.Message.Content
-		logger.Infof("[Recommend] LLM 最终响应: %s", content)
-
-		// 使用结构化输出后，响应应该是有效的 JSON，但仍需要清理可能的 markdown 代码块
-		content = strings.TrimSpace(content)
-		if strings.HasPrefix(content, "```json") {
-			content = strings.TrimPrefix(content, "```json")
-			content = strings.TrimPrefix(content, "```")
-			if idx := strings.LastIndex(content, "```"); idx != -1 {
-				content = content[:idx]
-			}
-			content = strings.TrimSpace(content)
-		} else if strings.HasPrefix(content, "```") {
-			content = strings.TrimPrefix(content, "```")
-			if idx := strings.LastIndex(content, "```"); idx != -1 {
-				content = content[:idx]
-			}
-			content = strings.TrimSpace(content)
-		}
-
-		var llmResult LLMRecommendation
-		if err := json.Unmarshal([]byte(content), &llmResult); err != nil {
-			return nil, fmt.Errorf("解析 LLM 响应失败: %w, 响应内容: %s", err, content)
-		}
-
-		return &llmResult, nil
+		// 解析最终结果
+		return s.parseLLMResponse(choice.Message.Content)
 	}
 
 	return nil, fmt.Errorf("LLM 调用超过最大迭代次数")
+}
+
+// buildLLMRequest 构建 LLM 请求
+func (s *Service) buildLLMRequest(model string, messages []openai.ChatCompletionMessage, tools []openai.Tool) openai.ChatCompletionRequest {
+	req := openai.ChatCompletionRequest{
+		Model:       model,
+		Messages:    messages,
+		Tools:       tools,
+		Temperature: 0.3,
+		ResponseFormat: &openai.ChatCompletionResponseFormat{
+			Type: openai.ChatCompletionResponseFormatTypeJSONObject,
+			JSONSchema: &openai.ChatCompletionResponseFormatJSONSchema{
+				Name:        "recommendation",
+				Description: "美食推荐结果",
+				Schema:      JSONSchema{schema: recommendationSchema},
+				Strict:      true,
+			},
+		},
+	}
+
+	if strings.Contains(model, "mimo-v2-flash") {
+		addReasoningEnabled(&req, false)
+	}
+
+	return req
+}
+
+// handleLLMError 处理 LLM 错误
+func (s *Service) handleLLMError(model string, err error) error {
+	apiErr := &openai.APIError{}
+	if errors.As(err, &apiErr) {
+		logger.Errorf("[Recommend] LLM 调用失败 - Model: %s, APIError详情: Code=%d, HTTPStatusCode=%d, Message=%s",
+			model, apiErr.Code, apiErr.HTTPStatusCode, apiErr.Message)
+		return fmt.Errorf("LLM 调用失败 (model: %s): status code: %d, message: %s",
+			model, apiErr.Code, apiErr.Message)
+	}
+	logger.Errorf("[Recommend] LLM 调用失败 - Model: %s, 错误类型: %T, 错误信息: %v", model, err, err)
+	return fmt.Errorf("LLM 调用失败 (model: %s): %w", model, err)
+}
+
+// handleToolCalls 处理工具调用
+func (s *Service) handleToolCalls(toolCalls []openai.ToolCall) []openai.ChatCompletionMessage {
+	logger.Infof("[Recommend] LLM 请求查询菜品详情，调用次数: %d", len(toolCalls))
+
+	var messages []openai.ChatCompletionMessage
+	for _, toolCall := range toolCalls {
+		if toolCall.Function.Name != "get_recipe_details" {
+			continue
+		}
+
+		ids := s.parseRecipeIDs(toolCall.Function.Arguments)
+		if len(ids) == 0 {
+			continue
+		}
+
+		details := s.getRecipeDetails(ids)
+		detailsJSON, err := json.MarshalIndent(details, "", "  ")
+		if err != nil {
+			logger.Errorf("[Recommend] 序列化菜品详情失败: %v", err)
+			continue
+		}
+
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:       openai.ChatMessageRoleTool,
+			Content:    string(detailsJSON),
+			ToolCallID: toolCall.ID,
+		})
+	}
+	return messages
+}
+
+// parseRecipeIDs 解析菜谱 ID 列表
+func (s *Service) parseRecipeIDs(arguments string) []string {
+	var args map[string]interface{}
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		logger.Errorf("[Recommend] 解析 function call 参数失败: %v", err)
+		return nil
+	}
+
+	recipeIDs, ok := args["recipe_ids"].([]interface{})
+	if !ok {
+		logger.Errorf("[Recommend] recipe_ids 参数格式错误")
+		return nil
+	}
+
+	ids := make([]string, 0, len(recipeIDs))
+	for _, id := range recipeIDs {
+		if idStr, ok := id.(string); ok {
+			ids = append(ids, idStr)
+		}
+	}
+	return ids
+}
+
+// parseLLMResponse 解析 LLM 响应
+func (s *Service) parseLLMResponse(content string) (*LLMRecommendation, error) {
+	logger.Infof("[Recommend] LLM 最终响应: %s", content)
+
+	content = cleanMarkdownCodeBlock(content)
+
+	var result LLMRecommendation
+	if err := json.Unmarshal([]byte(content), &result); err != nil {
+		return nil, fmt.Errorf("解析 LLM 响应失败: %w, 响应内容: %s", err, content)
+	}
+	return &result, nil
+}
+
+// cleanMarkdownCodeBlock 清理 Markdown 代码块包装
+func cleanMarkdownCodeBlock(content string) string {
+	content = strings.TrimSpace(content)
+	if strings.HasPrefix(content, "```json") {
+		content = strings.TrimPrefix(content, "```json")
+		content = strings.TrimPrefix(content, "```")
+		if idx := strings.LastIndex(content, "```"); idx != -1 {
+			content = content[:idx]
+		}
+		content = strings.TrimSpace(content)
+	} else if strings.HasPrefix(content, "```") {
+		content = strings.TrimPrefix(content, "```")
+		if idx := strings.LastIndex(content, "```"); idx != -1 {
+			content = content[:idx]
+		}
+		content = strings.TrimSpace(content)
+	}
+	return content
 }
 
 // buildRecommendPrompt 构建推荐 Prompt
@@ -641,7 +717,9 @@ func (s *Service) getRecipeDetails(ids []string) []map[string]interface{} {
 		return []map[string]interface{}{}
 	}
 
-	_ = s.fillTags(recipes)
+	if err := s.fillTags(recipes); err != nil {
+		logger.Errorf("[Recommend] 填充菜品详情标签失败: %v", err)
+	}
 
 	details := make([]map[string]interface{}, len(recipes))
 	for i, r := range recipes {

@@ -12,6 +12,7 @@ type Service struct {
 	Name                  string    `gorm:"column:name;size:128;not null"`
 	Description           *string   `gorm:"column:description;type:text"`
 	EncryptedKey          string    `gorm:"column:encrypted_key;type:text;not null"`
+	RequiredIdentities    *string   `gorm:"column:required_identities;type:text"` // 访问需要绑定的身份类型（JSON 数组）
 	AccessTokenExpiresIn  int       `gorm:"column:access_token_expires_in;default:7200"`
 	RefreshTokenExpiresIn int       `gorm:"column:refresh_token_expires_in;default:604800"`
 	Status                int8      `gorm:"column:status;default:0"` // 0=active, 1=disabled

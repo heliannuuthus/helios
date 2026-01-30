@@ -19,7 +19,6 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
-	"gorm.io/gorm"
 )
 
 import (
@@ -30,9 +29,9 @@ import (
 
 // InitializeApp 初始化应用（由 wire 生成）
 func InitializeApp() (*App, error) {
-	db := provideDB()
 	handler := provideRecipeHandler()
-	authHandler, err := provideAuthHandler()
+	service := provideHermesService()
+	authHandler, err := provideAuthHandler(service)
 	if err != nil {
 		return nil, err
 	}
@@ -43,9 +42,8 @@ func InitializeApp() (*App, error) {
 	recommendHandler := provideRecommendHandler()
 	uploadHandler := provideUploadHandler()
 	preferenceHandler := providePreferenceHandler()
-	hermesHandler := provideHermesHandler()
+	hermesHandler := provideHermesHandler(service)
 	app := &App{
-		DB:                db,
 		RecipeHandler:     handler,
 		AuthHandler:       authHandler,
 		FavoriteHandler:   favoriteHandler,
@@ -91,32 +89,30 @@ func provideHomeHandler() *home.Handler {
 	return home.NewHandler(database.GetZwei())
 }
 
-// 认证模块 Handler（使用 Auth 数据库）
-func provideAuthHandler() (*auth.Handler, error) {
-	authService, err := auth.NewService(database.GetAuth())
-	if err != nil {
-		return nil, err
-	}
-	return auth.NewHandler(authService), nil
+// Hermes Service（供 auth 模块复用）
+func provideHermesService() *hermes.Service {
+	return hermes.NewService()
+}
+
+// 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
+func provideAuthHandler(hermesService *hermes.Service) (*auth.Handler, error) {
+	userSvc := hermes.NewUserService(database.GetHermes())
+	return auth.Initialize(&auth.InitConfig{
+		HermesSvc: hermesService,
+		UserSvc:   userSvc,
+	})
 }
 
 func provideUploadHandler() *upload.Handler {
-	return upload.NewHandler(database.GetAuth())
+	return upload.NewHandler(database.GetHermes())
 }
 
-func provideHermesHandler() *hermes.Handler {
-	service := hermes.NewService()
-	return hermes.NewHandler(service)
-}
-
-// provideDB 提供默认数据库连接（用于 App.DB 字段，保持兼容性）
-func provideDB() *gorm.DB {
-	return database.Get()
+func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
+	return hermes.NewHandler(hermesService)
 }
 
 // ProviderSet 提供者集合
-var ProviderSet = wire.NewSet(
-	provideDB, recipe.NewService, favorite.NewService, history.NewService, preference.NewService, tag.NewService, recommend.NewService, provideRecipeHandler,
+var ProviderSet = wire.NewSet(recipe.NewService, favorite.NewService, history.NewService, preference.NewService, tag.NewService, recommend.NewService, provideRecipeHandler,
 	provideFavoriteHandler,
 	provideHistoryHandler,
 	providePreferenceHandler,
@@ -124,15 +120,15 @@ var ProviderSet = wire.NewSet(
 	provideRecommendHandler,
 	provideHomeHandler,
 
+	provideHermesService,
+	provideHermesHandler,
+
 	provideAuthHandler,
 	provideUploadHandler,
-
-	provideHermesHandler,
 )
 
 // App 应用依赖容器
 type App struct {
-	DB                *gorm.DB
 	RecipeHandler     *recipe.Handler
 	AuthHandler       *auth.Handler
 	FavoriteHandler   *favorite.Handler

@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/internal/zwei/recipe"
-
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 )
 
 // Handler 首页处理器
@@ -51,9 +51,9 @@ func (h *Handler) GetBanners(c *gin.Context) {
 // @Success 200 {array} RecipeListItem
 // @Router /api/home/recommend [get]
 func (h *Handler) GetRecommendRecipes(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "4"))
-	if limit < 1 {
-		limit = 1
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "4"))
+	if err != nil || limit < 1 {
+		limit = 4
 	} else if limit > 20 {
 		limit = 20
 	}
@@ -70,9 +70,9 @@ func (h *Handler) GetRecommendRecipes(c *gin.Context) {
 // @Success 200 {array} RecipeListItem
 // @Router /api/home/hot [get]
 func (h *Handler) GetHotRecipes(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "6"))
-	if limit < 1 {
-		limit = 1
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "6"))
+	if err != nil || limit < 1 {
+		limit = 6
 	} else if limit > 20 {
 		limit = 20
 	}
@@ -84,7 +84,7 @@ func (h *Handler) GetHotRecipes(c *gin.Context) {
 func (h *Handler) loadBannersFromConfig() []BannerItem {
 	var banners []BannerItem
 
-	bannersConfig := config.Get("home.banners")
+	bannersConfig := config.Zwei().Get("home.banners")
 	if bannersConfig == nil {
 		return banners
 	}
@@ -137,8 +137,8 @@ func generateBannerID(index int) string {
 }
 
 func (h *Handler) getHotRecipes(count int) []RecipeListItem {
-	recipes, _ := h.recipeService.GetHotRecipes(count, nil)
-	if len(recipes) == 0 {
+	recipes, err := h.recipeService.GetHotRecipes(count, nil)
+	if err != nil || len(recipes) == 0 {
 		return []RecipeListItem{}
 	}
 
@@ -160,8 +160,8 @@ func (h *Handler) getHotRecipes(count int) []RecipeListItem {
 }
 
 func (h *Handler) getRandomRecipes(count int) []RecipeListItem {
-	recipes, _ := h.recipeService.GetRecipes("", "", 100, 0)
-	if len(recipes) == 0 {
+	recipes, err := h.recipeService.GetRecipes("", "", 100, 0)
+	if err != nil || len(recipes) == 0 {
 		return []RecipeListItem{}
 	}
 

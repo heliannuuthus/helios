@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/heliannuuthus/helios/internal/zwei/models"
-
 	"gorm.io/gorm"
+
+	"github.com/heliannuuthus/helios/internal/zwei/models"
 )
 
 // Service 收藏服务
@@ -73,10 +73,8 @@ func (s *Service) IsFavorite(openID, recipeID string) (bool, error) {
 
 // GetFavorites 获取收藏列表
 func (s *Service) GetFavorites(openID, category, search string, limit, offset int) ([]models.Favorite, int64, error) {
-	var allFavorites []models.Favorite
-	if err := s.db.Where("user_id = ?", openID).
-		Order("created_at DESC").
-		Find(&allFavorites).Error; err != nil {
+	allFavorites, err := s.fetchUserFavorites(openID)
+	if err != nil {
 		return nil, 0, err
 	}
 
@@ -84,60 +82,106 @@ func (s *Service) GetFavorites(openID, category, search string, limit, offset in
 		return []models.Favorite{}, 0, nil
 	}
 
-	recipeIDs := make([]string, len(allFavorites))
-	for i, f := range allFavorites {
+	recipeMap, err := s.fetchRecipeMap(allFavorites)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	filtered := s.filterFavorites(allFavorites, recipeMap, category, search)
+	total := int64(len(filtered))
+
+	return paginate(filtered, offset, limit), total, nil
+}
+
+// fetchUserFavorites 获取用户所有收藏
+func (s *Service) fetchUserFavorites(openID string) ([]models.Favorite, error) {
+	var favorites []models.Favorite
+	err := s.db.Where("user_id = ?", openID).
+		Order("created_at DESC").
+		Find(&favorites).Error
+	return favorites, err
+}
+
+// fetchRecipeMap 获取菜谱映射
+func (s *Service) fetchRecipeMap(favorites []models.Favorite) (map[string]*models.Recipe, error) {
+	recipeIDs := make([]string, len(favorites))
+	for i, f := range favorites {
 		recipeIDs[i] = f.RecipeID
 	}
 
 	var recipes []models.Recipe
 	if err := s.db.Where("recipe_id IN ?", recipeIDs).Find(&recipes).Error; err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	recipeMap := make(map[string]*models.Recipe)
 	for i := range recipes {
 		recipeMap[recipes[i].RecipeID] = &recipes[i]
 	}
+	return recipeMap, nil
+}
 
+// filterFavorites 筛选收藏
+func (s *Service) filterFavorites(favorites []models.Favorite, recipeMap map[string]*models.Recipe, category, search string) []models.Favorite {
 	var filtered []models.Favorite
-	for i := range allFavorites {
-		recipe, ok := recipeMap[allFavorites[i].RecipeID]
+	for i := range favorites {
+		recipe, ok := recipeMap[favorites[i].RecipeID]
 		if !ok {
 			continue
 		}
 
-		if category != "" && recipe.Category != category {
+		if !matchCategory(recipe, category) {
 			continue
 		}
 
-		if search != "" {
-			searchLower := strings.ToLower(search)
-			nameLower := strings.ToLower(recipe.Name)
-			descLower := ""
-			if recipe.Description != nil {
-				descLower = strings.ToLower(*recipe.Description)
-			}
-			if !strings.Contains(nameLower, searchLower) && !strings.Contains(descLower, searchLower) {
-				continue
-			}
+		if !matchSearch(recipe, search) {
+			continue
 		}
 
-		allFavorites[i].Recipe = recipe
-		filtered = append(filtered, allFavorites[i])
+		favorites[i].Recipe = recipe
+		filtered = append(filtered, favorites[i])
 	}
+	return filtered
+}
 
-	total := int64(len(filtered))
+// matchCategory 检查分类是否匹配
+func matchCategory(recipe *models.Recipe, category string) bool {
+	if category == "" {
+		return true
+	}
+	return recipe.Category == category
+}
 
+// matchSearch 检查搜索关键词是否匹配
+func matchSearch(recipe *models.Recipe, search string) bool {
+	if search == "" {
+		return true
+	}
+	searchLower := strings.ToLower(search)
+	nameLower := strings.ToLower(recipe.Name)
+	if strings.Contains(nameLower, searchLower) {
+		return true
+	}
+	if recipe.Description != nil {
+		descLower := strings.ToLower(*recipe.Description)
+		if strings.Contains(descLower, searchLower) {
+			return true
+		}
+	}
+	return false
+}
+
+// paginate 分页
+func paginate[T any](items []T, offset, limit int) []T {
 	start := offset
-	if start > len(filtered) {
-		start = len(filtered)
+	if start > len(items) {
+		start = len(items)
 	}
 	end := start + limit
-	if end > len(filtered) {
-		end = len(filtered)
+	if end > len(items) {
+		end = len(items)
 	}
-
-	return filtered[start:end], total, nil
+	return items[start:end]
 }
 
 // GetFavoriteRecipeIDs 批量检查收藏状态

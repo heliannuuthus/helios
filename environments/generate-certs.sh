@@ -89,9 +89,6 @@ echo "📝 重命名证书文件..."
 mv "$CERT_FILE" fullchain.pem
 mv "$KEY_FILE" privkey.pem
 
-# 清理其他临时文件
-rm -f *.pem 2>/dev/null || true
-
 echo ""
 echo "✅ 证书生成完成！"
 echo ""

@@ -5,11 +5,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/heliannuuthus/helios/internal/auth"
-	"github.com/heliannuuthus/helios/pkg/logger"
-
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+
+	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // Handler 推荐处理器
@@ -67,9 +67,9 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 		req.Timestamp = time.Now().UnixMilli()
 	}
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "6"))
-	if limit < 1 {
-		limit = 1
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "6"))
+	if err != nil || limit < 1 {
+		limit = 6
 	} else if limit > 20 {
 		limit = 20
 	}
@@ -84,8 +84,9 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 
 	// 获取用户身份（如果已登录）
 	if user, exists := c.Get("user"); exists {
-		identity := user.(*auth.Identity)
-		ctx.UserID = identity.GetOpenID()
+		if identity, ok := user.(*auth.Claims); ok {
+			ctx.UserID = identity.GetOpenID()
+		}
 	}
 
 	// 检查每日推荐次数限制

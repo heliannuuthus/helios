@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -72,7 +73,12 @@ func InitWithConfig(cfg Config) {
 // Sync 刷新日志缓冲
 func Sync() {
 	if Log != nil {
-		_ = Log.Sync()
+		// 忽略同步错误，因为日志系统不应该因为同步失败而崩溃
+		// 常见的错误是 "sync /dev/stdout: invalid argument"，这在某些终端是正常的
+		if err := Log.Sync(); err != nil {
+			// 使用 fmt 输出到 stderr，避免递归调用 logger
+			fmt.Fprintf(os.Stderr, "[Logger] sync failed: %v\n", err)
+		}
 	}
 }
 
@@ -146,7 +152,11 @@ func (w *GormLogWriter) Printf(format string, args ...interface{}) {
 func init() {
 	// 确保即使没调用 Init 也能用（使用默认 logger）
 	if Log == nil {
-		Log, _ = zap.NewDevelopment()
+		var err error
+		Log, err = zap.NewDevelopment()
+		if err != nil {
+			panic(fmt.Sprintf("init logger failed: %v", err))
+		}
 		Sugar = Log.Sugar()
 	}
 }
