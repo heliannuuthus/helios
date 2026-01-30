@@ -1,3 +1,5 @@
+// Package utils provides utility functions for the application.
+// nolint:revive // This package name is intentional for collecting misc utilities.
 package utils
 
 import "time"

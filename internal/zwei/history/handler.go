@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/heliannuuthus/helios/internal/auth"
-
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+
+	"github.com/heliannuuthus/helios/internal/auth"
 )
 
 // Handler 浏览历史处理器
@@ -59,7 +59,11 @@ func (h *Handler) AddViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Identity)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
+		return
+	}
 	openID := identity.GetOpenID()
 
 	var req HistoryRequest
@@ -94,7 +98,11 @@ func (h *Handler) RemoveViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Identity)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
+		return
+	}
 	openID := identity.GetOpenID()
 	recipeID := c.Param("recipe_id")
 
@@ -119,7 +127,11 @@ func (h *Handler) ClearViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Identity)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
+		return
+	}
 	openID := identity.GetOpenID()
 
 	if err := h.service.ClearViewHistory(openID); err != nil {
@@ -148,21 +160,25 @@ func (h *Handler) GetViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity := user.(*auth.Identity)
+	identity, ok := user.(*auth.Claims)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
+		return
+	}
 	openID := identity.GetOpenID()
 
 	category := c.Query("category")
 	search := c.Query("search")
 
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
-	if limit < 1 {
-		limit = 1
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if err != nil || limit < 1 {
+		limit = 20
 	} else if limit > 100 {
 		limit = 100
 	}
 
-	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	if offset < 0 {
+	offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if err != nil || offset < 0 {
 		offset = 0
 	}
 

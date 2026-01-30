@@ -1,11 +1,14 @@
 package amap
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/heliannuuthus/helios/pkg/json"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // Client 高德地图客户端
@@ -49,13 +52,25 @@ func (c *Client) GetLocation(lat, lng float64) (*Location, error) {
 		return nil, fmt.Errorf("未配置 amap.api-key")
 	}
 
-	url := fmt.Sprintf("https://restapi.amap.com/v3/geocode/regeo?location=%.6f,%.6f&key=%s", lng, lat, c.apiKey)
+	reqURL := fmt.Sprintf("https://restapi.amap.com/v3/geocode/regeo?location=%.6f,%.6f&key=%s", lng, lat, c.apiKey)
 
-	resp, err := http.Get(url)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("请求高德 API 失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Errorf("[Amap] 关闭响应体失败: %v", err)
+		}
+	}()
 
 	var result struct {
 		Status    string `json:"status"`
@@ -102,13 +117,25 @@ func (c *Client) GetWeatherByAdcode(adcode string) (*Weather, error) {
 		return nil, fmt.Errorf("未配置 amap.api-key")
 	}
 
-	url := fmt.Sprintf("https://restapi.amap.com/v3/weather/weatherInfo?city=%s&key=%s&extensions=base", adcode, c.apiKey)
+	reqURL := fmt.Sprintf("https://restapi.amap.com/v3/weather/weatherInfo?city=%s&key=%s&extensions=base", adcode, c.apiKey)
 
-	resp, err := http.Get(url)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Errorf("[Amap] 关闭响应体失败: %v", err)
+		}
+	}()
 
 	var result struct {
 		Status string `json:"status"`
@@ -130,8 +157,12 @@ func (c *Client) GetWeatherByAdcode(adcode string) (*Weather, error) {
 	live := result.Lives[0]
 	var temp float64
 	var humidity int
-	_, _ = fmt.Sscanf(live.Temperature, "%f", &temp)
-	_, _ = fmt.Sscanf(live.Humidity, "%d", &humidity)
+	if _, err := fmt.Sscanf(live.Temperature, "%f", &temp); err != nil {
+		temp = 20 // 默认温度
+	}
+	if _, err := fmt.Sscanf(live.Humidity, "%d", &humidity); err != nil {
+		humidity = 50 // 默认湿度
+	}
 
 	return &Weather{
 		Temperature: temp,

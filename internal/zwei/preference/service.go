@@ -1,12 +1,12 @@
 package preference
 
 import (
-	"github.com/heliannuuthus/helios/internal/zwei/models"
-	"github.com/heliannuuthus/helios/internal/zwei/tag"
-
 	"sync"
 
 	"gorm.io/gorm"
+
+	"github.com/heliannuuthus/helios/internal/zwei/models"
+	"github.com/heliannuuthus/helios/internal/zwei/tag"
 )
 
 // Service 用户偏好服务
@@ -231,11 +231,7 @@ func (r *UpdatePreferencesRequest) Validate(tagService *tag.Service) error {
 	}
 
 	// 验证过敏选项是否存在
-	if err := validateTagValues(r.Allergies, models.TagTypeAllergy, tagService); err != nil {
-		return err
-	}
-
-	return nil
+	return validateTagValues(r.Allergies, models.TagTypeAllergy, tagService)
 }
 
 // validateTagValues 验证标签值是否存在

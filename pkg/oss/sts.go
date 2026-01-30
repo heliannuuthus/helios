@@ -1,16 +1,16 @@
 package oss
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/pkg/logger"
-
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
+
+	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/pkg/json"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 var (
@@ -19,9 +19,10 @@ var (
 
 // InitSTS 初始化 STS 客户端
 func InitSTS() error {
-	accessKeyID := config.GetString("oss.access-key-id")
-	accessKeySecret := config.GetString("oss.access-key-secret")
-	region := config.GetString("oss.region")
+	cfg := config.Zwei()
+	accessKeyID := cfg.GetString("oss.access-key-id")
+	accessKeySecret := cfg.GetString("oss.access-key-secret")
+	region := cfg.GetString("oss.region")
 
 	if accessKeyID == "" || accessKeySecret == "" {
 		return fmt.Errorf("OSS AccessKey 未配置")
@@ -29,7 +30,7 @@ func InitSTS() error {
 
 	// 如果没有配置 region，从 endpoint 提取
 	if region == "" {
-		endpoint := config.GetString("oss.endpoint")
+		endpoint := cfg.GetString("oss.endpoint")
 		// 从 oss-cn-beijing.aliyuncs.com 提取 cn-beijing
 		if len(endpoint) > 4 && endpoint[:4] == "oss-" {
 			region = endpoint[4:]
@@ -74,12 +75,13 @@ func GenerateSTSCredentials(objectKey string, durationSeconds int64) (*STSCreden
 		durationSeconds = 3600 // 最大 1 小时
 	}
 
-	roleArn := config.GetString("oss.role-arn")
+	cfg := config.Zwei()
+	roleArn := cfg.GetString("oss.role-arn")
 	if roleArn == "" {
 		return nil, fmt.Errorf("OSS STS Role ARN 未配置")
 	}
 
-	bucketName := config.GetString("oss.bucket")
+	bucketName := cfg.GetString("oss.bucket")
 	if bucketName == "" {
 		return nil, fmt.Errorf("OSS Bucket 未配置")
 	}

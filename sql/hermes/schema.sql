@@ -1,34 +1,19 @@
--- Auth 数据库 Schema（认证数据）
+-- Hermes 数据库 Schema（身份与访问管理数据）
 -- MySQL 语法
 -- 注意：session、authorization_code、refresh_token 都存储在 Redis 中
 -- 注意：IDP 配置从配置文件读取，不需要建表
 
 -- ==================== 数据库初始化 ====================
--- 创建 auth 数据库（如果不存在）
-CREATE DATABASE IF NOT EXISTS `auth` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- 创建 hermes 数据库（如果不存在）
+CREATE DATABASE IF NOT EXISTS `hermes` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 授予用户权限（MYSQL_USER 环境变量创建的用户，默认用户名是 helios）
 -- 注意：如果修改了 MYSQL_USER，需要同步修改这里的用户名
-GRANT ALL PRIVILEGES ON `auth`.* TO 'helios'@'%';
+GRANT ALL PRIVILEGES ON `hermes`.* TO 'helios'@'%';
 FLUSH PRIVILEGES;
 
--- 使用 auth 数据库
-USE `auth`;
-
--- ==================== 域相关 ====================
-
--- 域表（密钥在配置，表只存元信息）
-CREATE TABLE IF NOT EXISTS t_domain (
-    _id INT AUTO_INCREMENT PRIMARY KEY,
-    domain_id VARCHAR(32) NOT NULL COMMENT '域标识：ciam/piam',
-    name VARCHAR(128) NOT NULL COMMENT '域名称',
-    description TEXT COMMENT '描述',
-    status TINYINT DEFAULT 0 COMMENT '状态：0=active, 1=disabled',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY uk_domain_id (domain_id),
-    INDEX idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='域';
+-- 使用 hermes 数据库
+USE `hermes`;
 
 -- ==================== 服务相关 ====================
 
@@ -36,10 +21,11 @@ CREATE TABLE IF NOT EXISTS t_domain (
 CREATE TABLE IF NOT EXISTS t_service (
     _id INT AUTO_INCREMENT PRIMARY KEY,
     service_id VARCHAR(32) NOT NULL COMMENT '服务标识：zwei/atlas/order',
-    domain_id VARCHAR(32) NOT NULL COMMENT '所属域（关联 t_domain.domain_id）',
+    domain_id VARCHAR(32) NOT NULL COMMENT '所属域：ciam/piam',
     name VARCHAR(128) NOT NULL COMMENT '服务名称',
     description TEXT COMMENT '描述',
     encrypted_key TEXT NOT NULL COMMENT '服务 AES 密钥（用域加密密钥加密，AES-GCM）',
+    required_identities TEXT DEFAULT NULL COMMENT '访问该服务需要绑定的身份类型（JSON 数组），NULL 表示不限制',
     access_token_expires_in INT DEFAULT 7200 COMMENT 'Access Token 有效期（秒）',
     refresh_token_expires_in INT DEFAULT 604800 COMMENT 'Refresh Token 有效期（秒）',
     status TINYINT DEFAULT 0 COMMENT '状态：0=active, 1=disabled',
@@ -55,10 +41,12 @@ CREATE TABLE IF NOT EXISTS t_service (
 -- 应用表（OAuth2 客户端）
 CREATE TABLE IF NOT EXISTS t_application (
     _id INT AUTO_INCREMENT PRIMARY KEY,
-    domain_id VARCHAR(32) NOT NULL COMMENT '所属域（关联 t_domain.domain_id）',
+    domain_id VARCHAR(32) NOT NULL COMMENT '所属域：ciam/piam',
     app_id VARCHAR(64) NOT NULL COMMENT '应用唯一标识',
     name VARCHAR(128) NOT NULL COMMENT '应用名称',
     redirect_uris TEXT DEFAULT NULL COMMENT '重定向 URI 列表（JSON 数组），NULL 表示不需要重定向',
+    allowed_idps TEXT DEFAULT NULL COMMENT '允许的登录方式（JSON 数组），空/NULL 表示无可用登录方式',
+    allowed_origins TEXT DEFAULT NULL COMMENT '允许发起 auth 请求的源站列表（JSON 数组），NULL 表示不限制',
     encrypted_key TEXT DEFAULT NULL COMMENT '应用密钥（用域加密密钥加密，AES-GCM，AAD=app_id），NULL 表示无密钥',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -87,7 +75,7 @@ CREATE TABLE IF NOT EXISTS t_application_service_relation (
 -- 用户表
 CREATE TABLE IF NOT EXISTS t_user (
     _id INT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    domain_id VARCHAR(32) NOT NULL COMMENT '所属域（关联 t_domain.domain_id）',
+    domain_id VARCHAR(32) NOT NULL COMMENT '所属域：ciam/piam',
     openid VARCHAR(64) NOT NULL COMMENT '用户唯一标识',
     nickname VARCHAR(128) COMMENT '昵称',
     picture VARCHAR(512) COMMENT '头像 URL',
