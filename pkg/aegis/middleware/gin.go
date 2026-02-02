@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -14,19 +15,23 @@ type GinFactory struct {
 }
 
 // NewGinFactory 创建 Gin 中间件工厂
+// ctx: 用于初始化 JWKS 缓存
 // endpoint: Aegis 服务端点（如 http://auth.example.com）
-// signKeyProvider: 签名公钥提供者（用于验证 token）
-// encryptKeyProvider: 加密密钥提供者（用于解密 token 和签发 CAT）
-func NewGinFactory(endpoint string, signKeyProvider, encryptKeyProvider token.KeyProvider) *GinFactory {
-	return &GinFactory{
-		Factory: NewFactory(endpoint, signKeyProvider, encryptKeyProvider),
+// secretKeyProvider: 服务密钥提供者（用于解密 token 和签发 CAT）
+func NewGinFactory(ctx context.Context, endpoint string, secretKeyProvider token.KeyProvider) (*GinFactory, error) {
+	factory, err := NewFactory(ctx, endpoint, secretKeyProvider)
+	if err != nil {
+		return nil, err
 	}
+	return &GinFactory{
+		Factory: factory,
+	}, nil
 }
 
-// ForAudience 为特定 audience 创建 Gin 中间件
-func (f *GinFactory) ForAudience(audience string) *GinMiddleware {
+// WithAudience 为特定 audience 创建 Gin 中间件
+func (f *GinFactory) WithAudience(audience string) *GinMiddleware {
 	return &GinMiddleware{
-		Middleware: f.Factory.ForAudience(audience),
+		Middleware: f.Factory.WithAudience(audience),
 	}
 }
 

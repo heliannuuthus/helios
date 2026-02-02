@@ -94,25 +94,24 @@ provider = "turnstile"  # 验证提供商：turnstile
 site-key = ""           # 站点密钥（前端使用）
 secret-key = ""         # 密钥（后端验证使用）
 
-# 认证配置
-[auth]
-issuer = "https://auth.heliannuuthus.com/api"  # OIDC issuer URL
-endpoint = "https://auth.heliannuuthus.com"    # Auth 服务端点
+# Aegis 认证配置
+[aegis]
+endpoint = "https://aegis.heliannuuthus.com"    # Aegis 服务端点（issuer 自动拼接为 endpoint/api）
 expires-in = 7200           # access_token 过期时间(秒)，2小时
 refresh-expires-in = 365    # refresh_token 过期时间(天)，1年
 max-refresh-token = 10      # 每用户最大 refresh_token 数
-service-url = "http://localhost:18000"  # Auth 服务地址（内部调用）
+service-url = "http://localhost:18000"  # Aegis 服务地址（内部调用）
 
-# Cookie 配置（Auth 模块登录会话）
-[auth.cookie]
-domain = ""                 # Cookie 域名（留空则从 issuer 自动提取）
+# Cookie 配置（Aegis 模块登录会话）
+[aegis.cookie]
+domain = ""                 # Cookie 域名（留空则从 endpoint 自动提取）
 path = "/"                  # Cookie 路径
 secure = true               # 是否仅 HTTPS
 http-only = true            # 是否仅 HTTP（防 XSS）
 max-age = 600               # 最大存活时间（秒），默认 10 分钟
 
-# 端点配置（Auth 模块登录页面路径）
-[auth.endpoints]
+# 端点配置（Aegis 模块登录页面路径）
+[aegis.endpoints]
 login = "/login"            # 登录页面
 consent = "/consent"        # 授权同意页面
 mfa = "/mfa"                # MFA 验证页面
@@ -121,29 +120,25 @@ callback = "/callback"      # IDP 回调路径
 
 # 支持的 audience 及其解密密钥（用于后端服务验证 token）
 # 每个 key 是 audience（服务 ID），value 是 base64url 编码的 JWK JSON
-[auth.secrets]
+[aegis.secrets]
 # zwei = "base64url_encoded_jwk_json"
 # hermes = "base64url_encoded_jwk_json"
 
-# 域配置（Domain 配置，密钥使用 python3 scripts/genkeys.py 生成）
-[auth.domains.ciam]
+# 域配置（Domain 配置，密钥使用 python3 scripts/initialize-hermes.py 生成）
+[aegis.domains.ciam]
 name = "Customer Identity"           # 域名称
 description = "C端用户身份域"         # 域描述
 sign-key = "ed25519:base64_encoded_sign_key"      # 签名密钥（格式：算法:base64密钥）
 encrypt-key = "aes256:base64_encoded_encrypt_key"  # 加密密钥（格式：算法:base64密钥）
 
-[auth.domains.piam]
+[aegis.domains.piam]
 name = "Partner Identity"           # 域名称
 description = "B端用户身份域"         # 域描述
 sign-key = "ed25519:base64_encoded_sign_key"      # 签名密钥（格式：算法:base64密钥）
 encrypt-key = "aes256:base64_encoded_encrypt_key"  # 加密密钥（格式：算法:base64密钥）
 
-# KMS 密钥配置（使用 python3 scripts/genkeys.py 生成）
-[kms.token]
-sign-key = ""  # Ed25519 签名密钥（base64url 编码的 JWK JSON）
-enc-key = ""   # A256GCM 加密密钥（base64url 编码的 JWK JSON）
-
-[kms.database]
+# 数据库加密密钥（使用 python3 scripts/initialize-hermes.py 生成）
+[db]
 enc-key = ""   # AES-256-GCM 加密密钥（Base64 编码，32字节）
 
 # 首页轮播图配置
@@ -161,12 +156,12 @@ title = "新菜上线"
 link = "recipe_id_here"
 link-type = "recipe"
 
-# Hermes 缓存配置（用于 auth 模块缓存 hermes 数据）
+# Hermes 缓存配置（用于 aegis 模块缓存 hermes 数据）
 # 每个 cache 类型都有独立的配置前缀，支持独立配置和热更新
-# 配置格式：auth.cache.{type}.{config-key}
+# 配置格式：aegis.cache.{type}.{config-key}
 
 # Domain 缓存配置（含密钥）
-[auth.cache.domain]
+[aegis.cache.domain]
 key-prefix = "domain:"        # 缓存 key 前缀
 cache-size = 100             # 最大缓存条目数
 num-counters = 1000          # 计数器数量（ristretto 内部使用）
@@ -174,7 +169,7 @@ buffer-items = 64           # 缓冲区大小
 ttl = "5m"                   # 缓存过期时间（支持热更新）
 
 # Application 缓存配置（含密钥）
-[auth.cache.application]
+[aegis.cache.application]
 key-prefix = "app:"          # 缓存 key 前缀
 cache-size = 500             # 最大缓存条目数
 num-counters = 5000          # 计数器数量
@@ -182,7 +177,7 @@ buffer-items = 64            # 缓冲区大小
 ttl = "2m"                   # 缓存过期时间（支持热更新）
 
 # Service 缓存配置（含密钥）
-[auth.cache.service]
+[aegis.cache.service]
 key-prefix = "svc:"          # 缓存 key 前缀
 cache-size = 500             # 最大缓存条目数
 num-counters = 5000          # 计数器数量
@@ -190,7 +185,7 @@ buffer-items = 64            # 缓冲区大小
 ttl = "2m"                   # 缓存过期时间（支持热更新）
 
 # User 缓存配置
-[auth.cache.user]
+[aegis.cache.user]
 key-prefix = "user:"         # 缓存 key 前缀
 cache-size = 10000           # 最大缓存条目数
 num-counters = 100000        # 计数器数量
@@ -198,7 +193,7 @@ buffer-items = 64            # 缓冲区大小
 ttl = "10m"                  # 缓存过期时间（支持热更新）
 
 # ApplicationServiceRelation 缓存配置（应用可申请的服务关系）
-[auth.cache.application-service-relation]
+[aegis.cache.application-service-relation]
 key-prefix = "app-svc-rel:"  # 缓存 key 前缀
 cache-size = 2000            # 最大缓存条目数
 num-counters = 20000         # 计数器数量
@@ -206,7 +201,7 @@ buffer-items = 64            # 缓冲区大小
 ttl = "5m"                   # 缓存过期时间（支持热更新）
 
 # Relationship 缓存配置（服务关系）
-[auth.cache.relationship]
+[aegis.cache.relationship]
 key-prefix = "rel:"          # 缓存 key 前缀
 cache-size = 5000            # 最大缓存条目数
 num-counters = 50000         # 计数器数量
@@ -214,8 +209,8 @@ buffer-items = 64            # 缓冲区大小
 ttl = "5m"                   # 缓存过期时间（支持热更新）
 
 # Challenge 缓存配置（MFA 验证）
-[auth.cache.challenge]
-key-prefix = "auth:ch:"      # 缓存 key 前缀
+[aegis.cache.challenge]
+key-prefix = "aegis:ch:"      # 缓存 key 前缀
 expires_in = "5m"            # Challenge 过期时间（支持热更新）
 
 # 阿里云 OSS 配置（用于图片上传）

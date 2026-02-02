@@ -4,12 +4,17 @@
 package main
 
 import (
+	"context"
+
 	"github.com/google/wire"
 
 	"github.com/heliannuuthus/helios/internal/aegis"
+	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/database"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/upload"
+	"github.com/heliannuuthus/helios/internal/iris"
+	intMw "github.com/heliannuuthus/helios/internal/middleware"
 	"github.com/heliannuuthus/helios/internal/zwei/favorite"
 	"github.com/heliannuuthus/helios/internal/zwei/history"
 	"github.com/heliannuuthus/helios/internal/zwei/home"
@@ -17,6 +22,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
+	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
 )
 
 // 业务模块 Handler（使用 Zwei 数据库）
@@ -55,7 +61,8 @@ func provideHermesService() *hermes.Service {
 
 // 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
 func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
-	userSvc := hermes.NewUserService(database.GetHermes())
+	db := database.GetHermes()
+	userSvc := hermes.NewUserService(db)
 	return aegis.Initialize(&aegis.InitConfig{
 		HermesSvc: hermesService,
 		UserSvc:   userSvc,
@@ -68,6 +75,24 @@ func provideUploadHandler() *upload.Handler {
 
 func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
 	return hermes.NewHandler(hermesService)
+}
+
+// Iris 用户信息模块 Handler
+func provideIrisHandler() *iris.Handler {
+	db := database.GetHermes()
+	userSvc := hermes.NewUserService(db)
+	credentialSvc := hermes.NewCredentialService(db)
+	return iris.NewHandler(userSvc, credentialSvc)
+}
+
+// provideGinMiddlewareFactory 创建 Gin 中间件工厂
+func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
+	endpoint := config.GetAegisIssuer()
+	encryptKeyProvider, err := intMw.NewHermesKeyProvider()
+	if err != nil {
+		return nil, err
+	}
+	return middleware.NewGinFactory(context.Background(), endpoint, encryptKeyProvider)
 }
 
 // ProviderSet 提供者集合
@@ -92,12 +117,17 @@ var ProviderSet = wire.NewSet(
 	// 认证模块（使用 Hermes 数据库，依赖 hermes.Service）
 	provideAegisHandler,
 	provideUploadHandler,
+	// Iris 用户信息模块
+	provideIrisHandler,
+	// 中间件工厂
+	provideGinMiddlewareFactory,
 )
 
 // App 应用依赖容器
 type App struct {
 	RecipeHandler     *recipe.Handler
 	AegisHandler      *aegis.Handler
+	IrisHandler       *iris.Handler
 	FavoriteHandler   *favorite.Handler
 	HistoryHandler    *history.Handler
 	HomeHandler       *home.Handler
@@ -106,6 +136,7 @@ type App struct {
 	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
 	HermesHandler     *hermes.Handler
+	MiddlewareFactory *middleware.GinFactory
 }
 
 // InitializeApp 初始化应用（由 wire 生成）

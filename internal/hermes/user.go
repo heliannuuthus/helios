@@ -10,8 +10,9 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
-	"github.com/heliannuuthus/helios/pkg/kms"
+	"github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -42,6 +43,15 @@ func (s *UserService) FindByIdentity(ctx context.Context, idp, providerID string
 	}
 
 	return s.FindByOpenID(ctx, identity.OpenID)
+}
+
+// FindByEmail 根据邮箱查找用户
+func (s *UserService) FindByEmail(ctx context.Context, email string) (*models.User, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 // Create 创建用户
@@ -102,11 +112,16 @@ func (s *UserService) GetUserWithDecrypted(ctx context.Context, openID string) (
 
 	// 解密手机号
 	if user.PhoneCipher != nil && *user.PhoneCipher != "" {
-		phone, err := kms.DecryptPhone(*user.PhoneCipher, user.OpenID)
+		key, err := config.GetDBEncKeyRaw()
 		if err != nil {
-			logger.Warnf("[UserService] 解密手机号失败: %v", err)
+			logger.Warnf("[UserService] 获取数据库加密密钥失败: %v", err)
 		} else {
-			result.Phone = phone
+			phone, err := crypto.Decrypt(key, *user.PhoneCipher, user.OpenID)
+			if err != nil {
+				logger.Warnf("[UserService] 解密手机号失败: %v", err)
+			} else {
+				result.Phone = phone
+			}
 		}
 	}
 
@@ -145,12 +160,14 @@ func (s *UserService) FindOrCreate(ctx context.Context, req *models.FindOrCreate
 
 	// 2. 创建新用户
 	now := time.Now()
+	nickname := generateRandomName()
+	picture := generateRandomAvatar(req.ProviderID)
 	newUser := &models.User{
 		OpenID:      models.GenerateOpenID(),
-		Domain:      req.Domain,
-		Name:        generateRandomName(),
-		Picture:     generateRandomAvatar(req.ProviderID),
-		LastLoginAt: now,
+		DomainID:    req.DomainID,
+		Nickname:    &nickname,
+		Picture:     &picture,
+		LastLoginAt: &now,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -159,7 +176,6 @@ func (s *UserService) FindOrCreate(ctx context.Context, req *models.FindOrCreate
 		OpenID:    newUser.OpenID,
 		IDP:       req.IDP,
 		TOpenID:   req.ProviderID,
-		UnionID:   req.UnionID,
 		RawData:   req.RawData,
 		CreatedAt: now,
 		UpdatedAt: now,

@@ -8,10 +8,10 @@ bin/
 
 # Environment
 .env
-config.toml
-auth.config.toml
-zwei.config.toml
-hermes.config.toml
+
+# Config files (contain secrets, use config/example.toml as template)
+config/*.toml
+!config/example.toml
 
 # Database
 *.db

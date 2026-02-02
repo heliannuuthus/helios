@@ -105,6 +105,13 @@ func (s *ServiceWithKey) GetRequiredIdentities() []string {
 	return identities
 }
 
+// Domain 域（从配置文件读取，不存储在数据库）
+type Domain struct {
+	DomainID    string  // 域标识：ciam/piam
+	Name        string  // 域名称
+	Description *string // 域描述
+}
+
 // DomainWithKey 带签名密钥的 Domain
 type DomainWithKey struct {
 	Domain

@@ -23,7 +23,7 @@ type MPProvider struct {
 
 // NewMPProvider 创建微信小程序 Provider
 func NewMPProvider() *MPProvider {
-	cfg := config.Auth()
+	cfg := config.Aegis()
 	return &MPProvider{
 		appID:     cfg.GetString("idps.wxmp.appid"),
 		appSecret: cfg.GetString("idps.wxmp.secret"),
@@ -85,16 +85,11 @@ func (p *MPProvider) Exchange(ctx context.Context, params ...any) (*idp.Exchange
 		return nil, fmt.Errorf("登录失败: %s", result.ErrMsg)
 	}
 
-	unionID := "(无)"
-	if result.UnionID != "" {
-		unionID = result.UnionID
-	}
-	logger.Infof("[Wechat] 登录成功 - OpenID: %s, UnionID: %s", result.OpenID, unionID)
+	logger.Infof("[Wechat] 登录成功 - OpenID: %s", result.OpenID)
 
 	return &idp.ExchangeResult{
 		ProviderID: result.OpenID,
-		UnionID:    result.UnionID,
-		RawData:    fmt.Sprintf(`{"openid":"%s","unionid":"%s"}`, result.OpenID, result.UnionID),
+		RawData:    fmt.Sprintf(`{"openid":"%s"}`, result.OpenID),
 	}, nil
 }
 
@@ -125,10 +120,8 @@ func (p *MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, p
 // ToPublicConfig 转换为前端可用的公开配置
 func (p *MPProvider) ToPublicConfig() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		ID:           "wechat-mp",
-		ProviderType: idp.TypeWechatMP,
-		Name:         "微信小程序",
-		ClientID:     p.appID,
+		Connection: "wechat",
+		Strategy:   []string{"mp"},
 	}
 }
 

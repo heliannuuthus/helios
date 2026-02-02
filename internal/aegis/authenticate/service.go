@@ -12,7 +12,6 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -51,80 +50,86 @@ func NewService(cfg *ServiceConfig) *Service {
 // ==================== AuthFlow 管理 ====================
 
 // CreateFlow 创建认证流程
-// 错误信息会存储在返回的 flow.Error 中，调用方通过 flow.HasError() 检查
-func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) *types.AuthFlow {
+// 前置检查错误（参数验证、数据查询等）直接返回 error
+// 流程内错误（认证失败等）通过 flow.Error 返回
+func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) (*types.AuthFlow, error) {
 	ctx := c.Request.Context()
 
-	// 从配置获取 Flow 过期时间（秒转为 Duration）
-	flowExpiresIn := time.Duration(config.GetAuthCookieMaxAge()) * time.Second
+	logger.Debugf("[Authenticate] 开始创建认证流程 - ClientID: %s, Audience: %s, RedirectURI: %s",
+		req.ClientID, req.Audience, req.RedirectURI)
 
-	// 先创建 flow，后续错误都记录在 flow 中
-	flow := types.NewAuthFlow(req, flowExpiresIn)
+	// ==================== 前置检查（直接返回 error）====================
 
 	// 1. 验证 response_type
 	if req.ResponseType != "code" {
-		flow.Fail(autherrors.NewInvalidRequest("response_type must be 'code'"))
-		return flow
+		logger.Warnf("[Authenticate] 无效的 response_type: %s", req.ResponseType)
+		return nil, autherrors.NewInvalidRequest("response_type must be 'code'")
 	}
 
 	// 2. 获取 Application
 	app, err := s.cache.GetApplication(ctx, req.ClientID)
 	if err != nil {
-		flow.Fail(autherrors.NewClientNotFoundf("application not found: %s", req.ClientID))
-		return flow
-	}
-	flow.Application = app
-
-	// 3. 验证请求来源（应用侧跨域验证）
-	if err := validateOrigin(c, app); err != nil {
-		flow.Fail(err)
-		return flow
+		logger.Errorf("[Authenticate] 获取 Application 失败 - ClientID: %s, Error: %v", req.ClientID, err)
+		return nil, autherrors.NewClientNotFoundf("application not found: %s", req.ClientID)
 	}
 
-	// 4. 验证重定向 URI
+	// 3. 验证重定向 URI
 	if !app.ValidateRedirectURI(req.RedirectURI) {
-		flow.Fail(autherrors.NewInvalidRequest("invalid redirect_uri"))
-		return flow
+		logger.Warnf("[Authenticate] 无效的重定向 URI - ClientID: %s, RedirectURI: %s, AllowedURIs: %v",
+			req.ClientID, req.RedirectURI, app.GetRedirectURIs())
+		return nil, autherrors.NewInvalidRequest("invalid redirect_uri")
 	}
 
-	// 5. 获取 Service
+	// 4. 获取 Service
 	svc, err := s.cache.GetService(ctx, req.Audience)
 	if err != nil {
-		flow.Fail(autherrors.NewServiceNotFoundf("service not found: %s", req.Audience))
-		return flow
+		logger.Errorf("[Authenticate] 获取 Service 失败 - Audience: %s, Error: %v", req.Audience, err)
+		return nil, autherrors.NewServiceNotFoundf("service not found: %s", req.Audience)
 	}
-	flow.Service = svc
 
-	// 6. 验证 Application-Service 关系
+	// 5. 验证 Application-Service 关系
 	hasRelation, err := s.cache.CheckAppServiceRelation(ctx, req.ClientID, req.Audience)
 	if err != nil {
-		flow.Fail(autherrors.NewServerError("check relation failed"))
-		return flow
+		logger.Errorf("[Authenticate] 检查 Application-Service 关系失败 - ClientID: %s, Audience: %s, Error: %v",
+			req.ClientID, req.Audience, err)
+		return nil, autherrors.NewServerError("check relation failed")
 	}
 	if !hasRelation {
-		flow.Fail(autherrors.NewAccessDeniedf("application %s has no access to service %s", req.ClientID, req.Audience))
-		return flow
+		logger.Warnf("[Authenticate] Application 无权访问 Service - ClientID: %s, Audience: %s",
+			req.ClientID, req.Audience)
+		return nil, autherrors.NewAccessDeniedf("application %s has no access to service %s", req.ClientID, req.Audience)
 	}
 
-	// 7. 获取应用配置的登录方式
+	// 6. 获取应用配置的登录方式
 	allowedIDPs := app.GetAllowedIDPs()
 	if len(allowedIDPs) == 0 {
-		flow.Fail(autherrors.NewNoConnectionAvailable(""))
-		return flow
+		logger.Warnf("[Authenticate] 应用未配置登录方式 - ClientID: %s", req.ClientID)
+		return nil, autherrors.NewNoConnectionAvailable("")
 	}
 
-	// 8. 构建 ConnectionMap（使用应用配置的 IDP）
+	// ==================== 创建 Flow ====================
+
+	// 从配置获取 Flow 过期时间（秒转为 Duration）
+	flowExpiresIn := time.Duration(config.GetAegisCookieMaxAge()) * time.Second
+
+	// 创建 flow
+	flow := types.NewAuthFlow(req, flowExpiresIn)
+	flow.Application = app
+	flow.Service = svc
+
+	// 7. 构建 ConnectionMap（使用应用配置的 IDP）
 	flow.ConnectionMap = s.setConnections(allowedIDPs)
 
-	// 9. 保存到缓存
+	// 8. 保存到缓存
 	if err := s.SaveFlow(ctx, flow); err != nil {
-		flow.Fail(autherrors.NewServerError("save flow failed"))
-		return flow
+		logger.Errorf("[Authenticate] 保存 Flow 失败 - FlowID: %s, Error: %v", flow.ID, err)
+		return nil, autherrors.NewServerError("save flow failed")
 	}
 
-	logger.Infof("[Authenticate] 创建认证流程 - FlowID: %s, ClientID: %s", flow.ID, req.ClientID)
+	logger.Infof("[Authenticate] 创建认证流程成功 - FlowID: %s, ClientID: %s, Audience: %s",
+		flow.ID, req.ClientID, req.Audience)
 
-	return flow
+	return flow, nil
 }
 
 // GetAndValidateFlow 获取并验证 AuthFlow
@@ -132,6 +137,7 @@ func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) *types.Auth
 func (s *Service) GetAndValidateFlow(ctx context.Context, flowID string) *types.AuthFlow {
 	flow, err := s.GetFlow(ctx, flowID)
 	if err != nil {
+		logger.Warnf("[Authenticate] 获取 Flow 失败 - FlowID: %s, Error: %v", flowID, err)
 		// 创建空 flow 来存储错误
 		flow = &types.AuthFlow{ID: flowID}
 		flow.Fail(autherrors.NewFlowNotFound("session not found"))
@@ -139,6 +145,7 @@ func (s *Service) GetAndValidateFlow(ctx context.Context, flowID string) *types.
 	}
 
 	if flow.IsExpired() {
+		logger.Warnf("[Authenticate] Flow 已过期 - FlowID: %s, ExpiredAt: %v", flowID, flow.ExpiresAt)
 		flow.Fail(autherrors.NewFlowExpired("session expired"))
 		return flow
 	}
@@ -150,11 +157,13 @@ func (s *Service) GetAndValidateFlow(ctx context.Context, flowID string) *types.
 func (s *Service) GetFlow(ctx context.Context, flowID string) (*types.AuthFlow, error) {
 	data, err := s.cache.GetAuthFlow(ctx, flowID)
 	if err != nil {
+		logger.Debugf("[Authenticate] 从缓存获取 Flow 失败 - FlowID: %s, Error: %v", flowID, err)
 		return nil, autherrors.NewFlowNotFound("session not found")
 	}
 
 	var flow types.AuthFlow
 	if err := json.Unmarshal(data, &flow); err != nil {
+		logger.Errorf("[Authenticate] 反序列化 Flow 失败 - FlowID: %s, Error: %v", flowID, err)
 		return nil, fmt.Errorf("unmarshal flow failed: %w", err)
 	}
 
@@ -213,17 +222,65 @@ func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, connec
 	return result, nil
 }
 
-// GetAvailableConnections 获取可用的 Connection（从 flow.ConnectionMap）
-func (s *Service) GetAvailableConnections(flow *types.AuthFlow) []*types.ConnectionConfig {
+// GetAvailableConnections 获取可用的 ConnectionsMap
+func (s *Service) GetAvailableConnections(flow *types.AuthFlow) *types.ConnectionsMap {
 	if flow.ConnectionMap == nil {
 		return nil
 	}
 
-	configs := make([]*types.ConnectionConfig, 0, len(flow.ConnectionMap))
-	for _, cfg := range flow.ConnectionMap {
-		configs = append(configs, cfg)
+	result := &types.ConnectionsMap{
+		IDP:   make([]*types.ConnectionConfig, 0),
+		VChan: make([]*types.VChanConfig, 0),
+		MFA:   make([]string, 0),
 	}
-	return configs
+
+	// 添加 IDP connections
+	for _, cfg := range flow.ConnectionMap {
+		result.IDP = append(result.IDP, cfg)
+	}
+
+	// 添加 captcha vchan（如果配置了）
+	captchaCfg := s.getCaptchaConfig()
+	if captchaCfg != nil {
+		result.VChan = append(result.VChan, captchaCfg)
+	}
+
+	// 添加 MFA 列表
+	result.MFA = s.getAvailableMFAs()
+
+	return result
+}
+
+// getCaptchaConfig 获取 captcha 配置
+func (s *Service) getCaptchaConfig() *types.VChanConfig {
+	authCfg := config.Aegis()
+	if !authCfg.GetBool("captcha.enabled") {
+		return nil
+	}
+
+	return &types.VChanConfig{
+		Connection: "captcha",
+		Strategy:   authCfg.GetString("captcha.provider"), // turnstile, recaptcha 等
+		Identifier: authCfg.GetString("captcha.site-key"), // 前端需要的 site-key
+	}
+}
+
+// getAvailableMFAs 获取可用的 MFA 列表
+func (s *Service) getAvailableMFAs() []string {
+	authCfg := config.Aegis()
+	mfas := make([]string, 0)
+
+	if authCfg.GetBool("mfa.email-otp.enabled") {
+		mfas = append(mfas, "email-otp")
+	}
+	if authCfg.GetBool("mfa.tg-otp.enabled") {
+		mfas = append(mfas, "tg-otp")
+	}
+	if authCfg.GetBool("mfa.totp.enabled") {
+		mfas = append(mfas, "totp")
+	}
+
+	return mfas
 }
 
 // SendEmailCode 发送邮箱验证码
@@ -261,74 +318,178 @@ func (s *Service) setConnections(allowedIDPs []string) map[string]*types.Connect
 // getConnectionConfig 获取 Connection 配置
 func (s *Service) getConnectionConfig(idpType string) *types.ConnectionConfig {
 	var configPrefix string
-	var name string
+	var connection string
+	var strategy []string
 
 	switch idpType {
 	case idp.TypeWechatMP:
 		configPrefix = "idps.wxmp"
-		name = "微信小程序"
+		connection = "wechat"
+		strategy = []string{"mp"}
 	case idp.TypeTTMP:
 		configPrefix = "idps.tt"
-		name = "抖音小程序"
+		connection = "tt"
+		strategy = []string{"mp"}
 	case idp.TypeAlipayMP:
 		configPrefix = "idps.alipay"
-		name = "支付宝小程序"
+		connection = "alipay"
+		strategy = []string{"mp"}
 	case idp.TypeWecom:
 		configPrefix = "idps.wecom"
-		name = "企业微信"
+		connection = "wecom"
+		strategy = []string{"oauth"}
 	case idp.TypeGithub:
-		configPrefix = "idps.github"
-		name = "GitHub"
+		return s.getGithubConnectionConfig()
 	case idp.TypeGoogle:
-		configPrefix = "idps.google"
-		name = "Google"
+		return s.getGoogleConnectionConfig()
+	case "email":
+		return s.getEmailConnectionConfig()
+	case "user":
+		return s.getUserConnectionConfig()
+	case "oper":
+		return s.getOperConnectionConfig()
 	default:
 		return nil
 	}
 
-	authCfg := config.Auth()
+	authCfg := config.Aegis()
 	appID := authCfg.GetString(configPrefix + ".appid")
 	if appID == "" {
 		return nil
 	}
 
 	connCfg := &types.ConnectionConfig{
-		ID:            idpType,
-		ProviderType:  idpType,
-		Name:          name,
-		ClientID:      appID,
-		AllowedScopes: authCfg.GetStringSlice(configPrefix + ".allowed_scopes"),
+		Connection: connection,
+		Strategy:   strategy,
 	}
 
-	// 人机验证配置
-	if authCfg.GetBool(configPrefix + ".capture.required") {
-		connCfg.Capture = &types.CaptureConfig{
-			Required: true,
-			Type:     authCfg.GetString(configPrefix + ".capture.type"),
-			SiteKey:  authCfg.GetString(configPrefix + ".capture.site_key"),
+	// 检查是否需要 captcha
+	if authCfg.GetBool("captcha.enabled") {
+		connCfg.Require = &types.RequireConfig{
+			VChan: []string{"captcha"},
 		}
 	}
 
 	return connCfg
 }
 
-// validateOrigin 验证请求来源是否允许
-// 从 gin.Context 获取 Origin/Referer header，验证是否在应用的允许列表中
-func validateOrigin(c *gin.Context, app *models.ApplicationWithKey) *autherrors.AuthError {
-	origin := c.GetHeader("Origin")
-	if origin == "" {
-		origin = c.GetHeader("Referer")
+// getUserConnectionConfig 获取 user 身份配置
+func (s *Service) getUserConnectionConfig() *types.ConnectionConfig {
+	authCfg := config.Aegis()
+
+	cfg := &types.ConnectionConfig{
+		Connection: "user",
+		Strategy:   []string{},
 	}
 
-	// 没有 Origin 头，跳过验证
-	if origin == "" {
+	// 检查是否需要 captcha
+	if authCfg.GetBool("captcha.enabled") {
+		cfg.Require = &types.RequireConfig{
+			VChan: []string{"captcha"},
+		}
+	}
+
+	// 设置 delegate MFA
+	delegateMFAs := make([]string, 0)
+	if authCfg.GetBool("mfa.email-otp.enabled") {
+		delegateMFAs = append(delegateMFAs, "email-otp")
+	}
+	if len(delegateMFAs) > 0 {
+		cfg.Delegate = &types.DelegateConfig{
+			MFA: delegateMFAs,
+		}
+	}
+
+	return cfg
+}
+
+// getOperConnectionConfig 获取 oper（运营）身份配置
+func (s *Service) getOperConnectionConfig() *types.ConnectionConfig {
+	authCfg := config.Aegis()
+
+	cfg := &types.ConnectionConfig{
+		Connection: "oper",
+		Strategy:   []string{},
+	}
+
+	// 检查是否需要 captcha
+	if authCfg.GetBool("captcha.enabled") {
+		cfg.Require = &types.RequireConfig{
+			VChan: []string{"captcha"},
+		}
+	}
+
+	// 设置 delegate MFA（oper 可能支持更多 MFA）
+	delegateMFAs := make([]string, 0)
+	if authCfg.GetBool("mfa.email-otp.enabled") {
+		delegateMFAs = append(delegateMFAs, "email-otp")
+	}
+	if authCfg.GetBool("mfa.totp.enabled") {
+		delegateMFAs = append(delegateMFAs, "totp")
+	}
+	if len(delegateMFAs) > 0 {
+		cfg.Delegate = &types.DelegateConfig{
+			MFA: delegateMFAs,
+		}
+	}
+
+	return cfg
+}
+
+// getGithubConnectionConfig 获取 GitHub OAuth 配置
+func (s *Service) getGithubConnectionConfig() *types.ConnectionConfig {
+	authCfg := config.Aegis()
+
+	clientID := authCfg.GetString("idps.github.client-id")
+	if clientID == "" {
 		return nil
 	}
 
-	// 验证 Origin 是否在允许列表中
-	if !app.ValidateOrigin(origin) {
-		return autherrors.NewInvalidOriginf("origin %s not allowed for application %s", origin, app.AppID)
+	return &types.ConnectionConfig{
+		Connection: "github",
+		Strategy:   []string{"oauth"},
+		OAuth: &types.OAuthConfig{
+			ClientID:     clientID,
+			AuthorizeURL: "https://github.com/login/oauth/authorize",
+			Scope:        "read:user user:email",
+		},
+	}
+}
+
+// getGoogleConnectionConfig 获取 Google OAuth 配置
+func (s *Service) getGoogleConnectionConfig() *types.ConnectionConfig {
+	authCfg := config.Aegis()
+
+	clientID := authCfg.GetString("idps.google.client-id")
+	if clientID == "" {
+		return nil
 	}
 
-	return nil
+	return &types.ConnectionConfig{
+		Connection: "google",
+		Strategy:   []string{"oauth"},
+		OAuth: &types.OAuthConfig{
+			ClientID:     clientID,
+			AuthorizeURL: "https://accounts.google.com/o/oauth2/v2/auth",
+			Scope:        "openid email profile",
+		},
+	}
+}
+
+func (s *Service) getEmailConnectionConfig() *types.ConnectionConfig {
+	authCfg := config.Aegis()
+
+	cfg := &types.ConnectionConfig{
+		Connection: "email",
+		Strategy:   []string{"otp"}, // email 使用 OTP 验证
+	}
+
+	// 检查是否需要 captcha
+	if authCfg.GetBool("captcha.enabled") {
+		cfg.Require = &types.RequireConfig{
+			VChan: []string{"captcha"},
+		}
+	}
+
+	return cfg
 }

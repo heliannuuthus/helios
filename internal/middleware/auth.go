@@ -1,11 +1,15 @@
 package middleware
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 
+	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -90,4 +94,30 @@ func OptionalToken(v *token.Interpreter) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// HermesKeyProvider 基于 Hermes 配置的密钥提供者
+// 从 hermes 配置的 aegis.secret-key 读取 JWK
+type HermesKeyProvider struct {
+	key jwk.Key // 缓存解析后的 key
+}
+
+// NewHermesKeyProvider 创建基于 Hermes 配置的密钥提供者
+func NewHermesKeyProvider() (*HermesKeyProvider, error) {
+	secretBytes, err := config.GetHermesAegisSecretKeyBytes()
+	if err != nil {
+		return nil, fmt.Errorf("get hermes aegis secret key: %w", err)
+	}
+
+	key, err := jwk.ParseKey(secretBytes)
+	if err != nil {
+		return nil, fmt.Errorf("parse hermes aegis JWK: %w", err)
+	}
+
+	return &HermesKeyProvider{key: key}, nil
+}
+
+// Get 获取解密密钥（忽略 audience 参数，使用 hermes 配置的密钥）
+func (p *HermesKeyProvider) Get(ctx context.Context, audience string) (jwk.Key, error) {
+	return p.key, nil
 }

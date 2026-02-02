@@ -7,35 +7,31 @@ import (
 
 // CreateRequest 创建 Challenge 请求
 type CreateRequest struct {
-	Type         types.ChallengeType `json:"type" binding:"required,oneof=captcha totp email"`
+	Type         types.ChallengeType `json:"type" binding:"required,oneof=captcha email-otp totp sms-otp tg-otp"`
 	FlowID       string              `json:"flow_id,omitempty"`       // 关联的 AuthFlow ID
 	UserID       string              `json:"user_id,omitempty"`       // 关联的用户 ID
-	Email        string              `json:"email,omitempty"`         // email 类型时必填
-	CaptchaToken string              `json:"captcha_token,omitempty"` // captcha 前置验证 token
+	Email        string              `json:"email,omitempty"`         // email-otp 类型时必填
+	Phone        string              `json:"phone,omitempty"`         // sms-otp 类型时必填
+	CaptchaToken string              `json:"captcha_token,omitempty"` // captcha 前置验证 token（正常用户静默获取）
 }
 
 // CreateResponse 创建 Challenge 响应
 type CreateResponse struct {
-	ChallengeID string         `json:"challenge_id"`
-	Type        string         `json:"type"`
-	ExpiresIn   int            `json:"expires_in"` // 秒
-	Data        map[string]any `json:"data,omitempty"`
+	ChallengeID string             `json:"challenge_id"`
+	Type        string             `json:"type,omitempty"`      // 有 required 时不返回
+	ExpiresIn   int                `json:"expires_in,omitempty"` // 有 required 时不返回
+	Data        map[string]any     `json:"data,omitempty"`
+	Required    *types.VChanConfig `json:"required,omitempty"` // 需要先完成的前置验证（复用 VChanConfig）
 }
 
-// CaptchaRequiredResponse 需要 Captcha 的响应
-type CaptchaRequiredResponse struct {
-	Error   string `json:"error"` // captcha_required
-	SiteKey string `json:"site_key"`
-}
-
-// VerifyRequest 验证 Challenge 请求
+// VerifyRequest 验证 Challenge 请求（challenge_id 从 query 获取）
 type VerifyRequest struct {
-	ChallengeID string `json:"challenge_id" binding:"required"`
-	Code        string `json:"code,omitempty"`  // totp/email 验证码
-	Token       string `json:"token,omitempty"` // captcha token
+	Proof string `json:"proof" binding:"required"` // 验证证明（captcha token / OTP code）
 }
 
 // VerifyResponse 验证 Challenge 响应
 type VerifyResponse struct {
-	Verified bool `json:"verified"`
+	Verified    bool           `json:"verified"`
+	ChallengeID string         `json:"challenge_id,omitempty"` // 后续 challenge ID（captcha 验证后创建的 email challenge）
+	Data        map[string]any `json:"data,omitempty"`         // 附加数据
 }

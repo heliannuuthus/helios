@@ -21,7 +21,7 @@ type Interpreter struct {
 	signKeyProvider    KeyProvider // 签名公钥提供者（根据 clientID 获取）
 	encryptKeyProvider KeyProvider // 加密密钥提供者（根据 audience 获取）
 
-	verifiers  map[string]*Verifier  // 缓存：key = clientID
+	verifiers  map[string]*Verifier  // 缓存：key = audience
 	decryptors map[string]*decryptor // 缓存：key = audience
 	mu         sync.RWMutex
 }
@@ -36,12 +36,12 @@ func NewInterpreter(signKeyProvider, encryptKeyProvider KeyProvider) *Interprete
 	}
 }
 
-// Verifier 获取或创建绑定特定 clientID 的 Verifier
-func (i *Interpreter) Verifier(clientID string) *Verifier {
-	return getOrCreate(&i.mu, i.verifiers, clientID, func() *Verifier {
+// Verifier 获取或创建绑定特定 audience 的 Verifier
+func (i *Interpreter) Verifier(audience string) *Verifier {
+	return getOrCreate(&i.mu, i.verifiers, audience, func() *Verifier {
 		return &Verifier{
 			keyProvider: i.signKeyProvider,
-			clientID:    clientID,
+			audience:    audience,
 		}
 	})
 }
@@ -53,12 +53,12 @@ func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (*Claim
 		return nil, err
 	}
 
-	clientID, err := extractClientID(token)
-	if err != nil {
-		return nil, err
+	audience := extractAudience(token)
+	if audience == "" {
+		return nil, fmt.Errorf("%w: missing audience", ErrMissingClaims)
 	}
 
-	claims, err := i.Verifier(clientID).Verify(ctx, tokenString)
+	claims, err := i.Verifier(audience).Verify(ctx, tokenString)
 	if err != nil {
 		return nil, err
 	}
@@ -78,12 +78,12 @@ func (i *Interpreter) Verify(ctx context.Context, tokenString string) (*Claims, 
 		return nil, err
 	}
 
-	clientID, err := extractClientID(token)
-	if err != nil {
-		return nil, err
+	audience := extractAudience(token)
+	if audience == "" {
+		return nil, fmt.Errorf("%w: missing audience", ErrMissingClaims)
 	}
 
-	return i.Verifier(clientID).Verify(ctx, tokenString)
+	return i.Verifier(audience).Verify(ctx, tokenString)
 }
 
 // getDecryptor 获取或创建绑定特定 audience 的 decryptor
@@ -99,10 +99,10 @@ func (i *Interpreter) getDecryptor(audience string) *decryptor {
 // ============= Verifier =============
 
 // Verifier 负责验证 JWT 签名
-// 绑定特定的 clientID，只做验签不解密
+// 绑定特定的 audience，只做验签不解密
 type Verifier struct {
 	keyProvider KeyProvider
-	clientID    string
+	audience    string
 }
 
 // Verify 验证 token 签名，返回 Claims（用户信息字段为空）
@@ -112,27 +112,24 @@ func (v *Verifier) Verify(ctx context.Context, tokenString string) (*Claims, err
 		return nil, err
 	}
 
-	clientID, err := extractClientID(token)
-	if err != nil {
+	claims := extractClaims(token)
+
+	if claims.Audience != v.audience {
+		return nil, fmt.Errorf("%w: audience mismatch, expected %s, got %s",
+			ErrInvalidSignature, v.audience, claims.Audience)
+	}
+
+	if err := v.verifySignature(ctx, claims.ClientID, tokenString); err != nil {
 		return nil, err
 	}
 
-	if clientID != v.clientID {
-		return nil, fmt.Errorf("%w: client_id mismatch, expected %s, got %s",
-			ErrInvalidSignature, v.clientID, clientID)
-	}
-
-	if err := v.verifySignature(ctx, tokenString); err != nil {
-		return nil, err
-	}
-
-	return extractClaims(token), nil
+	return claims, nil
 }
 
-func (v *Verifier) verifySignature(ctx context.Context, tokenString string) error {
-	publicKey, err := v.keyProvider.Get(ctx, v.clientID)
+func (v *Verifier) verifySignature(ctx context.Context, clientID, tokenString string) error {
+	publicKey, err := v.keyProvider.Get(ctx, clientID)
 	if err != nil {
-		return fmt.Errorf("get public key for client %s: %w", v.clientID, err)
+		return fmt.Errorf("get public key for client %s: %w", clientID, err)
 	}
 
 	_, err = jwt.Parse([]byte(tokenString),
@@ -209,12 +206,11 @@ func parseToken(tokenString string) (jwt.Token, error) {
 	return token, nil
 }
 
-func extractClientID(token jwt.Token) (string, error) {
-	var clientID string
-	if err := token.Get("cli", &clientID); err != nil || clientID == "" {
-		return "", fmt.Errorf("%w: missing cli", ErrMissingClaims)
+func extractAudience(token jwt.Token) string {
+	if audVal, ok := token.Audience(); ok && len(audVal) > 0 {
+		return audVal[0]
 	}
-	return clientID, nil
+	return ""
 }
 
 func extractClaims(token jwt.Token) *Claims {

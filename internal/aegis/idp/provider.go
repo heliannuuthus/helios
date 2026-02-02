@@ -28,7 +28,6 @@ type Provider interface {
 // ExchangeResult 换取结果
 type ExchangeResult struct {
 	ProviderID string // IDP 侧用户唯一标识（openid）
-	UnionID    string // 联合 ID（可选）
 	RawData    string // 原始响应 JSON
 }
 

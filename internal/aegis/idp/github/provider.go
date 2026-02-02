@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	tokenURL = "https://github.com/login/oauth/access_token"
-	userURL  = "https://api.github.com/user"
+	tokenURL  = "https://github.com/login/oauth/access_token"
+	userURL   = "https://api.github.com/user"
+	emailsURL = "https://api.github.com/user/emails"
 )
 
 // Provider GitHub OAuth Provider
@@ -30,7 +31,7 @@ type Provider struct {
 
 // NewProvider 创建 GitHub Provider
 func NewProvider() *Provider {
-	cfg := config.Auth()
+	cfg := config.Aegis()
 	return &Provider{
 		clientID:     cfg.GetString("idps.github.client-id"),
 		clientSecret: cfg.GetString("idps.github.client-secret"),
@@ -160,12 +161,77 @@ func (p *Provider) getUserInfo(ctx context.Context, accessToken string) (*idp.Ex
 	}
 
 	login := gjson.Get(bodyStr, "login").String()
-	logger.Infof("[GitHub] 登录成功 - UserID: %s, Login: %s", userID, login)
+
+	// 如果 /user API 没有返回 email，尝试从 /user/emails 获取
+	email := gjson.Get(bodyStr, "email").String()
+	if email == "" {
+		email = p.getPrimaryEmail(ctx, accessToken)
+		if email != "" {
+			// 将 email 添加到 rawData 中
+			bodyStr = strings.TrimSuffix(bodyStr, "}") + `,"email":"` + email + `"}`
+		}
+	}
+
+	logger.Infof("[GitHub] 登录成功 - UserID: %s, Login: %s, Email: %s", userID, login, email)
 
 	return &idp.ExchangeResult{
 		ProviderID: userID,
 		RawData:    bodyStr,
 	}, nil
+}
+
+// getPrimaryEmail 获取用户主邮箱
+func (p *Provider) getPrimaryEmail(ctx context.Context, accessToken string) string {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, emailsURL, nil)
+	if err != nil {
+		logger.Warnf("[GitHub] 创建 emails 请求失败: %v", err)
+		return ""
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		logger.Warnf("[GitHub] 请求 emails 失败: %v", err)
+		return ""
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Warnf("[GitHub] close emails response body failed: %v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		logger.Warnf("[GitHub] 获取 emails 失败: HTTP %d", resp.StatusCode)
+		return ""
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Warnf("[GitHub] 读取 emails 响应失败: %v", err)
+		return ""
+	}
+
+	bodyStr := string(bodyBytes)
+	logger.Debugf("[GitHub] emails 响应: %s", bodyStr)
+
+	// 遍历邮箱列表，优先返回 primary 且 verified 的邮箱
+	emails := gjson.Parse(bodyStr).Array()
+	var fallbackEmail string
+	for _, e := range emails {
+		email := e.Get("email").String()
+		primary := e.Get("primary").Bool()
+		verified := e.Get("verified").Bool()
+
+		if primary && verified {
+			return email
+		}
+		if verified && fallbackEmail == "" {
+			fallbackEmail = email
+		}
+	}
+
+	return fallbackEmail
 }
 
 // FetchAdditionalInfo 补充获取用户信息
@@ -176,9 +242,7 @@ func (*Provider) FetchAdditionalInfo(ctx context.Context, infoType string, param
 // ToPublicConfig 转换为前端可用的公开配置
 func (p *Provider) ToPublicConfig() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		ID:           "github",
-		ProviderType: idp.TypeGithub,
-		Name:         "GitHub",
-		ClientID:     p.clientID,
+		Connection: "github",
+		Strategy:   []string{"oauth"},
 	}
 }

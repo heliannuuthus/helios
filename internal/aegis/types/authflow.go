@@ -3,12 +3,11 @@
 package types
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"time"
 
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
+	"github.com/heliannuuthus/helios/pkg/utils"
 )
 
 // FlowState 认证流程状态
@@ -125,9 +124,9 @@ var authRequestKnownFields = map[string]bool{
 	"state":                 true,
 	"scope":                 true,
 	// OIDC 扩展参数
-	"prompt":      true,
-	"nonce":       true,
-	"login_hint":  true,
+	"prompt":     true,
+	"nonce":      true,
+	"login_hint": true,
 }
 
 // Prompt 常量
@@ -274,48 +273,60 @@ type AuthorizationCode struct {
 
 // ConnectionConfig Connection 配置（返回给前端的公开配置）
 type ConnectionConfig struct {
-	ID            string                 `json:"id"`                       // 唯一标识（如 "wechat-mp-prod"）
-	ProviderType  string                 `json:"provider_type"`            // IDP 类型（如 "wechat:mp"）
-	Name          string                 `json:"name,omitempty"`           // 显示名称
-	ClientID      string                 `json:"client_id,omitempty"`      // IDP 的 AppID（公开）
-	AllowedScopes []string               `json:"allowed_scopes,omitempty"` // 允许的 scope
-	Capture       *CaptureConfig         `json:"capture,omitempty"`        // 人机验证配置
-	Extra         map[string]interface{} `json:"extra,omitempty"`          // 其他配置
+	Connection string          `json:"connection"`          // 平台标识（github, wechat, user, oper...）
+	Strategy   []string        `json:"strategy"`            // 登录策略（oauth, web, mp, oa...）
+	Identifier string          `json:"identifier,omitzero"` // 第三方标识（仅 vchan 使用，如 captcha 的 site_key）
+	Require    *RequireConfig  `json:"require,omitzero"`    // 前置验证要求
+	Delegate   *DelegateConfig `json:"delegate,omitzero"`   // 委托验证
+	OAuth      *OAuthConfig    `json:"oauth,omitzero"`      // OAuth 配置（用于构建授权 URL）
 }
 
-// CaptureConfig 人机验证配置
-type CaptureConfig struct {
-	Required bool   `json:"required"`
-	Type     string `json:"type,omitempty"`
-	SiteKey  string `json:"site_key,omitempty"`
+// OAuthConfig OAuth 授权配置（返回给前端用于构建授权 URL）
+type OAuthConfig struct {
+	ClientID     string `json:"client_id"`     // OAuth Client ID
+	AuthorizeURL string `json:"authorize_url"` // 授权端点 URL
+	Scope        string `json:"scope"`         // 请求的权限范围
 }
 
-// LoginRequest 登录请求
-type LoginRequest struct {
-	Connection string         `json:"connection" binding:"required"` // 身份提供方（IDP）
-	Data       map[string]any `json:"data" binding:"required"`       // Connection 需要的数据
+// RequireConfig 前置验证要求
+type RequireConfig struct {
+	VChan []string `json:"vchan"` // 需要的 vchan 列表（如 ["captcha"]）
+}
+
+// DelegateConfig 委托验证配置
+type DelegateConfig struct {
+	MFA []string `json:"mfa"` // 委托的 MFA 列表（如 ["email_otp"]）
+}
+
+// VChanConfig 验证渠道配置（captcha 等）
+type VChanConfig struct {
+	Connection string `json:"connection"` // 标识（captcha）
+	Strategy   string `json:"strategy"`   // 策略类型（turnstile, recaptcha...）
+	Identifier string `json:"identifier"` // 站点标识（site_key / app_id）
+}
+
+// MFAConfig MFA 配置
+type MFAConfig struct {
+	Connection string `json:"connection"` // 标识（email_otp, tg_otp, totp...）
+}
+
+// ConnectionsMap Connections 响应（按类别分类）
+type ConnectionsMap struct {
+	IDP   []*ConnectionConfig `json:"idp,omitzero"`   // 身份提供商
+	VChan []*VChanConfig      `json:"vchan,omitzero"` // 验证渠道（captcha 等）
+	MFA   []string            `json:"mfa,omitzero"`   // MFA 多因素认证
 }
 
 // ==================== 辅助函数 ====================
 
-// GenerateFlowID 生成 Flow ID
+// GenerateFlowID 生成 Flow ID（16位 Base62，约 62^16 ≈ 4.7×10^28 种可能）
 func GenerateFlowID() string {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		// 如果加密随机数生成失败，使用时间戳作为备选
-		return "flow_" + hex.EncodeToString([]byte(time.Now().Format("20060102150405.000000000")))
-	}
-	return "flow_" + hex.EncodeToString(bytes)
+	return utils.GenerateID(16)
 }
 
-// GenerateAuthorizationCode 生成授权码
+// GenerateAuthorizationCode 生成授权码（32位 Base62，约 62^32 ≈ 2.3×10^57 种可能）
 func GenerateAuthorizationCode() string {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		// 如果加密随机数生成失败，使用时间戳作为备选
-		return hex.EncodeToString([]byte(time.Now().Format("20060102150405.000000000")))
-	}
-	return hex.EncodeToString(bytes)
+	return utils.GenerateID(32)
 }
 
 // NewAuthFlow 创建新的 AuthFlow

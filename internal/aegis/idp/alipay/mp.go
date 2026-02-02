@@ -28,7 +28,7 @@ type MPProvider struct {
 
 // NewMPProvider 创建支付宝小程序 Provider
 func NewMPProvider() *MPProvider {
-	cfg := config.Auth()
+	cfg := config.Aegis()
 	p := &MPProvider{
 		appID: cfg.GetString("idps.alipay.appid"),
 	}
@@ -247,9 +247,7 @@ func (*MPProvider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...
 // ToPublicConfig 转换为前端可用的公开配置
 func (p *MPProvider) ToPublicConfig() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		ID:           "alipay-mp",
-		ProviderType: idp.TypeAlipayMP,
-		Name:         "支付宝小程序",
-		ClientID:     p.appID,
+		Connection: "alipay",
+		Strategy:   []string{"mp"},
 	}
 }

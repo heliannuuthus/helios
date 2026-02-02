@@ -3,10 +3,10 @@
 // 使用示例：
 //
 //	// 创建全局 Factory
-//	factory := middleware.NewFactory(signKeyProvider, encryptKeyProvider, "http://auth.example.com")
+//	factory, err := middleware.NewFactory(ctx, "http://auth.example.com", secretKeyProvider)
 //
 //	// 为特定 audience 创建中间件
-//	mw := factory.ForAudience("my-service-id")
+//	mw := factory.WithAudience("my-service-id")
 //
 //	r.Use(mw.RequireAuth())                      // 仅认证
 //	r.GET("/admin", mw.RequireRelation("admin")) // 认证 + 鉴权
@@ -16,6 +16,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/lestrrat-go/jwx/v3/jwa"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
 )
@@ -31,26 +33,42 @@ const (
 // Factory 中间件工厂
 // 用于创建绑定特定 audience 的中间件
 type Factory struct {
-	signKeyProvider    token.KeyProvider
-	encryptKeyProvider token.KeyProvider
+	signKeyProvider    token.KeyProvider // 验证 UAT 签名（公钥，来自 JWKS）
+	encryptKeyProvider token.KeyProvider // 解密 UAT subject（对称密钥，dir 模式）
+	catSignKeyProvider token.KeyProvider // 签发 CAT（对称密钥，HS256）
 	checker            *token.Checker
 }
 
 // NewFactory 创建中间件工厂
+// ctx: 用于初始化 JWKS 缓存
 // endpoint: Aegis 服务端点（如 http://auth.example.com）
-// signKeyProvider: 签名公钥提供者（用于验证 token）
-// encryptKeyProvider: 加密密钥提供者（用于解密 token 和签发 CAT）
-func NewFactory(endpoint string, signKeyProvider, encryptKeyProvider token.KeyProvider) *Factory {
+// secretKeyProvider: 服务密钥提供者（用于解密 token 和签发 CAT）
+//
+// secretKeyProvider 提供的密钥会被自动转换：
+//   - 解密 UAT: 使用 dir 算法
+//   - 签发 CAT: 使用 HS256 算法
+func NewFactory(ctx context.Context, endpoint string, secretKeyProvider token.KeyProvider) (*Factory, error) {
+	// 自动创建签名公钥提供者（通过 JWKS 接口获取）
+	signKeyProvider, err := token.NewJWKSKeyProvider(ctx, func() string { return endpoint })
+	if err != nil {
+		return nil, err
+	}
+
+	// 包装密钥提供者，设置正确的算法
+	encryptKeyProvider := token.NewEncryptKeyProvider(secretKeyProvider, jwa.DIRECT())
+	catSignKeyProvider := token.NewSignKeyProvider(secretKeyProvider, jwa.HS256())
+
 	return &Factory{
 		signKeyProvider:    signKeyProvider,
 		encryptKeyProvider: encryptKeyProvider,
-		checker:            token.NewChecker(endpoint, encryptKeyProvider),
-	}
+		catSignKeyProvider: catSignKeyProvider,
+		checker:            token.NewChecker(endpoint, catSignKeyProvider),
+	}, nil
 }
 
-// ForAudience 为特定 audience 创建中间件
+// WithAudience 为特定 audience 创建中间件
 // audience: 服务 ID（用于 token 验证）
-func (f *Factory) ForAudience(audience string) *Middleware {
+func (f *Factory) WithAudience(audience string) *Middleware {
 	interpreter := token.NewInterpreter(f.signKeyProvider, f.encryptKeyProvider)
 	return &Middleware{
 		interpreter: interpreter,

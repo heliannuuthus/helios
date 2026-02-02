@@ -19,10 +19,9 @@ var (
 
 // InitSTS 初始化 STS 客户端
 func InitSTS() error {
-	cfg := config.Zwei()
-	accessKeyID := cfg.GetString("oss.access-key-id")
-	accessKeySecret := cfg.GetString("oss.access-key-secret")
-	region := cfg.GetString("oss.region")
+	accessKeyID := config.GetOSSAccessKeyID()
+	accessKeySecret := config.GetOSSAccessKeySecret()
+	region := config.GetOSSRegion()
 
 	if accessKeyID == "" || accessKeySecret == "" {
 		return fmt.Errorf("OSS AccessKey 未配置")
@@ -30,7 +29,7 @@ func InitSTS() error {
 
 	// 如果没有配置 region，从 endpoint 提取
 	if region == "" {
-		endpoint := cfg.GetString("oss.endpoint")
+		endpoint := config.GetOSSEndpoint()
 		// 从 oss-cn-beijing.aliyuncs.com 提取 cn-beijing
 		if len(endpoint) > 4 && endpoint[:4] == "oss-" {
 			region = endpoint[4:]
@@ -75,13 +74,12 @@ func GenerateSTSCredentials(objectKey string, durationSeconds int64) (*STSCreden
 		durationSeconds = 3600 // 最大 1 小时
 	}
 
-	cfg := config.Zwei()
-	roleArn := cfg.GetString("oss.role-arn")
+	roleArn := config.GetOSSRoleARN()
 	if roleArn == "" {
 		return nil, fmt.Errorf("OSS STS Role ARN 未配置")
 	}
 
-	bucketName := cfg.GetString("oss.bucket")
+	bucketName := config.GetOSSBucket()
 	if bucketName == "" {
 		return nil, fmt.Errorf("OSS Bucket 未配置")
 	}

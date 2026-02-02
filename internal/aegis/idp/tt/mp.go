@@ -26,7 +26,7 @@ type MPProvider struct {
 
 // NewMPProvider 创建抖音小程序 Provider
 func NewMPProvider() *MPProvider {
-	cfg := config.Auth()
+	cfg := config.Aegis()
 	return &MPProvider{
 		appID:     cfg.GetString("idps.tt.appid"),
 		appSecret: cfg.GetString("idps.tt.secret"),
@@ -154,23 +154,17 @@ func (p *MPProvider) parseUserInfo(bodyBytes []byte) (*idp.ExchangeResult, error
 	}
 
 	openID := gjson.GetBytes(bodyBytes, "data.openid").String()
-	unionID := gjson.GetBytes(bodyBytes, "data.unionid").String()
 
 	if openID == "" {
 		logger.Errorf("[TT] data 中缺少 openid")
 		return nil, errors.New("data 中缺少 openid")
 	}
 
-	unionIDLog := "(无)"
-	if unionID != "" {
-		unionIDLog = unionID
-	}
-	logger.Infof("[TT] 登录成功 - OpenID: %s, UnionID: %s", openID, unionIDLog)
+	logger.Infof("[TT] 登录成功 - OpenID: %s", openID)
 
 	return &idp.ExchangeResult{
 		ProviderID: openID,
-		UnionID:    unionID,
-		RawData:    fmt.Sprintf(`{"openid":"%s","unionid":"%s"}`, openID, unionID),
+		RawData:    fmt.Sprintf(`{"openid":"%s"}`, openID),
 	}, nil
 }
 
@@ -201,10 +195,8 @@ func (p *MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, p
 // ToPublicConfig 转换为前端可用的公开配置
 func (p *MPProvider) ToPublicConfig() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		ID:           "tt-mp",
-		ProviderType: idp.TypeTTMP,
-		Name:         "抖音小程序",
-		ClientID:     p.appID,
+		Connection: "tt",
+		Strategy:   []string{"mp"},
 	}
 }
 

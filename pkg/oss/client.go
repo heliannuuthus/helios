@@ -20,14 +20,13 @@ var (
 
 // getOSSEndpoint 根据环境变量获取 OSS endpoint（内网或公网）
 func getOSSEndpoint() string {
-	cfg := config.Zwei()
-	endpoint := cfg.GetString("oss.endpoint")
+	endpoint := config.GetOSSEndpoint()
 	if endpoint == "" {
 		return ""
 	}
 
 	// 检查是否使用内网（从配置 app.env 读取）
-	appEnv := cfg.GetString("app.env")
+	appEnv := config.GetEnv()
 	useInternal := appEnv == "prod"
 
 	if !useInternal {
@@ -48,11 +47,10 @@ func getOSSEndpoint() string {
 
 // Init 初始化 OSS 客户端
 func Init() error {
-	cfg := config.Zwei()
 	endpoint := getOSSEndpoint()
-	accessKeyID := cfg.GetString("oss.access-key-id")
-	accessKeySecret := cfg.GetString("oss.access-key-secret")
-	bucketName := cfg.GetString("oss.bucket")
+	accessKeyID := config.GetOSSAccessKeyID()
+	accessKeySecret := config.GetOSSAccessKeySecret()
+	bucketName := config.GetOSSBucket()
 
 	if endpoint == "" || accessKeyID == "" || accessKeySecret == "" || bucketName == "" {
 		return fmt.Errorf("OSS 配置不完整，请检查 config.toml 中的 [oss] 配置")
@@ -141,7 +139,7 @@ func UploadImageWithSTS(objectKey string, reader io.Reader, credentials *STSCred
 	}
 
 	endpoint := getOSSEndpoint()
-	bucketName := config.Zwei().GetString("oss.bucket")
+	bucketName := config.GetOSSBucket()
 
 	// 使用 STS 凭证创建临时客户端
 	stsClient, err := oss.New(endpoint, credentials.AccessKeyID, credentials.AccessKeySecret,
@@ -168,12 +166,11 @@ func UploadImageWithSTS(objectKey string, reader io.Reader, credentials *STSCred
 
 // buildObjectURL 构建对象 URL
 func buildObjectURL(objectKey string) string {
-	cfg := config.Zwei()
-	domain := cfg.GetString("oss.domain")
+	domain := config.GetOSSDomain()
 	if domain == "" {
 		// 如果没有配置自定义域名，使用 OSS 默认域名
-		endpoint := cfg.GetString("oss.endpoint")
-		bucketName := cfg.GetString("oss.bucket")
+		endpoint := config.GetOSSEndpoint()
+		bucketName := config.GetOSSBucket()
 		domain = fmt.Sprintf("https://%s.%s", bucketName, endpoint)
 	} else {
 		// 如果配置了自定义域名，确保有协议前缀

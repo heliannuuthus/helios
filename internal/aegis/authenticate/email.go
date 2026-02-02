@@ -8,8 +8,15 @@ import (
 	"math/big"
 
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
+	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
+
+// ErrUserNotFound 用户不存在
+var ErrUserNotFound = errors.New("user not found")
+
+// ErrEmailNotVerified 邮箱未验证
+var ErrEmailNotVerified = errors.New("email not verified")
 
 // EmailAuthenticator 邮箱验证码认证器
 type EmailAuthenticator struct {
@@ -36,8 +43,12 @@ func (*EmailAuthenticator) Supports(connection string) bool {
 }
 
 // Authenticate 执行认证（验证验证码）
+// PIAM 域邮箱登录规则：
+// 1. 用户必须已存在（通过邮箱查找）
+// 2. 用户邮箱必须已验证（email_verified = true）
+// 3. 验证码必须正确
 func (a *EmailAuthenticator) Authenticate(ctx context.Context, _ string, data map[string]any) (*AuthResult, error) {
-	// 获取 email 和 code
+	// 1. 获取 email 和 code
 	email, ok := data["email"].(string)
 	if !ok || email == "" {
 		return nil, errors.New("email is required")
@@ -48,15 +59,30 @@ func (a *EmailAuthenticator) Authenticate(ctx context.Context, _ string, data ma
 		return nil, errors.New("code is required")
 	}
 
-	// 验证验证码
+	// 2. 查找用户（必须存在且邮箱已验证）
+	user, err := a.cache.FindUserByEmail(ctx, email)
+	if err != nil {
+		logger.Warnf("[EmailAuth] 用户不存在 - Email: %s, Error: %v", email, err)
+		return nil, ErrUserNotFound
+	}
+
+	// 3. 检查邮箱是否已验证
+	if !user.EmailVerified {
+		logger.Warnf("[EmailAuth] 邮箱未验证 - Email: %s, OpenID: %s", email, user.OpenID)
+		return nil, ErrEmailNotVerified
+	}
+
+	// 4. 验证验证码
 	if err := a.cache.VerifyOTP(ctx, a.otpKey(email), code); err != nil {
 		return nil, fmt.Errorf("invalid or expired code: %w", err)
 	}
 
-	logger.Infof("[EmailAuth] 验证成功 - Email: %s", email)
+	logger.Infof("[EmailAuth] 验证成功 - Email: %s, OpenID: %s", email, user.OpenID)
 
+	// 返回用户的 OpenID 作为 ProviderID，用于后续查找
 	return &AuthResult{
-		ProviderID: email, // 邮箱作为 ProviderID
+		ProviderID: user.OpenID,
+		RawData:    fmt.Sprintf(`{"email":"%s","openid":"%s"}`, email, user.OpenID),
 	}, nil
 }
 
@@ -74,7 +100,7 @@ func (a *EmailAuthenticator) SendCode(ctx context.Context, email string) error {
 	}
 
 	// 发送邮件
-	otpExpiresIn := cache.GetOTPExpiresIn()
+	otpExpiresIn := config.GetAegisOTPExpiresIn()
 	subject := "验证码"
 	body := fmt.Sprintf("您的验证码是：%s，有效期 %d 分钟。", code, int(otpExpiresIn.Minutes()))
 	if err := a.sender.Send(ctx, email, subject, body); err != nil {

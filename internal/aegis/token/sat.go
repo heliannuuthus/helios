@@ -1,11 +1,11 @@
 package token
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v3/jwt"
+
+	"github.com/heliannuuthus/helios/pkg/utils"
 )
 
 // ServiceAccessToken 服务访问令牌
@@ -36,12 +36,6 @@ func NewServiceAccessToken(issuer, clientID, audience, scope string, ttl time.Du
 func (s *ServiceAccessToken) Build() (jwt.Token, error) {
 	now := time.Now()
 
-	// JTI
-	jtiBytes := make([]byte, 16)
-	if _, err := rand.Read(jtiBytes); err != nil {
-		return nil, err
-	}
-
 	return jwt.NewBuilder().
 		Issuer(s.issuer).
 		Audience([]string{s.audience}). // aud = service_id
@@ -49,7 +43,7 @@ func (s *ServiceAccessToken) Build() (jwt.Token, error) {
 		IssuedAt(now).
 		Expiration(now.Add(s.ttl)).
 		NotBefore(s.notBefore).
-		JwtID(hex.EncodeToString(jtiBytes)).
+		JwtID(utils.GenerateJTI()).
 		Claim("scope", s.scope).
 		Build()
 }

@@ -16,6 +16,7 @@ const (
 	TypeWecom  = "wecom"  // 企业微信
 	TypeGithub = "github" // GitHub
 	TypeGoogle = "google" // Google
+	TypeEmail  = "email"  // 邮箱验证码（PIAM 专用）
 )
 
 // Domain 用户域
@@ -29,7 +30,7 @@ const (
 // GetDomain 获取 IDP 所属域
 func GetDomain(idpType string) Domain {
 	switch idpType {
-	case TypeWecom, TypeGithub, TypeGoogle:
+	case TypeWecom, TypeGithub, TypeGoogle, TypeEmail:
 		return DomainPIAM
 	default:
 		return DomainCIAM
@@ -37,11 +38,17 @@ func GetDomain(idpType string) Domain {
 }
 
 // SupportsAutoCreate 是否支持自动创建用户
+// CIAM 域的社交登录允许自动创建，PIAM 域需要预先创建用户（会员制）
 func SupportsAutoCreate(idpType string) bool {
 	switch idpType {
-	case TypeWechatMP, TypeTTMP, TypeAlipayMP:
-		return true // C 端都支持
+	case TypeWechatMP, TypeTTMP, TypeAlipayMP, TypeWechatWeb, TypeAlipayWeb, TypeTTWeb:
+		return true // C 端社交登录都支持自动创建
 	default:
-		return false // B 端需要预先配置
+		return false // PIAM 域（邮箱/企业微信/GitHub/Google）需要预先配置用户
 	}
+}
+
+// RequiresVerifiedEmail 是否需要邮箱已验证
+func RequiresVerifiedEmail(idpType string) bool {
+	return idpType == TypeEmail
 }

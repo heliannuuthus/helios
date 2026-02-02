@@ -10,19 +10,23 @@ import (
 
 // User 用户
 type User struct {
-	ID            uint      `gorm:"primaryKey;autoIncrement;column:_id"`
-	Domain        string    `json:"domain" gorm:"column:domain;size:32;not null;index"`
-	OpenID        string    `json:"id" gorm:"column:openid;size:64;not null;uniqueIndex"`
-	Name          string    `json:"name" gorm:"column:name;size:128"`
-	Picture       string    `json:"picture" gorm:"column:picture;size:512"`
-	Email         *string   `json:"email" gorm:"column:email;size:256;index"`
-	EmailVerified bool      `json:"email_verified" gorm:"column:email_verified;default:false"`
-	Phone         *string   `json:"-" gorm:"column:phone;size:64;index"`   // 手机号哈希（用于查询）
-	PhoneCipher   *string   `json:"-" gorm:"column:phone_cipher;size:256"` // 手机号密文
-	Status        int8      `json:"status" gorm:"column:status;default:0"` // 0=active, 1=disabled
-	LastLoginAt   time.Time `json:"last_login_at" gorm:"column:last_login_at"`
-	CreatedAt     time.Time `json:"created_at" gorm:"column:created_at"`
-	UpdatedAt     time.Time `json:"updated_at" gorm:"column:updated_at"`
+	// 主键
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
+	// 固定长度字段（高频访问）
+	OpenID        string `json:"id" gorm:"column:openid;size:64;not null;uniqueIndex"`
+	DomainID      string `json:"domain_id" gorm:"column:domain_id;size:32;not null"`
+	Status        int8   `json:"status" gorm:"column:status;not null;default:0"` // 0=active, 1=disabled
+	EmailVerified bool   `json:"email_verified" gorm:"column:email_verified;not null;default:false"`
+	// 时间戳
+	LastLoginAt *time.Time `json:"last_login_at" gorm:"column:last_login_at"`
+	CreatedAt   time.Time  `json:"created_at" gorm:"column:created_at;not null"`
+	UpdatedAt   time.Time  `json:"updated_at" gorm:"column:updated_at;not null"`
+	// 变长字段（低频访问）
+	Nickname    *string `json:"nickname" gorm:"column:nickname;size:128"`
+	Picture     *string `json:"picture" gorm:"column:picture;size:512"`
+	Email       *string `json:"email" gorm:"column:email;size:256;uniqueIndex"`
+	Phone       *string `json:"-" gorm:"column:phone;size:64;uniqueIndex"`   // 手机号哈希
+	PhoneCipher *string `json:"-" gorm:"column:phone_cipher;size:256"`       // 手机号密文
 }
 
 func (User) TableName() string {
@@ -36,14 +40,17 @@ func (u *User) IsActive() bool {
 
 // UserIdentity 用户身份（IDP 绑定）
 type UserIdentity struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement;column:_id"`
-	OpenID    string    `gorm:"column:openid;size:64;not null;index"`
-	IDP       string    `gorm:"column:idp;size:64;not null;uniqueIndex:uk_idp_t_openid,priority:1"`
-	TOpenID   string    `gorm:"column:t_openid;size:256;not null;uniqueIndex:uk_idp_t_openid,priority:2"` // 第三方原始标识
-	UnionID   string    `gorm:"column:union_id;size:256"`
-	RawData   string    `gorm:"column:raw_data;type:text"`
-	CreatedAt time.Time `gorm:"column:created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at"`
+	// 主键
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
+	// 固定长度字段
+	OpenID string `gorm:"column:openid;size:64;not null;index"`
+	IDP    string `gorm:"column:idp;size:64;not null;uniqueIndex:uk_idp_t_openid,priority:1"`
+	// 时间戳
+	CreatedAt time.Time `gorm:"column:created_at;not null"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null"`
+	// 变长字段
+	TOpenID string `gorm:"column:t_openid;size:256;not null;uniqueIndex:uk_idp_t_openid,priority:2"`
+	RawData string `gorm:"column:raw_data;type:text"`
 }
 
 func (UserIdentity) TableName() string {
@@ -58,10 +65,14 @@ type UserWithDecrypted struct {
 
 // SafeString 脱敏输出（用于日志）
 func (u *UserWithDecrypted) SafeString() string {
-	return fmt.Sprintf("User{OpenID:%s, Domain:%s, Name:%s, Email:%s, Phone:%s}",
+	nickname := ""
+	if u.Nickname != nil {
+		nickname = *u.Nickname
+	}
+	return fmt.Sprintf("User{OpenID:%s, DomainID:%s, Nickname:%s, Email:%s, Phone:%s}",
 		u.OpenID,
-		u.Domain,
-		u.Name,
+		u.DomainID,
+		nickname,
 		maskEmail(u.Email),
 		maskPhone(u.Phone),
 	)
@@ -111,9 +122,8 @@ func maskPhone(phone string) string {
 
 // FindOrCreateUserRequest 查找或创建用户请求
 type FindOrCreateUserRequest struct {
-	Domain     string // 用户域
+	DomainID   string // 用户域
 	IDP        string // 身份提供方
 	ProviderID string // IDP 侧用户标识
-	UnionID    string // 联合 ID（可选）
 	RawData    string // 原始数据
 }

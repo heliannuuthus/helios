@@ -31,7 +31,7 @@ type Provider struct {
 
 // NewProvider 创建 Google Provider
 func NewProvider() *Provider {
-	cfg := config.Auth()
+	cfg := config.Aegis()
 	return &Provider{
 		clientID:     cfg.GetString("idps.google.client-id"),
 		clientSecret: cfg.GetString("idps.google.client-secret"),
@@ -183,9 +183,7 @@ func (*Provider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...an
 // ToPublicConfig 转换为前端可用的公开配置
 func (p *Provider) ToPublicConfig() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		ID:           "google",
-		ProviderType: idp.TypeGoogle,
-		Name:         "Google",
-		ClientID:     p.clientID,
+		Connection: "google",
+		Strategy:   []string{"oauth"},
 	}
 }

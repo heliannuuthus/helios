@@ -6,28 +6,36 @@ import (
 
 // Application 应用
 type Application struct {
-	ID             uint      `gorm:"primaryKey;autoIncrement;column:_id"`
-	DomainID       string    `gorm:"column:domain_id;size:32;not null;index"`
-	AppID          string    `gorm:"column:app_id;size:64;not null;uniqueIndex"`
-	Name           string    `gorm:"column:name;size:128;not null"`
-	RedirectURIs   *string   `gorm:"column:redirect_uris;type:text"`   // JSON 数组
-	AllowedIDPs    *string   `gorm:"column:allowed_idps;type:text"`    // 允许的登录方式（JSON 数组）
-	AllowedOrigins *string   `gorm:"column:allowed_origins;type:text"` // 允许的跨域源（JSON 数组）
-	EncryptedKey   *string   `gorm:"column:encrypted_key;type:text"`   // NULL 表示无密钥
-	CreatedAt      time.Time `gorm:"column:created_at;not null"`
-	UpdatedAt      time.Time `gorm:"column:updated_at;not null"`
+	// 主键
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
+	// 固定长度字段
+	AppID    string `gorm:"column:app_id;size:64;not null;uniqueIndex"`
+	DomainID string `gorm:"column:domain_id;size:32;not null;index"`
+	// 时间戳
+	CreatedAt time.Time `gorm:"column:created_at;not null"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null"`
+	// 变长字段
+	Name           string  `gorm:"column:name;size:128;not null"`
+	LogoURL        *string `gorm:"column:logo_url;size:512"`         // 应用 Logo URL
+	EncryptedKey   *string `gorm:"column:encrypted_key;size:256"`    // NULL=公开应用
+	RedirectURIs   *string `gorm:"column:redirect_uris;size:2048"`   // JSON 数组
+	AllowedIDPs    *string `gorm:"column:allowed_idps;size:512"`     // JSON 数组
+	AllowedOrigins *string `gorm:"column:allowed_origins;size:1024"` // JSON 数组
 }
 
 func (Application) TableName() string {
 	return "t_application"
 }
 
-// ApplicationServiceRelation 应用可访问的服务和关系
+// ApplicationServiceRelation 应用服务关系
 type ApplicationServiceRelation struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement;column:_id"`
-	AppID     string    `gorm:"column:app_id;size:64;not null;index"`
-	ServiceID string    `gorm:"column:service_id;size:32;not null;index"`
-	Relation  string    `gorm:"column:relation;size:32;not null"`
+	// 主键
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
+	// 固定长度字段
+	AppID     string `gorm:"column:app_id;size:64;not null"`
+	ServiceID string `gorm:"column:service_id;size:32;not null;index"`
+	Relation  string `gorm:"column:relation;size:32;not null;default:*"`
+	// 时间戳
 	CreatedAt time.Time `gorm:"column:created_at;not null"`
 }
 

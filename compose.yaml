@@ -26,12 +26,6 @@ services:
         limits:
           memory: 450m
           cpus: "1.5"
-    healthcheck:
-      test: "CMD-SHELL mysqladmin ping -h localhost -uroot -proot || exit 1"
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   cache:
     image: redis:7-alpine
@@ -48,11 +42,6 @@ services:
         limits:
           memory: 512m
           cpus: "0.5"
-    healthcheck:
-      test: "CMD redis-cli ping"
-      interval: 10s
-      timeout: 3s
-      retries: 3
 
   gateway:
     image: nginx:alpine
@@ -61,8 +50,6 @@ services:
     # https-proxy 会监听主机端口 80 和 443，转发到 gateway:80
     # 生产环境：通过 compose.prod.yaml 覆盖，正常映射主机端口 80，不使用 https-proxy
     ports: []
-    expose:
-      - "80"
     volumes:
       # 挂载 Nginx 配置
       - ./environments/gateway/nginx.conf:/etc/nginx/nginx.conf:ro
@@ -74,18 +61,6 @@ services:
         limits:
           memory: 128m
           cpus: "0.25"
-    # nerdctl compose 不完全支持 depends_on condition，使用简单依赖
-    # 实际启动顺序通过 restart 策略和健康检查脚本控制
-    depends_on:
-      - db
-      - cache
-    healthcheck:
-      # 检查 nginx 是否真正在运行（检查端口 80 是否监听）
-      test: "CMD-SHELL wget --quiet --tries=1 --spider http://localhost:80 || exit 1"
-      interval: 5s
-      timeout: 2s
-      retries: 3
-      start_period: 5s
     stop_grace_period: 10s
 
   https-proxy:
@@ -104,16 +79,6 @@ services:
         limits:
           memory: 64m
           cpus: "0.1"
-    # nerdctl compose 不完全支持 depends_on condition，使用简单依赖
-    depends_on:
-      - gateway
-    healthcheck:
-      # 检查 nginx 是否真正在运行（检查端口 80 是否监听）
-      test: "CMD-SHELL wget --quiet --tries=1 --spider http://localhost:80 || exit 1"
-      interval: 5s
-      timeout: 2s
-      retries: 3
-      start_period: 5s
     stop_grace_period: 10s
 
 volumes:

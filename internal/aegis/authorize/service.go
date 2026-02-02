@@ -19,7 +19,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
-	"github.com/heliannuuthus/helios/pkg/kms"
+	"github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -91,13 +91,15 @@ func (s *Service) PrepareAuthorization(ctx context.Context, flow *types.AuthFlow
 		requestedScopes = append([]string{ScopeOpenID}, requestedScopes...)
 	}
 
-	// 3. 获取 connection 允许的 scope
+	// 3. 获取允许的 scope（由 aegis 统一控制，基于应用配置）
+	// 验证 connection 存在
 	connectionConfig := flow.ConnectionMap[flow.Connection]
 	if connectionConfig == nil {
 		return fmt.Errorf("connection %s not found in flow", flow.Connection)
 	}
 
-	allowedScopes := connectionConfig.AllowedScopes
+	// scope 由应用配置决定，不再从 connection 获取
+	allowedScopes := s.getAllowedScopes(flow)
 	if len(allowedScopes) == 0 {
 		allowedScopes = []string{ScopeOpenID}
 	}
@@ -403,7 +405,7 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 }
 
 func (s *Service) cleanupOldRefreshTokens(ctx context.Context, userID, clientID string) {
-	maxTokens := config.Auth().GetInt("auth.max-refresh-token")
+	maxTokens := config.Aegis().GetInt("aegis.max-refresh-token")
 	if maxTokens <= 0 {
 		maxTokens = 10
 	}
@@ -431,8 +433,12 @@ func (s *Service) buildUserClaims(user *models.UserWithDecrypted, scope string) 
 	scopes := parseScopeSet(scope)
 
 	if scopes[ScopeProfile] {
-		claims.Nickname = user.Name
-		claims.Picture = user.Picture
+		if user.Nickname != nil {
+			claims.Nickname = *user.Nickname
+		}
+		if user.Picture != nil {
+			claims.Picture = *user.Picture
+		}
 	}
 
 	if scopes[ScopeEmail] && user.Email != nil {
@@ -474,8 +480,12 @@ func (s *Service) GetUserInfo(ctx context.Context, openID, scope string) (*UserI
 	scopes := parseScopeSet(scope)
 
 	if scopes[ScopeProfile] {
-		resp.Nickname = user.Name
-		resp.Picture = user.Picture
+		if user.Nickname != nil {
+			resp.Nickname = *user.Nickname
+		}
+		if user.Picture != nil {
+			resp.Picture = *user.Picture
+		}
 	}
 
 	if scopes[ScopeEmail] && user.Email != nil {
@@ -597,6 +607,14 @@ func generateRefreshTokenValue() string {
 	return hex.EncodeToString(b)
 }
 
+// getAllowedScopes 获取允许的 scope
+// scope 由 aegis 统一控制，默认允许所有标准 scope
+func (s *Service) getAllowedScopes(_ *types.AuthFlow) []string {
+	// TODO: 可以从应用配置或服务配置中读取
+	// 目前默认允许所有标准 scope
+	return []string{ScopeOpenID, ScopeProfile, ScopeEmail, ScopePhone, ScopeOfflineAccess}
+}
+
 // maskEmail 邮箱脱敏
 func maskEmail(email string) string {
 	if email == "" {
@@ -624,7 +642,11 @@ func maskPhone(phone string) string {
 	return phone[:3] + "****" + phone[len(phone)-4:]
 }
 
-// DecryptPhone 解密手机号（从 user 模块导出）
+// DecryptPhone 解密手机号
 func DecryptPhone(cipher, openID string) (string, error) {
-	return kms.DecryptPhone(cipher, openID)
+	key, err := config.GetDBEncKeyRaw()
+	if err != nil {
+		return "", err
+	}
+	return crypto.Decrypt(key, cipher, openID)
 }

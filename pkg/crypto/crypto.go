@@ -1,4 +1,4 @@
-package kms
+package crypto
 
 import (
 	"crypto/aes"

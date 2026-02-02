@@ -37,21 +37,20 @@ func (a *IDPAuthenticator) Authenticate(ctx context.Context, connection string, 
 		return nil, fmt.Errorf("unsupported idp: %s", connection)
 	}
 
-	// 获取 code
-	code, ok := data["code"].(string)
-	if !ok || code == "" {
-		return nil, errors.New("code is required")
+	// 获取 proof（OAuth code）
+	proof, ok := data["proof"].(string)
+	if !ok || proof == "" {
+		return nil, errors.New("proof (code) is required")
 	}
 
 	// 调用 IDP Exchange（使用变长参数）
-	result, err := provider.Exchange(ctx, code)
+	result, err := provider.Exchange(ctx, proof)
 	if err != nil {
 		return nil, fmt.Errorf("idp exchange failed: %w", err)
 	}
 
 	return &AuthResult{
 		ProviderID: result.ProviderID,
-		UnionID:    result.UnionID,
 		RawData:    result.RawData,
 	}, nil
 }

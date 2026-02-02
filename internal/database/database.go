@@ -2,6 +2,8 @@ package database
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -15,6 +17,33 @@ var (
 	zweiDB   *gorm.DB // Zwei 数据源（业务数据）
 	hermesDB *gorm.DB // Hermes 数据源（身份与访问管理数据）
 )
+
+// parseDSNFromURL 将 mysql://user:pass@host:port/db?params 格式转换为 Go MySQL DSN 格式
+// 输入: mysql://helios:helios@localhost:3306/hermes?charset=utf8mb4&parseTime=true
+// 输出: helios:helios@tcp(localhost:3306)/hermes?charset=utf8mb4&parseTime=true
+func parseDSNFromURL(dbURL string) string {
+	// 如果已经是 DSN 格式（不含 mysql://），直接返回
+	if !strings.HasPrefix(dbURL, "mysql://") {
+		return dbURL
+	}
+
+	u, err := url.Parse(dbURL)
+	if err != nil {
+		logger.Fatalf("解析数据库 URL 失败: %v", err)
+	}
+
+	user := u.User.Username()
+	password, _ := u.User.Password()
+	host := u.Host
+	database := strings.TrimPrefix(u.Path, "/")
+	query := u.RawQuery
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, host, database)
+	if query != "" {
+		dsn += "?" + query
+	}
+	return dsn
+}
 
 // buildDSN 从配置构建 MySQL DSN
 func buildDSN(cfg *config.Cfg, hostKey, portKey, userKey, passwordKey, nameKey, timeoutConnectKey, timeoutReadKey, timeoutWriteKey string) string {
@@ -90,34 +119,14 @@ func InitZwei() *gorm.DB {
 	}
 
 	cfg := config.Zwei()
-	dsn := buildDSN(cfg,
-		config.ZweiDBHost,
-		config.ZweiDBPort,
-		config.ZweiDBUser,
-		config.ZweiDBPassword,
-		config.ZweiDBName,
-		config.ZweiDBTimeoutConnect,
-		config.ZweiDBTimeoutRead,
-		config.ZweiDBTimeoutWrite,
-	)
-	opts := buildOptions(cfg,
-		config.ZweiDBPoolMaxIdleConns,
-		config.ZweiDBPoolMaxOpenConns,
-		config.ZweiDBPoolConnMaxLifetime,
-		config.ZweiDBPoolConnMaxIdleTime,
-		"database.slow-threshold",
-	)
+	dsn := parseDSNFromURL(cfg.GetString(config.DBURL))
 	var err error
-	zweiDB, err = pkgdb.Connect(dsn, opts...)
+	zweiDB, err = pkgdb.Connect(dsn)
 	if err != nil {
 		logger.Fatalf("连接 Zwei 数据库失败: %v", err)
 	}
 
-	logger.Infof("数据库连接成功 (zwei): %s@%s:%d/%s",
-		cfg.GetString(config.ZweiDBUser),
-		cfg.GetString(config.ZweiDBHost),
-		cfg.GetInt(config.ZweiDBPort),
-		cfg.GetString(config.ZweiDBName))
+	logger.Infof("数据库连接成功 (zwei): %s", dsn)
 	return zweiDB
 }
 
@@ -128,22 +137,13 @@ func InitHermes() *gorm.DB {
 	}
 
 	cfg := config.Hermes()
-	dsn := buildDSN(cfg,
-		config.HermesDBHost,
-		config.HermesDBPort,
-		config.HermesDBUser,
-		config.HermesDBPassword,
-		config.HermesDBName,
-		config.HermesDBTimeoutConnect,
-		config.HermesDBTimeoutRead,
-		config.HermesDBTimeoutWrite,
-	)
+	dsn := parseDSNFromURL(cfg.GetString(config.DBURL))
 	opts := buildOptions(cfg,
-		config.HermesDBPoolMaxIdleConns,
-		config.HermesDBPoolMaxOpenConns,
-		config.HermesDBPoolConnMaxLifetime,
-		config.HermesDBPoolConnMaxIdleTime,
-		"database.slow-threshold",
+		config.DBPoolMaxIdleConns,
+		config.DBPoolMaxOpenConns,
+		config.DBPoolConnMaxLifetime,
+		config.DBPoolConnMaxIdleTime,
+		config.DBSlowThreshold,
 	)
 
 	var err error
@@ -152,11 +152,7 @@ func InitHermes() *gorm.DB {
 		logger.Fatalf("连接 Hermes 数据库失败: %v", err)
 	}
 
-	logger.Infof("数据库连接成功 (hermes): %s@%s:%d/%s",
-		cfg.GetString(config.HermesDBUser),
-		cfg.GetString(config.HermesDBHost),
-		cfg.GetInt(config.HermesDBPort),
-		cfg.GetString(config.HermesDBName))
+	logger.Infof("数据库连接成功 (hermes): %s", cfg.GetString(config.DBURL))
 	return hermesDB
 }
 

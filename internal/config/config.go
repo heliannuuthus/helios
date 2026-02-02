@@ -11,6 +11,64 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	// 配置文件名（位于 config/ 目录）
+	ConfigFile       = "config"
+	ZweiConfigFile   = "zwei"
+	HermesConfigFile = "hermes"
+	AegisConfigFile  = "aegis"
+	IrisConfigFile   = "iris"
+
+	// 配置名称
+	ConfigName       = "helios"
+	ZweiConfigName   = "zwei"
+	HermesConfigName = "hermes"
+	AegisConfigName  = "aegis"
+	IrisConfigName   = "iris"
+
+	AegisDomains          = "aegis.domains"
+	AegisSecrets          = "aegis.secrets"
+	AegisEndpoint         = "aegis.endpoint"
+	AegisExpiresIn        = "aegis.expires-in"
+	AegisRefreshExpiresIn = "aegis.refresh-expires-in"
+	AegisMaxRefreshToken  = "aegis.max-refresh-token"
+	AegisAudience         = "aegis.audience"
+	AegisSecretKey        = "aegis.secret-key"
+	AegisCookieDomain     = "aegis.cookie.domain"
+	AegisCookiePath       = "aegis.cookie.path"
+	AegisCookieSecure     = "aegis.cookie.secure"
+	AegisCookieHTTPOnly   = "aegis.cookie.http-only"
+	AegisCookieMaxAge     = "aegis.cookie.max-age"
+
+	DBURL                 = "db.url"
+	DBPoolMaxIdleConns    = "db.pool.max-idle-conns"
+	DBPoolMaxOpenConns    = "db.pool.max-open-conns"
+	DBPoolConnMaxLifetime = "db.pool.conn-max-lifetime"
+	DBPoolConnMaxIdleTime = "db.pool.conn-max-idle-time"
+	DBSlowThreshold       = "db.slow-threshold"
+
+	LogLevel  = "log.level"
+	LogFormat = "log.format"
+
+	CORSOrigins          = "cors.origins"
+	CORSAllowCredentials = "cors.allow_credentials"
+	CORSAllowMethods     = "cors.allow_methods"
+	CORSAllowHeaders     = "cors.allow_headers"
+
+	AMapAPIKey = "amap.api-key"
+
+	OpenrouterAPIKey = "openrouter.api-key"
+	OpenrouterModel  = "openrouter.model"
+
+	OSSEndpoint        = "oss.endpoint"
+	OSSAccessKeyID     = "oss.access-key-id"
+	OSSAccessKeySecret = "oss.access-key-secret"
+	OSSBucket          = "oss.bucket"
+	OSSDomain          = "oss.domain"
+	OSSRegion          = "oss.region"
+	OSSRoleARN         = "oss.role-arn"
+)
+
 // Cfg 配置实例包装器
 type Cfg struct {
 	*viper.Viper
@@ -18,11 +76,13 @@ type Cfg struct {
 	snapshot map[string]any
 }
 
-// 三个模块的配置单例
+// 配置单例
 var (
+	cfg       *Cfg // 通用配置
 	zweiCfg   *Cfg
 	hermesCfg *Cfg
-	authCfg   *Cfg
+	aegisCfg  *Cfg
+	irisCfg   *Cfg
 )
 
 // newCfg 创建新的配置实例
@@ -126,9 +186,19 @@ func detectChanges(prefix string, old, new map[string]any) []Change {
 
 // Load 加载所有配置
 func Load() {
+	LoadConfig()
 	LoadZwei()
 	LoadHermes()
-	LoadAuth()
+	LoadAegis()
+	LoadIris()
+}
+
+// LoadConfig 加载通用配置
+func LoadConfig() {
+	if cfg != nil {
+		return
+	}
+	cfg = newCfg(ConfigName, ConfigFile)
 }
 
 // LoadZwei 加载 Zwei 配置
@@ -136,7 +206,7 @@ func LoadZwei() {
 	if zweiCfg != nil {
 		return
 	}
-	zweiCfg = newCfg("zwei", "zwei.config")
+	zweiCfg = newCfg(ZweiConfigName, ZweiConfigFile)
 }
 
 // LoadHermes 加载 Hermes 配置
@@ -144,15 +214,23 @@ func LoadHermes() {
 	if hermesCfg != nil {
 		return
 	}
-	hermesCfg = newCfg("hermes", "hermes.config")
+	hermesCfg = newCfg(HermesConfigName, HermesConfigFile)
 }
 
-// LoadAuth 加载 Auth 配置
-func LoadAuth() {
-	if authCfg != nil {
+// LoadAegis 加载 Aegis 配置
+func LoadAegis() {
+	if aegisCfg != nil {
 		return
 	}
-	authCfg = newCfg("auth", "auth.config")
+	aegisCfg = newCfg(AegisConfigName, AegisConfigFile)
+}
+
+// LoadIris 加载 Iris 配置
+func LoadIris() {
+	if irisCfg != nil {
+		return
+	}
+	irisCfg = newCfg(IrisConfigName, IrisConfigFile)
 }
 
 // Zwei 返回 Zwei 配置单例
@@ -171,12 +249,133 @@ func Hermes() *Cfg {
 	return hermesCfg
 }
 
-// Auth 返回 Auth 配置单例
-func Auth() *Cfg {
-	if authCfg == nil {
-		LoadAuth()
+// Aegis 返回 Aegis 配置单例
+func Aegis() *Cfg {
+	if aegisCfg == nil {
+		LoadAegis()
 	}
-	return authCfg
+	return aegisCfg
+}
+
+// Iris 返回 Iris 配置单例
+func Iris() *Cfg {
+	if irisCfg == nil {
+		LoadIris()
+	}
+	return irisCfg
+}
+
+// Config 返回通用配置单例
+func Config() *Cfg {
+	if cfg == nil {
+		LoadConfig()
+	}
+	return cfg
+}
+
+// ==================== 通用配置访问函数 ====================
+
+// GetAppName 获取应用名称
+func GetAppName() string {
+	return Config().GetString("app.name")
+}
+
+// GetAppVersion 获取应用版本
+func GetAppVersion() string {
+	return Config().GetString("app.version")
+}
+
+// IsDebug 是否调试模式
+func IsDebug() bool {
+	return Config().GetBool("app.debug")
+}
+
+// GetEnv 获取环境标识
+func GetEnv() string {
+	return Config().GetString("app.env")
+}
+
+// GetServerHost 获取服务监听地址
+func GetServerHost() string {
+	host := Config().GetString("server.host")
+	if host == "" {
+		return "0.0.0.0"
+	}
+	return host
+}
+
+// GetServerPort 获取服务监听端口
+func GetServerPort() int {
+	port := Config().GetInt("server.port")
+	if port == 0 {
+		return 18000
+	}
+	return port
+}
+
+// GetLogLevel 获取日志级别
+func GetLogLevel() string {
+	level := Config().GetString("log.level")
+	if level == "" {
+		return "info"
+	}
+	return level
+}
+
+// GetLogFormat 获取日志格式
+func GetLogFormat() string {
+	format := Config().GetString("log.format")
+	if format == "" {
+		return "console"
+	}
+	return format
+}
+
+// IsModuleEnabled 检查模块是否启用
+func IsModuleEnabled(module string) bool {
+	return Config().GetBool("modules." + module)
+}
+
+// GetRedisURL 获取 Redis URL
+func GetRedisURL() string {
+	return Config().GetString("redis.url")
+}
+
+// ==================== OSS 配置访问函数 ====================
+
+// GetOSSEndpoint 获取 OSS 端点
+func GetOSSEndpoint() string {
+	return Config().GetString("oss.endpoint")
+}
+
+// GetOSSAccessKeyID 获取 OSS AccessKey ID
+func GetOSSAccessKeyID() string {
+	return Config().GetString("oss.access-key-id")
+}
+
+// GetOSSAccessKeySecret 获取 OSS AccessKey Secret
+func GetOSSAccessKeySecret() string {
+	return Config().GetString("oss.access-key-secret")
+}
+
+// GetOSSBucket 获取 OSS Bucket
+func GetOSSBucket() string {
+	return Config().GetString("oss.bucket")
+}
+
+// GetOSSDomain 获取 OSS 自定义域名
+func GetOSSDomain() string {
+	return Config().GetString("oss.domain")
+}
+
+// GetOSSRegion 获取 OSS 区域
+func GetOSSRegion() string {
+	return Config().GetString("oss.region")
+}
+
+// GetOSSRoleARN 获取 OSS STS Role ARN
+func GetOSSRoleARN() string {
+	return Config().GetString("oss.role-arn")
 }
 
 // Name 返回配置名称

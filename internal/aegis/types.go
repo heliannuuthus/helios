@@ -119,8 +119,18 @@ type IDPsResponse struct {
 
 // LoginRequest 登录请求
 type LoginRequest struct {
-	Connection string            `json:"connection" binding:"required"` // 身份提供方（IDP）
-	Data       map[string]string `json:"data" binding:"required"`       // Connection 需要的数据
+	// 必填：身份标识
+	Connection string `json:"connection" binding:"required"` // 身份标识（user, oper, github, wechat...）
+
+	// 可选：登录策略（用于同一 connection 多种策略的情况）
+	Strategy string `json:"strategy,omitempty"` // 登录策略（oauth, web, mp, oa...）
+
+	// 身份主体（用户名/邮箱/手机号/OpenID...）
+	Principal string `json:"principal,omitempty"`
+
+	// 凭证证明（any 类型，由各 authenticator 自行解析）
+	// 可能是 string（password/OTP/captcha token）或复杂对象（OAuth 回调数据等）
+	Proof any `json:"proof,omitempty"`
 }
 
 // LoginResponse 登录响应

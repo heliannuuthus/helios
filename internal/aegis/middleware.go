@@ -16,7 +16,9 @@ type Middleware struct {
 
 // NewMiddleware 创建中间件
 func NewMiddleware(tokenSvc *token.Service) *Middleware {
-	return &Middleware{tokenSvc: tokenSvc}
+	return &Middleware{
+		tokenSvc: tokenSvc,
+	}
 }
 
 // RequireClientAuth 要求客户端认证（验证 CAT）

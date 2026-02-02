@@ -3,18 +3,24 @@
 package types
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"time"
+
+	"github.com/heliannuuthus/helios/pkg/utils"
 )
 
 // ChallengeType Challenge 类型
+// 命名规范：{channel}-{method}，与 MFA 配置保持一致
 type ChallengeType string
 
 const (
+	// VChan 类型（验证渠道，非 MFA）
 	ChallengeTypeCaptcha ChallengeType = "captcha" // 人机验证（Turnstile）
-	ChallengeTypeTOTP    ChallengeType = "totp"    // TOTP 动态口令
-	ChallengeTypeEmail   ChallengeType = "email"   // 邮箱验证码
+
+	// MFA 类型（多因素认证）
+	ChallengeTypeEmailOTP ChallengeType = "email-otp" // 邮箱 OTP
+	ChallengeTypeTOTP     ChallengeType = "totp"      // TOTP 动态口令（Authenticator App）
+	ChallengeTypeSmsOTP   ChallengeType = "sms-otp"   // 短信 OTP（预留）
+	ChallengeTypeTgOTP    ChallengeType = "tg-otp"    // Telegram OTP（预留）
 )
 
 // Challenge 额外的身份验证步骤
@@ -39,13 +45,9 @@ func (c *Challenge) IsValid() bool {
 	return !c.IsExpired() && !c.Verified
 }
 
-// GenerateChallengeID 生成 Challenge ID
+// GenerateChallengeID 生成 Challenge ID（16位 Base62）
 func GenerateChallengeID() string {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		return "ch_" + hex.EncodeToString([]byte(time.Now().Format("20060102150405.000000000")))
-	}
-	return "ch_" + hex.EncodeToString(bytes)
+	return utils.GenerateID(16)
 }
 
 // NewChallenge 创建新的 Challenge
@@ -97,8 +99,18 @@ func (c *Challenge) GetStringData(key string) string {
 // RequiresCaptcha 检查该 Challenge 类型是否需要 Captcha 前置验证
 func (t ChallengeType) RequiresCaptcha() bool {
 	switch t {
-	case ChallengeTypeEmail:
-		return true // email 需要 captcha 前置
+	case ChallengeTypeEmailOTP, ChallengeTypeSmsOTP:
+		return true // 发送类 OTP 需要 captcha 前置防刷
+	default:
+		return false
+	}
+}
+
+// IsMFA 检查是否是 MFA 类型
+func (t ChallengeType) IsMFA() bool {
+	switch t {
+	case ChallengeTypeEmailOTP, ChallengeTypeTOTP, ChallengeTypeSmsOTP, ChallengeTypeTgOTP:
+		return true
 	default:
 		return false
 	}
