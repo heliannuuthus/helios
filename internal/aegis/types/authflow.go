@@ -272,49 +272,26 @@ type AuthorizationCode struct {
 }
 
 // ConnectionConfig Connection 配置（返回给前端的公开配置）
+// 统一结构，适用于 IDP 和 MFA
 type ConnectionConfig struct {
-	Connection string          `json:"connection"`          // 平台标识（github, wechat, user, oper...）
-	Strategy   []string        `json:"strategy"`            // 登录策略（oauth, web, mp, oa...）
-	Identifier string          `json:"identifier,omitzero"` // 第三方标识（仅 vchan 使用，如 captcha 的 site_key）
-	Require    *RequireConfig  `json:"require,omitzero"`    // 前置验证要求
-	Delegate   *DelegateConfig `json:"delegate,omitzero"`   // 委托验证
-	OAuth      *OAuthConfig    `json:"oauth,omitzero"`      // OAuth 配置（用于构建授权 URL）
+	Connection string   `json:"connection"`          // 标识（github, google, wechat:mp, user, oper, email_otp, totp, captcha:turnstile...）
+	Identifier string   `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
+	Strategy   []string `json:"strategy,omitzero"`   // 登录策略（仅 user/oper 需要：password, email_otp, webauthn）
+	Delegate   []string `json:"delegate,omitzero"`   // 委托验证/MFA（totp, email_otp）
+	Require    []string `json:"require,omitzero"`    // 前置验证（captcha）
 }
 
-// OAuthConfig OAuth 授权配置（返回给前端用于构建授权 URL）
-type OAuthConfig struct {
-	ClientID     string `json:"client_id"`     // OAuth Client ID
-	AuthorizeURL string `json:"authorize_url"` // 授权端点 URL
-	Scope        string `json:"scope"`         // 请求的权限范围
-}
-
-// RequireConfig 前置验证要求
-type RequireConfig struct {
-	VChan []string `json:"vchan"` // 需要的 vchan 列表（如 ["captcha"]）
-}
-
-// DelegateConfig 委托验证配置
-type DelegateConfig struct {
-	MFA []string `json:"mfa"` // 委托的 MFA 列表（如 ["email_otp"]）
-}
-
-// VChanConfig 验证渠道配置（captcha 等）
+// VChanConfig 验证渠道配置（用于 Challenge 响应）
 type VChanConfig struct {
-	Connection string `json:"connection"` // 标识（captcha）
-	Strategy   string `json:"strategy"`   // 策略类型（turnstile, recaptcha...）
-	Identifier string `json:"identifier"` // 站点标识（site_key / app_id）
-}
-
-// MFAConfig MFA 配置
-type MFAConfig struct {
-	Connection string `json:"connection"` // 标识（email_otp, tg_otp, totp...）
+	Connection string `json:"connection"` // 标识（captcha:turnstile）
+	Identifier string `json:"identifier"` // 站点标识（site_key）
 }
 
 // ConnectionsMap Connections 响应（按类别分类）
 type ConnectionsMap struct {
-	IDP   []*ConnectionConfig `json:"idp,omitzero"`   // 身份提供商
-	VChan []*VChanConfig      `json:"vchan,omitzero"` // 验证渠道（captcha 等）
-	MFA   []string            `json:"mfa,omitzero"`   // MFA 多因素认证
+	IDP   []*ConnectionConfig `json:"idp,omitzero"`   // 身份提供商（github, google, user, oper, wechat:mp...）
+	VChan []*ConnectionConfig `json:"vchan,omitzero"` // 验证渠道/前置验证（captcha:turnstile, captcha:recaptcha...）
+	MFA   []*ConnectionConfig `json:"mfa,omitzero"`   // MFA 方式（email_otp, totp, webauthn...）
 }
 
 // ==================== 辅助函数 ====================

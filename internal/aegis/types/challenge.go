@@ -21,6 +21,7 @@ const (
 	ChallengeTypeTOTP     ChallengeType = "totp"      // TOTP 动态口令（Authenticator App）
 	ChallengeTypeSmsOTP   ChallengeType = "sms-otp"   // 短信 OTP（预留）
 	ChallengeTypeTgOTP    ChallengeType = "tg-otp"    // Telegram OTP（预留）
+	ChallengeTypeWebAuthn ChallengeType = "webauthn"  // WebAuthn/Passkey
 )
 
 // Challenge 额外的身份验证步骤
@@ -109,7 +110,7 @@ func (t ChallengeType) RequiresCaptcha() bool {
 // IsMFA 检查是否是 MFA 类型
 func (t ChallengeType) IsMFA() bool {
 	switch t {
-	case ChallengeTypeEmailOTP, ChallengeTypeTOTP, ChallengeTypeSmsOTP, ChallengeTypeTgOTP:
+	case ChallengeTypeEmailOTP, ChallengeTypeTOTP, ChallengeTypeSmsOTP, ChallengeTypeTgOTP, ChallengeTypeWebAuthn:
 		return true
 	default:
 		return false

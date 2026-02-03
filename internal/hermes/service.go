@@ -286,16 +286,6 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 		redirectURIs = &urisStr
 	}
 
-	var allowedIDPs *string
-	if len(req.AllowedIDPs) > 0 {
-		idpsJSON, err := json.Marshal(req.AllowedIDPs)
-		if err != nil {
-			return nil, fmt.Errorf("marshal allowed idps: %w", err)
-		}
-		idpsStr := string(idpsJSON)
-		allowedIDPs = &idpsStr
-	}
-
 	var encryptedKey *string
 	if req.NeedKey {
 		key, err := s.generateApplicationKey(req.DomainID, req.AppID)
@@ -310,7 +300,6 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 		AppID:        req.AppID,
 		Name:         req.Name,
 		RedirectURIs: redirectURIs,
-		AllowedIDPs:  allowedIDPs,
 		EncryptedKey: encryptedKey,
 	}
 
@@ -832,4 +821,18 @@ func (s *Service) GetGroupMembers(ctx context.Context, groupID string) ([]string
 	}
 
 	return userIDs, nil
+}
+
+// ==================== Application IDP Config 相关 ====================
+
+// GetApplicationIDPConfigs 获取应用 IDP 配置列表（按 priority 降序）
+func (s *Service) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
+	var configs []*models.ApplicationIDPConfig
+	if err := s.db.WithContext(ctx).
+		Where("app_id = ?", appID).
+		Order("priority DESC").
+		Find(&configs).Error; err != nil {
+		return nil, fmt.Errorf("获取应用 IDP 配置失败: %w", err)
+	}
+	return configs, nil
 }

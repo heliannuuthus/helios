@@ -7,6 +7,7 @@ import (
 
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/aegis/token"
+	"github.com/heliannuuthus/helios/internal/aegis/webauthn"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 )
@@ -15,6 +16,7 @@ import (
 type Handler struct {
 	userSvc       *hermes.UserService
 	credentialSvc *hermes.CredentialService
+	webauthnSvc   *webauthn.Service
 }
 
 // NewHandler 创建用户信息处理器
@@ -23,6 +25,11 @@ func NewHandler(userSvc *hermes.UserService, credentialSvc *hermes.CredentialSer
 		userSvc:       userSvc,
 		credentialSvc: credentialSvc,
 	}
+}
+
+// SetWebAuthnService 设置 WebAuthn 服务（可选）
+func (h *Handler) SetWebAuthnService(svc *webauthn.Service) {
+	h.webauthnSvc = svc
 }
 
 // getClaims 从上下文获取用户 Claims
@@ -294,19 +301,20 @@ func (h *Handler) GetMFAStatus(c *gin.Context) {
 
 // SetupMFARequest 设置 MFA 请求
 type SetupMFARequest struct {
-	Type    string `json:"type" binding:"required,oneof=totp webauthn passkey"`
+	Type   string `json:"type" binding:"required,oneof=totp webauthn passkey"`
+	Action string `json:"action,omitempty"` // "begin" 或 "finish"（WebAuthn 专用）
+
+	// TOTP 专用
 	AppName string `json:"app_name,omitempty"`
 
-	// WebAuthn 专用
-	CredentialID    string   `json:"credential_id,omitempty"`
-	PublicKey       string   `json:"public_key,omitempty"`
-	AAGUID          string   `json:"aaguid,omitempty"`
-	Transport       []string `json:"transport,omitempty"`
-	AttestationType string   `json:"attestation_type,omitempty"`
+	// WebAuthn finish 阶段专用
+	ChallengeID string `json:"challenge_id,omitempty"` // begin 返回的 challenge_id
 }
 
 // SetupMFA POST /user/mfa
 // 设置 MFA
+// - TOTP: 直接返回 secret 和 otpauth_uri
+// - WebAuthn: action=begin 返回 options，action=finish 完成注册
 func (h *Handler) SetupMFA(c *gin.Context) {
 	claims := getClaims(c)
 	if claims == nil {
@@ -340,42 +348,92 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 		})
 
 	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		if req.CredentialID == "" || req.PublicKey == "" {
-			errorResponse(c, autherrors.NewInvalidRequest("credential_id and public_key are required"))
-			return
-		}
-		credential, err := h.credentialSvc.RegisterWebAuthn(ctx, &hermes.RegisterWebAuthnRequest{
-			OpenID:          claims.Subject,
-			CredentialID:    req.CredentialID,
-			PublicKey:       req.PublicKey,
-			AAGUID:          req.AAGUID,
-			Transport:       req.Transport,
-			AttestationType: req.AttestationType,
-		})
-		if err != nil {
-			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"type":          req.Type,
-			"credential_id": credential.ID,
-		})
+		h.setupWebAuthn(c, claims.Subject, req.Type, req.Action, req.ChallengeID)
 
 	default:
 		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
 	}
 }
 
+// setupWebAuthn 处理 WebAuthn 设置流程
+func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challengeID string) {
+	if h.webauthnSvc == nil {
+		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	switch action {
+	case "", "begin":
+		// 开始注册
+		user, err := h.userSvc.GetUserWithDecrypted(ctx, openID)
+		if err != nil {
+			errorResponse(c, autherrors.NewNotFound("user not found"))
+			return
+		}
+
+		existingCredentials, _ := h.webauthnSvc.ListCredentials(ctx, user.OpenID)
+		resp, err := h.webauthnSvc.BeginRegistration(ctx, user, existingCredentials)
+		if err != nil {
+			errorResponse(c, autherrors.NewServerError(err.Error()))
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"type":         credType,
+			"action":       "begin",
+			"options":      resp.Options,
+			"challenge_id": resp.ChallengeID,
+		})
+
+	case "finish":
+		if challengeID == "" {
+			errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required for finish"))
+			return
+		}
+
+		credential, err := h.webauthnSvc.FinishRegistration(ctx, challengeID, c.Request)
+		if err != nil {
+			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+			return
+		}
+
+		if err := h.webauthnSvc.SaveCredential(ctx, openID, credential); err != nil {
+			errorResponse(c, autherrors.NewServerError("save credential failed"))
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"type":          credType,
+			"action":        "finish",
+			"success":       true,
+			"credential_id": encodeCredentialID(credential.ID),
+		})
+
+	default:
+		errorResponse(c, autherrors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
+	}
+}
+
 // VerifyMFARequest 验证 MFA 请求
 type VerifyMFARequest struct {
-	Type         string `json:"type" binding:"required,oneof=totp webauthn passkey"`
+	Type   string `json:"type" binding:"required,oneof=totp webauthn passkey"`
+	Action string `json:"action,omitempty"` // "begin" 或 "finish"（WebAuthn 专用）
+
+	// TOTP 专用
 	CredentialID uint   `json:"credential_id,omitempty"`
 	Code         string `json:"code,omitempty"`
-	Confirm      bool   `json:"confirm,omitempty"`
+	Confirm      bool   `json:"confirm,omitempty"` // 首次绑定确认
+
+	// WebAuthn finish 阶段专用
+	ChallengeID string `json:"challenge_id,omitempty"`
 }
 
 // VerifyMFA PUT /user/mfa
 // 验证 MFA
+// - TOTP: 直接验证 code
+// - WebAuthn: action=begin 返回 options，action=finish 完成验证
 func (h *Handler) VerifyMFA(c *gin.Context) {
 	claims := getClaims(c)
 	if claims == nil {
@@ -422,13 +480,77 @@ func (h *Handler) VerifyMFA(c *gin.Context) {
 				return
 			}
 		}
-		c.JSON(http.StatusOK, gin.H{"success": true})
+		c.JSON(http.StatusOK, gin.H{"type": "totp", "success": true})
 
 	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		errorResponse(c, autherrors.NewInvalidRequest("webauthn verification not implemented"))
+		h.verifyWebAuthn(c, claims.Subject, req.Type, req.Action, req.ChallengeID)
 
 	default:
 		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
+	}
+}
+
+// verifyWebAuthn 处理 WebAuthn 验证流程
+func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, challengeID string) {
+	if h.webauthnSvc == nil {
+		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	switch action {
+	case "", "begin":
+		// 开始验证
+		user, err := h.userSvc.GetUserWithDecrypted(ctx, openID)
+		if err != nil {
+			errorResponse(c, autherrors.NewNotFound("user not found"))
+			return
+		}
+
+		existingCredentials, err := h.webauthnSvc.ListCredentials(ctx, user.OpenID)
+		if err != nil || len(existingCredentials) == 0 {
+			errorResponse(c, autherrors.NewInvalidRequest("no webauthn credentials found"))
+			return
+		}
+
+		resp, err := h.webauthnSvc.BeginLogin(ctx, user, existingCredentials)
+		if err != nil {
+			errorResponse(c, autherrors.NewServerError(err.Error()))
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"type":         credType,
+			"action":       "begin",
+			"options":      resp.Options,
+			"challenge_id": resp.ChallengeID,
+		})
+
+	case "finish":
+		if challengeID == "" {
+			errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required for finish"))
+			return
+		}
+
+		userID, credential, err := h.webauthnSvc.FinishLogin(ctx, challengeID, c.Request)
+		if err != nil {
+			errorResponse(c, autherrors.NewAccessDenied(err.Error()))
+			return
+		}
+
+		// 更新签名计数
+		_ = h.webauthnSvc.UpdateCredentialSignCount(ctx, encodeCredentialID(credential.ID), credential.Authenticator.SignCount)
+
+		c.JSON(http.StatusOK, gin.H{
+			"type":    credType,
+			"action":  "finish",
+			"success": true,
+			"user_id": userID,
+		})
+
+	default:
+		errorResponse(c, autherrors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
 	}
 }
 
@@ -536,4 +658,34 @@ func (h *Handler) DeleteMFA(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// encodeCredentialID 编码凭证 ID
+func encodeCredentialID(id []byte) string {
+	return encodeBase64URL(id)
+}
+
+// encodeBase64URL Base64URL 编码
+func encodeBase64URL(data []byte) string {
+	const base64URLCharset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	result := make([]byte, 0, (len(data)*4+2)/3)
+	for i := 0; i < len(data); i += 3 {
+		val := uint32(data[i]) << 16
+		if i+1 < len(data) {
+			val |= uint32(data[i+1]) << 8
+		}
+		if i+2 < len(data) {
+			val |= uint32(data[i+2])
+		}
+
+		result = append(result, base64URLCharset[(val>>18)&0x3F])
+		result = append(result, base64URLCharset[(val>>12)&0x3F])
+		if i+1 < len(data) {
+			result = append(result, base64URLCharset[(val>>6)&0x3F])
+		}
+		if i+2 < len(data) {
+			result = append(result, base64URLCharset[val&0x3F])
+		}
+	}
+	return string(result)
 }

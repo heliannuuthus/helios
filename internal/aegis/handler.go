@@ -14,6 +14,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/token"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
+	"github.com/heliannuuthus/helios/internal/aegis/webauthn"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
@@ -44,6 +45,7 @@ type Handler struct {
 	challengeSvc    *challenge.Service
 	cache           *cache.Manager
 	tokenSvc        *token.Service
+	webauthnSvc     *webauthn.Service
 }
 
 // HandlerConfig Handler 配置
@@ -69,6 +71,21 @@ func NewHandler(cfg *HandlerConfig) *Handler {
 // CacheManager 返回缓存管理器（用于 CORS 中间件等）
 func (h *Handler) CacheManager() *cache.Manager {
 	return h.cache
+}
+
+// WebAuthnService 返回 WebAuthn 服务（供其他模块使用，如 Iris）
+func (h *Handler) WebAuthnService() *webauthn.Service {
+	return h.webauthnSvc
+}
+
+// SetWebAuthnService 设置 WebAuthn 服务
+func (h *Handler) SetWebAuthnService(svc *webauthn.Service) {
+	h.webauthnSvc = svc
+}
+
+// HasWebAuthn 检查是否启用了 WebAuthn
+func (h *Handler) HasWebAuthn() bool {
+	return h.webauthnSvc != nil
 }
 
 // Authorize POST /auth/authorize
@@ -622,8 +639,8 @@ func (h *Handler) IDPs(c *gin.Context) {
 		// 如果没有 flow，返回空结构
 		connectionsMap = &types.ConnectionsMap{
 			IDP:   make([]*types.ConnectionConfig, 0),
-			VChan: make([]*types.VChanConfig, 0),
-			MFA:   make([]string, 0),
+			VChan: make([]*types.ConnectionConfig, 0),
+			MFA:   make([]*types.ConnectionConfig, 0),
 		}
 	}
 
@@ -700,13 +717,13 @@ func (h *Handler) flowErrorResponse(c *gin.Context, flow *types.AuthFlow) {
 
 // checkPreAuthRequirement 检查前置认证需求
 func checkPreAuthRequirement(_ string, data map[string]any, connectionConfig *types.ConnectionConfig) string {
-	if connectionConfig == nil || connectionConfig.Require == nil {
+	if connectionConfig == nil || len(connectionConfig.Require) == 0 {
 		return ""
 	}
 
 	// 检查是否需要 captcha
-	for _, vchan := range connectionConfig.Require.VChan {
-		if vchan == "captcha" {
+	for _, require := range connectionConfig.Require {
+		if require == "captcha" {
 			// 如果需要 captcha 但 data 中没有验证结果，返回 require
 			if _, ok := data["captcha_token"]; !ok {
 				return "captcha"
@@ -733,22 +750,35 @@ func (h *Handler) handleInteractionRequired(c *gin.Context, require string, _ *t
 // ==================== 辅助函数 ====================
 
 // setAuthSessionCookie 设置 Auth 会话 Cookie
+// 使用 http.SetCookie 以支持 SameSite 属性
+// SameSite=None 允许跨站请求携带 Cookie（OAuth 场景需要），必须配合 Secure=true
 func setAuthSessionCookie(c *gin.Context, value string) {
-	c.SetCookie(AuthSessionCookie, value,
-		config.GetAegisCookieMaxAge(),
-		config.GetAegisCookiePath(),
-		config.GetAegisCookieDomain(),
-		config.GetAegisCookieSecure(),
-		config.GetAegisCookieHTTPOnly())
+	cookie := &http.Cookie{
+		Name:     AuthSessionCookie,
+		Value:    value,
+		MaxAge:   config.GetAegisCookieMaxAge(),
+		Path:     config.GetAegisCookiePath(),
+		Domain:   config.GetAegisCookieDomain(),
+		Secure:   config.GetAegisCookieSecure(),
+		HttpOnly: config.GetAegisCookieHTTPOnly(),
+		SameSite: http.SameSiteNoneMode, // 跨站请求也携带 Cookie（OAuth 场景）
+	}
+	http.SetCookie(c.Writer, cookie)
 }
 
 // clearAuthSessionCookie 清除 Auth 会话 Cookie
 func clearAuthSessionCookie(c *gin.Context) {
-	c.SetCookie(AuthSessionCookie, "", -1,
-		config.GetAegisCookiePath(),
-		config.GetAegisCookieDomain(),
-		config.GetAegisCookieSecure(),
-		config.GetAegisCookieHTTPOnly())
+	cookie := &http.Cookie{
+		Name:     AuthSessionCookie,
+		Value:    "",
+		MaxAge:   -1,
+		Path:     config.GetAegisCookiePath(),
+		Domain:   config.GetAegisCookieDomain(),
+		Secure:   config.GetAegisCookieSecure(),
+		HttpOnly: config.GetAegisCookieHTTPOnly(),
+		SameSite: http.SameSiteNoneMode,
+	}
+	http.SetCookie(c.Writer, cookie)
 }
 
 // getAuthSessionCookie 获取 Auth 会话 Cookie

@@ -40,7 +40,7 @@ func InitializeApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	irisHandler := provideIrisHandler()
+	irisHandler := provideIrisHandler(aegisHandler)
 	favoriteHandler := provideFavoriteHandler()
 	historyHandler := provideHistoryHandler()
 	homeHandler := provideHomeHandler()
@@ -125,11 +125,17 @@ func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
 }
 
 // Iris 用户信息模块 Handler
-func provideIrisHandler() *iris.Handler {
+func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
 	db := database.GetHermes()
 	userSvc := hermes.NewUserService(db)
 	credentialSvc := hermes.NewCredentialService(db)
-	return iris.NewHandler(userSvc, credentialSvc)
+	handler := iris.NewHandler(userSvc, credentialSvc)
+
+	if aegisHandler.HasWebAuthn() {
+		handler.SetWebAuthnService(aegisHandler.WebAuthnService())
+	}
+
+	return handler
 }
 
 // provideGinMiddlewareFactory 创建 Gin 中间件工厂

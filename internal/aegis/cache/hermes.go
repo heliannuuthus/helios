@@ -218,3 +218,29 @@ func normalizeOrigin(origin string) string {
 	}
 	return origin
 }
+
+// GetApplicationIDPConfigs 获取应用 IDP 配置（带缓存）
+func (cm *Manager) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
+	cacheKey := config.GetAegisCacheKeyPrefix("app-idp-config") + appID
+
+	// 尝试从缓存获取
+	if cm.appIDPConfigCache != nil {
+		if cached, ok := cm.appIDPConfigCache.Get(cacheKey); ok {
+			return cached, nil
+		}
+	}
+
+	// 从 hermes 获取
+	configs, err := cm.hermesSvc.GetApplicationIDPConfigs(ctx, appID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 存入缓存
+	if cm.appIDPConfigCache != nil {
+		ttl := config.GetAegisCacheTTL("app-idp-config")
+		cm.appIDPConfigCache.SetWithTTL(cacheKey, configs, 1, ttl)
+	}
+
+	return configs, nil
+}

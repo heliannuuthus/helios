@@ -17,6 +17,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/idp/wechat"
 	"github.com/heliannuuthus/helios/internal/aegis/mail"
 	"github.com/heliannuuthus/helios/internal/aegis/token"
+	"github.com/heliannuuthus/helios/internal/aegis/webauthn"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -102,6 +103,17 @@ func Initialize(cfg *InitConfig) (*Handler, error) {
 		Cache:           cacheManager,
 		TokenSvc:        tokenSvc,
 	})
+
+	// 11. 初始化 WebAuthn Service（如果启用）
+	if webauthn.IsEnabled() {
+		webauthnSvc, err := webauthn.NewService(cacheManager)
+		if err != nil {
+			logger.Warnf("[Auth] WebAuthn 初始化失败: %v", err)
+		} else {
+			handler.SetWebAuthnService(webauthnSvc)
+			logger.Info("[Auth] WebAuthn 初始化完成")
+		}
+	}
 
 	logger.Info("[Auth] 模块初始化完成")
 	return handler, nil

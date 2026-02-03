@@ -124,8 +124,7 @@ func (s *Service) createChallengeWithCaptchaRequired(ctx context.Context, req *C
 	return &CreateResponse{
 		ChallengeID: challenge.ID,
 		Required: &types.VChanConfig{
-			Connection: "captcha",
-			Strategy:   s.captcha.GetProvider(),
+			Connection: "captcha:" + s.captcha.GetProvider(),
 			Identifier: s.captcha.GetSiteKey(),
 		},
 	}, nil

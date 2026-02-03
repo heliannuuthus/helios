@@ -39,19 +39,6 @@ func (a *ApplicationWithKey) ValidateRedirectURI(uri string) bool {
 	return false
 }
 
-// GetAllowedIDPs 解析允许的登录方式列表
-func (a *ApplicationWithKey) GetAllowedIDPs() []string {
-	if a.AllowedIDPs == nil || *a.AllowedIDPs == "" {
-		return nil
-	}
-	var idps []string
-	if err := json.Unmarshal([]byte(*a.AllowedIDPs), &idps); err != nil {
-		logger.Warnf("[Application] unmarshal allowed idps failed: %v", err)
-		return nil
-	}
-	return idps
-}
-
 // GetAllowedOrigins 解析允许的跨域源列表
 func (a *ApplicationWithKey) GetAllowedOrigins() []string {
 	if a.AllowedOrigins == nil || *a.AllowedOrigins == "" {

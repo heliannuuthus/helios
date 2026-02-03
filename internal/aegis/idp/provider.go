@@ -21,8 +21,9 @@ type Provider interface {
 	// params: 通用参数，不同 IDP 需要不同参数
 	FetchAdditionalInfo(ctx context.Context, infoType string, params ...any) (*AdditionalInfo, error)
 
-	// ToPublicConfig 转换为前端可用的公开配置（不含密钥）
-	ToPublicConfig() *types.ConnectionConfig
+	// Prepare 准备前端所需的公开配置（不含密钥）
+	// 返回 ConnectionConfig，包含 connection 标识和可选的 identifier（如 client_id）
+	Prepare() *types.ConnectionConfig
 }
 
 // ExchangeResult 换取结果

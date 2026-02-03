@@ -244,10 +244,10 @@ func (*MPProvider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...
 	return nil, fmt.Errorf("alipay does not support fetching %s yet", infoType)
 }
 
-// ToPublicConfig 转换为前端可用的公开配置
-func (p *MPProvider) ToPublicConfig() *types.ConnectionConfig {
+// Prepare 准备前端所需的公开配置
+func (p *MPProvider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		Connection: "alipay",
-		Strategy:   []string{"mp"},
+		Connection: "alipay:mp",
+		Identifier: p.appID,
 	}
 }

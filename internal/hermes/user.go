@@ -222,3 +222,83 @@ func generateRandomAvatar(seed string) string {
 	}
 	return fmt.Sprintf("https://api.dicebear.com/7.x/avataaars/svg?seed=%s&size=200", fmt.Sprintf("user%d", hash%10))
 }
+
+// ==================== WebAuthn 凭证管理 ====================
+
+// CreateCredential 创建 WebAuthn 凭证
+func (s *UserService) CreateCredential(ctx context.Context, cred *models.UserCredential) error {
+	return s.db.WithContext(ctx).Create(cred).Error
+}
+
+// GetCredentialByID 根据凭证 ID 获取凭证
+func (s *UserService) GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error) {
+	var cred models.UserCredential
+	if err := s.db.WithContext(ctx).Where("credential_id = ?", credentialID).First(&cred).Error; err != nil {
+		return nil, err
+	}
+	return &cred, nil
+}
+
+// GetUserCredentials 获取用户所有凭证
+func (s *UserService) GetUserCredentials(ctx context.Context, openID string) ([]models.UserCredential, error) {
+	var credentials []models.UserCredential
+	if err := s.db.WithContext(ctx).Where("openid = ?", openID).Find(&credentials).Error; err != nil {
+		return nil, err
+	}
+	return credentials, nil
+}
+
+// GetUserCredentialsByType 获取用户指定类型的凭证
+func (s *UserService) GetUserCredentialsByType(ctx context.Context, openID, credType string) ([]models.UserCredential, error) {
+	var credentials []models.UserCredential
+	if err := s.db.WithContext(ctx).Where("openid = ? AND type = ?", openID, credType).Find(&credentials).Error; err != nil {
+		return nil, err
+	}
+	return credentials, nil
+}
+
+// GetEnabledUserCredentialsByType 获取用户已启用的指定类型的凭证
+func (s *UserService) GetEnabledUserCredentialsByType(ctx context.Context, openID, credType string) ([]models.UserCredential, error) {
+	var credentials []models.UserCredential
+	if err := s.db.WithContext(ctx).Where("openid = ? AND type = ? AND enabled = ?", openID, credType, true).Find(&credentials).Error; err != nil {
+		return nil, err
+	}
+	return credentials, nil
+}
+
+// UpdateCredential 更新凭证
+func (s *UserService) UpdateCredential(ctx context.Context, credentialID string, updates map[string]any) error {
+	return s.db.WithContext(ctx).Model(&models.UserCredential{}).Where("credential_id = ?", credentialID).Updates(updates).Error
+}
+
+// UpdateCredentialSignCount 更新凭证签名计数
+func (s *UserService) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
+	return s.UpdateCredential(ctx, credentialID, map[string]any{
+		"secret":       gorm.Expr("JSON_SET(secret, '$.sign_count', ?)", signCount),
+		"last_used_at": time.Now(),
+	})
+}
+
+// EnableCredential 启用凭证
+func (s *UserService) EnableCredential(ctx context.Context, credentialID string) error {
+	return s.UpdateCredential(ctx, credentialID, map[string]any{"enabled": true})
+}
+
+// DisableCredential 禁用凭证
+func (s *UserService) DisableCredential(ctx context.Context, credentialID string) error {
+	return s.UpdateCredential(ctx, credentialID, map[string]any{"enabled": false})
+}
+
+// DeleteCredential 删除凭证
+func (s *UserService) DeleteCredential(ctx context.Context, openID, credentialID string) error {
+	return s.db.WithContext(ctx).Where("openid = ? AND credential_id = ?", openID, credentialID).Delete(&models.UserCredential{}).Error
+}
+
+// GetUserIDByCredentialID 根据凭证 ID 获取用户 OpenID
+func (s *UserService) GetUserIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
+	cred, err := s.GetCredentialByID(ctx, credentialID)
+	if err != nil {
+		return "", err
+	}
+	return cred.OpenID, nil
+}

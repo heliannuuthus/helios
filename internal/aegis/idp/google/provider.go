@@ -180,10 +180,10 @@ func (*Provider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...an
 	return nil, fmt.Errorf("google does not support fetching %s", infoType)
 }
 
-// ToPublicConfig 转换为前端可用的公开配置
-func (p *Provider) ToPublicConfig() *types.ConnectionConfig {
+// Prepare 准备前端所需的公开配置
+func (p *Provider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
 		Connection: "google",
-		Strategy:   []string{"oauth"},
+		Identifier: p.clientID,
 	}
 }

@@ -44,6 +44,9 @@ type Manager struct {
 	// 应用跨域配置缓存：app_id -> allowed_origins
 	appOriginsCache *ristretto.Cache[string, []string]
 
+	// 应用 IDP 配置缓存：app_id -> []*ApplicationIDPConfig
+	appIDPConfigCache *ristretto.Cache[string, []*models.ApplicationIDPConfig]
+
 	// Redis 客户端（用于分布式数据）
 	redis pkgstore.RedisClient
 }
@@ -154,6 +157,18 @@ func (cm *Manager) initLocalCaches() {
 	} else {
 		cm.appOriginsCache = appOriginsCache
 	}
+
+	// App IDP Config cache（应用 IDP 配置）
+	appIDPConfigCache, err := ristretto.NewCache(&ristretto.Config[string, []*models.ApplicationIDPConfig]{
+		NumCounters: config.GetAegisCacheNumCounters("app-idp-config"),
+		MaxCost:     config.GetAegisCacheSize("app-idp-config"),
+		BufferItems: config.GetAegisCacheBufferItems("app-idp-config"),
+	})
+	if err != nil {
+		logger.Errorf("[Manager] 创建 App IDP Config 缓存失败: %v", err)
+	} else {
+		cm.appIDPConfigCache = appIDPConfigCache
+	}
 }
 
 // Close 关闭缓存
@@ -179,5 +194,7 @@ func (cm *Manager) Close() {
 	if cm.appOriginsCache != nil {
 		cm.appOriginsCache.Close()
 	}
+	if cm.appIDPConfigCache != nil {
+		cm.appIDPConfigCache.Close()
+	}
 }
-

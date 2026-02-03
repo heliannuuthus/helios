@@ -239,10 +239,10 @@ func (*Provider) FetchAdditionalInfo(ctx context.Context, infoType string, param
 	return nil, fmt.Errorf("GitHub does not support fetching %s", infoType)
 }
 
-// ToPublicConfig 转换为前端可用的公开配置
-func (p *Provider) ToPublicConfig() *types.ConnectionConfig {
+// Prepare 准备前端所需的公开配置
+func (p *Provider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
 		Connection: "github",
-		Strategy:   []string{"oauth"},
+		Identifier: p.clientID,
 	}
 }

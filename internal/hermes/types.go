@@ -24,8 +24,7 @@ type ApplicationCreateRequest struct {
 	AppID        string   `json:"app_id" binding:"required"`
 	Name         string   `json:"name" binding:"required"`
 	RedirectURIs []string `json:"redirect_uris"`
-	AllowedIDPs  []string `json:"allowed_idps"` // 允许的登录方式
-	NeedKey      bool     `json:"need_key"`     // 是否需要密钥
+	NeedKey      bool     `json:"need_key"` // 是否需要密钥
 }
 
 // ApplicationUpdateRequest 更新应用请求

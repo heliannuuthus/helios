@@ -12,12 +12,12 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // Service 认证服务
-// 管理 AuthFlow，不连接数据库
 type Service struct {
 	cache          *cache.Manager
 	idpRegistry    *idp.Registry
@@ -100,25 +100,23 @@ func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) (*types.Aut
 		return nil, autherrors.NewAccessDeniedf("application %s has no access to service %s", req.ClientID, req.Audience)
 	}
 
-	// 6. 获取应用配置的登录方式
-	allowedIDPs := app.GetAllowedIDPs()
-	if len(allowedIDPs) == 0 {
+	// 6. 获取应用 IDP 配置并构建 ConnectionMap
+	idpConfigs, err := s.cache.GetApplicationIDPConfigs(ctx, req.ClientID)
+	if err != nil {
+		logger.Errorf("[Authenticate] 查询应用 IDP 配置失败 - ClientID: %s, Error: %v", req.ClientID, err)
+		return nil, autherrors.NewServerError("query idp configs failed")
+	}
+	if len(idpConfigs) == 0 {
 		logger.Warnf("[Authenticate] 应用未配置登录方式 - ClientID: %s", req.ClientID)
 		return nil, autherrors.NewNoConnectionAvailable("")
 	}
 
 	// ==================== 创建 Flow ====================
 
-	// 从配置获取 Flow 过期时间（秒转为 Duration）
-	flowExpiresIn := time.Duration(config.GetAegisCookieMaxAge()) * time.Second
-
-	// 创建 flow
-	flow := types.NewAuthFlow(req, flowExpiresIn)
+	flow := types.NewAuthFlow(req, time.Duration(config.GetAegisCookieMaxAge())*time.Second)
 	flow.Application = app
 	flow.Service = svc
-
-	// 7. 构建 ConnectionMap（使用应用配置的 IDP）
-	flow.ConnectionMap = s.setConnections(allowedIDPs)
+	flow.ConnectionMap = s.buildConnectionMap(idpConfigs)
 
 	// 8. 保存到缓存
 	if err := s.SaveFlow(ctx, flow); err != nil {
@@ -223,6 +221,10 @@ func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, connec
 }
 
 // GetAvailableConnections 获取可用的 ConnectionsMap
+// 组装三部分数据：
+// 1. IDP - 身份提供商（github, google, user, oper, wechat:mp...）
+// 2. VChan - 验证渠道/前置验证（captcha:turnstile...）
+// 3. MFA - 多因素认证（email_otp, totp, webauthn...），从 IDP 的 delegate 配置中派生
 func (s *Service) GetAvailableConnections(flow *types.AuthFlow) *types.ConnectionsMap {
 	if flow.ConnectionMap == nil {
 		return nil
@@ -230,54 +232,102 @@ func (s *Service) GetAvailableConnections(flow *types.AuthFlow) *types.Connectio
 
 	result := &types.ConnectionsMap{
 		IDP:   make([]*types.ConnectionConfig, 0),
-		VChan: make([]*types.VChanConfig, 0),
-		MFA:   make([]string, 0),
+		VChan: make([]*types.ConnectionConfig, 0),
+		MFA:   make([]*types.ConnectionConfig, 0),
 	}
 
-	// 添加 IDP connections
+	// 收集引用的 MFA 和 VChan（去重）
+	mfaSet := make(map[string]bool)
+	vchanSet := make(map[string]bool)
+
+	// 添加 IDP connections，同时收集 delegate 和 require
 	for _, cfg := range flow.ConnectionMap {
 		result.IDP = append(result.IDP, cfg)
+
+		// 从 delegate 中收集 MFA（如 email_otp, totp, webauthn）
+		for _, mfa := range cfg.Delegate {
+			mfaSet[mfa] = true
+		}
+		// 从 require 中收集 VChan（如 captcha）
+		for _, req := range cfg.Require {
+			vchanSet[req] = true
+		}
 	}
 
-	// 添加 captcha vchan（如果配置了）
-	captchaCfg := s.getCaptchaConfig()
-	if captchaCfg != nil {
-		result.VChan = append(result.VChan, captchaCfg)
-	}
+	// 构建 VChan 配置（前置验证渠道）
+	result.VChan = s.buildVChanConfigs(vchanSet)
 
-	// 添加 MFA 列表
-	result.MFA = s.getAvailableMFAs()
+	// 构建 MFA 配置（多因素认证）
+	result.MFA = s.buildMFAConfigs(mfaSet)
 
 	return result
 }
 
-// getCaptchaConfig 获取 captcha 配置
-func (s *Service) getCaptchaConfig() *types.VChanConfig {
+// buildVChanConfigs 根据 VChan 类型集合构建验证渠道配置列表
+// 只返回系统实际启用的 VChan（如 captcha）
+func (s *Service) buildVChanConfigs(vchanSet map[string]bool) []*types.ConnectionConfig {
 	authCfg := config.Aegis()
-	if !authCfg.GetBool("captcha.enabled") {
-		return nil
+	vchans := make([]*types.ConnectionConfig, 0)
+
+	// Captcha（人机验证）
+	if vchanSet["captcha"] && authCfg.GetBool("captcha.enabled") {
+		provider := authCfg.GetString("captcha.provider")
+		vchans = append(vchans, &types.ConnectionConfig{
+			Connection: "captcha:" + provider,
+			Identifier: authCfg.GetString("captcha.site-key"),
+		})
 	}
 
-	return &types.VChanConfig{
-		Connection: "captcha",
-		Strategy:   authCfg.GetString("captcha.provider"), // turnstile, recaptcha 等
-		Identifier: authCfg.GetString("captcha.site-key"), // 前端需要的 site-key
-	}
+	return vchans
 }
 
-// getAvailableMFAs 获取可用的 MFA 列表
-func (s *Service) getAvailableMFAs() []string {
+// buildMFAConfigs 根据 MFA 类型集合构建 MFA 配置列表
+// 只返回系统实际启用的 MFA
+func (s *Service) buildMFAConfigs(mfaSet map[string]bool) []*types.ConnectionConfig {
 	authCfg := config.Aegis()
-	mfas := make([]string, 0)
+	mfas := make([]*types.ConnectionConfig, 0)
 
-	if authCfg.GetBool("mfa.email-otp.enabled") {
-		mfas = append(mfas, "email-otp")
+	// Email OTP
+	if mfaSet["email_otp"] && authCfg.GetBool("mfa.email-otp.enabled") {
+		mfas = append(mfas, &types.ConnectionConfig{
+			Connection: "email_otp",
+		})
 	}
-	if authCfg.GetBool("mfa.tg-otp.enabled") {
-		mfas = append(mfas, "tg-otp")
+
+	// Telegram OTP
+	if mfaSet["tg_otp"] && authCfg.GetBool("mfa.tg-otp.enabled") {
+		mfas = append(mfas, &types.ConnectionConfig{
+			Connection: "tg_otp",
+		})
 	}
-	if authCfg.GetBool("mfa.totp.enabled") {
-		mfas = append(mfas, "totp")
+
+	// TOTP
+	if mfaSet["totp"] && authCfg.GetBool("mfa.totp.enabled") {
+		mfas = append(mfas, &types.ConnectionConfig{
+			Connection: "totp",
+		})
+	}
+
+	// WebAuthn
+	if mfaSet["webauthn"] && authCfg.GetBool("mfa.webauthn.enabled") {
+		cfg := &types.ConnectionConfig{
+			Connection: "webauthn",
+		}
+		if rpID := authCfg.GetString("mfa.webauthn.rp-id"); rpID != "" {
+			cfg.Identifier = rpID
+		}
+		mfas = append(mfas, cfg)
+	}
+
+	// Passkey（和 WebAuthn 共用底层但作为独立选项）
+	if mfaSet["passkey"] && authCfg.GetBool("mfa.passkey.enabled") {
+		cfg := &types.ConnectionConfig{
+			Connection: "passkey",
+		}
+		if rpID := authCfg.GetString("mfa.webauthn.rp-id"); rpID != "" {
+			cfg.Identifier = rpID
+		}
+		mfas = append(mfas, cfg)
 	}
 
 	return mfas
@@ -295,201 +345,37 @@ func (s *Service) SendEmailCode(ctx context.Context, email string) error {
 
 // ==================== 辅助方法 ====================
 
-// setConnections 根据应用配置的 IDP 列表构建 ConnectionMap
-func (s *Service) setConnections(allowedIDPs []string) map[string]*types.ConnectionConfig {
-	connectionMap := make(map[string]*types.ConnectionConfig)
+// buildConnectionMap 根据应用 IDP 配置构建 ConnectionMap
+// 合并 Provider.Prepare() 基础配置与应用级配置（strategy, delegate, require）
+func (s *Service) buildConnectionMap(idpConfigs []*models.ApplicationIDPConfig) map[string]*types.ConnectionConfig {
+	result := make(map[string]*types.ConnectionConfig, len(idpConfigs))
 
-	for _, idpType := range allowedIDPs {
-		// 检查 IDP 是否在 Registry 中注册
-		if idpType != "email" && !s.idpRegistry.Has(idpType) {
-			logger.Warnf("[Authenticate] IDP %s not registered in registry", idpType)
+	for _, idpCfg := range idpConfigs {
+		// 获取 Provider 基础配置，或创建空配置（user/oper 等内部类型）
+		var cfg *types.ConnectionConfig
+		if provider, ok := s.idpRegistry.Get(idpCfg.Type); ok {
+			cfg = provider.Prepare()
+		} else {
+			cfg = &types.ConnectionConfig{Connection: idpCfg.Type}
+		}
+
+		if cfg == nil {
 			continue
 		}
 
-		cfg := s.getConnectionConfig(idpType)
-		if cfg != nil {
-			connectionMap[idpType] = cfg
+		// 应用级配置覆盖
+		if list := idpCfg.GetStrategyList(); len(list) > 0 {
+			cfg.Strategy = list
 		}
-	}
-
-	return connectionMap
-}
-
-// getConnectionConfig 获取 Connection 配置
-func (s *Service) getConnectionConfig(idpType string) *types.ConnectionConfig {
-	var configPrefix string
-	var connection string
-	var strategy []string
-
-	switch idpType {
-	case idp.TypeWechatMP:
-		configPrefix = "idps.wxmp"
-		connection = "wechat"
-		strategy = []string{"mp"}
-	case idp.TypeTTMP:
-		configPrefix = "idps.tt"
-		connection = "tt"
-		strategy = []string{"mp"}
-	case idp.TypeAlipayMP:
-		configPrefix = "idps.alipay"
-		connection = "alipay"
-		strategy = []string{"mp"}
-	case idp.TypeWecom:
-		configPrefix = "idps.wecom"
-		connection = "wecom"
-		strategy = []string{"oauth"}
-	case idp.TypeGithub:
-		return s.getGithubConnectionConfig()
-	case idp.TypeGoogle:
-		return s.getGoogleConnectionConfig()
-	case "email":
-		return s.getEmailConnectionConfig()
-	case "user":
-		return s.getUserConnectionConfig()
-	case "oper":
-		return s.getOperConnectionConfig()
-	default:
-		return nil
-	}
-
-	authCfg := config.Aegis()
-	appID := authCfg.GetString(configPrefix + ".appid")
-	if appID == "" {
-		return nil
-	}
-
-	connCfg := &types.ConnectionConfig{
-		Connection: connection,
-		Strategy:   strategy,
-	}
-
-	// 检查是否需要 captcha
-	if authCfg.GetBool("captcha.enabled") {
-		connCfg.Require = &types.RequireConfig{
-			VChan: []string{"captcha"},
+		if list := idpCfg.GetDelegateList(); len(list) > 0 {
+			cfg.Delegate = list
 		}
-	}
-
-	return connCfg
-}
-
-// getUserConnectionConfig 获取 user 身份配置
-func (s *Service) getUserConnectionConfig() *types.ConnectionConfig {
-	authCfg := config.Aegis()
-
-	cfg := &types.ConnectionConfig{
-		Connection: "user",
-		Strategy:   []string{},
-	}
-
-	// 检查是否需要 captcha
-	if authCfg.GetBool("captcha.enabled") {
-		cfg.Require = &types.RequireConfig{
-			VChan: []string{"captcha"},
+		if list := idpCfg.GetRequireList(); len(list) > 0 {
+			cfg.Require = list
 		}
+
+		result[idpCfg.Type] = cfg
 	}
 
-	// 设置 delegate MFA
-	delegateMFAs := make([]string, 0)
-	if authCfg.GetBool("mfa.email-otp.enabled") {
-		delegateMFAs = append(delegateMFAs, "email-otp")
-	}
-	if len(delegateMFAs) > 0 {
-		cfg.Delegate = &types.DelegateConfig{
-			MFA: delegateMFAs,
-		}
-	}
-
-	return cfg
-}
-
-// getOperConnectionConfig 获取 oper（运营）身份配置
-func (s *Service) getOperConnectionConfig() *types.ConnectionConfig {
-	authCfg := config.Aegis()
-
-	cfg := &types.ConnectionConfig{
-		Connection: "oper",
-		Strategy:   []string{},
-	}
-
-	// 检查是否需要 captcha
-	if authCfg.GetBool("captcha.enabled") {
-		cfg.Require = &types.RequireConfig{
-			VChan: []string{"captcha"},
-		}
-	}
-
-	// 设置 delegate MFA（oper 可能支持更多 MFA）
-	delegateMFAs := make([]string, 0)
-	if authCfg.GetBool("mfa.email-otp.enabled") {
-		delegateMFAs = append(delegateMFAs, "email-otp")
-	}
-	if authCfg.GetBool("mfa.totp.enabled") {
-		delegateMFAs = append(delegateMFAs, "totp")
-	}
-	if len(delegateMFAs) > 0 {
-		cfg.Delegate = &types.DelegateConfig{
-			MFA: delegateMFAs,
-		}
-	}
-
-	return cfg
-}
-
-// getGithubConnectionConfig 获取 GitHub OAuth 配置
-func (s *Service) getGithubConnectionConfig() *types.ConnectionConfig {
-	authCfg := config.Aegis()
-
-	clientID := authCfg.GetString("idps.github.client-id")
-	if clientID == "" {
-		return nil
-	}
-
-	return &types.ConnectionConfig{
-		Connection: "github",
-		Strategy:   []string{"oauth"},
-		OAuth: &types.OAuthConfig{
-			ClientID:     clientID,
-			AuthorizeURL: "https://github.com/login/oauth/authorize",
-			Scope:        "read:user user:email",
-		},
-	}
-}
-
-// getGoogleConnectionConfig 获取 Google OAuth 配置
-func (s *Service) getGoogleConnectionConfig() *types.ConnectionConfig {
-	authCfg := config.Aegis()
-
-	clientID := authCfg.GetString("idps.google.client-id")
-	if clientID == "" {
-		return nil
-	}
-
-	return &types.ConnectionConfig{
-		Connection: "google",
-		Strategy:   []string{"oauth"},
-		OAuth: &types.OAuthConfig{
-			ClientID:     clientID,
-			AuthorizeURL: "https://accounts.google.com/o/oauth2/v2/auth",
-			Scope:        "openid email profile",
-		},
-	}
-}
-
-func (s *Service) getEmailConnectionConfig() *types.ConnectionConfig {
-	authCfg := config.Aegis()
-
-	cfg := &types.ConnectionConfig{
-		Connection: "email",
-		Strategy:   []string{"otp"}, // email 使用 OTP 验证
-	}
-
-	// 检查是否需要 captcha
-	if authCfg.GetBool("captcha.enabled") {
-		cfg.Require = &types.RequireConfig{
-			VChan: []string{"captcha"},
-		}
-	}
-
-	return cfg
+	return result
 }

@@ -18,7 +18,7 @@ type CreateRequest struct {
 // CreateResponse 创建 Challenge 响应
 type CreateResponse struct {
 	ChallengeID string             `json:"challenge_id"`
-	Type        string             `json:"type,omitempty"`      // 有 required 时不返回
+	Type        string             `json:"type,omitempty"`       // 有 required 时不返回
 	ExpiresIn   int                `json:"expires_in,omitempty"` // 有 required 时不返回
 	Data        map[string]any     `json:"data,omitempty"`
 	Required    *types.VChanConfig `json:"required,omitempty"` // 需要先完成的前置验证（复用 VChanConfig）
@@ -31,7 +31,8 @@ type VerifyRequest struct {
 
 // VerifyResponse 验证 Challenge 响应
 type VerifyResponse struct {
-	Verified    bool           `json:"verified"`
-	ChallengeID string         `json:"challenge_id,omitempty"` // 后续 challenge ID（captcha 验证后创建的 email challenge）
-	Data        map[string]any `json:"data,omitempty"`         // 附加数据
+	Verified       bool           `json:"verified"`
+	ChallengeID    string         `json:"challenge_id,omitempty"`    // 后续 challenge ID（captcha 验证后创建的 email challenge）
+	ChallengeToken string         `json:"challenge_token,omitempty"` // 验证成功后的凭证（用于 Login 的 proof）
+	Data           map[string]any `json:"data,omitempty"`            // 附加数据
 }
