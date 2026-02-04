@@ -15,8 +15,8 @@ const AuthTypeWebAuthn AuthType = "webauthn"
 // WebAuthnAuthenticator WebAuthn 认证器
 // 用于 MFA 场景下的 WebAuthn 验证
 type WebAuthnAuthenticator struct {
-	cache     *cache.Manager
-	webauthn  *waservice.Service
+	cache    *cache.Manager
+	webauthn *waservice.Service
 }
 
 // NewWebAuthnAuthenticator 创建 WebAuthn 认证器

@@ -1,76 +1,64 @@
 package token
 
 import (
+	"fmt"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v3/jwt"
+	"aidanwoods.dev/go-paseto"
 
-	"github.com/heliannuuthus/helios/pkg/utils"
+	"github.com/heliannuuthus/helios/pkg/aegis/token"
 )
 
 // ServiceAccessToken 服务访问令牌
 // 用于 M2M（机器对机器）通信，不包含用户信息
 type ServiceAccessToken struct {
-	issuer    string        // 签发者
-	clientID  string        // cli - 应用 ID
-	audience  string        // aud - 服务 ID
-	scope     string        // 授权范围
-	ttl       time.Duration // 有效期
-	notBefore time.Time     // 生效时间
+	token.Claims        // 内嵌基础 Claims
+	scope        string // 授权范围
 }
 
-// NewServiceAccessToken 创建 ServiceAccessToken
-func NewServiceAccessToken(issuer, clientID, audience, scope string, ttl time.Duration) *ServiceAccessToken {
+// NewServiceAccessToken 创建 ServiceAccessToken（用于签发）
+func NewServiceAccessToken(issuer, clientID, audience, scope string, expiresIn time.Duration) *ServiceAccessToken {
 	return &ServiceAccessToken{
-		issuer:    issuer,
-		clientID:  clientID,
-		audience:  audience,
-		scope:     scope,
-		ttl:       ttl,
-		notBefore: time.Now(),
+		Claims: token.NewClaims(issuer, clientID, audience, expiresIn),
+		scope:  scope,
 	}
 }
 
-// Build 构建 JWT Token（不包含签名）
-// ServiceAccessToken 没有 sub 字段（无用户信息）
-func (s *ServiceAccessToken) Build() (jwt.Token, error) {
-	now := time.Now()
+// ParseServiceAccessToken 从 PASETO Token 解析 ServiceAccessToken（用于验证后）
+func ParseServiceAccessToken(pasetoToken *paseto.Token) (*ServiceAccessToken, error) {
+	claims, err := token.ParseClaims(pasetoToken)
+	if err != nil {
+		return nil, fmt.Errorf("parse claims: %w", err)
+	}
 
-	return jwt.NewBuilder().
-		Issuer(s.issuer).
-		Audience([]string{s.audience}). // aud = service_id
-		Claim("cli", s.clientID).       // cli = client_id
-		IssuedAt(now).
-		Expiration(now.Add(s.ttl)).
-		NotBefore(s.notBefore).
-		JwtID(utils.GenerateJTI()).
-		Claim("scope", s.scope).
-		Build()
+	var scope string
+	if err := pasetoToken.Get("scope", &scope); err != nil {
+		// scope 是可选字段
+		scope = ""
+	}
+
+	return &ServiceAccessToken{
+		Claims: claims,
+		scope:  scope,
+	}, nil
 }
 
-// GetIssuer 返回签发者
-func (s *ServiceAccessToken) GetIssuer() string {
-	return s.issuer
+// Build 构建 PASETO Token（不包含签名）
+// ServiceAccessToken 没有 footer（无用户信息）
+func (s *ServiceAccessToken) Build() (*paseto.Token, error) {
+	t := paseto.NewToken()
+	if err := s.SetStandardClaims(&t); err != nil {
+		return nil, fmt.Errorf("set standard claims: %w", err)
+	}
+	if err := t.Set("scope", s.scope); err != nil {
+		return nil, fmt.Errorf("set scope: %w", err)
+	}
+	return &t, nil
 }
 
-// GetClientID 返回应用 ID
-func (s *ServiceAccessToken) GetClientID() string {
-	return s.clientID
-}
-
-// GetAudience 返回服务 ID
-func (s *ServiceAccessToken) GetAudience() string {
-	return s.audience
-}
-
-// ExpiresIn 返回有效期
+// ExpiresIn 实现 AccessToken 接口
 func (s *ServiceAccessToken) ExpiresIn() time.Duration {
-	return s.ttl
-}
-
-// GetNotBefore 返回生效时间
-func (s *ServiceAccessToken) GetNotBefore() time.Time {
-	return s.notBefore
+	return s.GetExpiresIn()
 }
 
 // GetScope 返回授权范围

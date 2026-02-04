@@ -7,7 +7,6 @@
 package main
 
 import (
-	"context"
 	"github.com/google/wire"
 	"github.com/heliannuuthus/helios/internal/aegis"
 	"github.com/heliannuuthus/helios/internal/config"
@@ -141,11 +140,20 @@ func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
 // provideGinMiddlewareFactory 创建 Gin 中间件工厂
 func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
 	endpoint := config.GetAegisIssuer()
-	encryptKeyProvider, err := middleware2.NewHermesKeyProvider()
+
+	symmetricKeyProvider, err := middleware2.NewHermesSymmetricKeyProvider()
 	if err != nil {
 		return nil, err
 	}
-	return middleware.NewGinFactory(context.Background(), endpoint, encryptKeyProvider)
+
+	publicKeyProvider := middleware2.NewHermesPublicKeyProvider(endpoint)
+
+	secretKeyProvider, err := middleware2.NewHermesSecretKeyProvider()
+	if err != nil {
+		return nil, err
+	}
+
+	return middleware.NewGinFactory(endpoint, publicKeyProvider, symmetricKeyProvider, secretKeyProvider), nil
 }
 
 // ProviderSet 提供者集合

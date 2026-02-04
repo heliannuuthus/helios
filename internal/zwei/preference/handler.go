@@ -61,12 +61,12 @@ func (h *Handler) GetUserPreferences(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*aegis.Claims)
+	identity, ok := user.(*aegis.VerifiedToken)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的用户信息"})
 		return
 	}
-	prefs, err := h.service.GetUserPreferences(identity.GetOpenID())
+	prefs, err := h.service.GetUserPreferences(identity.User.GetOpenID())
 	if err != nil {
 		logger.Error("获取用户偏好失败", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取用户偏好失败"})
@@ -97,7 +97,7 @@ func (h *Handler) UpdateUserPreferences(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*aegis.Claims)
+	identity, ok := user.(*aegis.VerifiedToken)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的用户信息"})
 		return
@@ -116,7 +116,7 @@ func (h *Handler) UpdateUserPreferences(c *gin.Context) {
 	}
 
 	// 更新偏好
-	if err := h.service.UpdateUserPreferences(identity.GetOpenID(), &req); err != nil {
+	if err := h.service.UpdateUserPreferences(identity.User.GetOpenID(), &req); err != nil {
 		logger.Error("更新用户偏好失败", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新用户偏好失败"})
 		return

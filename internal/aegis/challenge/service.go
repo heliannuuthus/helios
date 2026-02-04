@@ -355,7 +355,7 @@ func (s *Service) createEmailOTPChallenge(ctx context.Context, req *CreateReques
 	}, nil
 }
 
-func (s *Service) verifyCaptcha(ctx context.Context, challenge *types.Challenge, req *VerifyRequest, remoteIP string) (bool, error) {
+func (s *Service) verifyCaptcha(ctx context.Context, _ *types.Challenge, req *VerifyRequest, remoteIP string) (bool, error) {
 	if req.Proof == "" {
 		return false, fmt.Errorf("proof is required")
 	}
@@ -394,8 +394,8 @@ func (s *Service) verifyEmailOTP(ctx context.Context, challenge *types.Challenge
 		return false, fmt.Errorf("invalid code")
 	}
 
-	// 验证成功，删除 OTP
-	_ = s.cache.DeleteOTP(ctx, otpKey)
+	// 验证成功，删除 OTP（忽略删除失败，OTP 会在过期后自动清理）
+	_ = s.cache.DeleteOTP(ctx, otpKey) //nolint:errcheck
 
 	return true, nil
 }
@@ -407,7 +407,12 @@ func generateOTP(length int) string {
 	const digits = "0123456789"
 	result := make([]byte, length)
 	for i := range result {
-		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
+		if err != nil {
+			// 极端情况下使用 0
+			result[i] = digits[0]
+			continue
+		}
 		result[i] = digits[n.Int64()]
 	}
 	return string(result)
@@ -433,4 +438,3 @@ func maskEmail(email string) string {
 	}
 	return email[:1] + "**" + email[at:]
 }
-

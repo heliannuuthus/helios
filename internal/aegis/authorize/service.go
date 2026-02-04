@@ -10,16 +10,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v3/jwk"
-
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/aegis/token"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
+	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/token"
+	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/json"
-	"github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -344,13 +343,13 @@ func (s *Service) generateAccessToken(
 	scope string,
 ) (*TokenResponse, error) {
 	// 计算 TTL
-	accessTTL := time.Duration(svc.AccessTokenExpiresIn) * time.Second
+	accessTTL := time.Duration(svc.AccessTokenExpiresIn) * time.Second //nolint:gosec // AccessTokenExpiresIn 是配置的小整数，不会溢出
 	if accessTTL == 0 {
 		accessTTL = s.defaultAccessTTL
 	}
 
-	// 构建用户 Claims
-	userClaims := s.buildUserClaims(user, scope)
+	// 构建用户信息
+	userInfo := s.buildUserInfo(user, scope)
 
 	// 创建 Access Token
 	uat := token.NewUserAccessToken(
@@ -359,7 +358,7 @@ func (s *Service) generateAccessToken(
 		svc.ServiceID,
 		scope,
 		accessTTL,
-		userClaims,
+		userInfo,
 	)
 
 	accessToken, err := s.tokenSvc.Issue(ctx, uat)
@@ -377,7 +376,7 @@ func (s *Service) generateAccessToken(
 
 func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, scope string) (*cache.RefreshToken, error) {
 	// 计算 TTL
-	refreshTTL := time.Duration(flow.Service.RefreshTokenExpiresIn) * time.Second
+	refreshTTL := time.Duration(flow.Service.RefreshTokenExpiresIn) * time.Second //nolint:gosec // RefreshTokenExpiresIn 是配置的小整数，不会溢出
 	if refreshTTL == 0 {
 		refreshTTL = s.defaultRefreshTTL
 	}
@@ -425,8 +424,8 @@ func (s *Service) cleanupOldRefreshTokens(ctx context.Context, userID, clientID 
 	}
 }
 
-func (s *Service) buildUserClaims(user *models.UserWithDecrypted, scope string) *token.Claims {
-	claims := &token.Claims{
+func (s *Service) buildUserInfo(user *models.UserWithDecrypted, scope string) *pkgtoken.UserInfo {
+	info := &pkgtoken.UserInfo{
 		Subject: user.OpenID,
 	}
 
@@ -434,22 +433,22 @@ func (s *Service) buildUserClaims(user *models.UserWithDecrypted, scope string) 
 
 	if scopes[ScopeProfile] {
 		if user.Nickname != nil {
-			claims.Nickname = *user.Nickname
+			info.Nickname = *user.Nickname
 		}
 		if user.Picture != nil {
-			claims.Picture = *user.Picture
+			info.Picture = *user.Picture
 		}
 	}
 
 	if scopes[ScopeEmail] && user.Email != nil {
-		claims.Email = *user.Email
+		info.Email = *user.Email
 	}
 
 	if scopes[ScopePhone] && user.Phone != "" {
-		claims.Phone = user.Phone
+		info.Phone = user.Phone
 	}
 
-	return claims
+	return info
 }
 
 // ==================== Token 撤销 ====================
@@ -499,10 +498,17 @@ func (s *Service) GetUserInfo(ctx context.Context, openID, scope string) (*UserI
 	return resp, nil
 }
 
-// ==================== JWKS ====================
+// ==================== Public Keys ====================
 
-// GetJWKS 获取 JWKS（根据 client_id 返回其所属域的公钥）
-func (s *Service) GetJWKS(ctx context.Context, clientID string) (map[string]interface{}, error) {
+// PublicKeyResponse PASETO 公钥响应
+type PublicKeyResponse struct {
+	Version   string `json:"version"`    // PASETO 版本（v4）
+	Purpose   string `json:"purpose"`    // 用途（public）
+	PublicKey string `json:"public_key"` // Base64 编码的公钥
+}
+
+// GetPublicKey 获取公钥（根据 client_id 返回其所属域的公钥）
+func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKeyResponse, error) {
 	// 1. 获取 Application
 	app, err := s.cache.GetApplication(ctx, clientID)
 	if err != nil {
@@ -516,33 +522,19 @@ func (s *Service) GetJWKS(ctx context.Context, clientID string) (map[string]inte
 	}
 
 	// 3. 解析签名密钥获取公钥
-	signKey, err := jwk.ParseKey(domain.SignKey)
+	secretKey, err := pkgtoken.ParseSecretKeyFromJWK(domain.SignKey)
 	if err != nil {
 		return nil, fmt.Errorf("parse sign key: %w", err)
 	}
 
-	publicKey, err := signKey.PublicKey()
-	if err != nil {
-		return nil, fmt.Errorf("get public key: %w", err)
-	}
+	publicKey := secretKey.Public()
 
-	// 4. 构建 JWKS 响应
-	set := jwk.NewSet()
-	if err := set.AddKey(publicKey); err != nil {
-		return nil, fmt.Errorf("add public key to jwks: %w", err)
-	}
-
-	jsonBytes, err := json.Marshal(set)
-	if err != nil {
-		return nil, fmt.Errorf("marshal jwks: %w", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(jsonBytes, &result); err != nil {
-		return nil, fmt.Errorf("unmarshal jwks: %w", err)
-	}
-
-	return result, nil
+	// 4. 构建响应
+	return &PublicKeyResponse{
+		Version:   "v4",
+		Purpose:   "public",
+		PublicKey: publicKey.ExportHex(),
+	}, nil
 }
 
 // ==================== 辅助函数 ====================
@@ -648,5 +640,5 @@ func DecryptPhone(cipher, openID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return crypto.Decrypt(key, cipher, openID)
+	return cryptoutil.Decrypt(key, cipher, openID)
 }

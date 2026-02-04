@@ -12,7 +12,7 @@ import (
 
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
-	"github.com/heliannuuthus/helios/pkg/crypto"
+	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -116,7 +116,7 @@ func (s *UserService) GetUserWithDecrypted(ctx context.Context, openID string) (
 		if err != nil {
 			logger.Warnf("[UserService] 获取数据库加密密钥失败: %v", err)
 		} else {
-			phone, err := crypto.Decrypt(key, *user.PhoneCipher, user.OpenID)
+			phone, err := cryptoutil.Decrypt(key, *user.PhoneCipher, user.OpenID)
 			if err != nil {
 				logger.Warnf("[UserService] 解密手机号失败: %v", err)
 			} else {

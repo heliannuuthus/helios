@@ -6,49 +6,47 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lestrrat-go/jwx/v3/jwa"
-	"github.com/lestrrat-go/jwx/v3/jwt"
 )
 
-// issuer CAT 签发器（内部使用）
-type issuer struct {
-	keyProvider KeyProvider
+// Issuer CAT 签发器
+// 用于客户端签发 ClientAccessToken
+type Issuer struct {
+	keyProvider SecretKeyProvider
 }
 
-// newIssuer 创建 CAT 签发器（内部使用）
-func newIssuer(keyProvider KeyProvider) *issuer {
-	return &issuer{
+// NewIssuer 创建 CAT 签发器
+func NewIssuer(keyProvider SecretKeyProvider) *Issuer {
+	return &Issuer{
 		keyProvider: keyProvider,
 	}
 }
 
-// issue 签发 CAT
+// Issue 签发 CAT
 // clientID: 应用/服务 ID（调用时传入）
-func (i *issuer) issue(ctx context.Context, clientID string) (string, error) {
+func (i *Issuer) Issue(ctx context.Context, clientID string) (string, error) {
 	// 获取私钥
-	key, err := i.keyProvider.Get(ctx, clientID)
+	secretKey, err := i.keyProvider.Get(ctx, clientID)
 	if err != nil {
 		return "", fmt.Errorf("get signing key: %w", err)
 	}
 
-	// 构建 JWT
-	now := time.Now()
-	token, err := jwt.NewBuilder().
-		Subject(clientID).
-		Audience([]string{"aegis"}).
-		IssuedAt(now).
-		Expiration(now.Add(5 * time.Minute)).
-		JwtID(uuid.New().String()).
-		Build()
+	// 构建 PASETO Token
+	cat := NewClientAccessToken(
+		clientID, // issuer = clientID
+		clientID, // sub = clientID
+		"aegis",  // aud = aegis
+		5*time.Minute,
+	)
+
+	// 设置 JTI
+	token, err := cat.Build()
 	if err != nil {
 		return "", fmt.Errorf("build token: %w", err)
 	}
+	token.SetJti(uuid.New().String())
 
-	// 签名
-	signed, err := jwt.Sign(token, jwt.WithKey(jwa.HS256(), key))
-	if err != nil {
-		return "", fmt.Errorf("sign token: %w", err)
-	}
+	// 签名（无 footer）
+	signed := token.V4Sign(secretKey, nil)
 
-	return string(signed), nil
+	return signed, nil
 }

@@ -74,7 +74,7 @@ func (v *TurnstileVerifier) Verify(ctx context.Context, token, remoteIP string) 
 	if err != nil {
 		return false, fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("unexpected status: %d", resp.StatusCode)

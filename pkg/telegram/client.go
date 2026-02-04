@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	defaultAPIURL = "https://api.telegram.org"
+	defaultAPIURL  = "https://api.telegram.org"
 	defaultTimeout = 30 * time.Second
 )
 
@@ -100,7 +100,7 @@ func (c *Client) doRequest(ctx context.Context, method, apiMethod string, body i
 	}
 
 	if !result.OK {
-		return &result, fmt.Errorf("Telegram API 错误: %s (code: %d)", result.Description, result.ErrorCode)
+		return &result, fmt.Errorf("telegram API 错误: %s (code: %d)", result.Description, result.ErrorCode)
 	}
 
 	return &result, nil

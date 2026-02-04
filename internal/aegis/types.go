@@ -240,8 +240,14 @@ func NewError(code, description string) *Error {
 
 // ============= Type Aliases =============
 
-// Claims Token 解析后的身份信息（类型别名，实际定义在 token 包）
+// Claims Token 的公共基础结构（类型别名，实际定义在 token 包）
 type Claims = token.Claims
+
+// VerifiedToken Token 验证后的结果（类型别名，实际定义在 token 包）
+type VerifiedToken = token.VerifiedToken
+
+// UserInfo 用户信息（类型别名，实际定义在 token 包）
+type UserInfo = token.UserInfo
 
 // ============= Scope Helpers =============
 

@@ -54,9 +54,9 @@ func credentialsToExclusions(credentials []webauthn.Credential) []protocol.Crede
 	exclusions := make([]protocol.CredentialDescriptor, 0, len(credentials))
 	for _, cred := range credentials {
 		exclusions = append(exclusions, protocol.CredentialDescriptor{
-			Type:            protocol.PublicKeyCredentialType,
-			CredentialID:    cred.ID,
-			Transport:       cred.Transport,
+			Type:         protocol.PublicKeyCredentialType,
+			CredentialID: cred.ID,
+			Transport:    cred.Transport,
 		})
 	}
 	return exclusions
@@ -67,9 +67,9 @@ func credentialsToAllowed(credentials []webauthn.Credential) []protocol.Credenti
 	allowed := make([]protocol.CredentialDescriptor, 0, len(credentials))
 	for _, cred := range credentials {
 		allowed = append(allowed, protocol.CredentialDescriptor{
-			Type:            protocol.PublicKeyCredentialType,
-			CredentialID:    cred.ID,
-			Transport:       cred.Transport,
+			Type:         protocol.PublicKeyCredentialType,
+			CredentialID: cred.ID,
+			Transport:    cred.Transport,
 		})
 	}
 	return allowed
@@ -200,7 +200,9 @@ func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r 
 
 	// 标记 Challenge 为已验证
 	challenge.SetVerified()
-	_ = s.cache.SaveChallenge(ctx, challenge)
+	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
+		logger.Warnf("[WebAuthn] SaveChallenge failed after registration: %v", err)
+	}
 
 	logger.Infof("[WebAuthn] FinishRegistration success - UserID: %s, CredentialID: %s",
 		user.OpenID, base64.RawURLEncoding.EncodeToString(credential.ID))
@@ -388,7 +390,9 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, r *http.R
 
 	// 标记 Challenge 为已验证
 	challenge.SetVerified()
-	_ = s.cache.SaveChallenge(ctx, challenge)
+	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
+		logger.Warnf("[WebAuthn] SaveChallenge failed after login: %v", err)
+	}
 
 	logger.Infof("[WebAuthn] FinishLogin success - UserID: %s", userID)
 

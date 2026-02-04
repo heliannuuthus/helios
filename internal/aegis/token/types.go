@@ -14,8 +14,14 @@ var (
 	ErrMissingClaims       = errors.New("missing required claims")
 )
 
-// Claims 类型别名（使用 pkg/auth/token 中的定义）
+// Claims 类型别名（使用 pkg/aegis/token 中的定义）
 type Claims = pkgtoken.Claims
 
-// AccessToken 类型别名（使用 pkg/auth/token 中的定义）
+// UserInfo 类型别名（使用 pkg/aegis/token 中的定义）
+type UserInfo = pkgtoken.UserInfo
+
+// VerifiedToken 类型别名（使用 pkg/aegis/token 中的定义）
+type VerifiedToken = pkgtoken.VerifiedToken
+
+// AccessToken 类型别名（使用 pkg/aegis/token 中的定义）
 type AccessToken = pkgtoken.AccessToken

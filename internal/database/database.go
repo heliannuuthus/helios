@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
-	"time"
 
 	"gorm.io/gorm"
 
@@ -43,42 +42,6 @@ func parseDSNFromURL(dbURL string) string {
 		dsn += "?" + query
 	}
 	return dsn
-}
-
-// buildDSN 从配置构建 MySQL DSN
-func buildDSN(cfg *config.Cfg, hostKey, portKey, userKey, passwordKey, nameKey, timeoutConnectKey, timeoutReadKey, timeoutWriteKey string) string {
-	host := cfg.GetString(hostKey)
-	if host == "" {
-		host = "localhost"
-	}
-	port := cfg.GetInt(portKey)
-	if port == 0 {
-		port = 3306
-	}
-	user := cfg.GetString(userKey)
-	if user == "" {
-		user = "root"
-	}
-	password := cfg.GetString(passwordKey)
-	database := cfg.GetString(nameKey)
-
-	// 超时配置
-	connectTimeout := cfg.GetDuration(timeoutConnectKey)
-	if connectTimeout == 0 {
-		connectTimeout = 10 * time.Second
-	}
-	readTimeout := cfg.GetDuration(timeoutReadKey)
-	if readTimeout == 0 {
-		readTimeout = 30 * time.Second
-	}
-	writeTimeout := cfg.GetDuration(timeoutWriteKey)
-	if writeTimeout == 0 {
-		writeTimeout = 30 * time.Second
-	}
-
-	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local&timeout=%s&readTimeout=%s&writeTimeout=%s",
-		user, password, host, port, database,
-		connectTimeout.String(), readTimeout.String(), writeTimeout.String())
 }
 
 // buildOptions 从配置构建连接池选项

@@ -115,6 +115,7 @@ func NewClient(host, username, password string, opts ...Option) *Client {
 	if c.tlsConfig == nil {
 		c.tlsConfig = &tls.Config{
 			ServerName: c.host,
+			MinVersion: tls.VersionTLS12,
 		}
 	}
 
@@ -133,7 +134,11 @@ func (c *Client) dial(ctx context.Context) (net.Conn, error) {
 	}
 
 	if c.encryption == EncryptionSSL {
-		return tls.DialWithDialer(dialer, "tcp", c.addr(), c.tlsConfig)
+		tlsDialer := &tls.Dialer{
+			NetDialer: dialer,
+			Config:    c.tlsConfig,
+		}
+		return tlsDialer.DialContext(ctx, "tcp", c.addr())
 	}
 
 	return dialer.DialContext(ctx, "tcp", c.addr())
@@ -145,26 +150,54 @@ func (c *Client) Send(ctx context.Context, msg *Message) error {
 		return fmt.Errorf("validate message failed: %w", err)
 	}
 
-	// 建立连接
+	client, cleanup, err := c.createSMTPClient(ctx)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	if err := c.setupConnection(client); err != nil {
+		return err
+	}
+
+	if err := c.sendEnvelope(client, msg); err != nil {
+		return err
+	}
+
+	if err := c.sendContent(client, msg); err != nil {
+		return err
+	}
+
+	return client.Quit()
+}
+
+// createSMTPClient 创建 SMTP 客户端并返回清理函数
+func (c *Client) createSMTPClient(ctx context.Context) (*smtp.Client, func(), error) {
 	conn, err := c.dial(ctx)
 	if err != nil {
-		return fmt.Errorf("dial failed: %w", err)
+		return nil, nil, fmt.Errorf("dial failed: %w", err)
 	}
-	defer conn.Close()
 
-	// 创建 SMTP 客户端
 	client, err := smtp.NewClient(conn, c.host)
 	if err != nil {
-		return fmt.Errorf("create smtp client failed: %w", err)
+		_ = conn.Close() //nolint:errcheck
+		return nil, nil, fmt.Errorf("create smtp client failed: %w", err)
 	}
-	defer client.Close()
 
-	// 设置本地主机名
+	cleanup := func() {
+		_ = client.Close() //nolint:errcheck
+		_ = conn.Close()   //nolint:errcheck
+	}
+
+	return client, cleanup, nil
+}
+
+// setupConnection 设置连接（HELLO、STARTTLS、AUTH）
+func (c *Client) setupConnection(client *smtp.Client) error {
 	if err := client.Hello(c.localName); err != nil {
 		return fmt.Errorf("hello failed: %w", err)
 	}
 
-	// STARTTLS
 	if c.encryption == EncryptionSTARTTLS {
 		if ok, _ := client.Extension("STARTTLS"); ok {
 			if err := client.StartTLS(c.tlsConfig); err != nil {
@@ -173,7 +206,6 @@ func (c *Client) Send(ctx context.Context, msg *Message) error {
 		}
 	}
 
-	// 认证
 	if c.username != "" && c.password != "" {
 		auth := smtp.PlainAuth("", c.username, c.password, c.host)
 		if err := client.Auth(auth); err != nil {
@@ -181,7 +213,11 @@ func (c *Client) Send(ctx context.Context, msg *Message) error {
 		}
 	}
 
-	// 设置发件人
+	return nil
+}
+
+// sendEnvelope 发送信封（发件人、收件人）
+func (c *Client) sendEnvelope(client *smtp.Client, msg *Message) error {
 	from := msg.From.Address
 	if from == "" {
 		from = c.username
@@ -190,15 +226,17 @@ func (c *Client) Send(ctx context.Context, msg *Message) error {
 		return fmt.Errorf("mail from failed: %w", err)
 	}
 
-	// 设置收件人
-	recipients := c.collectRecipients(msg)
-	for _, rcpt := range recipients {
+	for _, rcpt := range c.collectRecipients(msg) {
 		if err := client.Rcpt(rcpt); err != nil {
 			return fmt.Errorf("rcpt to %s failed: %w", rcpt, err)
 		}
 	}
 
-	// 发送邮件内容
+	return nil
+}
+
+// sendContent 发送邮件内容
+func (c *Client) sendContent(client *smtp.Client, msg *Message) error {
 	w, err := client.Data()
 	if err != nil {
 		return fmt.Errorf("data command failed: %w", err)
@@ -217,7 +255,7 @@ func (c *Client) Send(ctx context.Context, msg *Message) error {
 		return fmt.Errorf("close data writer failed: %w", err)
 	}
 
-	return client.Quit()
+	return nil
 }
 
 // SendSimple 发送简单邮件（便捷方法）
@@ -251,7 +289,7 @@ func (c *Client) validateMessage(msg *Message) error {
 
 // collectRecipients 收集所有收件人
 func (c *Client) collectRecipients(msg *Message) []string {
-	var recipients []string
+	recipients := make([]string, 0, len(msg.To)+len(msg.Cc)+len(msg.Bcc))
 	for _, addr := range msg.To {
 		recipients = append(recipients, addr.Address)
 	}
@@ -290,56 +328,56 @@ func (c *Client) writeHeader(buf *bytes.Buffer, msg *Message) {
 	if from.Address == "" {
 		from.Address = c.username
 	}
-	buf.WriteString(fmt.Sprintf("From: %s\r\n", c.encodeAddress(from)))
+	fmt.Fprintf(buf, "From: %s\r\n", c.encodeAddress(from))
 
 	// To
-	var toAddrs []string
+	toAddrs := make([]string, 0, len(msg.To))
 	for _, addr := range msg.To {
 		toAddrs = append(toAddrs, c.encodeAddress(addr))
 	}
-	buf.WriteString(fmt.Sprintf("To: %s\r\n", strings.Join(toAddrs, ", ")))
+	fmt.Fprintf(buf, "To: %s\r\n", strings.Join(toAddrs, ", "))
 
 	// Cc
 	if len(msg.Cc) > 0 {
-		var ccAddrs []string
+		ccAddrs := make([]string, 0, len(msg.Cc))
 		for _, addr := range msg.Cc {
 			ccAddrs = append(ccAddrs, c.encodeAddress(addr))
 		}
-		buf.WriteString(fmt.Sprintf("Cc: %s\r\n", strings.Join(ccAddrs, ", ")))
+		fmt.Fprintf(buf, "Cc: %s\r\n", strings.Join(ccAddrs, ", "))
 	}
 
 	// Reply-To
 	if msg.ReplyTo != nil {
-		buf.WriteString(fmt.Sprintf("Reply-To: %s\r\n", c.encodeAddress(*msg.ReplyTo)))
+		fmt.Fprintf(buf, "Reply-To: %s\r\n", c.encodeAddress(*msg.ReplyTo))
 	}
 
 	// Subject
-	buf.WriteString(fmt.Sprintf("Subject: %s\r\n", c.encodeSubject(msg.Subject)))
+	fmt.Fprintf(buf, "Subject: %s\r\n", c.encodeSubject(msg.Subject))
 
 	// Date
-	buf.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
+	fmt.Fprintf(buf, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
 
 	// Message-ID
-	buf.WriteString(fmt.Sprintf("Message-ID: <%d.%s@%s>\r\n",
-		time.Now().UnixNano(), c.username, c.host))
+	fmt.Fprintf(buf, "Message-ID: <%d.%s@%s>\r\n",
+		time.Now().UnixNano(), c.username, c.host)
 
 	// MIME-Version
 	buf.WriteString("MIME-Version: 1.0\r\n")
 
 	// Priority
 	if msg.Priority != PriorityNormal {
-		buf.WriteString(fmt.Sprintf("X-Priority: %d\r\n", msg.Priority))
+		fmt.Fprintf(buf, "X-Priority: %d\r\n", msg.Priority)
 	}
 
 	// Custom headers
 	for key, value := range msg.Headers {
-		buf.WriteString(fmt.Sprintf("%s: %s\r\n", key, value))
+		fmt.Fprintf(buf, "%s: %s\r\n", key, value)
 	}
 }
 
 // writeSimpleBody 写入简单邮件正文
 func (c *Client) writeSimpleBody(buf *bytes.Buffer, msg *Message) {
-	buf.WriteString(fmt.Sprintf("Content-Type: %s; charset=UTF-8\r\n", msg.ContentType))
+	fmt.Fprintf(buf, "Content-Type: %s; charset=UTF-8\r\n", msg.ContentType)
 	buf.WriteString("Content-Transfer-Encoding: base64\r\n")
 	buf.WriteString("\r\n")
 
@@ -358,57 +396,75 @@ func (c *Client) writeSimpleBody(buf *bytes.Buffer, msg *Message) {
 
 // writeMultipartBody 写入带附件的邮件正文
 func (c *Client) writeMultipartBody(buf *bytes.Buffer, msg *Message) error {
-	// 检查是否有内嵌附件
-	hasInline := false
-	for _, att := range msg.Attachments {
-		if att.Inline {
-			hasInline = true
-			break
-		}
-	}
-
-	var boundary string
-	if hasInline {
-		boundary = c.generateBoundary("mixed")
-		buf.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=\"%s\"\r\n\r\n", boundary))
-	} else {
-		boundary = c.generateBoundary("mixed")
-		buf.WriteString(fmt.Sprintf("Content-Type: multipart/mixed; boundary=\"%s\"\r\n\r\n", boundary))
-	}
+	hasInline := c.hasInlineAttachments(msg)
+	boundary := c.generateBoundary("mixed")
+	fmt.Fprintf(buf, "Content-Type: multipart/mixed; boundary=\"%s\"\r\n\r\n", boundary)
 
 	// 写入正文部分
-	buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
-	if hasInline && msg.ContentType == ContentTypeHTML {
-		// 使用 related 类型包装 HTML 和内嵌图片
-		relatedBoundary := c.generateBoundary("related")
-		buf.WriteString(fmt.Sprintf("Content-Type: multipart/related; boundary=\"%s\"\r\n\r\n", relatedBoundary))
-
-		// HTML 正文
-		buf.WriteString(fmt.Sprintf("--%s\r\n", relatedBoundary))
-		buf.WriteString(fmt.Sprintf("Content-Type: %s; charset=UTF-8\r\n", msg.ContentType))
-		buf.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
-		c.writeBase64Body(buf, msg.Body)
-		buf.WriteString("\r\n")
-
-		// 内嵌附件
-		for _, att := range msg.Attachments {
-			if !att.Inline {
-				continue
-			}
-			if err := c.writeAttachment(buf, relatedBoundary, att); err != nil {
-				return err
-			}
-		}
-
-		buf.WriteString(fmt.Sprintf("--%s--\r\n", relatedBoundary))
-	} else {
-		buf.WriteString(fmt.Sprintf("Content-Type: %s; charset=UTF-8\r\n", msg.ContentType))
-		buf.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
-		c.writeBase64Body(buf, msg.Body)
-		buf.WriteString("\r\n")
+	fmt.Fprintf(buf, "--%s\r\n", boundary)
+	if err := c.writeBodyPart(buf, msg, hasInline); err != nil {
+		return err
 	}
 
 	// 写入普通附件
+	if err := c.writeNormalAttachments(buf, boundary, msg); err != nil {
+		return err
+	}
+
+	fmt.Fprintf(buf, "--%s--\r\n", boundary)
+	return nil
+}
+
+// hasInlineAttachments 检查是否有内嵌附件
+func (c *Client) hasInlineAttachments(msg *Message) bool {
+	for _, att := range msg.Attachments {
+		if att.Inline {
+			return true
+		}
+	}
+	return false
+}
+
+// writeBodyPart 写入邮件正文部分
+func (c *Client) writeBodyPart(buf *bytes.Buffer, msg *Message, hasInline bool) error {
+	if hasInline && msg.ContentType == ContentTypeHTML {
+		return c.writeRelatedBody(buf, msg)
+	}
+	fmt.Fprintf(buf, "Content-Type: %s; charset=UTF-8\r\n", msg.ContentType)
+	buf.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+	c.writeBase64Body(buf, msg.Body)
+	buf.WriteString("\r\n")
+	return nil
+}
+
+// writeRelatedBody 写入 HTML 正文和内嵌图片（multipart/related）
+func (c *Client) writeRelatedBody(buf *bytes.Buffer, msg *Message) error {
+	relatedBoundary := c.generateBoundary("related")
+	fmt.Fprintf(buf, "Content-Type: multipart/related; boundary=\"%s\"\r\n\r\n", relatedBoundary)
+
+	// HTML 正文
+	fmt.Fprintf(buf, "--%s\r\n", relatedBoundary)
+	fmt.Fprintf(buf, "Content-Type: %s; charset=UTF-8\r\n", msg.ContentType)
+	buf.WriteString("Content-Transfer-Encoding: base64\r\n\r\n")
+	c.writeBase64Body(buf, msg.Body)
+	buf.WriteString("\r\n")
+
+	// 内嵌附件
+	for _, att := range msg.Attachments {
+		if !att.Inline {
+			continue
+		}
+		if err := c.writeAttachment(buf, relatedBoundary, att); err != nil {
+			return err
+		}
+	}
+
+	fmt.Fprintf(buf, "--%s--\r\n", relatedBoundary)
+	return nil
+}
+
+// writeNormalAttachments 写入普通附件
+func (c *Client) writeNormalAttachments(buf *bytes.Buffer, boundary string, msg *Message) error {
 	for _, att := range msg.Attachments {
 		if att.Inline {
 			continue
@@ -417,14 +473,12 @@ func (c *Client) writeMultipartBody(buf *bytes.Buffer, msg *Message) error {
 			return err
 		}
 	}
-
-	buf.WriteString(fmt.Sprintf("--%s--\r\n", boundary))
 	return nil
 }
 
 // writeAttachment 写入附件
 func (c *Client) writeAttachment(buf *bytes.Buffer, boundary string, att Attachment) error {
-	buf.WriteString(fmt.Sprintf("--%s\r\n", boundary))
+	fmt.Fprintf(buf, "--%s\r\n", boundary)
 
 	contentType := att.ContentType
 	if contentType == "" {
@@ -434,16 +488,16 @@ func (c *Client) writeAttachment(buf *bytes.Buffer, boundary string, att Attachm
 	encodedFilename := mime.QEncoding.Encode("UTF-8", att.Filename)
 
 	if att.Inline {
-		buf.WriteString(fmt.Sprintf("Content-Type: %s; name=\"%s\"\r\n", contentType, encodedFilename))
+		fmt.Fprintf(buf, "Content-Type: %s; name=\"%s\"\r\n", contentType, encodedFilename)
 		buf.WriteString("Content-Transfer-Encoding: base64\r\n")
-		buf.WriteString(fmt.Sprintf("Content-Disposition: inline; filename=\"%s\"\r\n", encodedFilename))
+		fmt.Fprintf(buf, "Content-Disposition: inline; filename=\"%s\"\r\n", encodedFilename)
 		if att.ContentID != "" {
-			buf.WriteString(fmt.Sprintf("Content-ID: <%s>\r\n", att.ContentID))
+			fmt.Fprintf(buf, "Content-ID: <%s>\r\n", att.ContentID)
 		}
 	} else {
-		buf.WriteString(fmt.Sprintf("Content-Type: %s; name=\"%s\"\r\n", contentType, encodedFilename))
+		fmt.Fprintf(buf, "Content-Type: %s; name=\"%s\"\r\n", contentType, encodedFilename)
 		buf.WriteString("Content-Transfer-Encoding: base64\r\n")
-		buf.WriteString(fmt.Sprintf("Content-Disposition: attachment; filename=\"%s\"\r\n", encodedFilename))
+		fmt.Fprintf(buf, "Content-Disposition: attachment; filename=\"%s\"\r\n", encodedFilename)
 	}
 	buf.WriteString("\r\n")
 
@@ -506,13 +560,13 @@ func (c *Client) Verify(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("dial failed: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() //nolint:errcheck
 
 	client, err := smtp.NewClient(conn, c.host)
 	if err != nil {
 		return fmt.Errorf("create smtp client failed: %w", err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }() //nolint:errcheck
 
 	if err := client.Hello(c.localName); err != nil {
 		return fmt.Errorf("hello failed: %w", err)

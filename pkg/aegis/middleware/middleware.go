@@ -3,7 +3,7 @@
 // 使用示例：
 //
 //	// 创建全局 Factory
-//	factory, err := middleware.NewFactory(ctx, "http://auth.example.com", secretKeyProvider)
+//	factory, err := middleware.NewFactory(ctx, "http://auth.example.com", publicKeyProvider, symmetricKeyProvider, secretKeyProvider)
 //
 //	// 为特定 audience 创建中间件
 //	mw := factory.WithAudience("my-service-id")
@@ -14,10 +14,9 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
-
-	"github.com/lestrrat-go/jwx/v3/jwa"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
 )
@@ -33,37 +32,30 @@ const (
 // Factory 中间件工厂
 // 用于创建绑定特定 audience 的中间件
 type Factory struct {
-	signKeyProvider    token.KeyProvider // 验证 UAT 签名（公钥，来自 JWKS）
-	encryptKeyProvider token.KeyProvider // 解密 UAT subject（对称密钥，dir 模式）
-	catSignKeyProvider token.KeyProvider // 签发 CAT（对称密钥，HS256）
+	signKeyProvider    token.PublicKeyProvider    // 验证 UAT 签名（公钥）
+	encryptKeyProvider token.SymmetricKeyProvider // 解密 UAT footer（对称密钥）
+	catSignKeyProvider token.SecretKeyProvider    // 签发 CAT（私钥）
 	checker            *token.Checker
 }
 
 // NewFactory 创建中间件工厂
-// ctx: 用于初始化 JWKS 缓存
+// ctx: 用于初始化
 // endpoint: Aegis 服务端点（如 http://auth.example.com）
-// secretKeyProvider: 服务密钥提供者（用于解密 token 和签发 CAT）
-//
-// secretKeyProvider 提供的密钥会被自动转换：
-//   - 解密 UAT: 使用 dir 算法
-//   - 签发 CAT: 使用 HS256 算法
-func NewFactory(ctx context.Context, endpoint string, secretKeyProvider token.KeyProvider) (*Factory, error) {
-	// 自动创建签名公钥提供者（通过 JWKS 接口获取）
-	signKeyProvider, err := token.NewJWKSKeyProvider(ctx, func() string { return endpoint })
-	if err != nil {
-		return nil, err
-	}
-
-	// 包装密钥提供者，设置正确的算法
-	encryptKeyProvider := token.NewEncryptKeyProvider(secretKeyProvider, jwa.DIRECT())
-	catSignKeyProvider := token.NewSignKeyProvider(secretKeyProvider, jwa.HS256())
-
+// publicKeyProvider: 公钥提供者（用于验证 UAT 签名）
+// symmetricKeyProvider: 对称密钥提供者（用于解密 footer）
+// secretKeyProvider: 私钥提供者（用于签发 CAT）
+func NewFactory(
+	endpoint string,
+	publicKeyProvider token.PublicKeyProvider,
+	symmetricKeyProvider token.SymmetricKeyProvider,
+	secretKeyProvider token.SecretKeyProvider,
+) *Factory {
 	return &Factory{
-		signKeyProvider:    signKeyProvider,
-		encryptKeyProvider: encryptKeyProvider,
-		catSignKeyProvider: catSignKeyProvider,
-		checker:            token.NewChecker(endpoint, catSignKeyProvider),
-	}, nil
+		signKeyProvider:    publicKeyProvider,
+		encryptKeyProvider: symmetricKeyProvider,
+		catSignKeyProvider: secretKeyProvider,
+		checker:            token.NewChecker(endpoint, secretKeyProvider),
+	}
 }
 
 // WithAudience 为特定 audience 创建中间件
@@ -120,7 +112,7 @@ func (m *Middleware) RequireRelationOn(relation, objectType, objectID string) Mi
 
 			// 2. 鉴权
 			if err := m.authorize(r.Context(), claims, relation, objectType, objectID); err != nil {
-				if err == errForbidden {
+				if errors.Is(err, errForbidden) {
 					http.Error(w, `{"error":"forbidden","message":"无权限访问"}`, http.StatusForbidden)
 				} else {
 					http.Error(w, `{"error":"internal_error","message":"鉴权失败"}`, http.StatusInternalServerError)
@@ -152,7 +144,7 @@ func (m *Middleware) RequireAnyRelationOn(relations []string, objectType, object
 
 			// 2. 鉴权（任意一个关系即可）
 			if err := m.authorizeAny(r.Context(), claims, relations, objectType, objectID); err != nil {
-				if err == errForbidden {
+				if errors.Is(err, errForbidden) {
 					http.Error(w, `{"error":"forbidden","message":"无权限访问"}`, http.StatusForbidden)
 				} else {
 					http.Error(w, `{"error":"internal_error","message":"鉴权失败"}`, http.StatusInternalServerError)
@@ -173,7 +165,7 @@ type forbiddenError struct{}
 func (e *forbiddenError) Error() string { return "forbidden" }
 
 // authenticate 认证：验证用户 token
-func (m *Middleware) authenticate(r *http.Request) (*token.Claims, error) {
+func (m *Middleware) authenticate(r *http.Request) (*token.VerifiedToken, error) {
 	tokenStr := extractToken(r)
 	if tokenStr == "" {
 		return nil, token.ErrMissingClaims
@@ -183,12 +175,12 @@ func (m *Middleware) authenticate(r *http.Request) (*token.Claims, error) {
 }
 
 // authorize 鉴权：检查单个关系
-func (m *Middleware) authorize(ctx context.Context, claims *token.Claims, relation, objectType, objectID string) error {
+func (m *Middleware) authorize(ctx context.Context, vt *token.VerifiedToken, relation, objectType, objectID string) error {
 	if m.checker == nil {
 		return errForbidden
 	}
 
-	permitted, err := m.checker.Check(ctx, claims, relation, objectType, objectID)
+	permitted, err := m.checker.Check(ctx, vt, relation, objectType, objectID)
 	if err != nil {
 		return err
 	}
@@ -199,13 +191,13 @@ func (m *Middleware) authorize(ctx context.Context, claims *token.Claims, relati
 }
 
 // authorizeAny 鉴权：检查任意一个关系
-func (m *Middleware) authorizeAny(ctx context.Context, claims *token.Claims, relations []string, objectType, objectID string) error {
+func (m *Middleware) authorizeAny(ctx context.Context, vt *token.VerifiedToken, relations []string, objectType, objectID string) error {
 	if m.checker == nil {
 		return errForbidden
 	}
 
 	for _, relation := range relations {
-		permitted, err := m.checker.Check(ctx, claims, relation, objectType, objectID)
+		permitted, err := m.checker.Check(ctx, vt, relation, objectType, objectID)
 		if err != nil {
 			continue
 		}
@@ -229,20 +221,20 @@ func extractToken(r *http.Request) string {
 	return authorization
 }
 
-// GetClaims 从 context 中获取用户身份信息
-func GetClaims(ctx context.Context) *token.Claims {
-	claims, ok := ctx.Value(ClaimsKey).(*token.Claims)
+// GetVerifiedToken 从 context 中获取验证后的 Token
+func GetVerifiedToken(ctx context.Context) *token.VerifiedToken {
+	vt, ok := ctx.Value(ClaimsKey).(*token.VerifiedToken)
 	if !ok {
 		return nil
 	}
-	return claims
+	return vt
 }
 
 // GetOpenID 从 context 中获取用户 OpenID
 func GetOpenID(ctx context.Context) string {
-	claims := GetClaims(ctx)
-	if claims == nil {
+	vt := GetVerifiedToken(ctx)
+	if vt == nil || vt.User == nil {
 		return ""
 	}
-	return claims.Subject
+	return vt.User.Subject
 }

@@ -2,142 +2,94 @@ package token
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
-	"github.com/lestrrat-go/httprc/v3"
-	"github.com/lestrrat-go/jwx/v3/jwa"
-	"github.com/lestrrat-go/jwx/v3/jwk"
+	"aidanwoods.dev/go-paseto"
 )
 
-// KeyProvider 密钥提供者接口
-type KeyProvider interface {
-	Get(ctx context.Context, keyID string) (jwk.Key, error)
+// PublicKeyProvider 公钥提供者接口（用于验证签名）
+type PublicKeyProvider interface {
+	Get(ctx context.Context, keyID string) (paseto.V4AsymmetricPublicKey, error)
 }
 
-// KeyProviderFunc 函数式 KeyProvider
-type KeyProviderFunc func(ctx context.Context, keyID string) (jwk.Key, error)
+// PublicKeyProviderFunc 函数式 PublicKeyProvider
+type PublicKeyProviderFunc func(ctx context.Context, keyID string) (paseto.V4AsymmetricPublicKey, error)
 
-// Get 实现 KeyProvider 接口
-func (f KeyProviderFunc) Get(ctx context.Context, keyID string) (jwk.Key, error) {
+// Get 实现 PublicKeyProvider 接口
+func (f PublicKeyProviderFunc) Get(ctx context.Context, keyID string) (paseto.V4AsymmetricPublicKey, error) {
 	return f(ctx, keyID)
 }
 
-// KeyWithAlg 为密钥设置指定的算法
-// 返回一个新的密钥副本，不修改原始密钥
-func KeyWithAlg(key jwk.Key, alg jwa.KeyAlgorithm) (jwk.Key, error) {
-	// 克隆密钥
-	cloned, err := key.Clone()
-	if err != nil {
-		return nil, err
-	}
-
-	// 设置新的算法
-	if err := cloned.Set(jwk.AlgorithmKey, alg); err != nil {
-		return nil, err
-	}
-
-	return cloned, nil
+// SymmetricKeyProvider 对称密钥提供者接口（用于加解密 footer）
+type SymmetricKeyProvider interface {
+	Get(ctx context.Context, keyID string) (paseto.V4SymmetricKey, error)
 }
 
-// SignKeyProvider 将加密密钥提供者包装为签名密钥提供者
-// 用于将 enc 密钥转换为 HS256 签名密钥
-type SignKeyProvider struct {
-	inner KeyProvider
-	alg   jwa.SignatureAlgorithm
+// SymmetricKeyProviderFunc 函数式 SymmetricKeyProvider
+type SymmetricKeyProviderFunc func(ctx context.Context, keyID string) (paseto.V4SymmetricKey, error)
+
+// Get 实现 SymmetricKeyProvider 接口
+func (f SymmetricKeyProviderFunc) Get(ctx context.Context, keyID string) (paseto.V4SymmetricKey, error) {
+	return f(ctx, keyID)
 }
 
-// NewSignKeyProvider 创建签名密钥提供者
-func NewSignKeyProvider(inner KeyProvider, alg jwa.SignatureAlgorithm) *SignKeyProvider {
-	return &SignKeyProvider{inner: inner, alg: alg}
+// SecretKeyProvider 私钥提供者接口（用于签名）
+type SecretKeyProvider interface {
+	Get(ctx context.Context, keyID string) (paseto.V4AsymmetricSecretKey, error)
 }
 
-// Get 获取签名密钥（转换算法）
-func (p *SignKeyProvider) Get(ctx context.Context, keyID string) (jwk.Key, error) {
-	key, err := p.inner.Get(ctx, keyID)
-	if err != nil {
-		return nil, err
-	}
-	return KeyWithAlg(key, p.alg)
+// SecretKeyProviderFunc 函数式 SecretKeyProvider
+type SecretKeyProviderFunc func(ctx context.Context, keyID string) (paseto.V4AsymmetricSecretKey, error)
+
+// Get 实现 SecretKeyProvider 接口
+func (f SecretKeyProviderFunc) Get(ctx context.Context, keyID string) (paseto.V4AsymmetricSecretKey, error) {
+	return f(ctx, keyID)
 }
 
-// EncryptKeyProvider 将密钥提供者包装为加密密钥提供者
-// 用于确保密钥使用正确的加密算法
-type EncryptKeyProvider struct {
-	inner KeyProvider
-	alg   jwa.KeyEncryptionAlgorithm
-}
-
-// NewEncryptKeyProvider 创建加密密钥提供者
-func NewEncryptKeyProvider(inner KeyProvider, alg jwa.KeyEncryptionAlgorithm) *EncryptKeyProvider {
-	return &EncryptKeyProvider{inner: inner, alg: alg}
-}
-
-// Get 获取加密密钥（转换算法）
-func (p *EncryptKeyProvider) Get(ctx context.Context, keyID string) (jwk.Key, error) {
-	key, err := p.inner.Get(ctx, keyID)
-	if err != nil {
-		return nil, err
-	}
-	return KeyWithAlg(key, p.alg)
-}
-
-// JWKSKeyProvider 基于 JWKS 的公钥提供者
-// 使用 jwk.Cache 自动刷新，遵循 HTTP Cache-Control
-type JWKSKeyProvider struct {
-	cache        *jwk.Cache
+// HTTPPublicKeyProvider 基于 HTTP 接口的公钥提供者
+// 从远程服务获取公钥（用于分布式场景）
+type HTTPPublicKeyProvider struct {
 	endpointFunc func() string // 动态获取 endpoint
 	mu           sync.RWMutex
-	registered   map[string]bool
+	cache        map[string]paseto.V4AsymmetricPublicKey
 }
 
-// NewJWKSKeyProvider 创建 JWKS 公钥提供者
+// NewHTTPPublicKeyProvider 创建 HTTP 公钥提供者
 // endpointFunc: 动态获取 Auth 服务端点的函数（支持热更新）
-func NewJWKSKeyProvider(ctx context.Context, endpointFunc func() string) (*JWKSKeyProvider, error) {
-	cache, err := jwk.NewCache(ctx, httprc.NewClient(httprc.WithWhitelist(httprc.NewInsecureWhitelist())))
-	if err != nil {
-		return nil, err
-	}
-
-	return &JWKSKeyProvider{
-		cache:        cache,
+func NewHTTPPublicKeyProvider(endpointFunc func() string) *HTTPPublicKeyProvider {
+	return &HTTPPublicKeyProvider{
 		endpointFunc: endpointFunc,
-		registered:   make(map[string]bool),
-	}, nil
+		cache:        make(map[string]paseto.V4AsymmetricPublicKey),
+	}
 }
 
 // Get 获取公钥
 // URL 固定为: {endpoint}/pubkeys?client_id={clientID}
-func (p *JWKSKeyProvider) Get(ctx context.Context, clientID string) (jwk.Key, error) {
-	// 1. 构建 JWKS URL（路径固定）
-	url := p.endpointFunc() + "/pubkeys?client_id=" + clientID
-
-	// 2. 动态注册（如未注册）
+func (p *HTTPPublicKeyProvider) Get(ctx context.Context, clientID string) (paseto.V4AsymmetricPublicKey, error) {
+	// 1. 检查缓存
 	p.mu.RLock()
-	registered := p.registered[url]
+	if key, ok := p.cache[clientID]; ok {
+		p.mu.RUnlock()
+		return key, nil
+	}
 	p.mu.RUnlock()
 
-	if !registered {
-		p.mu.Lock()
-		if !p.registered[url] {
-			if err := p.cache.Register(ctx, url); err != nil {
-				p.mu.Unlock()
-				return nil, err
-			}
-			p.registered[url] = true
-		}
-		p.mu.Unlock()
-	}
+	// 2. 从远程获取（需要实现 HTTP 调用）
+	// TODO: 实现 HTTP 调用获取公钥
+	return paseto.V4AsymmetricPublicKey{}, fmt.Errorf("HTTP public key fetch not implemented for client %s", clientID)
+}
 
-	// 3. 从缓存获取
-	set, err := p.cache.Lookup(ctx, url)
-	if err != nil {
-		return nil, err
-	}
+// CachePublicKey 缓存公钥（用于预加载或手动更新）
+func (p *HTTPPublicKeyProvider) CachePublicKey(clientID string, publicKey paseto.V4AsymmetricPublicKey) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.cache[clientID] = publicKey
+}
 
-	key, ok := set.Key(0)
-	if !ok {
-		return nil, ErrNoKeysInJWKS
-	}
-
-	return key, nil
+// InvalidateCache 清除缓存
+func (p *HTTPPublicKeyProvider) InvalidateCache(clientID string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.cache, clientID)
 }

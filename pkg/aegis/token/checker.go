@@ -30,7 +30,7 @@ type checkResponse struct {
 // Checker 关系检查器
 // 负责调用 Aegis /auth/check 接口检查关系
 type Checker struct {
-	issuer     *issuer
+	issuer     *Issuer
 	endpoint   string
 	httpClient *http.Client
 }
@@ -38,9 +38,9 @@ type Checker struct {
 // NewChecker 创建关系检查器
 // endpoint: Aegis 服务端点（如 http://auth.example.com）
 // keyProvider: 提供签名私钥（用于签发 CAT）
-func NewChecker(endpoint string, keyProvider KeyProvider) *Checker {
+func NewChecker(endpoint string, keyProvider SecretKeyProvider) *Checker {
 	return &Checker{
-		issuer:   newIssuer(keyProvider),
+		issuer:   NewIssuer(keyProvider),
 		endpoint: strings.TrimSuffix(endpoint, "/"),
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
@@ -49,26 +49,28 @@ func NewChecker(endpoint string, keyProvider KeyProvider) *Checker {
 }
 
 // Check 检查关系
-// claims: 用户/应用的身份信息
+// vt: 验证后的 Token
 // relation: 关系类型
 // objectType: 资源类型
 // objectID: 资源 ID
 //
-// 内部根据 claims 判断主体类型：
-//   - 如果 Subject 不为空，则为 user，subjectID = Subject
-//   - 如果 Subject 为空，则为 app（M2M），subjectID = ClientID
-func (c *Checker) Check(ctx context.Context, claims *Claims, relation, objectType, objectID string) (bool, error) {
+// 内部根据 Token 判断主体类型：
+//   - 如果 User 不为空，则为 user，subjectID = User.Subject
+//   - 如果 User 为空，则为 app（M2M），subjectID = ClientID
+func (c *Checker) Check(ctx context.Context, vt *VerifiedToken, relation, objectType, objectID string) (bool, error) {
 	// 判断主体类型
 	subjectType := "user"
-	subjectID := claims.Subject
-	if subjectID == "" {
+	var subjectID string
+	if vt.User != nil && vt.User.Subject != "" {
+		subjectID = vt.User.Subject
+	} else {
 		// M2M 场景：没有用户，使用应用身份
 		subjectType = "app"
-		subjectID = claims.ClientID
+		subjectID = vt.ClientID
 	}
 
 	// 签发 CAT（使用 Audience）
-	cat, err := c.issuer.issue(ctx, claims.Audience)
+	cat, err := c.issuer.Issue(ctx, vt.Audience)
 	if err != nil {
 		return false, fmt.Errorf("issue CAT: %w", err)
 	}
@@ -102,7 +104,7 @@ func (c *Checker) Check(ctx context.Context, claims *Claims, relation, objectTyp
 	if err != nil {
 		return false, fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
 
 	// 读取响应
 	body, err := io.ReadAll(resp.Body)

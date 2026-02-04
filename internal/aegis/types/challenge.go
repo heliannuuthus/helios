@@ -27,8 +27,8 @@ const (
 // Challenge 额外的身份验证步骤
 type Challenge struct {
 	ID        string         `json:"id"`
-	FlowID    string         `json:"flow_id,omitempty"`    // 关联的 AuthFlow ID（可选）
-	UserID    string         `json:"user_id,omitempty"`    // 关联的用户 ID（可选）
+	FlowID    string         `json:"flow_id,omitempty"` // 关联的 AuthFlow ID（可选）
+	UserID    string         `json:"user_id,omitempty"` // 关联的用户 ID（可选）
 	Type      ChallengeType  `json:"type"`
 	CreatedAt time.Time      `json:"created_at"`
 	ExpiresAt time.Time      `json:"expires_at"`

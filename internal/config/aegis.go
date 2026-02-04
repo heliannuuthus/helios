@@ -295,6 +295,30 @@ func IsMailEnabled() bool {
 	return Aegis().GetBool("mail.enabled")
 }
 
+// mailProviderDefaults 邮件服务商默认配置
+type mailProviderDefaults struct {
+	host   string
+	port   int
+	useSSL bool
+}
+
+// getMailProviderDefaults 根据服务商获取默认配置
+func getMailProviderDefaults(provider string) mailProviderDefaults {
+	defaults := map[string]mailProviderDefaults{
+		"qq-exmail": {host: "smtp.exmail.qq.com", port: 465, useSSL: true},
+		"qq":        {host: "smtp.qq.com", port: 465, useSSL: true},
+		"163":       {host: "smtp.163.com", port: 465, useSSL: true},
+		"gmail":     {host: "smtp.gmail.com", port: 587, useSSL: false},
+		"outlook":   {host: "smtp.office365.com", port: 587, useSSL: false},
+		"aliyun":    {host: "smtp.mxhichina.com", port: 465, useSSL: true},
+	}
+
+	if d, ok := defaults[provider]; ok {
+		return d
+	}
+	return mailProviderDefaults{port: 587}
+}
+
 // GetMailConfig 获取邮件配置
 func GetMailConfig() *MailConfig {
 	cfg := Aegis()
@@ -304,50 +328,19 @@ func GetMailConfig() *MailConfig {
 		provider = "qq-exmail"
 	}
 
-	// 根据 provider 设置默认的 host 和 port
+	// 获取配置或使用默认值
 	host := cfg.GetString("mail.host")
 	port := cfg.GetInt("mail.port")
 	useSSL := cfg.GetBool("mail.use-ssl")
 
+	// 如果未配置 host，使用服务商默认值
 	if host == "" {
-		switch provider {
-		case "qq-exmail":
-			host = "smtp.exmail.qq.com"
-			if port == 0 {
-				port = 465
-			}
-			useSSL = true
-		case "qq":
-			host = "smtp.qq.com"
-			if port == 0 {
-				port = 465
-			}
-			useSSL = true
-		case "163":
-			host = "smtp.163.com"
-			if port == 0 {
-				port = 465
-			}
-			useSSL = true
-		case "gmail":
-			host = "smtp.gmail.com"
-			if port == 0 {
-				port = 587
-			}
-			useSSL = false
-		case "outlook":
-			host = "smtp.office365.com"
-			if port == 0 {
-				port = 587
-			}
-			useSSL = false
-		case "aliyun":
-			host = "smtp.mxhichina.com"
-			if port == 0 {
-				port = 465
-			}
-			useSSL = true
+		defaults := getMailProviderDefaults(provider)
+		host = defaults.host
+		if port == 0 {
+			port = defaults.port
 		}
+		useSSL = defaults.useSSL
 	}
 
 	if port == 0 {

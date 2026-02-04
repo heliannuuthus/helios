@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"context"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -15,17 +15,20 @@ type GinFactory struct {
 }
 
 // NewGinFactory 创建 Gin 中间件工厂
-// ctx: 用于初始化 JWKS 缓存
 // endpoint: Aegis 服务端点（如 http://auth.example.com）
-// secretKeyProvider: 服务密钥提供者（用于解密 token 和签发 CAT）
-func NewGinFactory(ctx context.Context, endpoint string, secretKeyProvider token.KeyProvider) (*GinFactory, error) {
-	factory, err := NewFactory(ctx, endpoint, secretKeyProvider)
-	if err != nil {
-		return nil, err
-	}
+// publicKeyProvider: 公钥提供者（用于验证 UAT 签名）
+// symmetricKeyProvider: 对称密钥提供者（用于解密 footer）
+// secretKeyProvider: 私钥提供者（用于签发 CAT）
+func NewGinFactory(
+	endpoint string,
+	publicKeyProvider token.PublicKeyProvider,
+	symmetricKeyProvider token.SymmetricKeyProvider,
+	secretKeyProvider token.SecretKeyProvider,
+) *GinFactory {
+	factory := NewFactory(endpoint, publicKeyProvider, symmetricKeyProvider, secretKeyProvider)
 	return &GinFactory{
 		Factory: factory,
-	}, nil
+	}
 }
 
 // WithAudience 为特定 audience 创建 Gin 中间件
@@ -77,7 +80,7 @@ func (m *GinMiddleware) RequireRelationOn(relation, objectType, objectID string)
 
 		// 2. 鉴权
 		if err := m.authorize(c.Request.Context(), claims, relation, objectType, objectID); err != nil {
-			if err == errForbidden {
+			if errors.Is(err, errForbidden) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error":   "forbidden",
 					"message": "无权限访问",
@@ -116,7 +119,7 @@ func (m *GinMiddleware) RequireAnyRelationOn(relations []string, objectType, obj
 
 		// 2. 鉴权
 		if err := m.authorizeAny(c.Request.Context(), claims, relations, objectType, objectID); err != nil {
-			if err == errForbidden {
+			if errors.Is(err, errForbidden) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error":   "forbidden",
 					"message": "无权限访问",
@@ -135,20 +138,24 @@ func (m *GinMiddleware) RequireAnyRelationOn(relations []string, objectType, obj
 	}
 }
 
-// GetClaimsFromGin 从 Gin context 中获取用户身份信息
-func GetClaimsFromGin(c *gin.Context) *token.Claims {
-	claims, exists := c.Get(string(ClaimsKey))
+// GetVerifiedTokenFromGin 从 Gin context 中获取验证后的 Token
+func GetVerifiedTokenFromGin(c *gin.Context) *token.VerifiedToken {
+	vt, exists := c.Get(string(ClaimsKey))
 	if !exists {
 		return nil
 	}
-	return claims.(*token.Claims)
+	result, ok := vt.(*token.VerifiedToken)
+	if !ok {
+		return nil
+	}
+	return result
 }
 
 // GetOpenIDFromGin 从 Gin context 中获取用户 OpenID
 func GetOpenIDFromGin(c *gin.Context) string {
-	claims := GetClaimsFromGin(c)
-	if claims == nil {
+	vt := GetVerifiedTokenFromGin(c)
+	if vt == nil || vt.User == nil {
 		return ""
 	}
-	return claims.Subject
+	return vt.User.Subject
 }

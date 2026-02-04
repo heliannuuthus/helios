@@ -4,8 +4,6 @@
 package main
 
 import (
-	"context"
-
 	"github.com/google/wire"
 
 	"github.com/heliannuuthus/helios/internal/aegis"
@@ -95,11 +93,23 @@ func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
 // provideGinMiddlewareFactory 创建 Gin 中间件工厂
 func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
 	endpoint := config.GetAegisIssuer()
-	encryptKeyProvider, err := intMw.NewHermesKeyProvider()
+
+	// 对称密钥提供者（用于解密 footer）
+	symmetricKeyProvider, err := intMw.NewHermesSymmetricKeyProvider()
 	if err != nil {
 		return nil, err
 	}
-	return middleware.NewGinFactory(context.Background(), endpoint, encryptKeyProvider)
+
+	// 公钥提供者（用于验证签名）- 使用 HTTP 端点
+	publicKeyProvider := intMw.NewHermesPublicKeyProvider(endpoint)
+
+	// 私钥提供者（用于签发 CAT）- 使用本地密钥
+	secretKeyProvider, err := intMw.NewHermesSecretKeyProvider()
+	if err != nil {
+		return nil, err
+	}
+
+	return middleware.NewGinFactory(endpoint, publicKeyProvider, symmetricKeyProvider, secretKeyProvider), nil
 }
 
 // ProviderSet 提供者集合

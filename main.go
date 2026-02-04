@@ -100,6 +100,7 @@ func main() {
 		authGroup.POST("/revoke", app.AegisHandler.Revoke) // 撤销 Token
 		authGroup.POST("/check", app.AegisHandler.Check)   // 关系检查（使用 CAT 认证）
 		authGroup.POST("/logout", middleware.RequireAuth(), app.AegisHandler.Logout)
+		authGroup.GET("/pubkeys", app.AegisHandler.PublicKeys) // 获取 PASETO 公钥
 	}
 
 	// Iris 用户信息路由（需要 Iris 服务认证）

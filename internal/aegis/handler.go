@@ -398,7 +398,7 @@ func (h *Handler) Check(c *gin.Context) {
 	}
 
 	// 3. 获取 serviceID（使用 CAT 签发者的 clientID 查询其所属服务）
-	serviceID := catClaims.ClientID
+	serviceID := catClaims.GetClientID()
 
 	// 4. 设置默认值
 	objectType := req.ObjectType
@@ -461,13 +461,13 @@ func (h *Handler) checkRelation(ctx context.Context, serviceID, subjectID, relat
 // Logout POST /auth/logout
 // 登出
 func (h *Handler) Logout(c *gin.Context) {
-	claims := GetClaims(c)
+	claims := GetVerifiedToken(c)
 	if claims == nil {
 		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
 
-	if err := h.authorizeSvc.RevokeAllTokens(c.Request.Context(), claims.Subject); err != nil {
+	if err := h.authorizeSvc.RevokeAllTokens(c.Request.Context(), getOpenID(claims)); err != nil {
 		h.errorResponse(c, autherrors.NewServerError("failed to revoke tokens"))
 		return
 	}
@@ -478,13 +478,13 @@ func (h *Handler) Logout(c *gin.Context) {
 // UserInfo GET /auth/userinfo
 // 获取用户信息
 func (h *Handler) UserInfo(c *gin.Context) {
-	claims := GetClaims(c)
+	claims := GetVerifiedToken(c)
 	if claims == nil {
 		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
 
-	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), claims.Subject, claims.Scope)
+	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), getOpenID(claims), claims.Scope)
 	if err != nil {
 		h.errorResponse(c, autherrors.NewUserNotFound("user not found"))
 		return
@@ -496,7 +496,7 @@ func (h *Handler) UserInfo(c *gin.Context) {
 // UpdateUserInfo PUT /auth/userinfo
 // 更新用户信息
 func (h *Handler) UpdateUserInfo(c *gin.Context) {
-	claims := GetClaims(c)
+	claims := GetVerifiedToken(c)
 	if claims == nil {
 		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -511,7 +511,7 @@ func (h *Handler) UpdateUserInfo(c *gin.Context) {
 	// TODO: 实现用户信息更新（通过 CacheManager 调用 UserService）
 
 	// 返回更新后的用户信息
-	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), claims.Subject, claims.Scope)
+	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), getOpenID(claims), claims.Scope)
 	if err != nil {
 		h.errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
@@ -520,22 +520,22 @@ func (h *Handler) UpdateUserInfo(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// JWKS GET /.well-known/jwks.json
-// 获取 JWKS
-func (h *Handler) JWKS(c *gin.Context) {
+// PublicKeys GET /pubkeys
+// 获取 PASETO 公钥
+func (h *Handler) PublicKeys(c *gin.Context) {
 	clientID := c.Query("client_id")
 	if clientID == "" {
 		h.errorResponse(c, autherrors.NewInvalidRequest("client_id is required"))
 		return
 	}
 
-	jwks, err := h.authorizeSvc.GetJWKS(c.Request.Context(), clientID)
+	publicKey, err := h.authorizeSvc.GetPublicKey(c.Request.Context(), clientID)
 	if err != nil {
 		h.errorResponse(c, autherrors.NewClientNotFound(err.Error()))
 		return
 	}
 
-	c.JSON(http.StatusOK, jwks)
+	c.JSON(http.StatusOK, publicKey)
 }
 
 // SendEmailCode POST /auth/email/code
@@ -916,14 +916,22 @@ func ForwardError(c *gin.Context, errorCode, errorDesc string) {
 	redirect(c, targetURL)
 }
 
-// GetClaims 从上下文获取用户 Claims
-func GetClaims(c *gin.Context) *token.Claims {
-	if claims, exists := c.Get("user"); exists {
-		if cl, ok := claims.(*token.Claims); ok {
-			return cl
+// GetVerifiedToken 从上下文获取验证后的 Token
+func GetVerifiedToken(c *gin.Context) *token.VerifiedToken {
+	if vt, exists := c.Get("user"); exists {
+		if t, ok := vt.(*token.VerifiedToken); ok {
+			return t
 		}
 	}
 	return nil
+}
+
+// getOpenID 从 VerifiedToken 中获取 OpenID
+func getOpenID(vt *token.VerifiedToken) string {
+	if vt != nil && vt.User != nil {
+		return vt.User.Subject
+	}
+	return ""
 }
 
 // MarshalAuthFlow 序列化 AuthFlow

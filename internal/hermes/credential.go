@@ -15,7 +15,7 @@ import (
 
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
-	"github.com/heliannuuthus/helios/pkg/crypto"
+	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -92,7 +92,7 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *TOTPSetupRequest
 		return nil, fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	encryptedSecret, err := crypto.Encrypt(encKey, string(secretJSON), req.OpenID)
+	encryptedSecret, err := cryptoutil.Encrypt(encKey, string(secretJSON), req.OpenID)
 	if err != nil {
 		return nil, fmt.Errorf("加密密钥失败: %w", err)
 	}
@@ -143,7 +143,7 @@ func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *ConfirmTOTPReq
 		return fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	secretJSON, err := crypto.Decrypt(encKey, credential.Secret, req.OpenID)
+	secretJSON, err := cryptoutil.Decrypt(encKey, credential.Secret, req.OpenID)
 	if err != nil {
 		return fmt.Errorf("解密密钥失败: %w", err)
 	}
@@ -197,7 +197,7 @@ func (s *CredentialService) VerifyTOTP(ctx context.Context, req *VerifyTOTPReque
 		return fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	secretJSON, err := crypto.Decrypt(encKey, credential.Secret, req.OpenID)
+	secretJSON, err := cryptoutil.Decrypt(encKey, credential.Secret, req.OpenID)
 	if err != nil {
 		return fmt.Errorf("解密密钥失败: %w", err)
 	}
@@ -306,7 +306,7 @@ func (s *CredentialService) RegisterWebAuthn(ctx context.Context, req *RegisterW
 		return nil, fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	encryptedSecret, err := crypto.Encrypt(encKey, string(secretJSON), req.OpenID)
+	encryptedSecret, err := cryptoutil.Encrypt(encKey, string(secretJSON), req.OpenID)
 	if err != nil {
 		return nil, fmt.Errorf("加密密钥失败: %w", err)
 	}
@@ -347,7 +347,7 @@ func (s *CredentialService) GetWebAuthnByCredentialID(ctx context.Context, crede
 		return nil, nil, fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	secretJSON, err := crypto.Decrypt(encKey, credential.Secret, credential.OpenID)
+	secretJSON, err := cryptoutil.Decrypt(encKey, credential.Secret, credential.OpenID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("解密密钥失败: %w", err)
 	}
@@ -384,7 +384,7 @@ func (s *CredentialService) UpdateWebAuthnSignCount(ctx context.Context, credent
 		return fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	encryptedSecret, err := crypto.Encrypt(encKey, string(secretJSON), credential.OpenID)
+	encryptedSecret, err := cryptoutil.Encrypt(encKey, string(secretJSON), credential.OpenID)
 	if err != nil {
 		return fmt.Errorf("加密密钥失败: %w", err)
 	}

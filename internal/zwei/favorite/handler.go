@@ -71,12 +71,12 @@ func (h *Handler) AddFavorite(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*aegis.Claims)
+	identity, ok := user.(*aegis.VerifiedToken)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := identity.User.GetOpenID()
 
 	var req FavoriteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -110,12 +110,12 @@ func (h *Handler) RemoveFavorite(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*aegis.Claims)
+	identity, ok := user.(*aegis.VerifiedToken)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := identity.User.GetOpenID()
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveFavorite(openID, recipeID); err != nil {
@@ -141,12 +141,12 @@ func (h *Handler) CheckFavorite(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*aegis.Claims)
+	identity, ok := user.(*aegis.VerifiedToken)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := identity.User.GetOpenID()
 	recipeID := c.Param("recipe_id")
 
 	isFavorite, err := h.service.IsFavorite(openID, recipeID)
@@ -178,12 +178,12 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*aegis.Claims)
+	identity, ok := user.(*aegis.VerifiedToken)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := identity.User.GetOpenID()
 
 	category := c.Query("category")
 	search := c.Query("search")
@@ -251,12 +251,12 @@ func (h *Handler) BatchCheckFavorites(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*aegis.Claims)
+	identity, ok := user.(*aegis.VerifiedToken)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := identity.User.GetOpenID()
 
 	var req BatchCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

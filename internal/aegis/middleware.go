@@ -7,9 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/heliannuuthus/helios/internal/aegis/token"
+	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/token"
 )
 
-// Middleware 认证中间件（用于验证 CAT/ServiceJWT）
+// Middleware 认证中间件（用于验证 CAT）
 type Middleware struct {
 	tokenSvc *token.Service
 }
@@ -60,10 +61,10 @@ func (*Middleware) extractToken(c *gin.Context) string {
 }
 
 // GetClientClaims 从上下文获取客户端信息
-func GetClientClaims(c *gin.Context) *token.CATClaims {
+func GetClientClaims(c *gin.Context) *pkgtoken.ClientAccessToken {
 	if claims, exists := c.Get("client_claims"); exists {
-		if catClaims, ok := claims.(*token.CATClaims); ok {
-			return catClaims
+		if cat, ok := claims.(*pkgtoken.ClientAccessToken); ok {
+			return cat
 		}
 	}
 	return nil

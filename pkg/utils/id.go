@@ -50,7 +50,7 @@ func GenerateRecipeID() string {
 	return GenerateID(22)
 }
 
-// GenerateJTI 生成 JWT ID（16位 Base62）
+// GenerateJTI 生成 Token ID（16位 Base62）
 func GenerateJTI() string {
 	return GenerateID(16)
 }

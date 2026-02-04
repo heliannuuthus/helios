@@ -12,7 +12,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/database"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
-	"github.com/heliannuuthus/helios/pkg/crypto"
+	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -108,7 +108,7 @@ func (*Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 // ==================== Service 相关 ====================
 
 // generateServiceKey 生成服务密钥并加密
-func (*Service) generateServiceKey(domainID, serviceID string) (string, error) {
+func (*Service) generateServiceKey(_, serviceID string) (string, error) {
 	// 生成 AES-256 密钥
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -122,7 +122,7 @@ func (*Service) generateServiceKey(domainID, serviceID string) (string, error) {
 	}
 
 	// 用域密钥加密服务密钥（AES-GCM，AAD=serviceID）
-	encryptedKey, err := crypto.EncryptAESGCM(key, domainEncryptKey, serviceID)
+	encryptedKey, err := cryptoutil.EncryptAESGCM(key, domainEncryptKey, serviceID)
 	if err != nil {
 		return "", fmt.Errorf("加密服务密钥失败: %w", err)
 	}
@@ -200,7 +200,7 @@ func (s *Service) decryptServiceKey(svc *models.Service) ([]byte, error) {
 		return nil, fmt.Errorf("解码服务密钥失败: %w", err)
 	}
 
-	key, err := crypto.DecryptAESGCM(domainKey, encrypted, svc.ServiceID)
+	key, err := cryptoutil.DecryptAESGCM(domainKey, encrypted, svc.ServiceID)
 	if err != nil {
 		return nil, fmt.Errorf("解密服务密钥失败: %w", err)
 	}
@@ -252,7 +252,7 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, req *Serv
 // ==================== Application 相关 ====================
 
 // generateApplicationKey 生成应用密钥并加密
-func (s *Service) generateApplicationKey(domainID, appID string) (string, error) {
+func (*Service) generateApplicationKey(_, appID string) (string, error) {
 	// 生成 AES-256 密钥
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -266,7 +266,7 @@ func (s *Service) generateApplicationKey(domainID, appID string) (string, error)
 	}
 
 	// 用域密钥加密应用密钥（AES-GCM，AAD=appID）
-	encryptedKey, err := crypto.EncryptAESGCM(key, domainEncryptKey, appID)
+	encryptedKey, err := cryptoutil.EncryptAESGCM(key, domainEncryptKey, appID)
 	if err != nil {
 		return "", fmt.Errorf("加密应用密钥失败: %w", err)
 	}
@@ -355,7 +355,7 @@ func (s *Service) decryptApplicationKey(app *models.Application) ([]byte, error)
 		return nil, fmt.Errorf("解码应用密钥失败: %w", err)
 	}
 
-	key, err := crypto.DecryptAESGCM(domainKey, encrypted, app.AppID)
+	key, err := cryptoutil.DecryptAESGCM(domainKey, encrypted, app.AppID)
 	if err != nil {
 		return nil, fmt.Errorf("解密应用密钥失败: %w", err)
 	}
