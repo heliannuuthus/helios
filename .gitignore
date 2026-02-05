@@ -56,3 +56,4 @@ environments/certs/*.pem
 environments/certs/*.key
 environments/certs/*.crt
 !environments/certs/.gitkeep
+config.toml

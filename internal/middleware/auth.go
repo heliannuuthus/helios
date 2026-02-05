@@ -66,10 +66,7 @@ func RequireToken(v *token.Interpreter) gin.HandlerFunc {
 			return
 		}
 
-		openID := ""
-		if identity.User != nil {
-			openID = identity.User.Subject
-		}
+		openID := getOpenIDFromToken(identity)
 		logger.Infof("[Auth] 认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, openID)
 		c.Set("user", identity)
 		c.Next()
@@ -92,10 +89,7 @@ func OptionalToken(v *token.Interpreter) gin.HandlerFunc {
 
 		identity, err := v.Interpret(c.Request.Context(), tokenStr)
 		if err == nil && identity != nil {
-			openID := ""
-			if identity.User != nil {
-				openID = identity.User.Subject
-			}
+			openID := getOpenIDFromToken(identity)
 			logger.Infof("[Auth] 可选认证成功 - Path: %s, OpenID: %s", c.Request.URL.Path, openID)
 			c.Set("user", identity)
 		}
@@ -105,6 +99,14 @@ func OptionalToken(v *token.Interpreter) gin.HandlerFunc {
 }
 
 // HermesSymmetricKeyProvider 基于 Hermes 配置的对称密钥提供者
+
+// getOpenIDFromToken 从 Token 中提取 OpenID
+func getOpenIDFromToken(t token.Token) string {
+	if uat, ok := token.AsUAT(t); ok && uat.GetUser() != nil {
+		return uat.GetUser().Subject
+	}
+	return ""
+}
 // 从 hermes 配置的 aegis.secret-key 读取密钥
 type HermesSymmetricKeyProvider struct {
 	key paseto.V4SymmetricKey // 缓存解析后的 key

@@ -1,27 +1,38 @@
 package token
 
 import (
-	"errors"
-
 	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/token"
 )
 
-// Token 验证错误
-var (
-	ErrUnsupportedAudience = errors.New("unsupported audience")
-	ErrTokenExpired        = errors.New("token expired")
-	ErrInvalidSignature    = errors.New("invalid signature")
-	ErrMissingClaims       = errors.New("missing required claims")
+// 类型别名（便于 internal 包使用）
+type (
+	UserInfo           = pkgtoken.UserInfo
+	Token              = pkgtoken.Token
+	TokenType          = pkgtoken.TokenType
+	ChallengeType      = pkgtoken.ChallengeType
+	UserAccessToken    = pkgtoken.UserAccessToken
+	ServiceAccessToken = pkgtoken.ServiceAccessToken
+	ChallengeToken     = pkgtoken.ChallengeToken
+	ClientAccessToken  = pkgtoken.ClientAccessToken
 )
 
-// Claims 类型别名（使用 pkg/aegis/token 中的定义）
-type Claims = pkgtoken.Claims
+// 常量别名
+const (
+	TokenTypeCAT       = pkgtoken.TokenTypeCAT
+	TokenTypeUAT       = pkgtoken.TokenTypeUAT
+	TokenTypeSAT       = pkgtoken.TokenTypeSAT
+	TokenTypeChallenge = pkgtoken.TokenTypeChallenge
+)
 
-// UserInfo 类型别名（使用 pkg/aegis/token 中的定义）
-type UserInfo = pkgtoken.UserInfo
-
-// VerifiedToken 类型别名（使用 pkg/aegis/token 中的定义）
-type VerifiedToken = pkgtoken.VerifiedToken
-
-// AccessToken 类型别名（使用 pkg/aegis/token 中的定义）
-type AccessToken = pkgtoken.AccessToken
+// 构造函数别名
+var (
+	NewUserAccessToken    = pkgtoken.NewUserAccessToken
+	NewServiceAccessToken = pkgtoken.NewServiceAccessToken
+	NewChallengeToken     = pkgtoken.NewChallengeToken
+	UserInfoFromScope     = pkgtoken.UserInfoFromScope
+	Build                 = pkgtoken.Build
+	AsUAT                 = pkgtoken.AsUAT
+	AsCAT                 = pkgtoken.AsCAT
+	AsSAT                 = pkgtoken.AsSAT
+	AsChallenge           = pkgtoken.AsChallenge
+)

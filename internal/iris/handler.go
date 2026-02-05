@@ -33,20 +33,20 @@ func (h *Handler) SetWebAuthnService(svc *webauthn.Service) {
 	h.webauthnSvc = svc
 }
 
-// getVerifiedToken 从上下文获取验证后的 Token
-func getVerifiedToken(c *gin.Context) *token.VerifiedToken {
+// getToken 从上下文获取验证后的 Token
+func getToken(c *gin.Context) token.Token {
 	if vt, exists := c.Get("user"); exists {
-		if t, ok := vt.(*token.VerifiedToken); ok {
+		if t, ok := vt.(token.Token); ok {
 			return t
 		}
 	}
 	return nil
 }
 
-// getOpenID 从 VerifiedToken 中获取 OpenID
-func getOpenID(vt *token.VerifiedToken) string {
-	if vt != nil && vt.User != nil {
-		return vt.User.Subject
+// getOpenID 从 Token 中获取 OpenID
+func getOpenID(t token.Token) string {
+	if uat, ok := token.AsUAT(t); ok && uat.GetUser() != nil {
+		return uat.GetUser().Subject
 	}
 	return ""
 }
@@ -72,7 +72,7 @@ type ProfileResponse struct {
 // GetProfile GET /user/profile
 // 获取当前用户信息
 func (h *Handler) GetProfile(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -103,7 +103,7 @@ type UpdateProfileRequest struct {
 // UpdateProfile PUT /user/profile
 // 更新用户信息
 func (h *Handler) UpdateProfile(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -140,7 +140,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 // UploadAvatar POST /user/profile/avatar
 // 上传头像
 func (h *Handler) UploadAvatar(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -159,7 +159,7 @@ type UpdateEmailRequest struct {
 // UpdateEmail PUT /user/profile/email
 // 绑定/更新邮箱
 func (h *Handler) UpdateEmail(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -187,7 +187,7 @@ type UpdatePhoneRequest struct {
 // UpdatePhone PUT /user/profile/phone
 // 绑定/更新手机号
 func (h *Handler) UpdatePhone(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -214,7 +214,7 @@ type IdentityResponse struct {
 // ListIdentities GET /user/identities
 // 获取绑定的第三方身份列表
 func (h *Handler) ListIdentities(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -240,7 +240,7 @@ func (h *Handler) ListIdentities(c *gin.Context) {
 // BindIdentity POST /user/identities/:idp
 // 绑定第三方身份
 func (h *Handler) BindIdentity(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -261,7 +261,7 @@ func (h *Handler) BindIdentity(c *gin.Context) {
 // UnbindIdentity DELETE /user/identities/:idp
 // 解绑第三方身份
 func (h *Handler) UnbindIdentity(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -282,7 +282,7 @@ func (h *Handler) UnbindIdentity(c *gin.Context) {
 // GetMFAStatus GET /user/mfa
 // 获取 MFA 状态
 func (h *Handler) GetMFAStatus(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -325,7 +325,7 @@ type SetupMFARequest struct {
 // - TOTP: 直接返回 secret 和 otpauth_uri
 // - WebAuthn: action=begin 返回 options，action=finish 完成注册
 func (h *Handler) SetupMFA(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -448,7 +448,7 @@ type VerifyMFARequest struct {
 // - TOTP: 直接验证 code
 // - WebAuthn: action=begin 返回 options，action=finish 完成验证
 func (h *Handler) VerifyMFA(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -579,7 +579,7 @@ type UpdateMFARequest struct {
 // UpdateMFA PATCH /user/mfa
 // 启用/禁用 MFA
 func (h *Handler) UpdateMFA(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -634,7 +634,7 @@ type DeleteMFARequest struct {
 // DeleteMFA DELETE /user/mfa
 // 删除 MFA
 func (h *Handler) DeleteMFA(c *gin.Context) {
-	claims := getVerifiedToken(c)
+	claims := getToken(c)
 	if claims == nil {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return

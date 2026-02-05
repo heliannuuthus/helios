@@ -240,14 +240,22 @@ func NewError(code, description string) *Error {
 
 // ============= Type Aliases =============
 
-// Claims Token 的公共基础结构（类型别名，实际定义在 token 包）
-type Claims = token.Claims
-
-// VerifiedToken Token 验证后的结果（类型别名，实际定义在 token 包）
-type VerifiedToken = token.VerifiedToken
+// Token Token 接口（类型别名，实际定义在 token 包）
+type Token = token.Token
 
 // UserInfo 用户信息（类型别名，实际定义在 token 包）
 type UserInfo = token.UserInfo
+
+// AsUAT 类型断言助手函数（类型别名）
+var AsUAT = token.AsUAT
+
+// GetOpenIDFromToken 从 Token 获取 OpenID
+func GetOpenIDFromToken(t Token) string {
+	if uat, ok := AsUAT(t); ok && uat.GetUser() != nil {
+		return uat.GetUser().Subject
+	}
+	return ""
+}
 
 // ============= Scope Helpers =============
 

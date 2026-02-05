@@ -165,7 +165,7 @@ type forbiddenError struct{}
 func (e *forbiddenError) Error() string { return "forbidden" }
 
 // authenticate 认证：验证用户 token
-func (m *Middleware) authenticate(r *http.Request) (*token.VerifiedToken, error) {
+func (m *Middleware) authenticate(r *http.Request) (token.Token, error) {
 	tokenStr := extractToken(r)
 	if tokenStr == "" {
 		return nil, token.ErrMissingClaims
@@ -175,12 +175,12 @@ func (m *Middleware) authenticate(r *http.Request) (*token.VerifiedToken, error)
 }
 
 // authorize 鉴权：检查单个关系
-func (m *Middleware) authorize(ctx context.Context, vt *token.VerifiedToken, relation, objectType, objectID string) error {
+func (m *Middleware) authorize(ctx context.Context, t token.Token, relation, objectType, objectID string) error {
 	if m.checker == nil {
 		return errForbidden
 	}
 
-	permitted, err := m.checker.Check(ctx, vt, relation, objectType, objectID)
+	permitted, err := m.checker.Check(ctx, t, relation, objectType, objectID)
 	if err != nil {
 		return err
 	}
@@ -191,13 +191,13 @@ func (m *Middleware) authorize(ctx context.Context, vt *token.VerifiedToken, rel
 }
 
 // authorizeAny 鉴权：检查任意一个关系
-func (m *Middleware) authorizeAny(ctx context.Context, vt *token.VerifiedToken, relations []string, objectType, objectID string) error {
+func (m *Middleware) authorizeAny(ctx context.Context, t token.Token, relations []string, objectType, objectID string) error {
 	if m.checker == nil {
 		return errForbidden
 	}
 
 	for _, relation := range relations {
-		permitted, err := m.checker.Check(ctx, vt, relation, objectType, objectID)
+		permitted, err := m.checker.Check(ctx, t, relation, objectType, objectID)
 		if err != nil {
 			continue
 		}
@@ -221,20 +221,23 @@ func extractToken(r *http.Request) string {
 	return authorization
 }
 
-// GetVerifiedToken 从 context 中获取验证后的 Token
-func GetVerifiedToken(ctx context.Context) *token.VerifiedToken {
-	vt, ok := ctx.Value(ClaimsKey).(*token.VerifiedToken)
+// GetToken 从 context 中获取验证后的 Token
+func GetToken(ctx context.Context) token.Token {
+	t, ok := ctx.Value(ClaimsKey).(token.Token)
 	if !ok {
 		return nil
 	}
-	return vt
+	return t
 }
 
 // GetOpenID 从 context 中获取用户 OpenID
 func GetOpenID(ctx context.Context) string {
-	vt := GetVerifiedToken(ctx)
-	if vt == nil || vt.User == nil {
+	t := GetToken(ctx)
+	if t == nil {
 		return ""
 	}
-	return vt.User.Subject
+	if uat, ok := token.AsUAT(t); ok && uat.GetUser() != nil {
+		return uat.GetUser().Subject
+	}
+	return ""
 }

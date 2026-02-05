@@ -84,8 +84,8 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 
 	// 获取用户身份（如果已登录）
 	if user, exists := c.Get("user"); exists {
-		if identity, ok := user.(*aegis.VerifiedToken); ok {
-			ctx.UserID = identity.User.GetOpenID()
+		if identity, ok := user.(aegis.Token); ok {
+			ctx.UserID = aegis.GetOpenIDFromToken(identity)
 		}
 	}
 

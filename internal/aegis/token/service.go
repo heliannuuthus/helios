@@ -37,100 +37,92 @@ func (s *Service) GetIssuerName() string {
 
 // ============= 签发 =============
 
-// Issue 签发 token
-func (s *Service) Issue(ctx context.Context, accessToken token.AccessToken) (string, error) {
-	switch t := accessToken.(type) {
-	case *UserAccessToken:
-		return s.issueUserToken(ctx, t)
-	case *ServiceAccessToken:
-		return s.issueServiceToken(ctx, t)
-	case *ChallengeToken:
-		return s.issueChallengeToken(ctx, t)
+// Issue 签发 token（统一入口）
+// 根据 Token.Type() 自动路由到对应的签发逻辑
+func (s *Service) Issue(ctx context.Context, t token.Token) (string, error) {
+	switch t.Type() {
+	case token.TokenTypeUAT:
+		uat, ok := t.(*token.UserAccessToken)
+		if !ok {
+			return "", fmt.Errorf("%w: expected UserAccessToken", token.ErrUnsupportedToken)
+		}
+		return s.issueUserToken(ctx, uat)
+
+	case token.TokenTypeSAT:
+		sat, ok := t.(*token.ServiceAccessToken)
+		if !ok {
+			return "", fmt.Errorf("%w: expected ServiceAccessToken", token.ErrUnsupportedToken)
+		}
+		return s.issueServiceToken(ctx, sat)
+
+	case token.TokenTypeChallenge:
+		ct, ok := t.(*token.ChallengeToken)
+		if !ok {
+			return "", fmt.Errorf("%w: expected ChallengeToken", token.ErrUnsupportedToken)
+		}
+		return s.issueChallengeToken(ctx, ct)
+
+	case token.TokenTypeCAT:
+		return "", fmt.Errorf("%w: CAT should be issued by client using pkg/aegis/token.Issuer", token.ErrUnsupportedToken)
+
 	default:
-		return "", errors.New("unsupported token type")
+		return "", fmt.Errorf("%w: %s", token.ErrUnsupportedToken, t.Type())
 	}
 }
 
 // issueUserToken 签发用户访问令牌
-func (s *Service) issueUserToken(ctx context.Context, uat *UserAccessToken) (string, error) {
-	// 1. 验证用户信息
+func (s *Service) issueUserToken(ctx context.Context, uat *token.UserAccessToken) (string, error) {
 	if uat.GetUser() == nil {
 		return "", errors.New("user claims required for UserAccessToken")
 	}
 
-	// 2. 加密用户信息到 footer
 	footer, err := s.encryptFooter(ctx, uat)
 	if err != nil {
 		return "", fmt.Errorf("encrypt footer: %w", err)
 	}
 
-	// 3. 构建 PASETO Token
-	pasetoToken, err := uat.Build()
+	pasetoToken, err := token.Build(uat)
 	if err != nil {
 		return "", fmt.Errorf("build token: %w", err)
 	}
 
-	// 4. 签名（带 footer）
-	signed, err := s.sign(ctx, pasetoToken, uat.GetClientID(), footer)
-	if err != nil {
-		return "", fmt.Errorf("sign token: %w", err)
-	}
-
-	return signed, nil
+	return s.sign(ctx, pasetoToken, uat.GetClientID(), footer)
 }
 
 // issueServiceToken 签发服务访问令牌
-func (s *Service) issueServiceToken(ctx context.Context, sat *ServiceAccessToken) (string, error) {
-	// 1. 构建 PASETO Token
-	pasetoToken, err := sat.Build()
+func (s *Service) issueServiceToken(ctx context.Context, sat *token.ServiceAccessToken) (string, error) {
+	pasetoToken, err := token.Build(sat)
 	if err != nil {
 		return "", fmt.Errorf("build token: %w", err)
 	}
 
-	// 2. 签名（无 footer）
-	signed, err := s.sign(ctx, pasetoToken, sat.GetClientID(), nil)
-	if err != nil {
-		return "", fmt.Errorf("sign token: %w", err)
-	}
-
-	return signed, nil
+	return s.sign(ctx, pasetoToken, sat.GetClientID(), nil)
 }
 
 // issueChallengeToken 签发 Challenge 验证令牌
-func (s *Service) issueChallengeToken(ctx context.Context, ct *ChallengeToken) (string, error) {
-	// 1. 构建 PASETO Token
-	pasetoToken, err := ct.Build()
+func (s *Service) issueChallengeToken(ctx context.Context, ct *token.ChallengeToken) (string, error) {
+	pasetoToken, err := token.Build(ct)
 	if err != nil {
 		return "", fmt.Errorf("build token: %w", err)
 	}
 
-	// 2. 签名（无 footer，ChallengeToken 不需要加密用户信息）
-	signed, err := s.sign(ctx, pasetoToken, ct.GetClientID(), nil)
-	if err != nil {
-		return "", fmt.Errorf("sign token: %w", err)
-	}
-
-	return signed, nil
+	return s.sign(ctx, pasetoToken, ct.GetClientID(), nil)
 }
 
 // ============= 验证 =============
 
 // VerifyUAT 验证 UserAccessToken（只验签不解密）
-// 返回 token 中的基本信息，不包含解密后的用户信息
-func (s *Service) VerifyUAT(ctx context.Context, tokenString string) (*UserAccessToken, error) {
-	// 1. 提取 clientID（先不验证签名解析）
+func (s *Service) VerifyUAT(ctx context.Context, tokenString string) (*token.UserAccessToken, error) {
 	clientID, err := extractClientID(tokenString)
 	if err != nil {
 		return nil, fmt.Errorf("extract client_id: %w", err)
 	}
 
-	// 2. 获取公钥
 	publicKey, err := s.getPublicKey(ctx, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("get public key: %w", err)
 	}
 
-	// 3. 验证签名
 	parser := paseto.NewParser()
 	parser.AddRule(paseto.NotExpired())
 	parser.AddRule(paseto.ValidAt(time.Now()))
@@ -140,46 +132,16 @@ func (s *Service) VerifyUAT(ctx context.Context, tokenString string) (*UserAcces
 		return nil, fmt.Errorf("verify token: %w", err)
 	}
 
-	// 4. 解析为 UserAccessToken
-	uat, err := parseUserAccessToken(pasetoToken)
-	if err != nil {
-		return nil, fmt.Errorf("parse user access token: %w", err)
-	}
-	return uat, nil
+	return token.ParseUserAccessToken(pasetoToken)
 }
 
 // InterpretUAT 验证并解密 UserAccessToken
-// 返回完整的用户信息（包含解密后的用户 Claims）
-func (s *Service) InterpretUAT(ctx context.Context, tokenString string) (*UserAccessToken, error) {
-	// 1. 提取 clientID
-	clientID, err := extractClientID(tokenString)
+func (s *Service) InterpretUAT(ctx context.Context, tokenString string) (*token.UserAccessToken, error) {
+	uat, err := s.VerifyUAT(ctx, tokenString)
 	if err != nil {
-		return nil, fmt.Errorf("extract client_id: %w", err)
+		return nil, err
 	}
 
-	// 2. 获取公钥
-	publicKey, err := s.getPublicKey(ctx, clientID)
-	if err != nil {
-		return nil, fmt.Errorf("get public key: %w", err)
-	}
-
-	// 3. 验证签名
-	parser := paseto.NewParser()
-	parser.AddRule(paseto.NotExpired())
-	parser.AddRule(paseto.ValidAt(time.Now()))
-
-	pasetoToken, err := parser.ParseV4Public(publicKey, tokenString, nil)
-	if err != nil {
-		return nil, fmt.Errorf("verify token: %w", err)
-	}
-
-	// 4. 解析为 UserAccessToken
-	uat, err := parseUserAccessToken(pasetoToken)
-	if err != nil {
-		return nil, fmt.Errorf("parse user access token: %w", err)
-	}
-
-	// 5. 提取并解密 footer
 	footer := extractFooter(tokenString)
 	if footer == "" {
 		return uat, nil
@@ -200,7 +162,6 @@ func (s *Service) InterpretUAT(ctx context.Context, tokenString string) (*UserAc
 		return nil, fmt.Errorf("decrypt footer: %w", err)
 	}
 
-	// 6. 解析用户信息并设置到 UAT
 	var userInfo token.UserInfo
 	if err := json.Unmarshal(decrypted, &userInfo); err != nil {
 		return nil, fmt.Errorf("unmarshal user info: %w", err)
@@ -211,21 +172,17 @@ func (s *Service) InterpretUAT(ctx context.Context, tokenString string) (*UserAc
 }
 
 // VerifyChallengeToken 验证 ChallengeToken
-// ChallengeToken 由 Auth Service 签发，用于证明某个 principal 已完成挑战
-func (s *Service) VerifyChallengeToken(ctx context.Context, tokenString string) (*ChallengeToken, error) {
-	// 1. 提取 clientID
+func (s *Service) VerifyChallengeToken(ctx context.Context, tokenString string) (*token.ChallengeToken, error) {
 	clientID, err := extractClientID(tokenString)
 	if err != nil {
 		return nil, fmt.Errorf("extract client_id: %w", err)
 	}
 
-	// 2. 获取公钥
 	publicKey, err := s.getPublicKey(ctx, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("get public key: %w", err)
 	}
 
-	// 3. 验证签名
 	parser := paseto.NewParser()
 	parser.AddRule(paseto.NotExpired())
 	parser.AddRule(paseto.ValidAt(time.Now()))
@@ -235,12 +192,7 @@ func (s *Service) VerifyChallengeToken(ctx context.Context, tokenString string) 
 		return nil, fmt.Errorf("verify token: %w", err)
 	}
 
-	// 4. 解析为 ChallengeToken
-	ct, err := parseChallengeToken(pasetoToken)
-	if err != nil {
-		return nil, fmt.Errorf("parse challenge token: %w", err)
-	}
-	return ct, nil
+	return token.ParseChallengeToken(pasetoToken)
 }
 
 // VerifyCAT 验证 ClientAccessToken
@@ -312,28 +264,23 @@ func (s *Service) sign(ctx context.Context, pasetoToken *paseto.Token, clientID 
 }
 
 // encryptFooter 加密用户信息到 footer
-func (s *Service) encryptFooter(ctx context.Context, uat *UserAccessToken) ([]byte, error) {
-	// 1. 获取服务加密密钥
+func (s *Service) encryptFooter(ctx context.Context, uat *token.UserAccessToken) ([]byte, error) {
 	svc, err := s.cache.GetService(ctx, uat.GetAudience())
 	if err != nil {
 		return nil, fmt.Errorf("get service key: %w", err)
 	}
 
-	// 2. 序列化 claims
 	data, err := json.Marshal(uat.GetUser())
 	if err != nil {
 		return nil, fmt.Errorf("marshal claims: %w", err)
 	}
 
-	// 3. 解析对称密钥
 	symmetricKey, err := token.ParseSymmetricKeyFromBytes(svc.Key)
 	if err != nil {
 		return nil, fmt.Errorf("parse symmetric key: %w", err)
 	}
 
-	// 4. 加密
-	encrypted := token.EncryptFooter(symmetricKey, data)
-	return []byte(encrypted), nil
+	return []byte(token.EncryptFooter(symmetricKey, data)), nil
 }
 
 // getPublicKey 获取域的公钥

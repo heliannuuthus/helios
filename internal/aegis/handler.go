@@ -461,7 +461,7 @@ func (h *Handler) checkRelation(ctx context.Context, serviceID, subjectID, relat
 // Logout POST /auth/logout
 // 登出
 func (h *Handler) Logout(c *gin.Context) {
-	claims := GetVerifiedToken(c)
+	claims := GetToken(c)
 	if claims == nil {
 		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
@@ -478,13 +478,14 @@ func (h *Handler) Logout(c *gin.Context) {
 // UserInfo GET /auth/userinfo
 // 获取用户信息
 func (h *Handler) UserInfo(c *gin.Context) {
-	claims := GetVerifiedToken(c)
-	if claims == nil {
+	t := GetToken(c)
+	if t == nil {
 		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
 
-	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), getOpenID(claims), claims.Scope)
+	scope := getScope(t)
+	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), getOpenID(t), scope)
 	if err != nil {
 		h.errorResponse(c, autherrors.NewUserNotFound("user not found"))
 		return
@@ -496,8 +497,8 @@ func (h *Handler) UserInfo(c *gin.Context) {
 // UpdateUserInfo PUT /auth/userinfo
 // 更新用户信息
 func (h *Handler) UpdateUserInfo(c *gin.Context) {
-	claims := GetVerifiedToken(c)
-	if claims == nil {
+	t := GetToken(c)
+	if t == nil {
 		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
@@ -511,7 +512,8 @@ func (h *Handler) UpdateUserInfo(c *gin.Context) {
 	// TODO: 实现用户信息更新（通过 CacheManager 调用 UserService）
 
 	// 返回更新后的用户信息
-	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), getOpenID(claims), claims.Scope)
+	scope := getScope(t)
+	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), getOpenID(t), scope)
 	if err != nil {
 		h.errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
@@ -916,20 +918,31 @@ func ForwardError(c *gin.Context, errorCode, errorDesc string) {
 	redirect(c, targetURL)
 }
 
-// GetVerifiedToken 从上下文获取验证后的 Token
-func GetVerifiedToken(c *gin.Context) *token.VerifiedToken {
-	if vt, exists := c.Get("user"); exists {
-		if t, ok := vt.(*token.VerifiedToken); ok {
-			return t
+// GetToken 从上下文获取验证后的 Token
+func GetToken(c *gin.Context) token.Token {
+	if t, exists := c.Get("user"); exists {
+		if tk, ok := t.(token.Token); ok {
+			return tk
 		}
 	}
 	return nil
 }
 
-// getOpenID 从 VerifiedToken 中获取 OpenID
-func getOpenID(vt *token.VerifiedToken) string {
-	if vt != nil && vt.User != nil {
-		return vt.User.Subject
+// getOpenID 从 Token 中获取 OpenID
+func getOpenID(t token.Token) string {
+	if uat, ok := token.AsUAT(t); ok && uat.GetUser() != nil {
+		return uat.GetUser().Subject
+	}
+	return ""
+}
+
+// getScope 从 Token 中获取 scope
+func getScope(t token.Token) string {
+	if uat, ok := token.AsUAT(t); ok {
+		return uat.GetScope()
+	}
+	if sat, ok := token.AsSAT(t); ok {
+		return sat.GetScope()
 	}
 	return ""
 }

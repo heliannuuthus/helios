@@ -58,7 +58,7 @@ func (h *Handler) UploadImage(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*aegis.VerifiedToken)
+	identity, ok := user.(aegis.Token)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
 		return
@@ -102,7 +102,7 @@ func (h *Handler) UploadImage(c *gin.Context) {
 		// 如果是头像上传（prefix 为 "avatars"），强制使用认证用户的 openid 生成固定路径
 		// 这样可以防止前端传入错误的 openid 导致安全风险
 		if prefix == "avatars" {
-			objectKey = fmt.Sprintf("avatars/%s.jpg", identity.User.GetOpenID())
+			objectKey = fmt.Sprintf("avatars/%s.jpg", aegis.GetOpenIDFromToken(identity))
 		} else {
 			// 其他类型使用 prefix + filename（按日期组织）
 			now := time.Now()
@@ -113,8 +113,8 @@ func (h *Handler) UploadImage(c *gin.Context) {
 		// 如果是头像路径，强制使用认证用户的 openid（防止路径篡改）
 		if strings.HasPrefix(objectKey, "avatars/") && strings.HasSuffix(objectKey, ".jpg") {
 			// 忽略前端传入的 openid，使用认证 token 中的 openid
-			objectKey = fmt.Sprintf("avatars/%s.jpg", identity.User.GetOpenID())
-			logger.Infof("[Upload] 检测到头像上传，强制使用认证 OpenID 生成路径 - OpenID: %s", identity.User.GetOpenID())
+			objectKey = fmt.Sprintf("avatars/%s.jpg", aegis.GetOpenIDFromToken(identity))
+			logger.Infof("[Upload] 检测到头像上传，强制使用认证 OpenID 生成路径 - OpenID: %s", aegis.GetOpenIDFromToken(identity))
 		}
 	}
 
@@ -124,7 +124,7 @@ func (h *Handler) UploadImage(c *gin.Context) {
 	// 读取文件内容到内存（用于异步上传）
 	fileSrc, err := file.Open()
 	if err != nil {
-		logger.Errorf("[Upload] 打开文件失败 - OpenID: %s, Error: %v", identity.User.GetOpenID(), err)
+		logger.Errorf("[Upload] 打开文件失败 - OpenID: %s, Error: %v", aegis.GetOpenIDFromToken(identity), err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "读取文件失败"})
 		return
 	}
@@ -136,7 +136,7 @@ func (h *Handler) UploadImage(c *gin.Context) {
 
 	fileData, err := io.ReadAll(fileSrc)
 	if err != nil {
-		logger.Errorf("[Upload] 读取文件失败 - OpenID: %s, Error: %v", identity.User.GetOpenID(), err)
+		logger.Errorf("[Upload] 读取文件失败 - OpenID: %s, Error: %v", aegis.GetOpenIDFromToken(identity), err)
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": "读取文件失败"})
 		return
 	}
@@ -145,7 +145,7 @@ func (h *Handler) UploadImage(c *gin.Context) {
 	c.JSON(http.StatusOK, UploadImageResponse{URL: expectedURL})
 
 	// 异步上传到 OSS（使用 STS 凭证）
-	go h.uploadToOSSAsync(identity.User.GetOpenID(), objectKey, bytes.NewReader(fileData))
+	go h.uploadToOSSAsync(aegis.GetOpenIDFromToken(identity), objectKey, bytes.NewReader(fileData))
 }
 
 // uploadToOSSAsync 异步上传文件到 OSS（优先使用 STS 凭证，失败则回退到主账号凭证）

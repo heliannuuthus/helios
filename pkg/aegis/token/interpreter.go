@@ -47,16 +47,14 @@ func (i *Interpreter) Verifier(audience string) *Verifier {
 	})
 }
 
-// VerifiedToken 验证后的 Token 结果
-// 包含 Claims 字段和可选的用户信息
-type VerifiedToken struct {
-	Claims           // 内嵌基础 Claims
-	Scope  string    // 授权范围
-	User   *UserInfo // 用户信息（解密后填充，可为 nil）
-}
-
-// Interpret 验证并解释 token，返回完整身份信息（含用户信息）
-func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (*VerifiedToken, error) {
+// Interpret 验证并解释 token，返回 Token 接口
+// 这是最完整的验证方法，会解密 footer 中的用户信息（仅 UAT）
+// 返回的具体类型可通过类型断言获取：
+//   - *ClientAccessToken (CAT)
+//   - *UserAccessToken (UAT)
+//   - *ServiceAccessToken (SAT)
+//   - *ChallengeToken
+func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (Token, error) {
 	// 1. 提取 audience
 	audience, err := extractAudience(tokenString)
 	if err != nil {
@@ -67,28 +65,30 @@ func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (*Verif
 		return nil, fmt.Errorf("%w: missing audience", ErrMissingClaims)
 	}
 
-	// 2. 验证签名
-	vt, err := i.Verifier(audience).Verify(ctx, tokenString)
+	// 2. 验证签名并解析
+	token, err := i.Verifier(audience).Verify(ctx, tokenString)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. 解密 footer 中的用户信息
-	footer := extractFooter(tokenString)
-	if footer != "" {
-		userInfo, err := i.getDecryptor(vt.Audience).decrypt(ctx, footer)
-		if err != nil {
-			return nil, err
+	// 3. 解密 footer 中的用户信息（仅 UAT）
+	if uat, ok := token.(*UserAccessToken); ok {
+		footer := extractFooter(tokenString)
+		if footer != "" {
+			userInfo, err := i.getDecryptor(audience).decrypt(ctx, footer)
+			if err != nil {
+				return nil, err
+			}
+			uat.SetUser(userInfo)
 		}
-		vt.User = userInfo
 	}
 
-	return vt, nil
+	return token, nil
 }
 
-// Verify 只验证签名，不解密 footer（便捷方法）
-// 返回的 VerifiedToken 中 User 字段为 nil
-func (i *Interpreter) Verify(ctx context.Context, tokenString string) (*VerifiedToken, error) {
+// Verify 只验证签名，不解密 footer
+// 返回的 Token 接口可通过类型断言获取具体类型
+func (i *Interpreter) Verify(ctx context.Context, tokenString string) (Token, error) {
 	audience, err := extractAudience(tokenString)
 	if err != nil {
 		return nil, err
@@ -120,10 +120,10 @@ type Verifier struct {
 	audience    string
 }
 
-// Verify 验证 token 签名，返回 VerifiedToken（User 字段为 nil）
-func (v *Verifier) Verify(ctx context.Context, tokenString string) (*VerifiedToken, error) {
-	// 1. 提取 clientID
-	clientID, err := extractClientID(tokenString)
+// Verify 验证 token 签名，返回具体的 Token 类型
+func (v *Verifier) Verify(ctx context.Context, tokenString string) (Token, error) {
+	// 1. 提取 clientID（先尝试 cli 字段，失败则尝试 sub）
+	clientID, tokenType, err := extractClientIDAndType(tokenString)
 	if err != nil {
 		return nil, err
 	}
@@ -154,24 +154,24 @@ func (v *Verifier) Verify(ctx context.Context, tokenString string) (*VerifiedTok
 			ErrInvalidSignature, v.audience, audience)
 	}
 
-	// 5. 提取并返回 VerifiedToken
-	claims, err := ParseClaims(pasetoToken)
-	if err != nil {
-		return nil, fmt.Errorf("parse claims: %w", err)
-	}
-	// 修正 clientID（ParseClaims 从 cli 字段获取，这里确保一致）
-	claims.ClientID = clientID
+	// 5. 根据类型解析为具体 Token
+	return parseToken(pasetoToken, tokenType)
+}
 
-	var scope string
-	if err := pasetoToken.Get("scope", &scope); err != nil {
-		// scope 是可选字段，忽略错误
-		scope = ""
+// parseToken 根据类型解析 PASETO Token 为具体的 Token 类型
+func parseToken(pasetoToken *paseto.Token, tokenType TokenType) (Token, error) {
+	switch tokenType {
+	case TokenTypeCAT:
+		return ParseClientAccessToken(pasetoToken)
+	case TokenTypeUAT:
+		return ParseUserAccessToken(pasetoToken)
+	case TokenTypeSAT:
+		return ParseServiceAccessToken(pasetoToken)
+	case TokenTypeChallenge:
+		return ParseChallengeToken(pasetoToken)
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedToken, tokenType)
 	}
-
-	return &VerifiedToken{
-		Claims: claims,
-		Scope:  scope,
-	}, nil
 }
 
 // ============= 内部实现 =============
@@ -207,6 +207,42 @@ func (d *decryptor) decrypt(ctx context.Context, footer string) (*UserInfo, erro
 
 // ============= 辅助函数 =============
 
+// extractClientIDAndType 从 token 中提取 clientID 并识别类型
+// CAT: 使用 sub 作为 clientID
+// 其他: 使用 cli 作为 clientID
+func extractClientIDAndType(tokenString string) (clientID string, tokenType TokenType, err error) {
+	token, err := unsafeParseToken(tokenString)
+	if err != nil {
+		return "", "", err
+	}
+
+	// 检查是否有 typ 字段（ChallengeToken）
+	var typ string
+	if token.Get("typ", &typ) == nil && typ != "" {
+		var cli string
+		if token.Get("cli", &cli) != nil || cli == "" {
+			return "", "", errors.New("missing cli (client_id)")
+		}
+		return cli, TokenTypeChallenge, nil
+	}
+
+	// 检查是否有 cli 字段
+	var cli string
+	if token.Get("cli", &cli) == nil && cli != "" {
+		// 有 cli 字段 -> UAT 或 SAT
+		// 通过 footer 区分（有 footer 是 UAT，无 footer 是 SAT）
+		// 但这里只能返回默认类型，具体由 Interpret 补充
+		return cli, TokenTypeUAT, nil
+	}
+
+	// 无 cli 字段 -> CAT，使用 sub 作为 clientID
+	sub, err := token.GetSubject()
+	if err != nil || sub == "" {
+		return "", "", errors.New("missing cli and sub (client_id)")
+	}
+	return sub, TokenTypeCAT, nil
+}
+
 func extractAudience(tokenString string) (string, error) {
 	token, err := unsafeParseToken(tokenString)
 	if err != nil {
@@ -218,20 +254,6 @@ func extractAudience(tokenString string) (string, error) {
 		return "", fmt.Errorf("get audience: %w", err)
 	}
 	return audience, nil
-}
-
-func extractClientID(tokenString string) (string, error) {
-	token, err := unsafeParseToken(tokenString)
-	if err != nil {
-		return "", err
-	}
-
-	var clientID string
-	if err := token.Get("cli", &clientID); err != nil || clientID == "" {
-		return "", errors.New("missing cli (client_id)")
-	}
-
-	return clientID, nil
 }
 
 // unsafeParseToken 不验证签名解析 token（仅用于提取 claims）

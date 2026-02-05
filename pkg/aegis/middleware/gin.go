@@ -138,13 +138,13 @@ func (m *GinMiddleware) RequireAnyRelationOn(relations []string, objectType, obj
 	}
 }
 
-// GetVerifiedTokenFromGin 从 Gin context 中获取验证后的 Token
-func GetVerifiedTokenFromGin(c *gin.Context) *token.VerifiedToken {
-	vt, exists := c.Get(string(ClaimsKey))
+// GetTokenFromGin 从 Gin context 中获取验证后的 Token
+func GetTokenFromGin(c *gin.Context) token.Token {
+	t, exists := c.Get(string(ClaimsKey))
 	if !exists {
 		return nil
 	}
-	result, ok := vt.(*token.VerifiedToken)
+	result, ok := t.(token.Token)
 	if !ok {
 		return nil
 	}
@@ -153,9 +153,12 @@ func GetVerifiedTokenFromGin(c *gin.Context) *token.VerifiedToken {
 
 // GetOpenIDFromGin 从 Gin context 中获取用户 OpenID
 func GetOpenIDFromGin(c *gin.Context) string {
-	vt := GetVerifiedTokenFromGin(c)
-	if vt == nil || vt.User == nil {
+	t := GetTokenFromGin(c)
+	if t == nil {
 		return ""
 	}
-	return vt.User.Subject
+	if uat, ok := token.AsUAT(t); ok && uat.GetUser() != nil {
+		return uat.GetUser().Subject
+	}
+	return ""
 }

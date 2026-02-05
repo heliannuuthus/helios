@@ -49,28 +49,27 @@ func NewChecker(endpoint string, keyProvider SecretKeyProvider) *Checker {
 }
 
 // Check 检查关系
-// vt: 验证后的 Token
+// t: 验证后的 Token
 // relation: 关系类型
 // objectType: 资源类型
 // objectID: 资源 ID
 //
 // 内部根据 Token 判断主体类型：
-//   - 如果 User 不为空，则为 user，subjectID = User.Subject
-//   - 如果 User 为空，则为 app（M2M），subjectID = ClientID
-func (c *Checker) Check(ctx context.Context, vt *VerifiedToken, relation, objectType, objectID string) (bool, error) {
+//   - UAT 且有用户信息，则为 user，subjectID = User.Subject
+//   - 其他情况，则为 app（M2M），subjectID = ClientID
+func (c *Checker) Check(ctx context.Context, t Token, relation, objectType, objectID string) (bool, error) {
 	// 判断主体类型
-	subjectType := "user"
-	var subjectID string
-	if vt.User != nil && vt.User.Subject != "" {
-		subjectID = vt.User.Subject
-	} else {
-		// M2M 场景：没有用户，使用应用身份
-		subjectType = "app"
-		subjectID = vt.ClientID
+	subjectType := "app"
+	subjectID := t.GetClientID()
+
+	// 如果是 UAT 且有用户信息，使用用户身份
+	if uat, ok := AsUAT(t); ok && uat.GetUser() != nil && uat.GetUser().Subject != "" {
+		subjectType = "user"
+		subjectID = uat.GetUser().Subject
 	}
 
 	// 签发 CAT（使用 Audience）
-	cat, err := c.issuer.Issue(ctx, vt.Audience)
+	cat, err := c.issuer.Issue(ctx, t.GetAudience())
 	if err != nil {
 		return false, fmt.Errorf("issue CAT: %w", err)
 	}
