@@ -24,7 +24,9 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
 	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
+)
 
+import (
 	_ "github.com/heliannuuthus/helios/docs"
 )
 

@@ -61,7 +61,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/home.RecipeListItem"
+                                "$ref": "#/definitions/zwei.RecipeListItem"
                             }
                         }
                     }
@@ -92,7 +92,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/home.RecipeListItem"
+                                "$ref": "#/definitions/zwei.RecipeListItem"
                             }
                         }
                     }
@@ -171,7 +171,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/recipe.RecipeListItem"
+                                "$ref": "#/definitions/zwei.RecipeListItem"
                             }
                         }
                     }
@@ -1373,7 +1373,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "recipe": {
-                    "$ref": "#/definitions/favorite.RecipeListItem"
+                    "$ref": "#/definitions/zwei.RecipeListItem"
                 },
                 "recipe_id": {
                     "type": "string"
@@ -1416,63 +1416,11 @@ const docTemplate = `{
                 }
             }
         },
-        "favorite.RecipeListItem": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "difficulty": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "image_path": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tags": {
-                    "$ref": "#/definitions/favorite.TagsGrouped"
-                },
-                "total_time_minutes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "favorite.TagsGrouped": {
-            "type": "object",
-            "properties": {
-                "cuisines": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "flavors": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scenes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "history.HistoryListItem": {
             "type": "object",
             "properties": {
                 "recipe": {
-                    "$ref": "#/definitions/history.RecipeListItem"
+                    "$ref": "#/definitions/zwei.RecipeListItem"
                 },
                 "recipe_id": {
                     "type": "string"
@@ -1518,58 +1466,6 @@ const docTemplate = `{
                 }
             }
         },
-        "history.RecipeListItem": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "difficulty": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "image_path": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tags": {
-                    "$ref": "#/definitions/history.TagsGrouped"
-                },
-                "total_time_minutes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "history.TagsGrouped": {
-            "type": "object",
-            "properties": {
-                "cuisines": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "flavors": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scenes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "home.BannerItem": {
             "type": "object",
             "properties": {
@@ -1587,58 +1483,6 @@ const docTemplate = `{
                 },
                 "title": {
                     "type": "string"
-                }
-            }
-        },
-        "home.RecipeListItem": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "difficulty": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "image_path": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tags": {
-                    "$ref": "#/definitions/home.TagsGrouped"
-                },
-                "total_time_minutes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "home.TagsGrouped": {
-            "type": "object",
-            "properties": {
-                "cuisines": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "flavors": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scenes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -1879,35 +1723,6 @@ const docTemplate = `{
                 }
             }
         },
-        "recipe.RecipeListItem": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "difficulty": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "image_path": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tags": {
-                    "$ref": "#/definitions/recipe.TagsGrouped"
-                },
-                "total_time_minutes": {
-                    "type": "integer"
-                }
-            }
-        },
         "recipe.RecipeResponse": {
             "type": "object",
             "properties": {
@@ -1963,7 +1778,7 @@ const docTemplate = `{
                     }
                 },
                 "tags": {
-                    "$ref": "#/definitions/recipe.TagsGrouped"
+                    "$ref": "#/definitions/zwei.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
@@ -2058,29 +1873,6 @@ const docTemplate = `{
                 }
             }
         },
-        "recipe.TagsGrouped": {
-            "type": "object",
-            "properties": {
-                "cuisines": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "flavors": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scenes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
         "recommend.ContextRequest": {
             "type": "object",
             "properties": {
@@ -2149,7 +1941,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tags": {
-                    "$ref": "#/definitions/recommend.TagsGrouped"
+                    "$ref": "#/definitions/zwei.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
@@ -2197,29 +1989,6 @@ const docTemplate = `{
                 "summary": {
                     "description": "LLM 生成的一句话整体评价",
                     "type": "string"
-                }
-            }
-        },
-        "recommend.TagsGrouped": {
-            "type": "object",
-            "properties": {
-                "cuisines": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "flavors": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scenes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -2314,6 +2083,58 @@ const docTemplate = `{
                 "url": {
                     "description": "上传后的图片 URL",
                     "type": "string"
+                }
+            }
+        },
+        "zwei.RecipeListItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "difficulty": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_path": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tags": {
+                    "$ref": "#/definitions/zwei.TagsGrouped"
+                },
+                "total_time_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "zwei.TagsGrouped": {
+            "type": "object",
+            "properties": {
+                "cuisines": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "flavors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scenes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         }
