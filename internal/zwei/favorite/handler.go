@@ -7,7 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
+	"github.com/heliannuuthus/helios/internal/zwei"
 )
 
 // Handler 收藏处理器
@@ -32,9 +33,9 @@ type FavoriteResponse struct {
 }
 
 type FavoriteListItem struct {
-	RecipeID  string          `json:"recipe_id"`
-	CreatedAt string          `json:"created_at"`
-	Recipe    *RecipeListItem `json:"recipe,omitempty"`
+	RecipeID  string               `json:"recipe_id"`
+	CreatedAt string               `json:"created_at"`
+	Recipe    *zwei.RecipeListItem `json:"recipe,omitempty"`
 }
 
 type FavoriteListResponse struct {
@@ -71,12 +72,12 @@ func (h *Handler) AddFavorite(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(aegis.Token)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := aegis.GetOpenIDFromToken(identity)
 
 	var req FavoriteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -110,12 +111,12 @@ func (h *Handler) RemoveFavorite(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(aegis.Token)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := aegis.GetOpenIDFromToken(identity)
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveFavorite(openID, recipeID); err != nil {
@@ -141,12 +142,12 @@ func (h *Handler) CheckFavorite(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(aegis.Token)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := aegis.GetOpenIDFromToken(identity)
 	recipeID := c.Param("recipe_id")
 
 	isFavorite, err := h.service.IsFavorite(openID, recipeID)
@@ -178,12 +179,12 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(aegis.Token)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := aegis.GetOpenIDFromToken(identity)
 
 	category := c.Query("category")
 	search := c.Query("search")
@@ -214,13 +215,13 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 		}
 
 		if f.Recipe != nil {
-			item.Recipe = &RecipeListItem{
+			item.Recipe = &zwei.RecipeListItem{
 				ID:               f.Recipe.RecipeID,
 				Name:             f.Recipe.Name,
 				Description:      f.Recipe.Description,
 				Category:         f.Recipe.Category,
 				Difficulty:       f.Recipe.Difficulty,
-				Tags:             GroupTags(f.Recipe.Tags),
+				Tags:             zwei.GroupTags(f.Recipe.Tags),
 				ImagePath:        f.Recipe.GetImagePath(),
 				TotalTimeMinutes: f.Recipe.TotalTimeMinutes,
 			}
@@ -251,12 +252,12 @@ func (h *Handler) BatchCheckFavorites(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(aegis.Token)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := aegis.GetOpenIDFromToken(identity)
 
 	var req BatchCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

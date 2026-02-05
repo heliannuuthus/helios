@@ -8,7 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
+	"github.com/heliannuuthus/helios/internal/zwei"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -35,7 +36,7 @@ type RecommendRequest struct {
 
 // RecommendRecipeItem 推荐菜品项（包含推荐理由）
 type RecommendRecipeItem struct {
-	RecipeListItem
+	zwei.RecipeListItem
 	Reason string `json:"reason"` // 该菜品的推荐理由
 }
 
@@ -84,8 +85,8 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 
 	// 获取用户身份（如果已登录）
 	if user, exists := c.Get("user"); exists {
-		if identity, ok := user.(*auth.Claims); ok {
-			ctx.UserID = identity.GetOpenID()
+		if identity, ok := user.(aegis.Token); ok {
+			ctx.UserID = aegis.GetOpenIDFromToken(identity)
 		}
 	}
 
@@ -117,13 +118,13 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 
 	for i, r := range result.Recipes {
 		response.Recipes[i] = RecommendRecipeItem{
-			RecipeListItem: RecipeListItem{
+			RecipeListItem: zwei.RecipeListItem{
 				ID:               r.Recipe.RecipeID,
 				Name:             r.Recipe.Name,
 				Description:      r.Recipe.Description,
 				Category:         r.Recipe.Category,
 				Difficulty:       r.Recipe.Difficulty,
-				Tags:             GroupTags(r.Recipe.Tags),
+				Tags:             zwei.GroupTags(r.Recipe.Tags),
 				ImagePath:        r.Recipe.GetImagePath(),
 				TotalTimeMinutes: r.Recipe.TotalTimeMinutes,
 			},

@@ -15,9 +15,9 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/models"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
 	"github.com/heliannuuthus/helios/pkg/amap"
+	"github.com/heliannuuthus/helios/pkg/helperutil"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/pkg/utils"
 )
 
 // Service 推荐服务
@@ -93,8 +93,8 @@ func (s *Service) GetContext(req *ContextRequest) *ContextResponse {
 	t := time.UnixMilli(req.Timestamp)
 	response.Time = &TimeInfo{
 		Timestamp: req.Timestamp,
-		MealTime:  utils.GetMealTime(t),
-		Season:    utils.GetSeason(t),
+		MealTime:  helperutil.GetMealTime(t),
+		Season:    helperutil.GetSeason(t),
 		DayOfWeek: int(t.Weekday()),
 		Hour:      t.Hour(),
 	}
@@ -247,8 +247,8 @@ func (s *Service) GetRecommendations(ctx *Context, limit int) (*Result, error) {
 			Humidity:    weather.Humidity,
 			Weather:     weather.Weather,
 		},
-		MealTime:    utils.GetMealTime(t),
-		Season:      utils.GetSeason(t),
+		MealTime:    helperutil.GetMealTime(t),
+		Season:      helperutil.GetSeason(t),
 		Temperature: getTemperatureFeeling(weather.Temperature),
 	}
 

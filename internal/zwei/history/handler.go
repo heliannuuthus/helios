@@ -7,7 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
+	"github.com/heliannuuthus/helios/internal/zwei"
 )
 
 // Handler 浏览历史处理器
@@ -32,9 +33,9 @@ type HistoryResponse struct {
 }
 
 type HistoryListItem struct {
-	RecipeID string          `json:"recipe_id"`
-	ViewedAt string          `json:"viewed_at"`
-	Recipe   *RecipeListItem `json:"recipe,omitempty"`
+	RecipeID string               `json:"recipe_id"`
+	ViewedAt string               `json:"viewed_at"`
+	Recipe   *zwei.RecipeListItem `json:"recipe,omitempty"`
 }
 
 type HistoryListResponse struct {
@@ -59,12 +60,12 @@ func (h *Handler) AddViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(aegis.Token)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := aegis.GetOpenIDFromToken(identity)
 
 	var req HistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -98,12 +99,12 @@ func (h *Handler) RemoveViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(aegis.Token)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := aegis.GetOpenIDFromToken(identity)
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveViewHistory(openID, recipeID); err != nil {
@@ -127,12 +128,12 @@ func (h *Handler) ClearViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(aegis.Token)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := aegis.GetOpenIDFromToken(identity)
 
 	if err := h.service.ClearViewHistory(openID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
@@ -160,12 +161,12 @@ func (h *Handler) GetViewHistory(c *gin.Context) {
 		return
 	}
 
-	identity, ok := user.(*auth.Claims)
+	identity, ok := user.(aegis.Token)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
 		return
 	}
-	openID := identity.GetOpenID()
+	openID := aegis.GetOpenIDFromToken(identity)
 
 	category := c.Query("category")
 	search := c.Query("search")
@@ -196,13 +197,13 @@ func (h *Handler) GetViewHistory(c *gin.Context) {
 		}
 
 		if h.Recipe != nil {
-			item.Recipe = &RecipeListItem{
+			item.Recipe = &zwei.RecipeListItem{
 				ID:               h.Recipe.RecipeID,
 				Name:             h.Recipe.Name,
 				Description:      h.Recipe.Description,
 				Category:         h.Recipe.Category,
 				Difficulty:       h.Recipe.Difficulty,
-				Tags:             GroupTags(h.Recipe.Tags),
+				Tags:             zwei.GroupTags(h.Recipe.Tags),
 				ImagePath:        h.Recipe.GetImagePath(),
 				TotalTimeMinutes: h.Recipe.TotalTimeMinutes,
 			}

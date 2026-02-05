@@ -6,17 +6,16 @@ type ServiceCreateRequest struct {
 	DomainID              string  `json:"domain_id" binding:"required"`
 	Name                  string  `json:"name" binding:"required"`
 	Description           *string `json:"description"`
-	AccessTokenExpiresIn  *int    `json:"access_token_expires_in"`
-	RefreshTokenExpiresIn *int    `json:"refresh_token_expires_in"`
+	AccessTokenExpiresIn  *uint   `json:"access_token_expires_in"`
+	RefreshTokenExpiresIn *uint   `json:"refresh_token_expires_in"`
 }
 
 // ServiceUpdateRequest 更新服务请求
 type ServiceUpdateRequest struct {
 	Name                  *string `json:"name"`
 	Description           *string `json:"description"`
-	AccessTokenExpiresIn  *int    `json:"access_token_expires_in"`
-	RefreshTokenExpiresIn *int    `json:"refresh_token_expires_in"`
-	Status                *int8   `json:"status"`
+	AccessTokenExpiresIn  *uint   `json:"access_token_expires_in"`
+	RefreshTokenExpiresIn *uint   `json:"refresh_token_expires_in"`
 }
 
 // ApplicationCreateRequest 创建应用请求
@@ -93,6 +92,7 @@ type AppServiceRelationshipUpdateRequest struct {
 // GroupCreateRequest 创建组请求
 type GroupCreateRequest struct {
 	GroupID     string  `json:"group_id" binding:"required"`
+	ServiceID   string  `json:"service_id" binding:"required"`
 	Name        string  `json:"name" binding:"required"`
 	Description *string `json:"description"`
 }

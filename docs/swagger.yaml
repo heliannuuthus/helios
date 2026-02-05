@@ -26,7 +26,7 @@ definitions:
       created_at:
         type: string
       recipe:
-        $ref: '#/definitions/favorite.RecipeListItem'
+        $ref: '#/definitions/zwei.RecipeListItem'
       recipe_id:
         type: string
     type: object
@@ -53,44 +53,10 @@ definitions:
       recipe_id:
         type: string
     type: object
-  favorite.RecipeListItem:
-    properties:
-      category:
-        type: string
-      description:
-        type: string
-      difficulty:
-        type: integer
-      id:
-        type: string
-      image_path:
-        type: string
-      name:
-        type: string
-      tags:
-        $ref: '#/definitions/favorite.TagsGrouped'
-      total_time_minutes:
-        type: integer
-    type: object
-  favorite.TagsGrouped:
-    properties:
-      cuisines:
-        items:
-          type: string
-        type: array
-      flavors:
-        items:
-          type: string
-        type: array
-      scenes:
-        items:
-          type: string
-        type: array
-    type: object
   history.HistoryListItem:
     properties:
       recipe:
-        $ref: '#/definitions/history.RecipeListItem'
+        $ref: '#/definitions/zwei.RecipeListItem'
       recipe_id:
         type: string
       viewed_at:
@@ -119,40 +85,6 @@ definitions:
       viewed_at:
         type: string
     type: object
-  history.RecipeListItem:
-    properties:
-      category:
-        type: string
-      description:
-        type: string
-      difficulty:
-        type: integer
-      id:
-        type: string
-      image_path:
-        type: string
-      name:
-        type: string
-      tags:
-        $ref: '#/definitions/history.TagsGrouped'
-      total_time_minutes:
-        type: integer
-    type: object
-  history.TagsGrouped:
-    properties:
-      cuisines:
-        items:
-          type: string
-        type: array
-      flavors:
-        items:
-          type: string
-        type: array
-      scenes:
-        items:
-          type: string
-        type: array
-    type: object
   home.BannerItem:
     properties:
       id:
@@ -165,40 +97,6 @@ definitions:
         type: string
       title:
         type: string
-    type: object
-  home.RecipeListItem:
-    properties:
-      category:
-        type: string
-      description:
-        type: string
-      difficulty:
-        type: integer
-      id:
-        type: string
-      image_path:
-        type: string
-      name:
-        type: string
-      tags:
-        $ref: '#/definitions/home.TagsGrouped'
-      total_time_minutes:
-        type: integer
-    type: object
-  home.TagsGrouped:
-    properties:
-      cuisines:
-        items:
-          type: string
-        type: array
-      flavors:
-        items:
-          type: string
-        type: array
-      scenes:
-        items:
-          type: string
-        type: array
     type: object
   preference.OptionItem:
     properties:
@@ -361,25 +259,6 @@ definitions:
     - name
     - servings
     type: object
-  recipe.RecipeListItem:
-    properties:
-      category:
-        type: string
-      description:
-        type: string
-      difficulty:
-        type: integer
-      id:
-        type: string
-      image_path:
-        type: string
-      name:
-        type: string
-      tags:
-        $ref: '#/definitions/recipe.TagsGrouped'
-      total_time_minutes:
-        type: integer
-    type: object
   recipe.RecipeResponse:
     properties:
       additional_notes:
@@ -417,7 +296,7 @@ definitions:
           $ref: '#/definitions/recipe.StepResponse'
         type: array
       tags:
-        $ref: '#/definitions/recipe.TagsGrouped'
+        $ref: '#/definitions/zwei.TagsGrouped'
       total_time_minutes:
         type: integer
     type: object
@@ -479,21 +358,6 @@ definitions:
       step:
         type: integer
     type: object
-  recipe.TagsGrouped:
-    properties:
-      cuisines:
-        items:
-          type: string
-        type: array
-      flavors:
-        items:
-          type: string
-        type: array
-      scenes:
-        items:
-          type: string
-        type: array
-    type: object
   recommend.ContextRequest:
     properties:
       latitude:
@@ -539,7 +403,7 @@ definitions:
         description: 该菜品的推荐理由
         type: string
       tags:
-        $ref: '#/definitions/recommend.TagsGrouped'
+        $ref: '#/definitions/zwei.TagsGrouped'
       total_time_minutes:
         type: integer
     type: object
@@ -572,21 +436,6 @@ definitions:
       summary:
         description: LLM 生成的一句话整体评价
         type: string
-    type: object
-  recommend.TagsGrouped:
-    properties:
-      cuisines:
-        items:
-          type: string
-        type: array
-      flavors:
-        items:
-          type: string
-        type: array
-      scenes:
-        items:
-          type: string
-        type: array
     type: object
   recommend.TimeInfo:
     properties:
@@ -651,6 +500,40 @@ definitions:
         description: 上传后的图片 URL
         type: string
     type: object
+  zwei.RecipeListItem:
+    properties:
+      category:
+        type: string
+      description:
+        type: string
+      difficulty:
+        type: integer
+      id:
+        type: string
+      image_path:
+        type: string
+      name:
+        type: string
+      tags:
+        $ref: '#/definitions/zwei.TagsGrouped'
+      total_time_minutes:
+        type: integer
+    type: object
+  zwei.TagsGrouped:
+    properties:
+      cuisines:
+        items:
+          type: string
+        type: array
+      flavors:
+        items:
+          type: string
+        type: array
+      scenes:
+        items:
+          type: string
+        type: array
+    type: object
 host: localhost:18000
 info:
   contact: {}
@@ -687,7 +570,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/home.RecipeListItem'
+              $ref: '#/definitions/zwei.RecipeListItem'
             type: array
       summary: 获取热门菜谱（按收藏数排序）
       tags:
@@ -707,7 +590,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/home.RecipeListItem'
+              $ref: '#/definitions/zwei.RecipeListItem'
             type: array
       summary: 获取推荐菜谱（随机）
       tags:
@@ -759,7 +642,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/recipe.RecipeListItem'
+              $ref: '#/definitions/zwei.RecipeListItem'
             type: array
       summary: 获取菜谱列表
       tags:

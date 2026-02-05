@@ -7,8 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"github.com/heliannuuthus/helios/internal/zwei"
 	"github.com/heliannuuthus/helios/internal/zwei/models"
-	"github.com/heliannuuthus/helios/pkg/utils"
+	"github.com/heliannuuthus/helios/pkg/helperutil"
 )
 
 // Handler 菜谱处理器
@@ -89,7 +90,7 @@ type RecipeResponse struct {
 	ImagePath        *string              `json:"image_path"`
 	Category         string               `json:"category"`
 	Difficulty       int                  `json:"difficulty"`
-	Tags             TagsGrouped          `json:"tags"`
+	Tags             zwei.TagsGrouped     `json:"tags"`
 	Servings         int                  `json:"servings"`
 	PrepTimeMinutes  *int                 `json:"prep_time_minutes"`
 	CookTimeMinutes  *int                 `json:"cook_time_minutes"`
@@ -138,7 +139,7 @@ func (h *Handler) CreateRecipe(c *gin.Context) {
 
 	recipeID := req.ID
 	if recipeID == "" {
-		recipeID = utils.GenerateRecipeID()
+		recipeID = helperutil.GenerateRecipeID()
 	}
 
 	recipeModel := models.Recipe{
@@ -194,7 +195,7 @@ func (h *Handler) CreateRecipe(c *gin.Context) {
 // @Param search query string false "搜索关键词"
 // @Param limit query int false "限制数量" default(100)
 // @Param offset query int false "偏移量" default(0)
-// @Success 200 {array} RecipeListItem
+// @Success 200 {array} zwei.RecipeListItem
 // @Router /api/recipes [get]
 func (h *Handler) GetRecipes(c *gin.Context) {
 	category := c.Query("category")
@@ -218,15 +219,15 @@ func (h *Handler) GetRecipes(c *gin.Context) {
 		return
 	}
 
-	items := make([]RecipeListItem, len(recipes))
+	items := make([]zwei.RecipeListItem, len(recipes))
 	for i, r := range recipes {
-		items[i] = RecipeListItem{
+		items[i] = zwei.RecipeListItem{
 			ID:               r.RecipeID,
 			Name:             r.Name,
 			Description:      r.Description,
 			Category:         r.Category,
 			Difficulty:       r.Difficulty,
-			Tags:             GroupTags(r.Tags),
+			Tags:             zwei.GroupTags(r.Tags),
 			ImagePath:        r.GetImagePath(),
 			TotalTimeMinutes: r.TotalTimeMinutes,
 		}
@@ -431,7 +432,7 @@ func (h *Handler) CreateRecipesBatch(c *gin.Context) {
 	for i, req := range reqs {
 		recipeID := req.ID
 		if recipeID == "" {
-			recipeID = utils.GenerateRecipeID()
+			recipeID = helperutil.GenerateRecipeID()
 		}
 		recipes[i] = models.Recipe{
 			RecipeID:         recipeID,
@@ -524,7 +525,7 @@ func (h *Handler) toRecipeResponse(r *models.Recipe) *RecipeResponse {
 		images = []string{}
 	}
 
-	tags := GroupTags(r.Tags)
+	tags := zwei.GroupTags(r.Tags)
 
 	return &RecipeResponse{
 		ID:               r.RecipeID,

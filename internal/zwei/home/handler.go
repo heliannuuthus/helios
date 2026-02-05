@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/zwei"
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 )
 
@@ -48,7 +49,7 @@ func (h *Handler) GetBanners(c *gin.Context) {
 // @Tags home
 // @Produce json
 // @Param limit query int false "数量限制" default(4)
-// @Success 200 {array} RecipeListItem
+// @Success 200 {array} zwei.RecipeListItem
 // @Router /api/home/recommend [get]
 func (h *Handler) GetRecommendRecipes(c *gin.Context) {
 	limit, err := strconv.Atoi(c.DefaultQuery("limit", "4"))
@@ -67,7 +68,7 @@ func (h *Handler) GetRecommendRecipes(c *gin.Context) {
 // @Tags home
 // @Produce json
 // @Param limit query int false "数量限制" default(6)
-// @Success 200 {array} RecipeListItem
+// @Success 200 {array} zwei.RecipeListItem
 // @Router /api/home/hot [get]
 func (h *Handler) GetHotRecipes(c *gin.Context) {
 	limit, err := strconv.Atoi(c.DefaultQuery("limit", "6"))
@@ -136,21 +137,21 @@ func generateBannerID(index int) string {
 	return "banner_" + string(rune('a'+index))
 }
 
-func (h *Handler) getHotRecipes(count int) []RecipeListItem {
+func (h *Handler) getHotRecipes(count int) []zwei.RecipeListItem {
 	recipes, err := h.recipeService.GetHotRecipes(count, nil)
 	if err != nil || len(recipes) == 0 {
-		return []RecipeListItem{}
+		return []zwei.RecipeListItem{}
 	}
 
-	items := make([]RecipeListItem, len(recipes))
+	items := make([]zwei.RecipeListItem, len(recipes))
 	for i, r := range recipes {
-		items[i] = RecipeListItem{
+		items[i] = zwei.RecipeListItem{
 			ID:               r.RecipeID,
 			Name:             r.Name,
 			Description:      r.Description,
 			Category:         r.Category,
 			Difficulty:       r.Difficulty,
-			Tags:             GroupTags(r.Tags),
+			Tags:             zwei.GroupTags(r.Tags),
 			ImagePath:        r.GetImagePath(),
 			TotalTimeMinutes: r.TotalTimeMinutes,
 		}
@@ -159,21 +160,21 @@ func (h *Handler) getHotRecipes(count int) []RecipeListItem {
 	return items
 }
 
-func (h *Handler) getRandomRecipes(count int) []RecipeListItem {
+func (h *Handler) getRandomRecipes(count int) []zwei.RecipeListItem {
 	recipes, err := h.recipeService.GetRecipes("", "", 100, 0)
 	if err != nil || len(recipes) == 0 {
-		return []RecipeListItem{}
+		return []zwei.RecipeListItem{}
 	}
 
-	var items []RecipeListItem
+	var items []zwei.RecipeListItem
 	for _, r := range recipes {
-		items = append(items, RecipeListItem{
+		items = append(items, zwei.RecipeListItem{
 			ID:               r.RecipeID,
 			Name:             r.Name,
 			Description:      r.Description,
 			Category:         r.Category,
 			Difficulty:       r.Difficulty,
-			Tags:             GroupTags(r.Tags),
+			Tags:             zwei.GroupTags(r.Tags),
 			ImagePath:        r.GetImagePath(),
 			TotalTimeMinutes: r.TotalTimeMinutes,
 		})

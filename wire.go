@@ -6,10 +6,13 @@ package main
 import (
 	"github.com/google/wire"
 
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
+	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/database"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/upload"
+	"github.com/heliannuuthus/helios/internal/iris"
+	intMw "github.com/heliannuuthus/helios/internal/middleware"
 	"github.com/heliannuuthus/helios/internal/zwei/favorite"
 	"github.com/heliannuuthus/helios/internal/zwei/history"
 	"github.com/heliannuuthus/helios/internal/zwei/home"
@@ -17,6 +20,8 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
+	"github.com/heliannuuthus/helios/pkg/aegis/keys"
+	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
 )
 
 // 业务模块 Handler（使用 Zwei 数据库）
@@ -48,15 +53,16 @@ func provideHomeHandler() *home.Handler {
 	return home.NewHandler(database.GetZwei())
 }
 
-// Hermes Service（供 auth 模块复用）
+// Hermes Service（供 aegis 模块复用）
 func provideHermesService() *hermes.Service {
-	return hermes.NewService()
+	return hermes.NewService(database.GetHermes())
 }
 
 // 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
-func provideAuthHandler(hermesService *hermes.Service) (*auth.Handler, error) {
-	userSvc := hermes.NewUserService(database.GetHermes())
-	return auth.Initialize(&auth.InitConfig{
+func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
+	db := database.GetHermes()
+	userSvc := hermes.NewUserService(db)
+	return aegis.Initialize(&aegis.InitConfig{
 		HermesSvc: hermesService,
 		UserSvc:   userSvc,
 	})
@@ -68,6 +74,39 @@ func provideUploadHandler() *upload.Handler {
 
 func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
 	return hermes.NewHandler(hermesService)
+}
+
+// Iris 用户信息模块 Handler
+func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
+	db := database.GetHermes()
+	userSvc := hermes.NewUserService(db)
+	credentialSvc := hermes.NewCredentialService(db)
+	handler := iris.NewHandler(userSvc, credentialSvc)
+
+	// 如果 Aegis 有 WebAuthn，设置到 Iris Handler
+	if aegisHandler.HasWebAuthn() {
+		handler.SetWebAuthnService(aegisHandler.WebAuthnService())
+	}
+
+	return handler
+}
+
+// provideGinMiddlewareFactory 创建 Gin 中间件工厂
+func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
+	endpoint := config.GetAegisIssuer()
+
+	// 创建密钥提供者
+	keyProvider, err := intMw.NewHermesKeyProvider()
+	if err != nil {
+		return nil, err
+	}
+
+	return middleware.NewGinFactory(
+		endpoint,
+		keys.NewPublicKeyProvider(keyProvider),    // 公钥（用于验证签名）
+		keys.NewSymmetricKeyProvider(keyProvider), // 对称密钥（用于解密 footer）
+		keys.NewSecretKeyProvider(keyProvider),    // 私钥（用于签发 CAT）
+	), nil
 }
 
 // ProviderSet 提供者集合
@@ -86,18 +125,23 @@ var ProviderSet = wire.NewSet(
 	provideTagHandler,
 	provideRecommendHandler,
 	provideHomeHandler,
-	// Hermes 模块（使用 Hermes 数据库，提供给 auth 复用）
+	// Hermes 模块（使用 Hermes 数据库，提供给 aegis 复用）
 	provideHermesService,
 	provideHermesHandler,
 	// 认证模块（使用 Hermes 数据库，依赖 hermes.Service）
-	provideAuthHandler,
+	provideAegisHandler,
 	provideUploadHandler,
+	// Iris 用户信息模块
+	provideIrisHandler,
+	// 中间件工厂
+	provideGinMiddlewareFactory,
 )
 
 // App 应用依赖容器
 type App struct {
 	RecipeHandler     *recipe.Handler
-	AuthHandler       *auth.Handler
+	AegisHandler      *aegis.Handler
+	IrisHandler       *iris.Handler
 	FavoriteHandler   *favorite.Handler
 	HistoryHandler    *history.Handler
 	HomeHandler       *home.Handler
@@ -106,6 +150,7 @@ type App struct {
 	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
 	HermesHandler     *hermes.Handler
+	MiddlewareFactory *middleware.GinFactory
 }
 
 // InitializeApp 初始化应用（由 wire 生成）

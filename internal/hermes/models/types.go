@@ -39,19 +39,6 @@ func (a *ApplicationWithKey) ValidateRedirectURI(uri string) bool {
 	return false
 }
 
-// GetAllowedIDPs 解析允许的登录方式列表
-func (a *ApplicationWithKey) GetAllowedIDPs() []string {
-	if a.AllowedIDPs == nil || *a.AllowedIDPs == "" {
-		return nil
-	}
-	var idps []string
-	if err := json.Unmarshal([]byte(*a.AllowedIDPs), &idps); err != nil {
-		logger.Warnf("[Application] unmarshal allowed idps failed: %v", err)
-		return nil
-	}
-	return idps
-}
-
 // GetAllowedOrigins 解析允许的跨域源列表
 func (a *ApplicationWithKey) GetAllowedOrigins() []string {
 	if a.AllowedOrigins == nil || *a.AllowedOrigins == "" {
@@ -105,10 +92,18 @@ func (s *ServiceWithKey) GetRequiredIdentities() []string {
 	return identities
 }
 
+// Domain 域（从配置文件读取，不存储在数据库）
+type Domain struct {
+	DomainID    string  // 域标识：ciam/piam
+	Name        string  // 域名称
+	Description *string // 域描述
+}
+
 // DomainWithKey 带签名密钥的 Domain
 type DomainWithKey struct {
 	Domain
-	SignKey []byte // 签名密钥
+	Main []byte   // 当前主密钥（32 字节 Ed25519 seed，用于签发新 token）
+	Keys [][]byte // 所有有效密钥（包括主密钥和轮换中的旧密钥，用于验证）
 }
 
 // ==================== URI 规范化辅助函数 ====================
