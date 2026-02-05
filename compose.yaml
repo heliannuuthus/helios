@@ -36,6 +36,7 @@ services:
       - helios_redis_data:/data
       # 挂载 Redis 配置
       - ./environments/cache/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
     restart: unless-stopped
     deploy:
       resources:

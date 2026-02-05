@@ -2,14 +2,13 @@ package authenticate
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
-	"github.com/heliannuuthus/helios/internal/aegis/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
@@ -28,7 +27,6 @@ type Service struct {
 type ServiceConfig struct {
 	Cache       *cache.Manager
 	IDPRegistry *idp.Registry
-	EmailSender EmailSender
 }
 
 // NewService 创建认证服务
@@ -41,7 +39,6 @@ func NewService(cfg *ServiceConfig) *Service {
 	// 注册认证器
 	s.authenticators = []Authenticator{
 		NewIDPAuthenticator(cfg.IDPRegistry),
-		NewEmailAuthenticator(cfg.Cache, cfg.EmailSender),
 	}
 
 	return s
@@ -55,7 +52,7 @@ func NewService(cfg *ServiceConfig) *Service {
 func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) (*types.AuthFlow, error) {
 	ctx := c.Request.Context()
 
-	logger.Debugf("[Authenticate] 开始创建认证流程 - ClientID: %s, Audience: %s, RedirectURI: %s",
+	logger.Infof("[Authenticate] 开始创建认证流程 - ClientID: %s, Audience: %s, RedirectURI: %s",
 		req.ClientID, req.Audience, req.RedirectURI)
 
 	// ==================== 前置检查（直接返回 error）====================
@@ -116,7 +113,7 @@ func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) (*types.Aut
 	flow := types.NewAuthFlow(req, time.Duration(config.GetAegisCookieMaxAge())*time.Second)
 	flow.Application = app
 	flow.Service = svc
-	flow.ConnectionMap = s.buildConnectionMap(idpConfigs)
+	flow.ConnectionMap = s.setConnections(idpConfigs)
 
 	// 8. 保存到缓存
 	if err := s.SaveFlow(ctx, flow); err != nil {
@@ -132,6 +129,7 @@ func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) (*types.Aut
 
 // GetAndValidateFlow 获取并验证 AuthFlow
 // 错误信息存储在返回的 flow.Error 中
+// 验证成功后会更新内存中的过期时间（需要调用方在适当时机调用 SaveFlow 持久化）
 func (s *Service) GetAndValidateFlow(ctx context.Context, flowID string) *types.AuthFlow {
 	flow, err := s.GetFlow(ctx, flowID)
 	if err != nil {
@@ -148,7 +146,17 @@ func (s *Service) GetAndValidateFlow(ctx context.Context, flowID string) *types.
 		return flow
 	}
 
+	// 验证成功，更新内存中的过期时间（续期）
+	// 注意：需要调用方在流程结束时调用 SaveFlow 持久化
+	s.RenewFlow(flow)
+
 	return flow
+}
+
+// RenewFlow 续期 AuthFlow（仅更新内存，需调用 SaveFlow 持久化）
+func (s *Service) RenewFlow(flow *types.AuthFlow) {
+	ttl := time.Duration(config.GetAegisCookieMaxAge()) * time.Second
+	flow.Renew(ttl)
 }
 
 // GetFlow 获取 AuthFlow
@@ -162,7 +170,7 @@ func (s *Service) GetFlow(ctx context.Context, flowID string) (*types.AuthFlow, 
 	var flow types.AuthFlow
 	if err := json.Unmarshal(data, &flow); err != nil {
 		logger.Errorf("[Authenticate] 反序列化 Flow 失败 - FlowID: %s, Error: %v", flowID, err)
-		return nil, fmt.Errorf("unmarshal flow failed: %w", err)
+		return nil, autherrors.NewServerErrorf("unmarshal flow failed: %v", err)
 	}
 
 	return &flow, nil
@@ -172,7 +180,7 @@ func (s *Service) GetFlow(ctx context.Context, flowID string) (*types.AuthFlow, 
 func (s *Service) SaveFlow(ctx context.Context, flow *types.AuthFlow) error {
 	data, err := json.Marshal(flow)
 	if err != nil {
-		return fmt.Errorf("marshal flow failed: %w", err)
+		return autherrors.NewServerErrorf("marshal flow failed: %v", err)
 	}
 
 	return s.cache.SaveAuthFlow(ctx, flow.ID, data)
@@ -186,14 +194,18 @@ func (s *Service) DeleteFlow(ctx context.Context, flowID string) error {
 // ==================== 认证 ====================
 
 // Authenticate 执行认证
-func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, connection string, data map[string]any) (*AuthResult, error) {
+// connection: IDP 类型（如 github, google, user, oper）
+// proof: 认证凭证（OAuth code / password / OTP code）
+// params: 额外参数（如 identifier）
+func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, connection string, proof string, params ...any) (*AuthResult, error) {
 	// 1. 验证 flow 状态
 	if !flow.CanAuthenticate() {
 		return nil, autherrors.NewFlowInvalid("flow state does not allow authentication")
 	}
 
-	// 2. 验证 connection 是否在 ConnectionMap 中
-	if _, ok := flow.ConnectionMap[connection]; !ok {
+	// 2. 获取 ConnectionConfig
+	connCfg, ok := flow.ConnectionMap[connection]
+	if !ok {
 		return nil, autherrors.NewInvalidRequest("connection not found in flow")
 	}
 
@@ -210,7 +222,7 @@ func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, connec
 	}
 
 	// 4. 执行认证
-	result, err := authenticator.Authenticate(ctx, connection, data)
+	result, err := authenticator.Authenticate(ctx, connCfg, proof, params...)
 	if err != nil {
 		return nil, err
 	}
@@ -333,31 +345,20 @@ func (s *Service) buildMFAConfigs(mfaSet map[string]bool) []*types.ConnectionCon
 	return mfas
 }
 
-// SendEmailCode 发送邮箱验证码
-func (s *Service) SendEmailCode(ctx context.Context, email string) error {
-	for _, auth := range s.authenticators {
-		if emailAuth, ok := auth.(*EmailAuthenticator); ok {
-			return emailAuth.SendCode(ctx, email)
-		}
-	}
-	return autherrors.NewServerError("email authenticator not configured")
-}
-
 // ==================== 辅助方法 ====================
 
-// buildConnectionMap 根据应用 IDP 配置构建 ConnectionMap
+// setConnections 根据应用 IDP 配置构建 ConnectionMap
 // 合并 Provider.Prepare() 基础配置与应用级配置（strategy, delegate, require）
-func (s *Service) buildConnectionMap(idpConfigs []*models.ApplicationIDPConfig) map[string]*types.ConnectionConfig {
+func (s *Service) setConnections(idpConfigs []*models.ApplicationIDPConfig) map[string]*types.ConnectionConfig {
 	result := make(map[string]*types.ConnectionConfig, len(idpConfigs))
 
 	for _, idpCfg := range idpConfigs {
-		// 获取 Provider 基础配置，或创建空配置（user/oper 等内部类型）
-		var cfg *types.ConnectionConfig
-		if provider, ok := s.idpRegistry.Get(idpCfg.Type); ok {
-			cfg = provider.Prepare()
-		} else {
-			cfg = &types.ConnectionConfig{Connection: idpCfg.Type}
+		// 获取 Provider 基础配置，未注册的 Provider 跳过
+		provider, ok := s.idpRegistry.Get(idpCfg.Type)
+		if !ok {
+			continue
 		}
+		cfg := provider.Prepare()
 
 		if cfg == nil {
 			continue

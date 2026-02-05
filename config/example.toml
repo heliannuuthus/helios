@@ -41,10 +41,10 @@ name = "auth"           # 数据库名称
 
 # Redis 配置（用于存储 session、authorization_code、refresh_token）
 [redis]
-host = "localhost"      # Redis 主机地址
-port = 6379             # Redis 端口
-password = ""           # Redis 密码（如果未设置密码则留空）
-db = 0                  # Redis 数据库编号（0-15）
+host = "127.0.0.1"
+port = 6379
+password = "helios"
+db = 0
 # 前缀配置（可选）
 # session-prefix = "auth:session:"
 # code-prefix = "auth:code:"
@@ -119,27 +119,23 @@ error = "/error"            # 错误页面
 callback = "/callback"      # IDP 回调路径
 
 # 支持的 audience 及其解密密钥（用于后端服务验证 token）
-# 每个 key 是 audience（服务 ID），value 是 base64url 编码的 JWK JSON
+# 每个 key 是 audience（服务 ID），value 是 Base64URL 编码的 32 字节密钥
 [aegis.secrets]
-# zwei = "base64url_encoded_jwk_json"
-# hermes = "base64url_encoded_jwk_json"
+# zwei = "base64url_encoded_32byte_key"
+# hermes = "base64url_encoded_32byte_key"
 
-# 域配置（Domain 配置，密钥使用 python3 scripts/initialize-hermes.py 生成）
-[aegis.domains.ciam]
-name = "Customer Identity"           # 域名称
-description = "C端用户身份域"         # 域描述
-sign-key = "ed25519:base64_encoded_sign_key"      # 签名密钥（格式：算法:base64密钥）
-encrypt-key = "aes256:base64_encoded_encrypt_key"  # 加密密钥（格式：算法:base64密钥）
+# 域配置（注意：实际配置在 hermes.toml 中，这里仅作参考）
+# 密钥使用 python3 scripts/initialize-hermes.py 生成
+# [aegis.domains.ciam]
+# name = "Customer Identity"           # 域名称
+# description = "C端用户身份域"         # 域描述
+# 签名密钥（32 字节 Ed25519 seed，Base64URL 编码）
+# 支持密钥轮换：逗号分隔多个密钥，第一把是主密钥用于签发，其余是旧密钥用于验证
+# sign-keys = "base64url_32byte_seed"
 
-[aegis.domains.piam]
-name = "Partner Identity"           # 域名称
-description = "B端用户身份域"         # 域描述
-sign-key = "ed25519:base64_encoded_sign_key"      # 签名密钥（格式：算法:base64密钥）
-encrypt-key = "aes256:base64_encoded_encrypt_key"  # 加密密钥（格式：算法:base64密钥）
-
-# 数据库加密密钥（使用 python3 scripts/initialize-hermes.py 生成）
-[db]
-enc-key = ""   # AES-256-GCM 加密密钥（Base64 编码，32字节）
+# 数据库加密密钥（注意：实际配置在 hermes.toml 中）
+# [db]
+# enc-key = ""   # AES-256-GCM 加密密钥（Base64 编码，32字节）
 
 # 首页轮播图配置
 [[home.banners]]

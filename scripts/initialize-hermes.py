@@ -3,20 +3,23 @@
 Hermes 初始化脚本
 
 功能：
-1. 生成数据库加密密钥并输出 aegis.config.toml 配置片段
-2. 生成域签名密钥并输出 aegis.config.toml 配置片段
-3. 生成服务密钥并输出 hermes.config.toml 配置片段
+1. 生成数据库加密密钥并输出配置片段
+2. 生成域签名密钥（32 字节 Ed25519 seed）并输出配置片段
+3. 生成服务密钥（32 字节）并输出配置片段
 4. 生成加密后的服务密钥并直接写入 sql/hermes/init.sql
 
 密钥说明：
 ==========
 
+所有密钥统一使用 32 字节原始格式，Base64URL 编码（无填充）
+
 aegis.config.toml:
-  - [aegis.domains.{domain}] sign-key: Base64URL 编码的 Ed25519 JWK，用于签名 JWT Token
+  - [aegis.domains.{domain}] sign-keys: Base64URL 编码的 32 字节 Ed25519 seed
+    支持密钥轮换，逗号分隔多个密钥，第一把是主密钥
 
 hermes.config.toml:
-  - [db] enc-key: Base64 编码的 32 字节 AES 密钥，用于加密所有敏感数据
-  - [aegis] secret-key: Base64URL 编码的 AES-256 JWK，hermes 服务的密钥（用于验证 CAT）
+  - [db] enc-key: Base64 编码的 32 字节 AES-256 密钥，用于加密敏感数据
+  - [aegis] secret-key: Base64URL 编码的 32 字节密钥，服务的对称加密密钥
 
 sql/hermes/init.sql:
   - t_service.encrypted_key: 服务密钥的密文（用 db.enc-key 加密）
@@ -35,8 +38,6 @@ from typing import Optional
 from dataclasses import dataclass, field
 
 try:
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-    from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 except ImportError:
     print("请安装 cryptography 库: pip install cryptography")
@@ -79,8 +80,18 @@ class Application:
     name: str
     logo_url: Optional[str] = None
     redirect_uris: list[str] = field(default_factory=list)
-    allowed_idps: list[str] = field(default_factory=list)
     allowed_origins: list[str] = field(default_factory=list)
+
+
+@dataclass
+class AppIdpConfig:
+    """应用 IDP 配置"""
+    app_id: str
+    idp_type: str  # IDP 类型：email/google/github/wechat:mp 等
+    priority: int = 0  # 排序优先级（值越大越靠前）
+    strategy: Optional[str] = None  # 登录策略（仅 user/oper）：password,email_otp,webauthn
+    delegate: Optional[str] = None  # 委托 MFA：email_otp,totp,webauthn
+    require: Optional[str] = None  # 前置验证：captcha
 
 
 @dataclass
@@ -133,9 +144,15 @@ APPLICATIONS = [
         name="Atlas 管理控制台",
         logo_url="https://aegis.heliannuuthus.com/logos/atlas.svg",
         redirect_uris=["https://atlas.heliannuuthus.com/auth/callback"],
-        allowed_idps=["email", "google", "github"],
         allowed_origins=["https://atlas.heliannuuthus.com"],
     ),
+]
+
+APP_IDP_CONFIGS = [
+    # Atlas 应用的 IDP 配置
+    AppIdpConfig("atlas", "oper", priority=10, strategy="password",delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("atlas", "google", priority=5),
+    AppIdpConfig("atlas", "github", priority=5),
 ]
 
 APP_SERVICE_RELATIONS = [
@@ -169,45 +186,9 @@ def b64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
 
 
-def jwk_to_b64url(jwk: dict) -> str:
-    """JWK 转 Base64URL 编码的 JSON"""
-    return b64url_encode(json.dumps(jwk, separators=(",", ":")).encode("utf-8"))
-
-
-def generate_ed25519_jwk(kid: str) -> dict:
-    """生成 Ed25519 签名密钥 JWK"""
-    private_key = Ed25519PrivateKey.generate()
-    private_bytes = private_key.private_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PrivateFormat.Raw,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    public_bytes = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PublicFormat.Raw,
-    )
-    return {
-        "kty": "OKP",
-        "crv": "Ed25519",
-        "alg": "EdDSA",
-        "use": "sig",
-        "kid": kid,
-        "d": b64url_encode(private_bytes),
-        "x": b64url_encode(public_bytes),
-    }
-
-
-def generate_aes256_jwk(kid: str) -> tuple[dict, bytes]:
-    """生成 AES-256 加密密钥 JWK，返回 (JWK, 原始密钥)"""
-    key_bytes = secrets.token_bytes(32)
-    jwk = {
-        "kty": "oct",
-        "kid": kid,
-        "k": b64url_encode(key_bytes),
-        "alg": "A256GCM",
-        "use": "enc",
-    }
-    return jwk, key_bytes
+def generate_32byte_key() -> bytes:
+    """生成 32 字节随机密钥"""
+    return secrets.token_bytes(32)
 
 
 def encrypt_aes_gcm(key: bytes, plaintext: bytes, aad: str) -> bytes:
@@ -224,68 +205,95 @@ def encrypt_aes_gcm(key: bytes, plaintext: bytes, aad: str) -> bytes:
 class ServiceData:
     """服务数据"""
     service: Service
-    secret_jwk: dict
-    encrypted_key: str  # Base64 密文
+    secret_key: bytes      # 32 字节原始密钥
+    encrypted_key: str     # Base64 密文
 
 
 class Initializer:
     def __init__(self):
-        self.db_enc_key: bytes = b""  # 数据库加密密钥
-        self.domain_sign_keys: dict[str, dict] = {}  # 域签名密钥 JWK
+        self.db_enc_key: bytes = b""  # 数据库加密密钥（32 字节）
+        self.domain_sign_keys: dict[str, bytes] = {}  # 域签名密钥（32 字节 Ed25519 seed）
         self.services_data: list[ServiceData] = []
 
     def generate_all(self):
         """生成所有密钥"""
-        # 1. 生成数据库加密密钥
-        self.db_enc_key = secrets.token_bytes(32)
+        # 1. 生成数据库加密密钥（32 字节）
+        self.db_enc_key = generate_32byte_key()
 
-        # 2. 生成域签名密钥
+        # 2. 生成域签名密钥（32 字节 Ed25519 seed）
         for domain in DOMAINS:
-            self.domain_sign_keys[domain.domain_id] = generate_ed25519_jwk(f"{domain.domain_id}-sign")
+            self.domain_sign_keys[domain.domain_id] = generate_32byte_key()
 
         # 3. 生成服务密钥并加密
         for service in SERVICES:
-            # 生成服务密钥
-            secret_jwk, secret_key_raw = generate_aes256_jwk(f"{service.service_id}-secret")
+            # 生成服务密钥（32 字节）
+            secret_key = generate_32byte_key()
             
             # 用数据库加密密钥加密服务密钥
-            encrypted = encrypt_aes_gcm(self.db_enc_key, secret_key_raw, service.service_id)
+            encrypted = encrypt_aes_gcm(self.db_enc_key, secret_key, service.service_id)
             
             self.services_data.append(ServiceData(
                 service=service,
-                secret_jwk=secret_jwk,
+                secret_key=secret_key,
                 encrypted_key=b64_encode(encrypted),
             ))
 
-    def output_aegis_config(self) -> str:
-        """生成 aegis.config.toml 配置片段"""
+    def output_hermes_config(self) -> str:
+        """生成 hermes.toml 配置片段（含域签名密钥和 hermes 服务密钥）"""
         lines = []
-        # 域签名密钥
+        
+        # 数据库加密密钥
+        lines.append("[db]")
+        lines.append("# 数据库加密密钥（32 字节 AES-256，Base64 编码）")
+        lines.append("enc-key = '''")
+        lines.append(b64_encode(self.db_enc_key))
+        lines.append("'''")
+        lines.append("")
+        
+        # 域签名密钥（放在 hermes.toml）
         for domain in DOMAINS:
-            sign_jwk = self.domain_sign_keys.get(domain.domain_id)
-            if not sign_jwk:
+            sign_key = self.domain_sign_keys.get(domain.domain_id)
+            if not sign_key:
                 continue
             lines.append(f"[aegis.domains.{domain.domain_id}]")
             lines.append(f'name = "{domain.name}"')
             lines.append(f'description = "{domain.description}"')
-            lines.append(f'sign-key = "{jwk_to_b64url(sign_jwk)}"')
+            lines.append("# 签名密钥（32 字节 Ed25519 seed，Base64URL 编码）")
+            lines.append("# 支持密钥轮换：逗号分隔多个密钥，第一把是主密钥")
+            lines.append("sign-keys = '''")
+            lines.append(b64url_encode(sign_key))
+            lines.append("'''")
             lines.append("")
+        
+        # Hermes 服务密钥
+        hermes_data = next((sd for sd in self.services_data if sd.service.service_id == "hermes"), None)
+        if hermes_data:
+            lines.append("[aegis]")
+            lines.append("# Hermes 服务密钥（32 字节，Base64URL 编码）")
+            lines.append("secret-key = '''")
+            lines.append(b64url_encode(hermes_data.secret_key))
+            lines.append("'''")
+            lines.append("")
+        
         return "\n".join(lines)
 
-    def output_hermes_config(self) -> str:
-        """生成 hermes.config.toml 配置片段"""
+    def output_iris_config(self) -> str:
+        """生成 iris.toml 配置片段"""
         lines = []
-        # 数据库加密密钥
-        lines.append("[db]")
-        lines.append(f'enc-key = "{b64_encode(self.db_enc_key)}"  # 数据库加密密钥（用于加密敏感数据）')
-        lines.append("")
         
-        # 服务密钥
-        for sd in self.services_data:
-            lines.append(f"# {sd.service.name} ({sd.service.service_id})")
+        # Iris 服务密钥
+        iris_data = next((sd for sd in self.services_data if sd.service.service_id == "iris"), None)
+        if iris_data:
             lines.append("[aegis]")
-            lines.append(f'secret-key = "{jwk_to_b64url(sd.secret_jwk)}"')
+            lines.append("# Iris 服务的 audience（用于 token 验证）")
+            lines.append('audience = "iris"')
             lines.append("")
+            lines.append("# Iris 服务密钥（32 字节，Base64URL 编码）")
+            lines.append("secret-key = '''")
+            lines.append(b64url_encode(iris_data.secret_key))
+            lines.append("'''")
+            lines.append("")
+        
         return "\n".join(lines)
 
     def generate_init_sql(self) -> str:
@@ -313,16 +321,29 @@ class Initializer:
         # Applications
         if APPLICATIONS:
             lines.append("-- ==================== 应用 ====================")
-            lines.append("INSERT INTO t_application (app_id, domain_id, name, logo_url, redirect_uris, allowed_idps, allowed_origins) VALUES")
+            lines.append("INSERT INTO t_application (app_id, domain_id, name, logo_url, redirect_uris, allowed_origins) VALUES")
             app_values = []
             for app in APPLICATIONS:
                 logo_url = f"'{app.logo_url}'" if app.logo_url else "NULL"
                 redirect_uris = f"'{json.dumps(app.redirect_uris)}'" if app.redirect_uris else "NULL"
-                allowed_idps = f"'{json.dumps(app.allowed_idps)}'" if app.allowed_idps else "NULL"
                 allowed_origins = f"'{json.dumps(app.allowed_origins)}'" if app.allowed_origins else "NULL"
-                app_values.append(f"('{app.app_id}', '{app.domain_id}', '{app.name}', {logo_url}, {redirect_uris}, {allowed_idps}, {allowed_origins})")
+                app_values.append(f"('{app.app_id}', '{app.domain_id}', '{app.name}', {logo_url}, {redirect_uris}, {allowed_origins})")
             lines.append(",\n".join(app_values))
-            lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), logo_url = VALUES(logo_url), redirect_uris = VALUES(redirect_uris), allowed_idps = VALUES(allowed_idps), allowed_origins = VALUES(allowed_origins);")
+            lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), logo_url = VALUES(logo_url), redirect_uris = VALUES(redirect_uris), allowed_origins = VALUES(allowed_origins);")
+            lines.append("")
+
+        # Application IDP Configs
+        if APP_IDP_CONFIGS:
+            lines.append("-- ==================== 应用 IDP 配置 ====================")
+            lines.append("INSERT INTO t_application_idp_config (app_id, `type`, priority, strategy, delegate, `require`) VALUES")
+            idp_values = []
+            for cfg in APP_IDP_CONFIGS:
+                strategy = f"'{cfg.strategy}'" if cfg.strategy else "NULL"
+                delegate = f"'{cfg.delegate}'" if cfg.delegate else "NULL"
+                require = f"'{cfg.require}'" if cfg.require else "NULL"
+                idp_values.append(f"('{cfg.app_id}', '{cfg.idp_type}', {cfg.priority}, {strategy}, {delegate}, {require})")
+            lines.append(",\n".join(idp_values))
+            lines.append("ON DUPLICATE KEY UPDATE priority = VALUES(priority), strategy = VALUES(strategy), delegate = VALUES(delegate), `require` = VALUES(`require`);")
             lines.append("")
 
         # App Service Relations
@@ -376,19 +397,19 @@ class Initializer:
         print("  ✅ 服务密钥已生成并加密")
         print()
 
-        # 输出 aegis.config.toml 配置
+        # 输出 hermes.toml 配置
         print("=" * 60)
-        print("aegis.config.toml - 复制以下内容替换配置")
-        print("=" * 60)
-        print()
-        print(self.output_aegis_config())
-
-        # 输出 hermes.config.toml 配置
-        print("=" * 60)
-        print("hermes.config.toml - 复制以下内容替换 [aegis] 配置")
+        print("hermes.toml - 复制以下内容到配置文件")
         print("=" * 60)
         print()
         print(self.output_hermes_config())
+
+        # 输出 iris.toml 配置
+        print("=" * 60)
+        print("iris.toml - 复制以下内容到配置文件")
+        print("=" * 60)
+        print()
+        print(self.output_iris_config())
 
         # 写入 init.sql
         init_sql = self.generate_init_sql()

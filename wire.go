@@ -20,6 +20,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
+	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
 )
 
@@ -54,7 +55,7 @@ func provideHomeHandler() *home.Handler {
 
 // Hermes Service（供 aegis 模块复用）
 func provideHermesService() *hermes.Service {
-	return hermes.NewService()
+	return hermes.NewService(database.GetHermes())
 }
 
 // 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
@@ -94,22 +95,18 @@ func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
 func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
 	endpoint := config.GetAegisIssuer()
 
-	// 对称密钥提供者（用于解密 footer）
-	symmetricKeyProvider, err := intMw.NewHermesSymmetricKeyProvider()
+	// 创建密钥提供者
+	keyProvider, err := intMw.NewHermesKeyProvider()
 	if err != nil {
 		return nil, err
 	}
 
-	// 公钥提供者（用于验证签名）- 使用 HTTP 端点
-	publicKeyProvider := intMw.NewHermesPublicKeyProvider(endpoint)
-
-	// 私钥提供者（用于签发 CAT）- 使用本地密钥
-	secretKeyProvider, err := intMw.NewHermesSecretKeyProvider()
-	if err != nil {
-		return nil, err
-	}
-
-	return middleware.NewGinFactory(endpoint, publicKeyProvider, symmetricKeyProvider, secretKeyProvider), nil
+	return middleware.NewGinFactory(
+		endpoint,
+		keys.NewPublicKeyProvider(keyProvider),    // 公钥（用于验证签名）
+		keys.NewSymmetricKeyProvider(keyProvider), // 对称密钥（用于解密 footer）
+		keys.NewSecretKeyProvider(keyProvider),    // 私钥（用于签发 CAT）
+	), nil
 }
 
 // ProviderSet 提供者集合

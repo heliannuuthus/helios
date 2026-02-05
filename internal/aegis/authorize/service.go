@@ -16,8 +16,9 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
-	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/token"
+	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
+	"github.com/heliannuuthus/helios/pkg/helperutil"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -104,7 +105,7 @@ func (s *Service) PrepareAuthorization(ctx context.Context, flow *types.AuthFlow
 	}
 
 	// 4. 计算交集
-	grantedScopes := scopeIntersection(requestedScopes, allowedScopes)
+	grantedScopes := helperutil.ScopeIntersection(requestedScopes, allowedScopes)
 
 	// 5. 检查是否有有效的 scope
 	hasValidScope := false
@@ -324,7 +325,7 @@ func (s *Service) generateTokens(ctx context.Context, flow *types.AuthFlow) (*To
 	}
 
 	// 如果 scope 包含 offline_access，生成 refresh token
-	if containsScope(flow.GrantedScopes, ScopeOfflineAccess) {
+	if helperutil.ContainsScope(flow.GrantedScopes, ScopeOfflineAccess) {
 		rt, err := s.createRefreshToken(ctx, flow, scope)
 		if err != nil {
 			return nil, err
@@ -348,18 +349,19 @@ func (s *Service) generateAccessToken(
 		accessTTL = s.defaultAccessTTL
 	}
 
-	// 构建用户信息
-	userInfo := s.buildUserInfo(user, scope)
-
-	// 创建 Access Token
-	uat := token.NewUserAccessToken(
-		s.tokenSvc.GetIssuerName(),
-		app.AppID,
-		svc.ServiceID,
-		scope,
-		accessTTL,
-		userInfo,
-	)
+	// 构建 UAT（用户信息根据 scope 自动过滤）
+	uat := token.NewClaimsBuilder().
+		Issuer(s.tokenSvc.GetIssuerName()).
+		ClientID(app.AppID).
+		Audience(svc.ServiceID).
+		ExpiresIn(accessTTL).
+		Build(token.NewUserAccessTokenBuilder().
+			Scope(scope).
+			OpenID(user.OpenID).
+			Nickname(user.GetNickname()).
+			Picture(user.GetPicture()).
+			Email(user.GetEmail()).
+			Phone(user.GetPhone()))
 
 	accessToken, err := s.tokenSvc.Issue(ctx, uat)
 	if err != nil {
@@ -384,10 +386,16 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 	// 清理旧的 refresh token
 	s.cleanupOldRefreshTokens(ctx, flow.User.OpenID, flow.Application.AppID)
 
+	// 生成 refresh token 值
+	tokenValue, err := generateRefreshTokenValue()
+	if err != nil {
+		return nil, fmt.Errorf("generate refresh token: %w", err)
+	}
+
 	// 创建新的 refresh token
 	now := time.Now()
 	rt := &cache.RefreshToken{
-		Token:     generateRefreshTokenValue(),
+		Token:     tokenValue,
 		UserID:    flow.User.OpenID,
 		ClientID:  flow.Application.AppID,
 		Audience:  flow.Service.ServiceID,
@@ -422,33 +430,6 @@ func (s *Service) cleanupOldRefreshTokens(ctx context.Context, userID, clientID 
 			}
 		}
 	}
-}
-
-func (s *Service) buildUserInfo(user *models.UserWithDecrypted, scope string) *pkgtoken.UserInfo {
-	info := &pkgtoken.UserInfo{
-		Subject: user.OpenID,
-	}
-
-	scopes := parseScopeSet(scope)
-
-	if scopes[ScopeProfile] {
-		if user.Nickname != nil {
-			info.Nickname = *user.Nickname
-		}
-		if user.Picture != nil {
-			info.Picture = *user.Picture
-		}
-	}
-
-	if scopes[ScopeEmail] && user.Email != nil {
-		info.Email = *user.Email
-	}
-
-	if scopes[ScopePhone] && user.Phone != "" {
-		info.Phone = user.Phone
-	}
-
-	return info
 }
 
 // ==================== Token 撤销 ====================
@@ -488,11 +469,11 @@ func (s *Service) GetUserInfo(ctx context.Context, openID, scope string) (*UserI
 	}
 
 	if scopes[ScopeEmail] && user.Email != nil {
-		resp.Email = maskEmail(*user.Email)
+		resp.Email = helperutil.MaskEmail(*user.Email)
 	}
 
 	if scopes[ScopePhone] && user.Phone != "" {
-		resp.Phone = maskPhone(user.Phone)
+		resp.Phone = helperutil.MaskPhone(user.Phone)
 	}
 
 	return resp, nil
@@ -500,15 +481,22 @@ func (s *Service) GetUserInfo(ctx context.Context, openID, scope string) (*UserI
 
 // ==================== Public Keys ====================
 
-// PublicKeyResponse PASETO 公钥响应
-type PublicKeyResponse struct {
+// PublicKeyInfo 公钥信息
+type PublicKeyInfo struct {
 	Version   string `json:"version"`    // PASETO 版本（v4）
 	Purpose   string `json:"purpose"`    // 用途（public）
 	PublicKey string `json:"public_key"` // Base64 编码的公钥
 }
 
-// GetPublicKey 获取公钥（根据 client_id 返回其所属域的公钥）
-func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKeyResponse, error) {
+// PublicKeysResponse PASETO 公钥响应（支持密钥轮换）
+type PublicKeysResponse struct {
+	Main PublicKeyInfo   `json:"main"` // 当前主密钥（用于签发新 token）
+	Keys []PublicKeyInfo `json:"keys"` // 所有有效公钥（包括主密钥和轮换中的旧密钥，用于验证）
+}
+
+// GetPublicKey 获取公钥（根据 client_id 返回其所属域的所有有效公钥）
+// 返回的公钥列表包含主密钥和轮换期间的旧密钥，用于验证不同时期签发的 token
+func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKeysResponse, error) {
 	// 1. 获取 Application
 	app, err := s.cache.GetApplication(ctx, clientID)
 	if err != nil {
@@ -521,19 +509,36 @@ func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKey
 		return nil, fmt.Errorf("domain not found: %w", err)
 	}
 
-	// 3. 解析签名密钥获取公钥
-	secretKey, err := pkgtoken.ParseSecretKeyFromJWK(domain.SignKey)
+	// 3. 从域主密钥（32 字节 Ed25519 seed）直接解析公钥
+	mainPublicKey, err := keys.ParsePublicKeyFromSeed(domain.Main)
 	if err != nil {
-		return nil, fmt.Errorf("parse sign key: %w", err)
+		return nil, fmt.Errorf("parse main public key from seed: %w", err)
 	}
-
-	publicKey := secretKey.Public()
-
-	// 4. 构建响应
-	return &PublicKeyResponse{
+	main := PublicKeyInfo{
 		Version:   "v4",
 		Purpose:   "public",
-		PublicKey: publicKey.ExportHex(),
+		PublicKey: keys.ExportPublicKeyBase64(mainPublicKey),
+	}
+
+	// 4. 从所有域密钥（32 字节 Ed25519 seed）直接解析公钥
+	keyInfos := make([]PublicKeyInfo, 0, len(domain.Keys))
+	for _, signKey := range domain.Keys {
+		publicKey, err := keys.ParsePublicKeyFromSeed(signKey)
+		if err != nil {
+			return nil, fmt.Errorf("parse public key from seed: %w", err)
+		}
+
+		keyInfos = append(keyInfos, PublicKeyInfo{
+			Version:   "v4",
+			Purpose:   "public",
+			PublicKey: keys.ExportPublicKeyBase64(publicKey),
+		})
+	}
+
+	// 5. 构建响应
+	return &PublicKeysResponse{
+		Main: main,
+		Keys: keyInfos,
 	}, nil
 }
 
@@ -555,32 +560,6 @@ func verifyCodeChallenge(method, challenge, verifier string) bool {
 	}
 }
 
-// scopeIntersection 计算 scope 交集
-func scopeIntersection(requested, allowed []string) []string {
-	allowedSet := make(map[string]bool)
-	for _, s := range allowed {
-		allowedSet[s] = true
-	}
-
-	var result []string
-	for _, s := range requested {
-		if allowedSet[s] {
-			result = append(result, s)
-		}
-	}
-	return result
-}
-
-// containsScope 检查是否包含指定 scope
-func containsScope(scopes []string, target string) bool {
-	for _, s := range scopes {
-		if s == target {
-			return true
-		}
-	}
-	return false
-}
-
 // parseScopeSet 解析 scope 为集合
 func parseScopeSet(scope string) map[string]bool {
 	set := make(map[string]bool)
@@ -591,12 +570,12 @@ func parseScopeSet(scope string) map[string]bool {
 }
 
 // generateRefreshTokenValue 生成 refresh token 值
-func generateRefreshTokenValue() string {
+func generateRefreshTokenValue() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("generate refresh token value failed: %v", err))
+		return "", fmt.Errorf("generate refresh token value: %w", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
 
 // getAllowedScopes 获取允许的 scope
@@ -605,33 +584,6 @@ func (s *Service) getAllowedScopes(_ *types.AuthFlow) []string {
 	// TODO: 可以从应用配置或服务配置中读取
 	// 目前默认允许所有标准 scope
 	return []string{ScopeOpenID, ScopeProfile, ScopeEmail, ScopePhone, ScopeOfflineAccess}
-}
-
-// maskEmail 邮箱脱敏
-func maskEmail(email string) string {
-	if email == "" {
-		return ""
-	}
-	parts := strings.Split(email, "@")
-	if len(parts) != 2 {
-		return email
-	}
-	local := parts[0]
-	if len(local) <= 1 {
-		return local + "**@" + parts[1]
-	}
-	return string(local[0]) + "**@" + parts[1]
-}
-
-// maskPhone 手机号脱敏
-func maskPhone(phone string) string {
-	if phone == "" {
-		return ""
-	}
-	if len(phone) <= 7 {
-		return phone
-	}
-	return phone[:3] + "****" + phone[len(phone)-4:]
 }
 
 // DecryptPhone 解密手机号

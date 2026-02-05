@@ -243,84 +243,13 @@ func NewError(code, description string) *Error {
 // Token Token 接口（类型别名，实际定义在 token 包）
 type Token = token.Token
 
-// UserInfo 用户信息（类型别名，实际定义在 token 包）
-type UserInfo = token.UserInfo
-
 // AsUAT 类型断言助手函数（类型别名）
 var AsUAT = token.AsUAT
 
 // GetOpenIDFromToken 从 Token 获取 OpenID
 func GetOpenIDFromToken(t Token) string {
-	if uat, ok := AsUAT(t); ok && uat.GetUser() != nil {
-		return uat.GetUser().Subject
+	if uat, ok := AsUAT(t); ok && uat.HasUser() {
+		return uat.GetOpenID()
 	}
 	return ""
-}
-
-// ============= Scope Helpers =============
-
-// ParseScopes 解析 scope 字符串
-func ParseScopes(scope string) []string {
-	if scope == "" {
-		return nil
-	}
-	return strings.Fields(scope)
-}
-
-// JoinScopes 合并 scope 列表
-func JoinScopes(scopes []string) string {
-	return strings.Join(scopes, " ")
-}
-
-// ScopeIntersection 计算 scope 交集
-func ScopeIntersection(requested, allowed []string) []string {
-	allowedSet := make(map[string]bool)
-	for _, s := range allowed {
-		allowedSet[s] = true
-	}
-
-	var result []string
-	for _, s := range requested {
-		if allowedSet[s] {
-			result = append(result, s)
-		}
-	}
-	return result
-}
-
-// ContainsScope 检查 scope 列表是否包含某个 scope
-func ContainsScope(scopes []string, target string) bool {
-	for _, s := range scopes {
-		if s == target {
-			return true
-		}
-	}
-	return false
-}
-
-// MaskEmail 邮箱脱敏：a**@example.com
-func MaskEmail(email string) string {
-	if email == "" {
-		return ""
-	}
-	parts := strings.Split(email, "@")
-	if len(parts) != 2 {
-		return email
-	}
-	local := parts[0]
-	if len(local) <= 1 {
-		return local + "**@" + parts[1]
-	}
-	return string(local[0]) + "**@" + parts[1]
-}
-
-// MaskPhone 手机号脱敏：138****1234
-func MaskPhone(phone string) string {
-	if phone == "" {
-		return ""
-	}
-	if len(phone) <= 7 {
-		return phone
-	}
-	return phone[:3] + "****" + phone[len(phone)-4:]
 }

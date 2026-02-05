@@ -22,10 +22,9 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
+	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
-)
 
-import (
 	_ "github.com/heliannuuthus/helios/docs"
 )
 
@@ -102,7 +101,7 @@ func provideHomeHandler() *home.Handler {
 
 // Hermes Service（供 aegis 模块复用）
 func provideHermesService() *hermes.Service {
-	return hermes.NewService()
+	return hermes.NewService(database.GetHermes())
 }
 
 // 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
@@ -141,19 +140,14 @@ func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
 func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
 	endpoint := config.GetAegisIssuer()
 
-	symmetricKeyProvider, err := middleware2.NewHermesSymmetricKeyProvider()
+	keyProvider, err := middleware2.NewHermesKeyProvider()
 	if err != nil {
 		return nil, err
 	}
 
-	publicKeyProvider := middleware2.NewHermesPublicKeyProvider(endpoint)
-
-	secretKeyProvider, err := middleware2.NewHermesSecretKeyProvider()
-	if err != nil {
-		return nil, err
-	}
-
-	return middleware.NewGinFactory(endpoint, publicKeyProvider, symmetricKeyProvider, secretKeyProvider), nil
+	return middleware.NewGinFactory(
+		endpoint, keys.NewPublicKeyProvider(keyProvider), keys.NewSymmetricKeyProvider(keyProvider), keys.NewSecretKeyProvider(keyProvider),
+	), nil
 }
 
 // ProviderSet 提供者集合

@@ -5,22 +5,23 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/internal/aegis/authenticate"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/captcha"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/alipay"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/github"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/google"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/system"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/tt"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/wechat"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/webauthn"
 	"github.com/heliannuuthus/helios/internal/aegis/authorize"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
-	"github.com/heliannuuthus/helios/internal/aegis/captcha"
 	"github.com/heliannuuthus/helios/internal/aegis/challenge"
-	"github.com/heliannuuthus/helios/internal/aegis/idp"
-	"github.com/heliannuuthus/helios/internal/aegis/idp/alipay"
-	"github.com/heliannuuthus/helios/internal/aegis/idp/github"
-	"github.com/heliannuuthus/helios/internal/aegis/idp/google"
-	"github.com/heliannuuthus/helios/internal/aegis/idp/tt"
-	"github.com/heliannuuthus/helios/internal/aegis/idp/wechat"
-	"github.com/heliannuuthus/helios/internal/aegis/mail"
 	"github.com/heliannuuthus/helios/internal/aegis/token"
-	"github.com/heliannuuthus/helios/internal/aegis/webauthn"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/helios/pkg/mail"
 	pkgstore "github.com/heliannuuthus/helios/pkg/store"
 )
 
@@ -51,7 +52,7 @@ func Initialize(cfg *InitConfig) (*Handler, error) {
 	tokenSvc := token.NewService(cacheManager)
 
 	// 4. 初始化 IDP Registry
-	idpRegistry := initIDPRegistry()
+	idpRegistry := initIDPRegistry(cfg.UserSvc)
 
 	// 5. 初始化邮件发送器（如果启用）
 	var emailSender *mail.Sender
@@ -66,7 +67,6 @@ func Initialize(cfg *InitConfig) (*Handler, error) {
 	authenticateSvc := authenticate.NewService(&authenticate.ServiceConfig{
 		Cache:       cacheManager,
 		IDPRegistry: idpRegistry,
-		EmailSender: emailSender,
 	})
 
 	// 7. 初始化 Authorize Service
@@ -120,7 +120,7 @@ func Initialize(cfg *InitConfig) (*Handler, error) {
 }
 
 // initIDPRegistry 初始化 IDP 注册表
-func initIDPRegistry() *idp.Registry {
+func initIDPRegistry(userSvc *hermes.UserService) *idp.Registry {
 	registry := idp.NewRegistry()
 
 	// 注册微信小程序
@@ -137,6 +137,12 @@ func initIDPRegistry() *idp.Registry {
 
 	// 注册 Google
 	registry.Register(google.NewProvider())
+
+	// 注册系统账号密码登录（user/oper）
+	if userSvc != nil {
+		registry.Register(system.NewUserProvider(userSvc))
+		registry.Register(system.NewOperProvider(userSvc))
+	}
 
 	logger.Infof("[Auth] IDP 注册完成: %v", registry.List())
 	return registry

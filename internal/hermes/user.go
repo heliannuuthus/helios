@@ -45,10 +45,46 @@ func (s *UserService) FindByIdentity(ctx context.Context, idp, providerID string
 	return s.FindByOpenID(ctx, identity.OpenID)
 }
 
-// FindByEmail 根据邮箱查找用户
-func (s *UserService) FindByEmail(ctx context.Context, email string) (*models.User, error) {
+// findByEmail 根据邮箱查找用户（内部使用，返回基础 User）
+func (s *UserService) findByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
 	if err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// FindByEmail 根据邮箱查找用户（返回解密后的完整用户信息）
+func (s *UserService) FindByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error) {
+	user, err := s.findByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	return s.GetUserWithDecrypted(ctx, user.OpenID)
+}
+
+// FindByEmailAndDomain 根据邮箱和域查找用户
+func (s *UserService) FindByEmailAndDomain(ctx context.Context, email, domainID string) (*models.UserWithDecrypted, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("email = ? AND domain_id = ?", email, domainID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return s.GetUserWithDecrypted(ctx, user.OpenID)
+}
+
+// FindByUsername 根据用户名查找用户
+func (s *UserService) FindByUsername(ctx context.Context, username string) (*models.User, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("username = ?", username).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// FindByPhone 根据手机号哈希查找用户
+func (s *UserService) FindByPhone(ctx context.Context, phoneHash string) (*models.User, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("phone = ?", phoneHash).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -160,8 +196,20 @@ func (s *UserService) FindOrCreate(ctx context.Context, req *models.FindOrCreate
 
 	// 2. 创建新用户
 	now := time.Now()
-	nickname := generateRandomName()
-	picture := generateRandomAvatar(req.ProviderID)
+
+	// 优先使用 IDP 提供的用户信息，否则生成随机值
+	var nickname, picture string
+	if req.UserInfo != nil && req.UserInfo.Nickname != "" {
+		nickname = req.UserInfo.Nickname
+	} else {
+		nickname = generateRandomName()
+	}
+	if req.UserInfo != nil && req.UserInfo.Picture != "" {
+		picture = req.UserInfo.Picture
+	} else {
+		picture = generateRandomAvatar(req.ProviderID)
+	}
+
 	newUser := &models.User{
 		OpenID:      models.GenerateOpenID(),
 		DomainID:    req.DomainID,
@@ -170,6 +218,12 @@ func (s *UserService) FindOrCreate(ctx context.Context, req *models.FindOrCreate
 		LastLoginAt: &now,
 		CreatedAt:   now,
 		UpdatedAt:   now,
+	}
+
+	// 如果 IDP 提供了邮箱，设置并标记为已验证
+	if req.UserInfo != nil && req.UserInfo.Email != "" {
+		newUser.Email = &req.UserInfo.Email
+		newUser.EmailVerified = true
 	}
 
 	identity := &models.UserIdentity{
@@ -185,7 +239,7 @@ func (s *UserService) FindOrCreate(ctx context.Context, req *models.FindOrCreate
 		return nil, false, err
 	}
 
-	logger.Infof("[UserService] 创建新用户 - OpenID: %s, IDP: %s", newUser.OpenID, req.IDP)
+	logger.Infof("[UserService] 创建新用户 - OpenID: %s, DomainID: %s, IDP: %s", newUser.OpenID, req.DomainID, req.IDP)
 
 	result := &models.UserWithDecrypted{
 		User: *newUser,
@@ -301,4 +355,142 @@ func (s *UserService) GetUserIDByCredentialID(ctx context.Context, credentialID 
 		return "", err
 	}
 	return cred.OpenID, nil
+}
+
+// ==================== PasswordStore 接口实现（供 password IDP 使用）====================
+
+// PasswordStoreCredential 密码存储凭证信息
+type PasswordStoreCredential struct {
+	OpenID       string // 用户 OpenID
+	PasswordHash string // 密码哈希（bcrypt）
+	Nickname     string // 昵称
+	Email        string // 邮箱
+	Picture      string // 头像
+	Status       int8   // 用户状态
+}
+
+// GetUserByIdentifier 根据标识符获取 C 端用户凭证信息
+// identifier 可以是用户名、邮箱或手机号
+// 只在 CIAM 域中查找
+func (s *UserService) GetUserByIdentifier(ctx context.Context, identifier string) (*PasswordStoreCredential, error) {
+	return s.getByIdentifierAndDomain(ctx, identifier, "ciam")
+}
+
+// GetOperByIdentifier 根据标识符获取 B 端运营人员凭证信息
+// identifier 通常是用户名（oper 只支持用户名登录）
+// 只在 PIAM 域中查找
+func (s *UserService) GetOperByIdentifier(ctx context.Context, identifier string) (*PasswordStoreCredential, error) {
+	return s.getByIdentifierAndDomain(ctx, identifier, "piam")
+}
+
+// getByIdentifierAndDomain 根据标识符和域获取凭证信息
+func (s *UserService) getByIdentifierAndDomain(ctx context.Context, identifier, domainID string) (*PasswordStoreCredential, error) {
+	// 按优先级尝试不同的标识符类型
+	// 1. 尝试用户名
+	user, err := s.findByUsernameAndDomain(ctx, identifier, domainID)
+	if err == nil {
+		return s.toPasswordStoreCredential(user), nil
+	}
+
+	// 2. 尝试邮箱（如果标识符包含 @）
+	if isEmail(identifier) {
+		userByEmail, err := s.findByEmailAndDomainInternal(ctx, identifier, domainID)
+		if err == nil {
+			return s.toPasswordStoreCredential(userByEmail), nil
+		}
+	}
+
+	// 3. 尝试手机号（如果是纯数字）- 仅对 CIAM 有效
+	if domainID == "ciam" && isPhone(identifier) {
+		phoneHash := hashPhone(identifier)
+		userByPhone, err := s.findByPhoneAndDomain(ctx, phoneHash, domainID)
+		if err == nil {
+			return s.toPasswordStoreCredential(userByPhone), nil
+		}
+	}
+
+	return nil, errors.New("user not found")
+}
+
+// findByUsernameAndDomain 根据用户名和域查找
+func (s *UserService) findByUsernameAndDomain(ctx context.Context, username, domainID string) (*models.User, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("username = ? AND domain_id = ?", username, domainID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// findByEmailAndDomainInternal 根据邮箱和域查找（内部使用）
+func (s *UserService) findByEmailAndDomainInternal(ctx context.Context, email, domainID string) (*models.User, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("email = ? AND domain_id = ?", email, domainID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// findByPhoneAndDomain 根据手机号哈希和域查找
+func (s *UserService) findByPhoneAndDomain(ctx context.Context, phoneHash, domainID string) (*models.User, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("phone = ? AND domain_id = ?", phoneHash, domainID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// toPasswordStoreCredential 转换为密码存储凭证
+func (s *UserService) toPasswordStoreCredential(user *models.User) *PasswordStoreCredential {
+	cred := &PasswordStoreCredential{
+		OpenID: user.OpenID,
+		Status: user.Status,
+	}
+
+	if user.PasswordHash != nil {
+		cred.PasswordHash = *user.PasswordHash
+	}
+	if user.Nickname != nil {
+		cred.Nickname = *user.Nickname
+	}
+	if user.Email != nil {
+		cred.Email = *user.Email
+	}
+	if user.Picture != nil {
+		cred.Picture = *user.Picture
+	}
+
+	return cred
+}
+
+// isEmail 判断是否是邮箱格式
+func isEmail(s string) bool {
+	for _, c := range s {
+		if c == '@' {
+			return true
+		}
+	}
+	return false
+}
+
+// isPhone 判断是否是手机号格式（简单判断：纯数字且长度合理）
+func isPhone(s string) bool {
+	if len(s) < 10 || len(s) > 15 {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			// 允许 + 号开头（国际号码）
+			if c == '+' && s[0] == '+' {
+				continue
+			}
+			return false
+		}
+	}
+	return true
+}
+
+// hashPhone 对手机号进行哈希（用于查询）
+func hashPhone(phone string) string {
+	// 使用 SHA256 哈希手机号
+	return cryptoutil.Hash(phone)
 }

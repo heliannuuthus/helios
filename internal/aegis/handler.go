@@ -7,14 +7,14 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/heliannuuthus/helios/internal/aegis/authenticate"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/webauthn"
 	"github.com/heliannuuthus/helios/internal/aegis/authorize"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	"github.com/heliannuuthus/helios/internal/aegis/challenge"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
-	"github.com/heliannuuthus/helios/internal/aegis/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/token"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
-	"github.com/heliannuuthus/helios/internal/aegis/webauthn"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
@@ -68,6 +68,28 @@ func NewHandler(cfg *HandlerConfig) *Handler {
 	}
 }
 
+// ApplicationInfo 应用信息
+type ApplicationInfo struct {
+	AppID   string  `json:"app_id"`
+	Name    string  `json:"name"`
+	LogoURL *string `json:"logo_url,omitempty"`
+}
+
+// ServiceInfo 服务信息
+type ServiceInfo struct {
+	ServiceID   string  `json:"service_id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+}
+
+// AuthContextResponse 认证上下文响应（/auth/context 接口返回给前端的公开信息）
+type AuthContextResponse struct {
+	Application *ApplicationInfo `json:"application,omitempty"`
+	Service     *ServiceInfo     `json:"service,omitempty"`
+}
+
+// ==================== 公开方法（按登录认证流程顺序） ====================
+
 // CacheManager 返回缓存管理器（用于 CORS 中间件等）
 func (h *Handler) CacheManager() *cache.Manager {
 	return h.cache
@@ -87,6 +109,8 @@ func (h *Handler) SetWebAuthnService(svc *webauthn.Service) {
 func (h *Handler) HasWebAuthn() bool {
 	return h.webauthnSvc != nil
 }
+
+// ==================== 1. 认证会话创建 ====================
 
 // Authorize POST /auth/authorize
 // 创建认证会话
@@ -115,6 +139,50 @@ func (h *Handler) Authorize(c *gin.Context) {
 	forwardNext(c, flow)
 }
 
+// ==================== 2. 获取上下文信息 ====================
+
+// GetContext GET /auth/context
+// 获取当前认证流程的应用和服务信息
+func (h *Handler) GetContext(c *gin.Context) {
+	// 从 Cookie 获取 flowID
+	flowID, err := getAuthSessionCookie(c)
+	if err != nil || flowID == "" {
+		h.errorResponse(c, autherrors.NewInvalidRequest("missing aegis-session cookie"))
+		return
+	}
+
+	// 获取 AuthFlow
+	flow := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
+	if flow.HasError() {
+		h.flowErrorResponse(c, flow)
+		return
+	}
+
+	// 为 aegis-session cookie 续期
+	setAuthSessionCookie(c, flowID)
+
+	// 构建响应
+	resp := &AuthContextResponse{}
+
+	if flow.Application != nil {
+		resp.Application = &ApplicationInfo{
+			AppID:   flow.Application.AppID,
+			Name:    flow.Application.Name,
+			LogoURL: flow.Application.LogoURL,
+		}
+	}
+
+	if flow.Service != nil {
+		resp.Service = &ServiceInfo{
+			ServiceID:   flow.Service.ServiceID,
+			Name:        flow.Service.Name,
+			Description: flow.Service.Description,
+		}
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 // GetConnections GET /auth/connections
 // 获取可用的 Connection 配置（按类别分类：idp, vchan, mfa）
 func (h *Handler) GetConnections(c *gin.Context) {
@@ -138,63 +206,73 @@ func (h *Handler) GetConnections(c *gin.Context) {
 	c.JSON(http.StatusOK, connectionsMap)
 }
 
-// ApplicationInfo 应用信息
-type ApplicationInfo struct {
-	AppID   string  `json:"app_id"`
-	Name    string  `json:"name"`
-	LogoURL *string `json:"logo_url,omitempty"`
-}
+// ==================== 3. Challenge 验证 ====================
 
-// ServiceInfo 服务信息
-type ServiceInfo struct {
-	ServiceID   string  `json:"service_id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-}
-
-// AuthContextResponse 认证上下文响应（/auth/context 接口返回给前端的公开信息）
-type AuthContextResponse struct {
-	Application *ApplicationInfo `json:"application,omitempty"`
-	Service     *ServiceInfo     `json:"service,omitempty"`
-}
-
-// GetFlowInfo GET /auth/context
-// 获取当前认证流程的应用和服务信息
-func (h *Handler) GetFlowInfo(c *gin.Context) {
-	// 从 Cookie 获取 flowID
-	flowID, err := getAuthSessionCookie(c)
-	if err != nil || flowID == "" {
-		h.errorResponse(c, autherrors.NewInvalidRequest("missing aegis-session cookie"))
+// InitiateChallenge POST /auth/challenge
+// 发起 Challenge
+func (h *Handler) InitiateChallenge(c *gin.Context) {
+	if h.challengeSvc == nil {
+		h.errorResponse(c, autherrors.NewServerError("challenge service not configured"))
 		return
 	}
 
-	// 获取 AuthFlow
-	flow := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
-	if flow.HasError() {
-		h.flowErrorResponse(c, flow)
+	var req challenge.CreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
 
-	// 构建响应
-	resp := &AuthContextResponse{}
+	// 获取客户端 IP
+	remoteIP := c.ClientIP()
 
-	if flow.Application != nil {
-		resp.Application = &ApplicationInfo{
-			AppID:   flow.Application.AppID,
-			Name:    flow.Application.Name,
-			LogoURL: flow.Application.LogoURL,
-		}
-	}
-
-	if flow.Service != nil {
-		resp.Service = &ServiceInfo{
-			ServiceID:   flow.Service.ServiceID,
-			Name:        flow.Service.Name,
-			Description: flow.Service.Description,
-		}
+	resp, err := h.challengeSvc.Create(c.Request.Context(), &req, remoteIP)
+	if err != nil {
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		return
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// ContinueChallenge PUT /auth/challenge
+// 继续 Challenge（提交验证）
+func (h *Handler) ContinueChallenge(c *gin.Context) {
+	if h.challengeSvc == nil {
+		h.errorResponse(c, autherrors.NewServerError("challenge service not configured"))
+		return
+	}
+
+	// 从 query 获取 challenge_id
+	challengeID := c.Query("challenge_id")
+	if challengeID == "" {
+		h.errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required"))
+		return
+	}
+
+	var req challenge.VerifyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		return
+	}
+
+	// 获取客户端 IP
+	remoteIP := c.ClientIP()
+
+	resp, err := h.challengeSvc.Verify(c.Request.Context(), challengeID, &req, remoteIP)
+	if err != nil {
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
+// ==================== 4. 登录 ====================
+
+// loginUserResult 登录用户查找结果
+type loginUserResult struct {
+	user      *models.UserWithDecrypted
+	isNewUser bool
 }
 
 // Login POST /auth/login
@@ -222,102 +300,186 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	// 2. 执行认证 - 构建 data map
-	data := map[string]any{
-		"principal": req.Principal,
-		"proof":     req.Proof,
-		"strategy":  req.Strategy,
-	}
+	// 确保无论成功还是失败都保存 flow（续期已在 GetAndValidateFlow 中完成）
+	var loginSuccess bool
+	defer func() {
+		h.handleFlowCleanup(ctx, flowID, flow, loginSuccess)
+	}()
 
-	authResult, err := h.authenticateSvc.Authenticate(ctx, flow, req.Connection, data)
+	// 2. 执行认证
+	proof, ok := req.Proof.(string)
+	if !ok {
+		proof = ""
+	}
+	authResult, err := h.authenticateSvc.Authenticate(ctx, flow, req.Connection, proof, req.Principal, req.Strategy)
 	if err != nil {
 		logger.Errorf("[Handler] 认证失败: %v", err)
-		h.errorResponse(c, autherrors.NewAccessDenied(err.Error()))
+		h.errorResponse(c, autherrors.NewUnauthorized(err.Error()))
 		return
 	}
 
-	// 3. 根据 IDP 类型决定用户处理逻辑
-	var user *models.UserWithDecrypted
-	var isNewUser bool
-
-	if idp.SupportsAutoCreate(req.Connection) {
-		// CIAM 社交登录：自动创建用户
-		userReq := &models.FindOrCreateUserRequest{
-			DomainID:   string(idp.GetDomain(req.Connection)),
-			IDP:        req.Connection,
-			ProviderID: authResult.ProviderID,
-			RawData:    authResult.RawData,
-		}
-
-		user, isNewUser, err = h.cache.FindOrCreateUser(ctx, userReq)
-		if err != nil {
-			logger.Errorf("[Handler] 查找/创建用户失败: %v", err)
-			h.errorResponse(c, autherrors.NewServerError("user management failed"))
-			return
-		}
-	} else {
-		// PIAM 登录（邮箱/企业微信等）：用户必须已存在
-		// 对于邮箱登录，authResult.ProviderID 已经是 OpenID（在 EmailAuthenticator 中查找过用户）
-		// 对于其他 PIAM IDP，需要通过 identity 查找
-		if req.Connection == idp.TypeEmail {
-			// 邮箱登录：ProviderID 是 OpenID
-			user, err = h.cache.GetUser(ctx, authResult.ProviderID)
-		} else {
-			// 其他 PIAM IDP：通过 identity 查找
-			user, err = h.cache.GetUserByIdentity(ctx, req.Connection, authResult.ProviderID)
-		}
-
-		if err != nil {
-			logger.Errorf("[Handler] PIAM 用户不存在: %v", err)
-			h.errorResponse(c, autherrors.NewAccessDenied("user not found or not authorized"))
-			return
-		}
-
-		isNewUser = false
+	// 3. 查找或创建用户
+	userResult, authErr := h.findOrCreateLoginUser(ctx, req.Connection, authResult)
+	if authErr != nil {
+		h.errorResponse(c, authErr)
+		return
 	}
 
-	// 4. 更新 flow
-	flow.SetAuthenticated(req.Connection, authResult.ProviderID, user, isNewUser)
-
-	// 5. 准备授权（检查身份要求）
-	if err := h.authorizeSvc.PrepareAuthorization(ctx, flow); err != nil {
-		logger.Errorf("[Handler] 准备授权失败: %v", err)
+	// 4. 完成登录流程
+	authCode, err := h.completeLoginFlow(ctx, flow, req.Connection, authResult, userResult)
+	if err != nil {
 		h.errorResponse(c, err)
 		return
 	}
 
-	// 6. 生成授权码
-	authCode, err := h.authorizeSvc.GenerateAuthCode(ctx, flow)
-	if err != nil {
-		logger.Errorf("[Handler] 生成授权码失败: %v", err)
-		h.errorResponse(c, autherrors.NewServerError(err.Error()))
-		return
-	}
+	// 标记登录成功
+	loginSuccess = true
 
-	// 7. 保存更新后的 flow
-	if err := h.authenticateSvc.SaveFlow(ctx, flow); err != nil {
-		logger.Warnf("[Handler] 保存 flow 失败: %v", err)
-	}
-
-	// 8. 删除 flow（设置短 TTL）
-	if err := h.authenticateSvc.DeleteFlow(ctx, flowID); err != nil {
-		logger.Warnf("[Handler] 删除 flow 失败: %v", err)
-	}
-
-	// 9. 构建响应
+	// 5. 构建响应
 	redirectURI := flow.Request.RedirectURI + "?code=" + authCode.Code
 	if authCode.State != "" {
 		redirectURI += "&state=" + authCode.State
 	}
 
-	// 清除 Cookie
 	clearAuthSessionCookie(c)
-
 	c.JSON(http.StatusOK, LoginResponse{
 		Code:        authCode.Code,
 		RedirectURI: redirectURI,
 	})
 }
+
+// handleFlowCleanup 处理 flow 清理（登录成功删除，失败保存）
+func (h *Handler) handleFlowCleanup(ctx context.Context, flowID string, flow *types.AuthFlow, loginSuccess bool) {
+	if loginSuccess {
+		if err := h.authenticateSvc.DeleteFlow(ctx, flowID); err != nil {
+			logger.Warnf("[Handler] 删除 flow 失败: %v", err)
+		}
+	} else {
+		if err := h.authenticateSvc.SaveFlow(ctx, flow); err != nil {
+			logger.Warnf("[Handler] 保存 flow 失败: %v", err)
+		}
+	}
+}
+
+// findOrCreateLoginUser 查找或创建登录用户
+func (h *Handler) findOrCreateLoginUser(ctx context.Context, connection string, authResult *authenticate.AuthResult) (*loginUserResult, error) {
+	// 尝试查找用户
+	user, err := h.findUserByConnection(ctx, connection, authResult)
+	if err == nil {
+		return &loginUserResult{user: user, isNewUser: false}, nil
+	}
+
+	// 用户不存在，检查是否支持自动创建
+	if !idp.SupportsAutoCreate(connection) {
+		logger.Warnf("[Handler] 用户不存在且不支持自动创建 - Connection: %s, ProviderID: %s, Domain: %s",
+			connection, authResult.ProviderID, idp.GetDomain(connection))
+		return nil, autherrors.NewUnauthorized("user not found")
+	}
+
+	// 创建用户
+	return h.createLoginUser(ctx, connection, authResult)
+}
+
+// findUserByConnection 根据 connection 类型查找用户
+func (h *Handler) findUserByConnection(ctx context.Context, connection string, authResult *authenticate.AuthResult) (*models.UserWithDecrypted, error) {
+	if idp.RequiresEmailForBinding(connection) {
+		return h.findUserByEmailBinding(ctx, connection, authResult)
+	}
+	// 其他 IDP：通过 (connection, provider_id) 查找身份绑定关系
+	return h.cache.GetUserByIdentity(ctx, connection, authResult.ProviderID)
+}
+
+// findUserByEmailBinding 通过邮箱绑定查找用户（GitHub/Google 等 OAuth 登录）
+func (h *Handler) findUserByEmailBinding(ctx context.Context, connection string, authResult *authenticate.AuthResult) (*models.UserWithDecrypted, error) {
+	// 验证邮箱信息
+	if authResult.UserInfo == nil || authResult.UserInfo.Email == "" {
+		logger.Warnf("[Handler] OAuth 登录缺少邮箱信息 - Connection: %s, ProviderID: %s", connection, authResult.ProviderID)
+		return nil, autherrors.NewUnauthorized("email is required for this login method")
+	}
+
+	identityType := idp.GetIdentityType(connection)
+
+	// 先通过 IDP 身份查找（已绑定过）
+	user, err := h.cache.GetUserByIdentity(ctx, connection, authResult.ProviderID)
+	if err == nil {
+		return user, nil
+	}
+
+	// 未绑定过，尝试通过邮箱查找对应域的用户
+	logger.Infof("[Handler] 未找到 IDP 身份绑定，尝试通过邮箱查找 - Email: %s, IdentityType: %s", authResult.UserInfo.Email, identityType)
+	user, err = h.cache.FindUserByEmailAndDomain(ctx, authResult.UserInfo.Email, string(idp.GetDomain(connection)))
+	if err != nil {
+		return nil, err
+	}
+
+	// 找到用户，检查身份互斥
+	if user.DomainID != string(idp.GetDomain(connection)) {
+		logger.Warnf("[Handler] 身份互斥 - Email: %s, 现有域: %s, 请求域: %s", authResult.UserInfo.Email, user.DomainID, idp.GetDomain(connection))
+		return nil, autherrors.NewAccessDenied("identity conflict: this email is already bound to a different identity type")
+	}
+
+	logger.Infof("[Handler] 通过邮箱找到用户 - OpenID: %s, Email: %s", user.OpenID, authResult.UserInfo.Email)
+	return user, nil
+}
+
+// createLoginUser 创建登录用户
+func (h *Handler) createLoginUser(ctx context.Context, connection string, authResult *authenticate.AuthResult) (*loginUserResult, error) {
+	logger.Infof("[Handler] 用户不存在，开始自动创建 - Connection: %s, ProviderID: %s, Domain: %s",
+		connection, authResult.ProviderID, idp.GetDomain(connection))
+
+	userReq := &models.FindOrCreateUserRequest{
+		DomainID:   string(idp.GetDomain(connection)),
+		IDP:        connection,
+		ProviderID: authResult.ProviderID,
+		RawData:    authResult.RawData,
+	}
+
+	if authResult.UserInfo != nil {
+		userReq.UserInfo = &models.UserInfo{
+			Nickname: authResult.UserInfo.Nickname,
+			Email:    authResult.UserInfo.Email,
+			Phone:    authResult.UserInfo.Phone,
+			Picture:  authResult.UserInfo.Picture,
+		}
+	}
+
+	user, isNewUser, err := h.cache.FindOrCreateUser(ctx, userReq)
+	if err != nil {
+		logger.Errorf("[Handler] 创建用户失败: %v", err)
+		return nil, autherrors.NewServerError("user creation failed")
+	}
+
+	logger.Infof("[Handler] 用户创建成功 - OpenID: %s, IsNew: %v, Domain: %s", user.OpenID, isNewUser, userReq.DomainID)
+	return &loginUserResult{user: user, isNewUser: isNewUser}, nil
+}
+
+// completeLoginFlow 完成登录流程（更新 flow、准备授权、生成授权码）
+func (h *Handler) completeLoginFlow(ctx context.Context, flow *types.AuthFlow, connection string, authResult *authenticate.AuthResult, userResult *loginUserResult) (*types.AuthorizationCode, error) {
+	// 更新 flow
+	flow.SetAuthenticated(connection, authResult.ProviderID, userResult.user, userResult.isNewUser)
+
+	// 准备授权（检查身份要求）
+	if err := h.authorizeSvc.PrepareAuthorization(ctx, flow); err != nil {
+		logger.Errorf("[Handler] 准备授权失败: %v", err)
+		return nil, err
+	}
+
+	// 生成授权码
+	authCode, err := h.authorizeSvc.GenerateAuthCode(ctx, flow)
+	if err != nil {
+		logger.Errorf("[Handler] 生成授权码失败: %v", err)
+		return nil, autherrors.NewServerError(err.Error())
+	}
+
+	// 保存更新后的 flow
+	if err := h.authenticateSvc.SaveFlow(ctx, flow); err != nil {
+		logger.Warnf("[Handler] 保存 flow 失败: %v", err)
+	}
+
+	return authCode, nil
+}
+
+// ==================== 6. Token 换取 ====================
 
 // Token POST /auth/token
 // 换取 Token
@@ -337,21 +499,7 @@ func (h *Handler) Token(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// Revoke POST /auth/revoke
-// 撤销 Token
-func (h *Handler) Revoke(c *gin.Context) {
-	var req RevokeRequest
-	if err := c.ShouldBind(&req); err != nil {
-		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	// RFC 7009: 即使 token 无效，也应返回 200
-	if err := h.authorizeSvc.RevokeToken(c.Request.Context(), req.Token); err != nil {
-		logger.Warnf("[Handler] revoke token failed: %v", err)
-	}
-	c.Status(http.StatusOK)
-}
+// ==================== 7. 权限检查 ====================
 
 // Check POST /auth/check
 // 关系检查接口（使用 CAT 认证）
@@ -427,6 +575,154 @@ func (h *Handler) Check(c *gin.Context) {
 	})
 }
 
+// ==================== 9. 登出与撤销 ====================
+
+// Revoke POST /auth/revoke
+// 撤销 Token
+func (h *Handler) Revoke(c *gin.Context) {
+	var req RevokeRequest
+	if err := c.ShouldBind(&req); err != nil {
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		return
+	}
+
+	// RFC 7009: 即使 token 无效，也应返回 200
+	if err := h.authorizeSvc.RevokeToken(c.Request.Context(), req.Token); err != nil {
+		logger.Warnf("[Handler] revoke token failed: %v", err)
+	}
+	c.Status(http.StatusOK)
+}
+
+// Logout POST /auth/logout
+// 登出
+func (h *Handler) Logout(c *gin.Context) {
+	claims := GetToken(c)
+	if claims == nil {
+		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
+		return
+	}
+
+	if err := h.authorizeSvc.RevokeAllTokens(c.Request.Context(), getOpenID(claims)); err != nil {
+		h.errorResponse(c, autherrors.NewServerError("failed to revoke tokens"))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// ==================== 10. 公钥 ====================
+
+// PublicKeys GET /pubkeys
+// 获取 PASETO 公钥
+func (h *Handler) PublicKeys(c *gin.Context) {
+	clientID := c.Query("client_id")
+	if clientID == "" {
+		h.errorResponse(c, autherrors.NewInvalidRequest("client_id is required"))
+		return
+	}
+
+	publicKey, err := h.authorizeSvc.GetPublicKey(c.Request.Context(), clientID)
+	if err != nil {
+		h.errorResponse(c, autherrors.NewClientNotFound(err.Error()))
+		return
+	}
+
+	// 公钥不经常变化，设置缓存控制（3 小时）
+	c.Header("Cache-Control", "public, max-age=10800")
+	c.JSON(http.StatusOK, publicKey)
+}
+
+// ==================== 公开辅助函数（包级别） ====================
+
+// ForwardToStage 跳转到指定阶段（用于强制跳转到特定页面）
+func ForwardToStage(c *gin.Context, stage AuthStage) {
+	var targetURL string
+	switch stage {
+	case StageLogin:
+		targetURL = config.GetAegisEndpointLogin()
+	case StageConsent:
+		targetURL = config.GetAegisEndpointConsent()
+	case StageMFA:
+		targetURL = config.GetAegisEndpointMFA()
+	case StageCallback:
+		targetURL = config.GetAegisEndpointCallback()
+	case StageError:
+		targetURL = config.GetAegisEndpointError()
+	default:
+		targetURL = config.GetAegisEndpointLogin()
+	}
+	redirect(c, targetURL)
+}
+
+// ForwardToApp 重定向回应用（授权完成后）
+//
+// 使用 302 Found 重定向回 redirect_uri，携带授权码和 state
+func ForwardToApp(c *gin.Context, redirectURI, code, state string) {
+	targetURL := redirectURI + "?code=" + code
+	if state != "" {
+		targetURL += "&state=" + state
+	}
+
+	// 授权完成后始终使用 302，因为这是从 POST /login 完成后的跳转
+	// 但实际返回给前端的是 JSON，前端再执行跳转
+	// 如果是服务端直接重定向，使用 302
+	c.Redirect(http.StatusFound, targetURL)
+}
+
+// ForwardError 重定向到错误页面
+func ForwardError(c *gin.Context, errorCode, errorDesc string) {
+	targetURL := config.GetAegisEndpointError() + "?error=" + errorCode
+	if errorDesc != "" {
+		targetURL += "&error_description=" + errorDesc
+	}
+	redirect(c, targetURL)
+}
+
+// GetToken 从上下文获取验证后的 Token
+func GetToken(c *gin.Context) token.Token {
+	if t, exists := c.Get("user"); exists {
+		if tk, ok := t.(token.Token); ok {
+			return tk
+		}
+	}
+	return nil
+}
+
+// MarshalAuthFlow 序列化 AuthFlow
+func MarshalAuthFlow(flow *types.AuthFlow) ([]byte, error) {
+	return json.Marshal(flow)
+}
+
+// UnmarshalAuthFlow 反序列化 AuthFlow
+func UnmarshalAuthFlow(data []byte) (*types.AuthFlow, error) {
+	var flow types.AuthFlow
+	if err := json.Unmarshal(data, &flow); err != nil {
+		return nil, err
+	}
+	return &flow, nil
+}
+
+// ==================== 私有方法（Handler） ====================
+
+// errorResponse 统一错误响应
+func (h *Handler) errorResponse(c *gin.Context, err error) {
+	authErr := autherrors.ToAuthError(err)
+	c.JSON(authErr.HTTPStatus, authErr)
+}
+
+// flowErrorResponse 从 AuthFlow 中提取错误并响应
+func (h *Handler) flowErrorResponse(c *gin.Context, flow *types.AuthFlow) {
+	if flow.Error == nil {
+		h.errorResponse(c, autherrors.NewServerError("unknown error"))
+		return
+	}
+	c.JSON(flow.Error.HTTPStatus, map[string]any{
+		"error":             flow.Error.Code,
+		"error_description": flow.Error.Description,
+		"data":              flow.Error.Data,
+	})
+}
+
 // checkRelation 检查用户是否具有指定的关系
 func (h *Handler) checkRelation(ctx context.Context, serviceID, subjectID, relation, objectType, objectID string) (bool, error) {
 	// 从 hermes 查询关系
@@ -458,298 +754,7 @@ func (h *Handler) checkRelation(ctx context.Context, serviceID, subjectID, relat
 	return false, nil
 }
 
-// Logout POST /auth/logout
-// 登出
-func (h *Handler) Logout(c *gin.Context) {
-	claims := GetToken(c)
-	if claims == nil {
-		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
-		return
-	}
-
-	if err := h.authorizeSvc.RevokeAllTokens(c.Request.Context(), getOpenID(claims)); err != nil {
-		h.errorResponse(c, autherrors.NewServerError("failed to revoke tokens"))
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true})
-}
-
-// UserInfo GET /auth/userinfo
-// 获取用户信息
-func (h *Handler) UserInfo(c *gin.Context) {
-	t := GetToken(c)
-	if t == nil {
-		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
-		return
-	}
-
-	scope := getScope(t)
-	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), getOpenID(t), scope)
-	if err != nil {
-		h.errorResponse(c, autherrors.NewUserNotFound("user not found"))
-		return
-	}
-
-	c.JSON(http.StatusOK, resp)
-}
-
-// UpdateUserInfo PUT /auth/userinfo
-// 更新用户信息
-func (h *Handler) UpdateUserInfo(c *gin.Context) {
-	t := GetToken(c)
-	if t == nil {
-		h.errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
-		return
-	}
-
-	var req UpdateUserInfoRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	// TODO: 实现用户信息更新（通过 CacheManager 调用 UserService）
-
-	// 返回更新后的用户信息
-	scope := getScope(t)
-	resp, err := h.authorizeSvc.GetUserInfo(c.Request.Context(), getOpenID(t), scope)
-	if err != nil {
-		h.errorResponse(c, autherrors.NewServerError(err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, resp)
-}
-
-// PublicKeys GET /pubkeys
-// 获取 PASETO 公钥
-func (h *Handler) PublicKeys(c *gin.Context) {
-	clientID := c.Query("client_id")
-	if clientID == "" {
-		h.errorResponse(c, autherrors.NewInvalidRequest("client_id is required"))
-		return
-	}
-
-	publicKey, err := h.authorizeSvc.GetPublicKey(c.Request.Context(), clientID)
-	if err != nil {
-		h.errorResponse(c, autherrors.NewClientNotFound(err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, publicKey)
-}
-
-// SendEmailCode POST /auth/email/code
-// 发送邮箱验证码
-func (h *Handler) SendEmailCode(c *gin.Context) {
-	var req struct {
-		Email string `json:"email" binding:"required,email"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	if err := h.authenticateSvc.SendEmailCode(c.Request.Context(), req.Email); err != nil {
-		h.errorResponse(c, autherrors.NewServerError(err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true})
-}
-
-// InitiateChallenge POST /auth/challenge
-// 发起 Challenge
-func (h *Handler) InitiateChallenge(c *gin.Context) {
-	if h.challengeSvc == nil {
-		h.errorResponse(c, autherrors.NewServerError("challenge service not configured"))
-		return
-	}
-
-	var req challenge.CreateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	// 获取客户端 IP
-	remoteIP := c.ClientIP()
-
-	resp, err := h.challengeSvc.Create(c.Request.Context(), &req, remoteIP)
-	if err != nil {
-		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, resp)
-}
-
-// ContinueChallenge PUT /auth/challenge
-// 继续 Challenge（提交验证）
-func (h *Handler) ContinueChallenge(c *gin.Context) {
-	if h.challengeSvc == nil {
-		h.errorResponse(c, autherrors.NewServerError("challenge service not configured"))
-		return
-	}
-
-	// 从 query 获取 challenge_id
-	challengeID := c.Query("challenge_id")
-	if challengeID == "" {
-		h.errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required"))
-		return
-	}
-
-	var req challenge.VerifyRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	// 获取客户端 IP
-	remoteIP := c.ClientIP()
-
-	resp, err := h.challengeSvc.Verify(c.Request.Context(), challengeID, &req, remoteIP)
-	if err != nil {
-		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	c.JSON(http.StatusOK, resp)
-}
-
-// IDPs GET /idps
-// 获取可用的身份提供方列表（旧接口，返回 ConnectionsMap）
-func (h *Handler) IDPs(c *gin.Context) {
-	// 尝试从 Cookie 获取 flowID
-	flowID, err := getAuthSessionCookie(c)
-	if err != nil {
-		flowID = "" // Cookie 不存在时使用空字符串
-	}
-
-	var connectionsMap *types.ConnectionsMap
-
-	if flowID != "" {
-		// 如果有 flow，从 flow 获取
-		flow := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
-		if !flow.HasError() {
-			connectionsMap = h.authenticateSvc.GetAvailableConnections(flow)
-		}
-	}
-
-	if connectionsMap == nil {
-		// 如果没有 flow，返回空结构
-		connectionsMap = &types.ConnectionsMap{
-			IDP:   make([]*types.ConnectionConfig, 0),
-			VChan: make([]*types.ConnectionConfig, 0),
-			MFA:   make([]*types.ConnectionConfig, 0),
-		}
-	}
-
-	// 返回 ConnectionsMap（兼容新格式）
-	c.JSON(http.StatusOK, connectionsMap)
-}
-
-// LoginWithPreCheck POST /auth/login/check
-// 带前置检查的登录
-func (h *Handler) LoginWithPreCheck(c *gin.Context) {
-	var req LoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	// 从 Cookie 获取 flowID
-	flowID, err := getAuthSessionCookie(c)
-	if err != nil || flowID == "" {
-		h.errorResponse(c, autherrors.NewInvalidRequest("missing aegis-session cookie"))
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	// 1. 获取 AuthFlow
-	flow := h.authenticateSvc.GetAndValidateFlow(ctx, flowID)
-	if flow.HasError() {
-		h.flowErrorResponse(c, flow)
-		return
-	}
-
-	// 2. 获取 connection 配置
-	connectionConfig := flow.ConnectionMap[req.Connection]
-	if connectionConfig == nil {
-		h.errorResponse(c, autherrors.NewInvalidRequest("invalid connection"))
-		return
-	}
-
-	// 3. 检查前置认证需求 - 构建 data map
-	data := map[string]any{
-		"principal": req.Principal,
-		"proof":     req.Proof,
-		"strategy":  req.Strategy,
-	}
-
-	if require := checkPreAuthRequirement(req.Connection, data, connectionConfig); require != "" {
-		h.handleInteractionRequired(c, require, connectionConfig)
-		return
-	}
-
-	// 4. 继续正常登录流程
-	h.Login(c)
-}
-
-// errorResponse 统一错误响应
-func (h *Handler) errorResponse(c *gin.Context, err error) {
-	authErr := autherrors.ToAuthError(err)
-	c.JSON(authErr.HTTPStatus, authErr)
-}
-
-// flowErrorResponse 从 AuthFlow 中提取错误并响应
-func (h *Handler) flowErrorResponse(c *gin.Context, flow *types.AuthFlow) {
-	if flow.Error == nil {
-		h.errorResponse(c, autherrors.NewServerError("unknown error"))
-		return
-	}
-	c.JSON(flow.Error.HTTPStatus, map[string]any{
-		"error":             flow.Error.Code,
-		"error_description": flow.Error.Description,
-		"data":              flow.Error.Data,
-	})
-}
-
-// checkPreAuthRequirement 检查前置认证需求
-func checkPreAuthRequirement(_ string, data map[string]any, connectionConfig *types.ConnectionConfig) string {
-	if connectionConfig == nil || len(connectionConfig.Require) == 0 {
-		return ""
-	}
-
-	// 检查是否需要 captcha
-	for _, require := range connectionConfig.Require {
-		if require == "captcha" {
-			// 如果需要 captcha 但 data 中没有验证结果，返回 require
-			if _, ok := data["captcha_token"]; !ok {
-				return "captcha"
-			}
-		}
-	}
-
-	return ""
-}
-
-// handleInteractionRequired 处理需要交互的情况
-func (h *Handler) handleInteractionRequired(c *gin.Context, require string, _ *types.ConnectionConfig) {
-	// captcha site_key 从 vchan 配置获取，这里暂时返回空
-	// 前端应该从 /auth/connections 接口获取完整的 vchan 配置
-
-	c.JSON(http.StatusOK, InteractionRequiredResponse{
-		Error:          ErrInteractionRequired,
-		ErrorDesc:      "Human verification required",
-		Require:        require,
-		CaptchaSiteKey: "",
-	})
-}
-
-// ==================== 辅助函数 ====================
+// ==================== 私有辅助函数（包级别） ====================
 
 // setAuthSessionCookie 设置 Auth 会话 Cookie
 // 使用 http.SetCookie 以支持 SameSite 属性
@@ -787,8 +792,6 @@ func clearAuthSessionCookie(c *gin.Context) {
 func getAuthSessionCookie(c *gin.Context) (string, error) {
 	return c.Cookie(AuthSessionCookie)
 }
-
-// ==================== 重定向控制 ====================
 
 // forwardNext 根据 AuthFlow 状态决定下一步重定向
 //
@@ -862,26 +865,6 @@ func forwardNext(c *gin.Context, flow *types.AuthFlow) {
 	redirect(c, targetURL)
 }
 
-// ForwardToStage 跳转到指定阶段（用于强制跳转到特定页面）
-func ForwardToStage(c *gin.Context, stage AuthStage) {
-	var targetURL string
-	switch stage {
-	case StageLogin:
-		targetURL = config.GetAegisEndpointLogin()
-	case StageConsent:
-		targetURL = config.GetAegisEndpointConsent()
-	case StageMFA:
-		targetURL = config.GetAegisEndpointMFA()
-	case StageCallback:
-		targetURL = config.GetAegisEndpointCallback()
-	case StageError:
-		targetURL = config.GetAegisEndpointError()
-	default:
-		targetURL = config.GetAegisEndpointLogin()
-	}
-	redirect(c, targetURL)
-}
-
 // redirect 执行重定向，根据请求方法选择状态码
 func redirect(c *gin.Context, targetURL string) {
 	// 根据请求方法选择合适的重定向状态码
@@ -894,73 +877,10 @@ func redirect(c *gin.Context, targetURL string) {
 	c.Redirect(statusCode, targetURL)
 }
 
-// ForwardToApp 重定向回应用（授权完成后）
-//
-// 使用 302 Found 重定向回 redirect_uri，携带授权码和 state
-func ForwardToApp(c *gin.Context, redirectURI, code, state string) {
-	targetURL := redirectURI + "?code=" + code
-	if state != "" {
-		targetURL += "&state=" + state
-	}
-
-	// 授权完成后始终使用 302，因为这是从 POST /login 完成后的跳转
-	// 但实际返回给前端的是 JSON，前端再执行跳转
-	// 如果是服务端直接重定向，使用 302
-	c.Redirect(http.StatusFound, targetURL)
-}
-
-// ForwardError 重定向到错误页面
-func ForwardError(c *gin.Context, errorCode, errorDesc string) {
-	targetURL := config.GetAegisEndpointError() + "?error=" + errorCode
-	if errorDesc != "" {
-		targetURL += "&error_description=" + errorDesc
-	}
-	redirect(c, targetURL)
-}
-
-// GetToken 从上下文获取验证后的 Token
-func GetToken(c *gin.Context) token.Token {
-	if t, exists := c.Get("user"); exists {
-		if tk, ok := t.(token.Token); ok {
-			return tk
-		}
-	}
-	return nil
-}
-
 // getOpenID 从 Token 中获取 OpenID
 func getOpenID(t token.Token) string {
-	if uat, ok := token.AsUAT(t); ok && uat.GetUser() != nil {
-		return uat.GetUser().Subject
+	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
+		return uat.GetOpenID()
 	}
 	return ""
 }
-
-// getScope 从 Token 中获取 scope
-func getScope(t token.Token) string {
-	if uat, ok := token.AsUAT(t); ok {
-		return uat.GetScope()
-	}
-	if sat, ok := token.AsSAT(t); ok {
-		return sat.GetScope()
-	}
-	return ""
-}
-
-// MarshalAuthFlow 序列化 AuthFlow
-func MarshalAuthFlow(flow *types.AuthFlow) ([]byte, error) {
-	return json.Marshal(flow)
-}
-
-// UnmarshalAuthFlow 反序列化 AuthFlow
-func UnmarshalAuthFlow(data []byte) (*types.AuthFlow, error) {
-	var flow types.AuthFlow
-	if err := json.Unmarshal(data, &flow); err != nil {
-		return nil, err
-	}
-	return &flow, nil
-}
-
-// ==================== 类型转换辅助 ====================
-// 注意：以下函数已移除，因为它们未被使用
-// convertLoginData, toStringMap, splitConnection

@@ -34,6 +34,7 @@ const (
 	AegisMaxRefreshToken  = "aegis.max-refresh-token"
 	AegisAudience         = "aegis.audience"
 	AegisSecretKey        = "aegis.secret-key"
+	AegisSignKey          = "aegis.sign-key"
 	AegisCookieDomain     = "aegis.cookie.domain"
 	AegisCookiePath       = "aegis.cookie.path"
 	AegisCookieSecure     = "aegis.cookie.secure"

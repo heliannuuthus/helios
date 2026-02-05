@@ -141,40 +141,6 @@ func GetAegisEndpointCallback() string {
 	return endpoint
 }
 
-// ==================== Domain 配置 ====================
-
-// GetAegisDomainSignKey 获取域签名密钥（原始字符串）
-func GetAegisDomainSignKey(domainID string) string {
-	return Aegis().GetString(AegisDomains + "." + domainID + ".sign-key")
-}
-
-// GetAegisDomainSignKeyBytes 获取域签名密钥（解码后的 JWK JSON 字节）
-// 配置格式: Base64URL 编码的 JWK JSON
-func GetAegisDomainSignKeyBytes(domainID string) ([]byte, error) {
-	keyStr := GetAegisDomainSignKey(domainID)
-	if keyStr == "" {
-		return nil, fmt.Errorf("域 %s 签名密钥不存在", domainID)
-	}
-
-	// Base64URL 解码
-	keyBytes, err := base64.RawURLEncoding.DecodeString(keyStr)
-	if err != nil {
-		return nil, fmt.Errorf("解码签名密钥失败: %w", err)
-	}
-
-	return keyBytes, nil
-}
-
-// GetAegisDomainName 获取域名称
-func GetAegisDomainName(domainID string) string {
-	return Aegis().GetString(AegisDomains + "." + domainID + ".name")
-}
-
-// GetAegisDomainDescription 获取域描述
-func GetAegisDomainDescription(domainID string) string {
-	return Aegis().GetString(AegisDomains + "." + domainID + ".description")
-}
-
 // ==================== Cache 配置 ====================
 
 // GetAegisCacheKeyPrefix 获取缓存 key 前缀
@@ -360,12 +326,12 @@ func GetMailConfig() *MailConfig {
 
 // ==================== Secret 配置 ====================
 
-// GetAegisSecret 获取 audience 对应的 secret（base64url 编码的 JWK JSON）
+// GetAegisSecret 获取 audience 对应的 secret（Base64URL 编码的 32 字节密钥）
 func GetAegisSecret(audience string) string {
 	return Aegis().GetString(AegisSecrets + "." + audience)
 }
 
-// GetAegisSecretBytes 获取 audience 对应的 secret（解码后的 JWK JSON 字节）
+// GetAegisSecretBytes 获取 audience 对应的 secret（解码后的 32 字节密钥）
 func GetAegisSecretBytes(audience string) ([]byte, error) {
 	secretStr := GetAegisSecret(audience)
 	if secretStr == "" {

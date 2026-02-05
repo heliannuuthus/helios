@@ -102,7 +102,8 @@ type Domain struct {
 // DomainWithKey 带签名密钥的 Domain
 type DomainWithKey struct {
 	Domain
-	SignKey []byte // 签名密钥
+	Main []byte   // 当前主密钥（32 字节 Ed25519 seed，用于签发新 token）
+	Keys [][]byte // 所有有效密钥（包括主密钥和轮换中的旧密钥，用于验证）
 }
 
 // ==================== URI 规范化辅助函数 ====================

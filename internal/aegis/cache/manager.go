@@ -8,6 +8,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	pkgstore "github.com/heliannuuthus/helios/pkg/store"
 )
@@ -47,6 +48,9 @@ type Manager struct {
 	// 应用 IDP 配置缓存：app_id -> []*ApplicationIDPConfig
 	appIDPConfigCache *ristretto.Cache[string, []*models.ApplicationIDPConfig]
 
+	// 公钥缓存：client_id -> *keys.KeyEntry
+	pubKeyCache *ristretto.Cache[string, *keys.KeyEntry]
+
 	// Redis 客户端（用于分布式数据）
 	redis pkgstore.RedisClient
 }
@@ -68,6 +72,9 @@ func NewManager(cfg *ManagerConfig) *Manager {
 
 	// 创建本地缓存
 	cm.initLocalCaches()
+
+	// 创建公钥缓存
+	cm.initPubKeyCache()
 
 	return cm
 }
@@ -196,5 +203,8 @@ func (cm *Manager) Close() {
 	}
 	if cm.appIDPConfigCache != nil {
 		cm.appIDPConfigCache.Close()
+	}
+	if cm.pubKeyCache != nil {
+		cm.pubKeyCache.Close()
 	}
 }

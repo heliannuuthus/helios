@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/webauthn"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
-	"github.com/heliannuuthus/helios/internal/aegis/webauthn"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
@@ -45,8 +45,8 @@ func getToken(c *gin.Context) token.Token {
 
 // getOpenID 从 Token 中获取 OpenID
 func getOpenID(t token.Token) string {
-	if uat, ok := token.AsUAT(t); ok && uat.GetUser() != nil {
-		return uat.GetUser().Subject
+	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
+		return uat.GetOpenID()
 	}
 	return ""
 }

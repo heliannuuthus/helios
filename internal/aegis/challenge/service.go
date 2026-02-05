@@ -2,14 +2,13 @@ package challenge
 
 import (
 	"context"
-	"crypto/rand"
-	"fmt"
-	"math/big"
 	"time"
 
+	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/captcha"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
-	"github.com/heliannuuthus/helios/internal/aegis/captcha"
+	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
+	"github.com/heliannuuthus/helios/pkg/helperutil"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -70,7 +69,7 @@ func (s *Service) Create(ctx context.Context, req *CreateRequest, remoteIP strin
 		ok, err := s.captcha.Verify(ctx, req.CaptchaToken, remoteIP)
 		if err != nil || !ok {
 			logger.Warnf("[Challenge] captcha 验证失败: %v", err)
-			return nil, fmt.Errorf("captcha verification failed")
+			return nil, autherrors.NewInvalidRequest("captcha verification failed")
 		}
 	}
 
@@ -83,7 +82,7 @@ func (s *Service) Create(ctx context.Context, req *CreateRequest, remoteIP strin
 	case types.ChallengeTypeEmailOTP:
 		return s.createEmailOTPChallenge(ctx, req)
 	default:
-		return nil, fmt.Errorf("unsupported challenge type: %s", req.Type)
+		return nil, autherrors.NewInvalidRequestf("unsupported challenge type: %s", req.Type)
 	}
 }
 
@@ -95,20 +94,20 @@ func (s *Service) createChallengeWithCaptchaRequired(ctx context.Context, req *C
 	switch req.Type {
 	case types.ChallengeTypeEmailOTP:
 		if req.Email == "" {
-			return nil, fmt.Errorf("email is required for email-otp challenge")
+			return nil, autherrors.NewInvalidRequest("email is required for email-otp challenge")
 		}
 		challenge = types.NewChallenge(types.ChallengeTypeEmailOTP, DefaultEmailTTL)
 		challenge.SetData("email", req.Email)
-		challenge.SetData("masked_email", maskEmail(req.Email))
+		challenge.SetData("masked_email", helperutil.MaskEmail(req.Email))
 		challenge.SetData("pending_captcha", true) // 标记需要先验证 captcha
 	case types.ChallengeTypeTOTP:
 		if req.UserID == "" {
-			return nil, fmt.Errorf("user_id is required for totp challenge")
+			return nil, autherrors.NewInvalidRequest("user_id is required for totp challenge")
 		}
 		challenge = types.NewChallenge(types.ChallengeTypeTOTP, DefaultTOTPTTL)
 		challenge.SetData("pending_captcha", true)
 	default:
-		return nil, fmt.Errorf("unsupported challenge type for captcha: %s", req.Type)
+		return nil, autherrors.NewInvalidRequestf("unsupported challenge type for captcha: %s", req.Type)
 	}
 
 	challenge.FlowID = req.FlowID
@@ -116,7 +115,7 @@ func (s *Service) createChallengeWithCaptchaRequired(ctx context.Context, req *C
 
 	// 保存 challenge
 	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
-		return nil, fmt.Errorf("save challenge: %w", err)
+		return nil, autherrors.NewServerErrorf("save challenge: %v", err)
 	}
 
 	logger.Infof("[Challenge] 创建 pending challenge: %s, type: %s, 需要 captcha 前置验证", challenge.ID, challenge.Type)
@@ -125,7 +124,7 @@ func (s *Service) createChallengeWithCaptchaRequired(ctx context.Context, req *C
 		ChallengeID: challenge.ID,
 		Required: &types.VChanConfig{
 			Connection: "captcha:" + s.captcha.GetProvider(),
-			Identifier: s.captcha.GetSiteKey(),
+			Identifier: s.captcha.GetIdentifier(),
 		},
 	}, nil
 }
@@ -135,12 +134,12 @@ func (s *Service) Verify(ctx context.Context, challengeID string, req *VerifyReq
 	// 获取 Challenge
 	challenge, err := s.cache.GetChallenge(ctx, challengeID)
 	if err != nil {
-		return nil, fmt.Errorf("challenge not found")
+		return nil, autherrors.NewNotFound("challenge not found")
 	}
 
 	// 检查是否已过期
 	if challenge.IsExpired() {
-		return nil, fmt.Errorf("challenge expired")
+		return nil, autherrors.NewInvalidRequest("challenge expired")
 	}
 
 	// 检查是否已验证
@@ -163,7 +162,7 @@ func (s *Service) Verify(ctx context.Context, challengeID string, req *VerifyReq
 	case types.ChallengeTypeEmailOTP:
 		verified, err = s.verifyEmailOTP(ctx, challenge, req)
 	default:
-		return nil, fmt.Errorf("unsupported challenge type: %s", challenge.Type)
+		return nil, autherrors.NewInvalidRequestf("unsupported challenge type: %s", challenge.Type)
 	}
 
 	if err != nil {
@@ -185,13 +184,13 @@ func (s *Service) Verify(ctx context.Context, challengeID string, req *VerifyReq
 func (s *Service) verifyCaptchaAndContinue(ctx context.Context, challenge *types.Challenge, req *VerifyRequest, remoteIP string) (*VerifyResponse, error) {
 	// 验证 captcha proof
 	if req.Proof == "" {
-		return nil, fmt.Errorf("proof is required")
+		return nil, autherrors.NewInvalidRequest("proof is required")
 	}
 
 	ok, err := s.captcha.Verify(ctx, req.Proof, remoteIP)
 	if err != nil || !ok {
 		logger.Warnf("[Challenge] captcha 验证失败: %v", err)
-		return nil, fmt.Errorf("captcha verification failed")
+		return nil, autherrors.NewInvalidRequest("captcha verification failed")
 	}
 
 	// captcha 验证通过，移除 pending 标记
@@ -203,20 +202,23 @@ func (s *Service) verifyCaptchaAndContinue(ctx context.Context, challenge *types
 		// 发送邮件验证码
 		email := challenge.GetStringData("email")
 		if email == "" {
-			return nil, fmt.Errorf("email not found in challenge")
+			return nil, autherrors.NewInvalidRequest("email not found in challenge")
 		}
 
-		code := generateOTP(DefaultOTPLength)
+		code, err := helperutil.GenerateOTP(DefaultOTPLength)
+		if err != nil {
+			return nil, autherrors.NewServerErrorf("generate otp: %v", err)
+		}
 		otpKey := "email-otp:" + challenge.ID
 		if err := s.cache.SaveOTP(ctx, otpKey, code); err != nil {
-			return nil, fmt.Errorf("save otp: %w", err)
+			return nil, autherrors.NewServerErrorf("save otp: %v", err)
 		}
 
 		// 发送邮件
 		if s.emailSender != nil {
 			if err := s.emailSender.SendCode(ctx, email, code); err != nil {
 				logger.Errorf("[Challenge] 发送邮件失败: %v", err)
-				return nil, fmt.Errorf("send email failed")
+				return nil, autherrors.NewServerError("send email failed")
 			}
 		}
 
@@ -225,13 +227,13 @@ func (s *Service) verifyCaptchaAndContinue(ctx context.Context, challenge *types
 			logger.Warnf("[Challenge] 保存 challenge 失败: %v", err)
 		}
 
-		logger.Infof("[Challenge] captcha 验证通过，已发送邮件: %s", maskEmail(email))
+		logger.Infof("[Challenge] captcha 验证通过，已发送邮件: %s", helperutil.MaskEmail(email))
 
 		return &VerifyResponse{
 			Verified:    true, // captcha 验证通过
 			ChallengeID: challenge.ID,
 			Data: map[string]any{
-				"masked_email": maskEmail(email),
+				"masked_email": helperutil.MaskEmail(email),
 				"next":         "email-otp", // 提示前端下一步
 			},
 		}, nil
@@ -251,7 +253,7 @@ func (s *Service) verifyCaptchaAndContinue(ctx context.Context, challenge *types
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("unsupported challenge type: %s", challenge.Type)
+		return nil, autherrors.NewInvalidRequestf("unsupported challenge type: %s", challenge.Type)
 	}
 }
 
@@ -265,7 +267,7 @@ func (s *Service) GetCaptchaSiteKey() string {
 	if s.captcha == nil {
 		return ""
 	}
-	return s.captcha.GetSiteKey()
+	return s.captcha.GetIdentifier()
 }
 
 // ==================== 内部方法 ====================
@@ -276,7 +278,7 @@ func (s *Service) createCaptchaChallenge(ctx context.Context, req *CreateRequest
 	challenge.UserID = req.UserID
 
 	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
-		return nil, fmt.Errorf("save challenge: %w", err)
+		return nil, autherrors.NewServerErrorf("save challenge: %v", err)
 	}
 
 	return &CreateResponse{
@@ -284,14 +286,14 @@ func (s *Service) createCaptchaChallenge(ctx context.Context, req *CreateRequest
 		Type:        string(challenge.Type),
 		ExpiresIn:   int(time.Until(challenge.ExpiresAt).Seconds()),
 		Data: map[string]any{
-			"site_key": s.captcha.GetSiteKey(),
+			"site_key": s.captcha.GetIdentifier(),
 		},
 	}, nil
 }
 
 func (s *Service) createTOTPChallenge(ctx context.Context, req *CreateRequest) (*CreateResponse, error) {
 	if req.UserID == "" {
-		return nil, fmt.Errorf("user_id is required for totp challenge")
+		return nil, autherrors.NewInvalidRequest("user_id is required for totp challenge")
 	}
 
 	challenge := types.NewChallenge(types.ChallengeTypeTOTP, DefaultTOTPTTL)
@@ -299,7 +301,7 @@ func (s *Service) createTOTPChallenge(ctx context.Context, req *CreateRequest) (
 	challenge.UserID = req.UserID
 
 	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
-		return nil, fmt.Errorf("save challenge: %w", err)
+		return nil, autherrors.NewServerErrorf("save challenge: %v", err)
 	}
 
 	return &CreateResponse{
@@ -311,130 +313,94 @@ func (s *Service) createTOTPChallenge(ctx context.Context, req *CreateRequest) (
 
 func (s *Service) createEmailOTPChallenge(ctx context.Context, req *CreateRequest) (*CreateResponse, error) {
 	if req.Email == "" {
-		return nil, fmt.Errorf("email is required for email-otp challenge")
+		return nil, autherrors.NewInvalidRequest("email is required for email-otp challenge")
 	}
 
 	// 生成验证码
-	code := generateOTP(DefaultOTPLength)
+	code, err := helperutil.GenerateOTP(DefaultOTPLength)
+	if err != nil {
+		return nil, autherrors.NewServerErrorf("generate otp: %v", err)
+	}
 
 	// 创建 Challenge
 	challenge := types.NewChallenge(types.ChallengeTypeEmailOTP, DefaultEmailTTL)
 	challenge.FlowID = req.FlowID
 	challenge.UserID = req.UserID
 	challenge.SetData("email", req.Email)
-	challenge.SetData("masked_email", maskEmail(req.Email))
+	challenge.SetData("masked_email", helperutil.MaskEmail(req.Email))
 
 	// 保存验证码
 	otpKey := "email-otp:" + challenge.ID
 	if err := s.cache.SaveOTP(ctx, otpKey, code); err != nil {
-		return nil, fmt.Errorf("save otp: %w", err)
+		return nil, autherrors.NewServerErrorf("save otp: %v", err)
 	}
 
 	// 保存 Challenge
 	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
-		return nil, fmt.Errorf("save challenge: %w", err)
+		return nil, autherrors.NewServerErrorf("save challenge: %v", err)
 	}
 
 	// 发送邮件
 	if s.emailSender != nil {
 		if err := s.emailSender.SendCode(ctx, req.Email, code); err != nil {
 			logger.Errorf("[Challenge] 发送邮件失败: %v", err)
-			return nil, fmt.Errorf("send email failed")
+			return nil, autherrors.NewServerError("send email failed")
 		}
 	}
 
-	logger.Infof("[Challenge] 创建 email-otp challenge: %s, email: %s", challenge.ID, maskEmail(req.Email))
+	logger.Infof("[Challenge] 创建 email-otp challenge: %s, email: %s", challenge.ID, helperutil.MaskEmail(req.Email))
 
 	return &CreateResponse{
 		ChallengeID: challenge.ID,
 		Type:        string(challenge.Type),
 		ExpiresIn:   int(time.Until(challenge.ExpiresAt).Seconds()),
 		Data: map[string]any{
-			"masked_email": maskEmail(req.Email),
+			"masked_email": helperutil.MaskEmail(req.Email),
 		},
 	}, nil
 }
 
 func (s *Service) verifyCaptcha(ctx context.Context, _ *types.Challenge, req *VerifyRequest, remoteIP string) (bool, error) {
 	if req.Proof == "" {
-		return false, fmt.Errorf("proof is required")
+		return false, autherrors.NewInvalidRequest("proof is required")
 	}
 
 	if s.captcha == nil {
-		return false, fmt.Errorf("captcha verifier not configured")
+		return false, autherrors.NewServerError("captcha verifier not configured")
 	}
 
 	return s.captcha.Verify(ctx, req.Proof, remoteIP)
 }
 
-func (s *Service) verifyTOTP(_ context.Context, challenge *types.Challenge, req *VerifyRequest) (bool, error) {
+func (s *Service) verifyTOTP(ctx context.Context, challenge *types.Challenge, req *VerifyRequest) (bool, error) {
 	if req.Proof == "" {
-		return false, fmt.Errorf("proof is required")
+		return false, autherrors.NewInvalidRequest("proof is required")
 	}
 
 	if s.totpVerifier == nil {
-		return false, fmt.Errorf("totp verifier not configured")
+		return false, autherrors.NewServerError("totp verifier not configured")
 	}
 
-	return s.totpVerifier.Verify(context.Background(), challenge.UserID, req.Proof)
+	return s.totpVerifier.Verify(ctx, challenge.UserID, req.Proof)
 }
 
 func (s *Service) verifyEmailOTP(ctx context.Context, challenge *types.Challenge, req *VerifyRequest) (bool, error) {
 	if req.Proof == "" {
-		return false, fmt.Errorf("proof is required")
+		return false, autherrors.NewInvalidRequest("proof is required")
 	}
 
 	otpKey := "email-otp:" + challenge.ID
 	storedCode, err := s.cache.GetOTP(ctx, otpKey)
 	if err != nil {
-		return false, fmt.Errorf("otp not found or expired")
+		return false, autherrors.NewInvalidRequest("otp not found or expired")
 	}
 
 	if storedCode != req.Proof {
-		return false, fmt.Errorf("invalid code")
+		return false, autherrors.NewInvalidRequest("invalid code")
 	}
 
 	// 验证成功，删除 OTP（忽略删除失败，OTP 会在过期后自动清理）
 	_ = s.cache.DeleteOTP(ctx, otpKey) //nolint:errcheck
 
 	return true, nil
-}
-
-// ==================== 辅助函数 ====================
-
-// generateOTP 生成数字验证码
-func generateOTP(length int) string {
-	const digits = "0123456789"
-	result := make([]byte, length)
-	for i := range result {
-		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
-		if err != nil {
-			// 极端情况下使用 0
-			result[i] = digits[0]
-			continue
-		}
-		result[i] = digits[n.Int64()]
-	}
-	return string(result)
-}
-
-// maskEmail 邮箱脱敏
-func maskEmail(email string) string {
-	if email == "" {
-		return ""
-	}
-	at := -1
-	for i, c := range email {
-		if c == '@' {
-			at = i
-			break
-		}
-	}
-	if at <= 0 {
-		return email
-	}
-	if at <= 2 {
-		return email[:1] + "**" + email[at:]
-	}
-	return email[:1] + "**" + email[at:]
 }

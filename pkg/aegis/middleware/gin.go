@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
 )
 
@@ -21,9 +22,9 @@ type GinFactory struct {
 // secretKeyProvider: 私钥提供者（用于签发 CAT）
 func NewGinFactory(
 	endpoint string,
-	publicKeyProvider token.PublicKeyProvider,
-	symmetricKeyProvider token.SymmetricKeyProvider,
-	secretKeyProvider token.SecretKeyProvider,
+	publicKeyProvider keys.PublicKeyProvider,
+	symmetricKeyProvider keys.SymmetricKeyProvider,
+	secretKeyProvider keys.SecretKeyProvider,
 ) *GinFactory {
 	factory := NewFactory(endpoint, publicKeyProvider, symmetricKeyProvider, secretKeyProvider)
 	return &GinFactory{
@@ -157,8 +158,8 @@ func GetOpenIDFromGin(c *gin.Context) string {
 	if t == nil {
 		return ""
 	}
-	if uat, ok := token.AsUAT(t); ok && uat.GetUser() != nil {
-		return uat.GetUser().Subject
+	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
+		return uat.GetOpenID()
 	}
 	return ""
 }

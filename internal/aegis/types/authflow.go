@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/internal/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/helperutil"
 	"github.com/heliannuuthus/helios/pkg/json"
-	"github.com/heliannuuthus/helios/pkg/utils"
 )
 
 // FlowState 认证流程状态
@@ -298,12 +298,12 @@ type ConnectionsMap struct {
 
 // GenerateFlowID 生成 Flow ID（16位 Base62，约 62^16 ≈ 4.7×10^28 种可能）
 func GenerateFlowID() string {
-	return utils.GenerateID(16)
+	return helperutil.GenerateID(16)
 }
 
 // GenerateAuthorizationCode 生成授权码（32位 Base62，约 62^32 ≈ 2.3×10^57 种可能）
 func GenerateAuthorizationCode() string {
-	return utils.GenerateID(32)
+	return helperutil.GenerateID(32)
 }
 
 // NewAuthFlow 创建新的 AuthFlow
@@ -321,6 +321,11 @@ func NewAuthFlow(req *AuthRequest, ttl time.Duration) *AuthFlow {
 // IsExpired 检查是否已过期
 func (f *AuthFlow) IsExpired() bool {
 	return time.Now().After(f.ExpiresAt)
+}
+
+// Renew 续期 AuthFlow
+func (f *AuthFlow) Renew(ttl time.Duration) {
+	f.ExpiresAt = time.Now().Add(ttl)
 }
 
 // CanAuthenticate 检查是否可以进行认证

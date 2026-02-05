@@ -6,7 +6,6 @@ import (
 
 // 类型别名（便于 internal 包使用）
 type (
-	UserInfo           = pkgtoken.UserInfo
 	Token              = pkgtoken.Token
 	TokenType          = pkgtoken.TokenType
 	ChallengeType      = pkgtoken.ChallengeType
@@ -14,6 +13,14 @@ type (
 	ServiceAccessToken = pkgtoken.ServiceAccessToken
 	ChallengeToken     = pkgtoken.ChallengeToken
 	ClientAccessToken  = pkgtoken.ClientAccessToken
+	// Builder 类型别名
+	ClaimsBuilder    = pkgtoken.ClaimsBuilder
+	TokenTypeBuilder = pkgtoken.TokenTypeBuilder
+	// TokenType Builder 别名
+	UAT       = pkgtoken.UAT
+	SAT       = pkgtoken.SAT
+	CAT       = pkgtoken.CAT
+	Challenge = pkgtoken.Challenge
 )
 
 // 常量别名
@@ -26,13 +33,15 @@ const (
 
 // 构造函数别名
 var (
-	NewUserAccessToken    = pkgtoken.NewUserAccessToken
-	NewServiceAccessToken = pkgtoken.NewServiceAccessToken
-	NewChallengeToken     = pkgtoken.NewChallengeToken
-	UserInfoFromScope     = pkgtoken.UserInfoFromScope
-	Build                 = pkgtoken.Build
-	AsUAT                 = pkgtoken.AsUAT
-	AsCAT                 = pkgtoken.AsCAT
-	AsSAT                 = pkgtoken.AsSAT
-	AsChallenge           = pkgtoken.AsChallenge
+	Build       = pkgtoken.Build
+	AsUAT       = pkgtoken.AsUAT
+	AsCAT       = pkgtoken.AsCAT
+	AsSAT       = pkgtoken.AsSAT
+	AsChallenge = pkgtoken.AsChallenge
+	// Builder 构造函数
+	NewClaimsBuilder             = pkgtoken.NewClaimsBuilder
+	NewUserAccessTokenBuilder    = pkgtoken.NewUserAccessTokenBuilder
+	NewServiceAccessTokenBuilder = pkgtoken.NewServiceAccessTokenBuilder
+	NewClientAccessTokenBuilder  = pkgtoken.NewClientAccessTokenBuilder
+	NewChallengeTokenBuilder     = pkgtoken.NewChallengeTokenBuilder
 )

@@ -48,28 +48,21 @@ func (e *AuthError) GetData() map[string]any {
 
 const (
 	// 400 Bad Request
-	CodeInvalidRequest = "invalid_request"
-	CodeInvalidScope   = "invalid_scope"
-	CodeInvalidGrant   = "invalid_grant"
+	CodeInvalidRequest     = "invalid_request"
+	CodeInvalidGrant       = "invalid_grant"
+	CodeInvalidCredentials = "invalid_credentials"
+	CodeClientNotFound     = "client_not_found"
+	CodeServiceNotFound    = "service_not_found"
 
 	// 401 Unauthorized
-	CodeUnauthorized     = "unauthorized"
-	CodeInvalidToken     = "invalid_token"
-	CodeInvalidClient    = "invalid_client"
-	CodeExpiredToken     = "expired_token"
-	CodeTokenRevoked     = "token_revoked"
-	CodeInsufficientAuth = "insufficient_authentication"
+	CodeInvalidToken = "invalid_token"
 
 	// 403 Forbidden
-	CodeAccessDenied   = "access_denied"
-	CodeInvalidOrigin  = "invalid_origin"
-	CodeOriginMismatch = "origin_mismatch"
+	CodeAccessDenied = "access_denied"
 
 	// 404 Not Found
-	CodeNotFound        = "not_found"
-	CodeUserNotFound    = "user_not_found"
-	CodeClientNotFound  = "client_not_found"
-	CodeServiceNotFound = "service_not_found"
+	CodeNotFound     = "not_found"
+	CodeUserNotFound = "user_not_found"
 
 	// 412 Precondition Failed
 	CodeFlowNotFound = "flow_not_found"
@@ -79,7 +72,6 @@ const (
 	// 422 Unprocessable Entity
 	CodeNoConnectionAvailable = "no_connection_available"
 	CodeIdentityRequired      = "identity_required"
-	CodeInteractionRequired   = "interaction_required"
 
 	// 500 Internal Server Error
 	CodeServerError = "server_error"
@@ -115,34 +107,30 @@ func NewInvalidRequestf(format string, args ...any) *AuthError {
 	return Newf(http.StatusBadRequest, CodeInvalidRequest, format, args...)
 }
 
-func NewInvalidScope(description string) *AuthError {
-	return New(http.StatusBadRequest, CodeInvalidScope, description)
-}
-
 func NewInvalidGrant(description string) *AuthError {
 	return New(http.StatusBadRequest, CodeInvalidGrant, description)
+}
+
+func NewInvalidCredentials(description string) *AuthError {
+	return New(http.StatusUnauthorized, CodeInvalidCredentials, description)
+}
+
+func NewInvalidCredentialsf(format string, args ...any) *AuthError {
+	return Newf(http.StatusUnauthorized, CodeInvalidCredentials, format, args...)
 }
 
 // ==================== 401 Unauthorized ====================
 
 func NewUnauthorized(description string) *AuthError {
-	return New(http.StatusUnauthorized, CodeUnauthorized, description)
+	return New(http.StatusUnauthorized, CodeInvalidToken, description)
+}
+
+func NewUnauthorizedf(format string, args ...any) *AuthError {
+	return Newf(http.StatusUnauthorized, CodeInvalidToken, format, args...)
 }
 
 func NewInvalidToken(description string) *AuthError {
 	return New(http.StatusUnauthorized, CodeInvalidToken, description)
-}
-
-func NewInvalidClient(description string) *AuthError {
-	return New(http.StatusUnauthorized, CodeInvalidClient, description)
-}
-
-func NewExpiredToken(description string) *AuthError {
-	return New(http.StatusUnauthorized, CodeExpiredToken, description)
-}
-
-func NewTokenRevoked(description string) *AuthError {
-	return New(http.StatusUnauthorized, CodeTokenRevoked, description)
 }
 
 // ==================== 403 Forbidden ====================
@@ -153,14 +141,6 @@ func NewAccessDenied(description string) *AuthError {
 
 func NewAccessDeniedf(format string, args ...any) *AuthError {
 	return Newf(http.StatusForbidden, CodeAccessDenied, format, args...)
-}
-
-func NewInvalidOrigin(description string) *AuthError {
-	return New(http.StatusForbidden, CodeInvalidOrigin, description)
-}
-
-func NewInvalidOriginf(format string, args ...any) *AuthError {
-	return Newf(http.StatusForbidden, CodeInvalidOrigin, format, args...)
 }
 
 // ==================== 400 Bad Request (资源不存在视为参数错误) ====================
@@ -185,6 +165,10 @@ func NewServiceNotFoundf(format string, args ...any) *AuthError {
 
 func NewNotFound(description string) *AuthError {
 	return New(http.StatusNotFound, CodeNotFound, description)
+}
+
+func NewNotFoundf(format string, args ...any) *AuthError {
+	return Newf(http.StatusNotFound, CodeNotFound, format, args...)
 }
 
 func NewUserNotFound(description string) *AuthError {
@@ -219,16 +203,6 @@ func NewIdentityRequired(missing []string) *AuthError {
 	if len(missing) > 0 {
 		err.Data = map[string]any{
 			"required": missing,
-		}
-	}
-	return err
-}
-
-func NewInteractionRequired(requirement string) *AuthError {
-	err := New(http.StatusUnprocessableEntity, CodeInteractionRequired, "human verification required")
-	if requirement != "" {
-		err.Data = map[string]any{
-			"require": requirement,
 		}
 	}
 	return err

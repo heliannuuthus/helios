@@ -15,9 +15,13 @@ package middleware
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/heliannuuthus/helios/pkg/aegis/checker"
+	"github.com/heliannuuthus/helios/pkg/aegis/interpreter"
+	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
 )
 
@@ -32,10 +36,10 @@ const (
 // Factory 中间件工厂
 // 用于创建绑定特定 audience 的中间件
 type Factory struct {
-	signKeyProvider    token.PublicKeyProvider    // 验证 UAT 签名（公钥）
-	encryptKeyProvider token.SymmetricKeyProvider // 解密 UAT footer（对称密钥）
-	catSignKeyProvider token.SecretKeyProvider    // 签发 CAT（私钥）
-	checker            *token.Checker
+	signKeyProvider    keys.PublicKeyProvider    // 验证 UAT 签名（公钥）
+	encryptKeyProvider keys.SymmetricKeyProvider // 解密 UAT footer（对称密钥）
+	catSignKeyProvider keys.SecretKeyProvider    // 签发 CAT（私钥）
+	checker            *checker.Checker
 }
 
 // NewFactory 创建中间件工厂
@@ -46,32 +50,34 @@ type Factory struct {
 // secretKeyProvider: 私钥提供者（用于签发 CAT）
 func NewFactory(
 	endpoint string,
-	publicKeyProvider token.PublicKeyProvider,
-	symmetricKeyProvider token.SymmetricKeyProvider,
-	secretKeyProvider token.SecretKeyProvider,
+	publicKeyProvider keys.PublicKeyProvider,
+	symmetricKeyProvider keys.SymmetricKeyProvider,
+	secretKeyProvider keys.SecretKeyProvider,
 ) *Factory {
 	return &Factory{
 		signKeyProvider:    publicKeyProvider,
 		encryptKeyProvider: symmetricKeyProvider,
 		catSignKeyProvider: secretKeyProvider,
-		checker:            token.NewChecker(endpoint, secretKeyProvider),
+		checker:            checker.NewChecker(endpoint, secretKeyProvider),
 	}
 }
 
 // WithAudience 为特定 audience 创建中间件
 // audience: 服务 ID（用于 token 验证）
 func (f *Factory) WithAudience(audience string) *Middleware {
-	interpreter := token.NewInterpreter(f.signKeyProvider, f.encryptKeyProvider)
+	interp := interpreter.NewInterpreter(f.signKeyProvider, f.encryptKeyProvider)
 	return &Middleware{
-		interpreter: interpreter,
+		interpreter: interp,
 		checker:     f.checker,
+		audience:    audience,
 	}
 }
 
 // Middleware Aegis 中间件
 type Middleware struct {
-	interpreter *token.Interpreter
-	checker     *token.Checker
+	interpreter *interpreter.Interpreter
+	checker     *checker.Checker
+	audience    string // 期望的 audience（用于 token 验证）
 }
 
 // MiddlewareFunc 中间件函数类型
@@ -84,7 +90,7 @@ func (m *Middleware) RequireAuth() MiddlewareFunc {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, err := m.authenticate(r)
 			if err != nil {
-				http.Error(w, `{"error":"unauthorized","message":"未登录或登录已过期"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "未登录或登录已过期")
 				return
 			}
 
@@ -106,16 +112,16 @@ func (m *Middleware) RequireRelationOn(relation, objectType, objectID string) Mi
 			// 1. 认证
 			claims, err := m.authenticate(r)
 			if err != nil {
-				http.Error(w, `{"error":"unauthorized","message":"未登录或登录已过期"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "未登录或登录已过期")
 				return
 			}
 
 			// 2. 鉴权
 			if err := m.authorize(r.Context(), claims, relation, objectType, objectID); err != nil {
 				if errors.Is(err, errForbidden) {
-					http.Error(w, `{"error":"forbidden","message":"无权限访问"}`, http.StatusForbidden)
+					writeJSONError(w, http.StatusForbidden, "forbidden", "无权限访问")
 				} else {
-					http.Error(w, `{"error":"internal_error","message":"鉴权失败"}`, http.StatusInternalServerError)
+					writeJSONError(w, http.StatusInternalServerError, "internal_error", "鉴权失败")
 				}
 				return
 			}
@@ -138,16 +144,16 @@ func (m *Middleware) RequireAnyRelationOn(relations []string, objectType, object
 			// 1. 认证
 			claims, err := m.authenticate(r)
 			if err != nil {
-				http.Error(w, `{"error":"unauthorized","message":"未登录或登录已过期"}`, http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "未登录或登录已过期")
 				return
 			}
 
 			// 2. 鉴权（任意一个关系即可）
 			if err := m.authorizeAny(r.Context(), claims, relations, objectType, objectID); err != nil {
 				if errors.Is(err, errForbidden) {
-					http.Error(w, `{"error":"forbidden","message":"无权限访问"}`, http.StatusForbidden)
+					writeJSONError(w, http.StatusForbidden, "forbidden", "无权限访问")
 				} else {
-					http.Error(w, `{"error":"internal_error","message":"鉴权失败"}`, http.StatusInternalServerError)
+					writeJSONError(w, http.StatusInternalServerError, "internal_error", "鉴权失败")
 				}
 				return
 			}
@@ -164,6 +170,9 @@ type forbiddenError struct{}
 
 func (e *forbiddenError) Error() string { return "forbidden" }
 
+// ErrUnsupportedAudience audience 不支持错误
+var ErrUnsupportedAudience = errors.New("unsupported audience")
+
 // authenticate 认证：验证用户 token
 func (m *Middleware) authenticate(r *http.Request) (token.Token, error) {
 	tokenStr := extractToken(r)
@@ -171,7 +180,17 @@ func (m *Middleware) authenticate(r *http.Request) (token.Token, error) {
 		return nil, token.ErrMissingClaims
 	}
 
-	return m.interpreter.Interpret(r.Context(), tokenStr)
+	t, err := m.interpreter.Interpret(r.Context(), tokenStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// 验证 audience（如果配置了）
+	if m.audience != "" && t.GetAudience() != m.audience {
+		return nil, fmt.Errorf("%w: expected %s, got %s", ErrUnsupportedAudience, m.audience, t.GetAudience())
+	}
+
+	return t, nil
 }
 
 // authorize 鉴权：检查单个关系
@@ -196,16 +215,33 @@ func (m *Middleware) authorizeAny(ctx context.Context, t token.Token, relations 
 		return errForbidden
 	}
 
+	var lastErr error
 	for _, relation := range relations {
 		permitted, err := m.checker.Check(ctx, t, relation, objectType, objectID)
 		if err != nil {
+			lastErr = err
 			continue
 		}
 		if permitted {
 			return nil
 		}
 	}
+	if lastErr != nil {
+		return fmt.Errorf("%w: %w", errForbidden, lastErr)
+	}
 	return errForbidden
+}
+
+// writeJSONError 写入统一格式的 JSON 错误响应
+func writeJSONError(w http.ResponseWriter, statusCode int, errType, message string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(statusCode)
+	// 使用 fmt.Fprintf 避免 JSON 注入风险
+	// HTTP 响应写入失败通常无法恢复（客户端已断开连接），忽略错误是标准做法
+	if _, err := fmt.Fprintf(w, `{"error":%q,"message":%q}`, errType, message); err != nil {
+		// 写入失败时，连接可能已断开，无需额外处理
+		return
+	}
 }
 
 // extractToken 从请求中提取 token
@@ -236,8 +272,8 @@ func GetOpenID(ctx context.Context) string {
 	if t == nil {
 		return ""
 	}
-	if uat, ok := token.AsUAT(t); ok && uat.GetUser() != nil {
-		return uat.GetUser().Subject
+	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
+		return uat.GetOpenID()
 	}
 	return ""
 }

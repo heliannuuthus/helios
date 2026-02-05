@@ -6,10 +6,11 @@ import (
 	"net/http"
 	"strings"
 
-	"aidanwoods.dev/go-paseto"
 	"github.com/gin-gonic/gin"
 
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/pkg/aegis/interpreter"
+	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -40,8 +41,8 @@ func tokenPreview(tokenStr string, length int) string {
 	return tokenStr[:length]
 }
 
-// RequireToken 新版本认证中间件（使用 token.Interpreter）
-func RequireToken(v *token.Interpreter) gin.HandlerFunc {
+// RequireToken 新版本认证中间件（使用 interpreter.Interpreter）
+func RequireToken(v *interpreter.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
 		if authorization == "" {
@@ -73,8 +74,8 @@ func RequireToken(v *token.Interpreter) gin.HandlerFunc {
 	}
 }
 
-// OptionalToken 新版本可选认证中间件（使用 token.Interpreter）
-func OptionalToken(v *token.Interpreter) gin.HandlerFunc {
+// OptionalToken 新版本可选认证中间件（使用 interpreter.Interpreter）
+func OptionalToken(v *interpreter.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
 		if authorization == "" {
@@ -98,96 +99,27 @@ func OptionalToken(v *token.Interpreter) gin.HandlerFunc {
 	}
 }
 
-// HermesSymmetricKeyProvider 基于 Hermes 配置的对称密钥提供者
-
 // getOpenIDFromToken 从 Token 中提取 OpenID
 func getOpenIDFromToken(t token.Token) string {
-	if uat, ok := token.AsUAT(t); ok && uat.GetUser() != nil {
-		return uat.GetUser().Subject
+	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
+		return uat.GetOpenID()
 	}
 	return ""
 }
-// 从 hermes 配置的 aegis.secret-key 读取密钥
-type HermesSymmetricKeyProvider struct {
-	key paseto.V4SymmetricKey // 缓存解析后的 key
-}
 
-// NewHermesSymmetricKeyProvider 创建基于 Hermes 配置的对称密钥提供者
-func NewHermesSymmetricKeyProvider() (*HermesSymmetricKeyProvider, error) {
-	secretBytes, err := config.GetHermesAegisSecretKeyBytes()
+// NewHermesKeyProvider 创建基于 Hermes 配置的密钥提供者
+// 从 aegis.secret-key 读取 32 字节主密钥
+func NewHermesKeyProvider() (keys.KeyProvider, error) {
+	// 配置已直接返回 32 字节 raw key
+	masterKey, err := config.GetHermesAegisSecretKeyBytes()
 	if err != nil {
 		return nil, fmt.Errorf("get hermes aegis secret key: %w", err)
 	}
 
-	// 解析对称密钥（32 字节）
-	symmetricKey, err := token.ParseSymmetricKeyFromBytes(secretBytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse hermes aegis symmetric key: %w", err)
-	}
-
-	return &HermesSymmetricKeyProvider{key: symmetricKey}, nil
-}
-
-// Get 获取解密密钥（忽略 audience 参数，使用 hermes 配置的密钥）
-func (p *HermesSymmetricKeyProvider) Get(ctx context.Context, audience string) (paseto.V4SymmetricKey, error) {
-	return p.key, nil
-}
-
-// HermesPublicKeyProvider 基于 HTTP 端点的公钥提供者
-// 从 Aegis 服务获取公钥
-type HermesPublicKeyProvider struct {
-	endpoint string
-	cache    map[string]paseto.V4AsymmetricPublicKey
-}
-
-// NewHermesPublicKeyProvider 创建基于 HTTP 端点的公钥提供者
-func NewHermesPublicKeyProvider(endpoint string) *HermesPublicKeyProvider {
-	return &HermesPublicKeyProvider{
-		endpoint: endpoint,
-		cache:    make(map[string]paseto.V4AsymmetricPublicKey),
-	}
-}
-
-// Get 获取公钥（从远程服务获取）
-func (p *HermesPublicKeyProvider) Get(ctx context.Context, clientID string) (paseto.V4AsymmetricPublicKey, error) {
-	// TODO: 实现从 Aegis 服务获取公钥
-	// 现在先使用本地配置的公钥（从域签名密钥派生）
-	secretKeyBytes, err := config.GetHermesAegisSecretKeyBytes()
-	if err != nil {
-		return paseto.V4AsymmetricPublicKey{}, fmt.Errorf("get secret key: %w", err)
-	}
-
-	secretKey, err := token.ParseSecretKeyFromJWK(secretKeyBytes)
-	if err != nil {
-		return paseto.V4AsymmetricPublicKey{}, fmt.Errorf("parse secret key: %w", err)
-	}
-
-	return secretKey.Public(), nil
-}
-
-// HermesSecretKeyProvider 基于 Hermes 配置的私钥提供者
-// 从 hermes 配置读取 Ed25519 私钥（用于签发 CAT）
-type HermesSecretKeyProvider struct {
-	key paseto.V4AsymmetricSecretKey // 缓存解析后的 key
-}
-
-// NewHermesSecretKeyProvider 创建基于 Hermes 配置的私钥提供者
-func NewHermesSecretKeyProvider() (*HermesSecretKeyProvider, error) {
-	secretBytes, err := config.GetHermesAegisSecretKeyBytes()
-	if err != nil {
-		return nil, fmt.Errorf("get hermes aegis secret key: %w", err)
-	}
-
-	// 解析 Ed25519 私钥
-	secretKey, err := token.ParseSecretKeyFromJWK(secretBytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse hermes aegis secret key: %w", err)
-	}
-
-	return &HermesSecretKeyProvider{key: secretKey}, nil
-}
-
-// Get 获取私钥（忽略 keyID 参数，使用 hermes 配置的密钥）
-func (p *HermesSecretKeyProvider) Get(ctx context.Context, keyID string) (paseto.V4AsymmetricSecretKey, error) {
-	return p.key, nil
+	// 返回一个简单的 KeyProvider，忽略 id 参数，总是返回同一个主密钥
+	// string(masterKey) 将 []byte 转为 string 用于 map key
+	keyStr := string(masterKey)
+	return keys.KeyProviderFunc(func(ctx context.Context, id string) (map[string]struct{}, error) {
+		return map[string]struct{}{keyStr: {}}, nil
+	}), nil
 }

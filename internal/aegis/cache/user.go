@@ -86,6 +86,23 @@ func (cm *Manager) FindOrCreateUser(ctx context.Context, req *models.FindOrCreat
 	return user, isNew, nil
 }
 
+// FindUserByEmailAndDomain 根据邮箱和域查找用户
+func (cm *Manager) FindUserByEmailAndDomain(ctx context.Context, email, domainID string) (*models.UserWithDecrypted, error) {
+	result, err := cm.userSvc.FindByEmailAndDomain(ctx, email, domainID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 存入缓存
+	if cm.userCache != nil {
+		cacheKey := config.GetAegisCacheKeyPrefix("user") + result.OpenID
+		ttl := config.GetAegisCacheTTL("user")
+		cm.userCache.SetWithTTL(cacheKey, result, 1, ttl)
+	}
+
+	return result, nil
+}
+
 // InvalidateUser 清除用户缓存
 func (cm *Manager) InvalidateUser(ctx context.Context, openID string) {
 	if cm.userCache != nil {
