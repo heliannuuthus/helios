@@ -30,24 +30,21 @@ func main() {
 	// 加载所有配置
 	config.Load()
 
-	// 使用 Zwei 配置初始化日志（通用配置）
-	cfg := config.Zwei()
-
 	// 初始化日志
 	logger.InitWithConfig(logger.Config{
-		Format: cfg.GetString("log.format"),
-		Level:  cfg.GetString("log.level"),
-		Debug:  cfg.GetBool("app.debug"),
+		Format: config.GetLogFormat(),
+		Level:  config.GetLogLevel(),
+		Debug:  config.IsDebug(),
 	})
 	defer logger.Sync()
 
 	// 初始化 OSS（如果配置了）
-	if cfg.GetString("oss.endpoint") != "" {
+	if config.GetOSSEndpoint() != "" {
 		if err := oss.Init(); err != nil {
 			logger.Warnf("OSS 初始化失败（将跳过图片上传功能）: %v", err)
 		} else {
 			// 初始化 STS（如果配置了）
-			if cfg.GetString("oss.role-arn") != "" {
+			if config.GetOSSRoleARN() != "" {
 				if err := oss.InitSTS(); err != nil {
 					logger.Warnf("OSS STS 初始化失败（将使用主账号凭证）: %v", err)
 				}
@@ -62,7 +59,7 @@ func main() {
 	}
 
 	// 设置 Gin 模式
-	if !cfg.GetBool("app.debug") {
+	if !config.IsDebug() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
@@ -70,14 +67,11 @@ func main() {
 	r := gin.Default()
 	r.RedirectTrailingSlash = false
 
-	// 添加中间件
-	r.Use(middleware.CORS())
-
 	// 根路径
 	r.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
-			"message": cfg.GetString("app.name"),
-			"version": cfg.GetString("app.version"),
+			"message": config.GetAppName(),
+			"version": config.GetAppVersion(),
 		})
 	})
 
@@ -89,20 +83,50 @@ func main() {
 	// Swagger 文档
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Auth 路由（OAuth2.1/OIDC 风格）
+	// Aegis 认证路由（OAuth2.1/OIDC 风格）
 	authGroup := r.Group("/auth")
 	{
-		authGroup.GET("/authorize", app.AuthHandler.Authorize) // 创建认证会话并重定向到登录页面
-		authGroup.POST("/login", app.AuthHandler.Login)        // IDP 登录
-		authGroup.POST("/token", app.AuthHandler.Token)        // 获取/刷新 Token
-		authGroup.POST("/revoke", app.AuthHandler.Revoke)      // 撤销 Token
-		authGroup.POST("/logout", middleware.RequireAuth(), app.AuthHandler.Logout)
-		authGroup.GET("/userinfo", middleware.RequireAuth(), app.AuthHandler.UserInfo)
-		authGroup.PUT("/userinfo", middleware.RequireAuth(), app.AuthHandler.UpdateUserInfo)
+		// Aegis UI 调用的接口（需要 CORS）
+		aegisCORS := middleware.CORSWithConfig(config.Aegis(), app.AegisHandler.CacheManager())
+		authGroup.POST("/authorize", aegisCORS, app.AegisHandler.Authorize)         // 创建认证会话并重定向到登录页面
+		authGroup.GET("/connections", aegisCORS, app.AegisHandler.GetConnections)   // 获取可用的 Connection 配置
+		authGroup.GET("/context", aegisCORS, app.AegisHandler.GetContext)           // 获取当前流程的应用和服务信息
+		authGroup.POST("/login", aegisCORS, app.AegisHandler.Login)                 // IDP 登录
+		authGroup.POST("/challenge", aegisCORS, app.AegisHandler.InitiateChallenge) // 发起 Challenge
+		authGroup.PUT("/challenge", aegisCORS, app.AegisHandler.ContinueChallenge)  // 继续 Challenge
+
+		// 业务前端/后端调用的接口（不需要 Aegis UI 的 CORS）
+		authGroup.POST("/token", app.AegisHandler.Token)   // 获取/刷新 Token
+		authGroup.POST("/revoke", app.AegisHandler.Revoke) // 撤销 Token
+		authGroup.POST("/check", app.AegisHandler.Check)   // 关系检查（使用 CAT 认证）
+		authGroup.POST("/logout", middleware.RequireAuth(), app.AegisHandler.Logout)
+		authGroup.GET("/pubkeys", app.AegisHandler.PublicKeys) // 获取 PASETO 公钥
 	}
 
-	// IDPs 路由（获取认证源配置）
-	r.GET("/idps", app.AuthHandler.IDPs) // 获取认证源配置
+	// Iris 用户信息路由（需要 Iris 服务认证）
+	irisMw := app.MiddlewareFactory.WithAudience(config.GetIrisAegisAudience())
+	userGroup := r.Group("/user")
+	userGroup.Use(irisMw.RequireAuth())
+	{
+		// /user/profile - 用户基本信息
+		userGroup.GET("/profile", app.IrisHandler.GetProfile)
+		userGroup.PUT("/profile", app.IrisHandler.UpdateProfile)
+		userGroup.POST("/profile/avatar", app.IrisHandler.UploadAvatar)
+		userGroup.PUT("/profile/email", app.IrisHandler.UpdateEmail)
+		userGroup.PUT("/profile/phone", app.IrisHandler.UpdatePhone)
+
+		// /user/identities - 第三方身份
+		userGroup.GET("/identities", app.IrisHandler.ListIdentities)
+		userGroup.POST("/identities/:idp", app.IrisHandler.BindIdentity)
+		userGroup.DELETE("/identities/:idp", app.IrisHandler.UnbindIdentity)
+
+		// /user/mfa - MFA 设置（TOTP、WebAuthn、Passkey 统一入口）
+		userGroup.GET("/mfa", app.IrisHandler.GetMFAStatus)
+		userGroup.POST("/mfa", app.IrisHandler.SetupMFA)
+		userGroup.PUT("/mfa", app.IrisHandler.VerifyMFA)
+		userGroup.PATCH("/mfa", app.IrisHandler.UpdateMFA)
+		userGroup.DELETE("/mfa", app.IrisHandler.DeleteMFA)
+	}
 
 	// API 路由
 	api := r.Group("/api")
@@ -214,8 +238,10 @@ func main() {
 	}
 
 	// Hermes 身份与访问管理路由
+	// 使用 aegis 中间件进行认证
+	hermesMw := app.MiddlewareFactory.WithAudience(config.GetHermesAegisAudience())
 	hermes := r.Group("/hermes")
-	hermes.Use(middleware.RequireAuth())
+	hermes.Use(hermesMw.RequireAuth())
 	{
 		// 域管理
 		domains := hermes.Group("/domains")
@@ -272,7 +298,7 @@ func main() {
 	}
 
 	// 启动服务器
-	addr := fmt.Sprintf("%s:%d", cfg.GetString("server.host"), cfg.GetInt("server.port"))
+	addr := fmt.Sprintf("%s:%d", config.GetServerHost(), config.GetServerPort())
 	logger.Infof("服务启动: http://%s", addr)
 	logger.Infof("API 文档: http://%s/swagger/index.html", addr)
 

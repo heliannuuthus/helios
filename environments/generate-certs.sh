@@ -7,7 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CERTS_DIR="${SCRIPT_DIR}/certs"
 DOMAINS=(
-    "auth.heliannuuthus.com"
+    "aegis.heliannuuthus.com"
     "hermes.heliannuuthus.com"
     "zwei.heliannuuthus.com"
     "atlas.heliannuuthus.com"

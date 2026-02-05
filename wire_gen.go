@@ -8,10 +8,13 @@ package main
 
 import (
 	"github.com/google/wire"
-	"github.com/heliannuuthus/helios/internal/auth"
+	"github.com/heliannuuthus/helios/internal/aegis"
+	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/database"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/upload"
+	"github.com/heliannuuthus/helios/internal/iris"
+	middleware2 "github.com/heliannuuthus/helios/internal/middleware"
 	"github.com/heliannuuthus/helios/internal/zwei/favorite"
 	"github.com/heliannuuthus/helios/internal/zwei/history"
 	"github.com/heliannuuthus/helios/internal/zwei/home"
@@ -19,6 +22,8 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
+	"github.com/heliannuuthus/helios/pkg/aegis/keys"
+	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
 )
 
 import (
@@ -31,10 +36,11 @@ import (
 func InitializeApp() (*App, error) {
 	handler := provideRecipeHandler()
 	service := provideHermesService()
-	authHandler, err := provideAuthHandler(service)
+	aegisHandler, err := provideAegisHandler(service)
 	if err != nil {
 		return nil, err
 	}
+	irisHandler := provideIrisHandler(aegisHandler)
 	favoriteHandler := provideFavoriteHandler()
 	historyHandler := provideHistoryHandler()
 	homeHandler := provideHomeHandler()
@@ -43,9 +49,14 @@ func InitializeApp() (*App, error) {
 	uploadHandler := provideUploadHandler()
 	preferenceHandler := providePreferenceHandler()
 	hermesHandler := provideHermesHandler(service)
+	ginFactory, err := provideGinMiddlewareFactory()
+	if err != nil {
+		return nil, err
+	}
 	app := &App{
 		RecipeHandler:     handler,
-		AuthHandler:       authHandler,
+		AegisHandler:      aegisHandler,
+		IrisHandler:       irisHandler,
 		FavoriteHandler:   favoriteHandler,
 		HistoryHandler:    historyHandler,
 		HomeHandler:       homeHandler,
@@ -54,6 +65,7 @@ func InitializeApp() (*App, error) {
 		UploadHandler:     uploadHandler,
 		PreferenceHandler: preferenceHandler,
 		HermesHandler:     hermesHandler,
+		MiddlewareFactory: ginFactory,
 	}
 	return app, nil
 }
@@ -89,15 +101,16 @@ func provideHomeHandler() *home.Handler {
 	return home.NewHandler(database.GetZwei())
 }
 
-// Hermes Service（供 auth 模块复用）
+// Hermes Service（供 aegis 模块复用）
 func provideHermesService() *hermes.Service {
-	return hermes.NewService()
+	return hermes.NewService(database.GetHermes())
 }
 
 // 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
-func provideAuthHandler(hermesService *hermes.Service) (*auth.Handler, error) {
-	userSvc := hermes.NewUserService(database.GetHermes())
-	return auth.Initialize(&auth.InitConfig{
+func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
+	db := database.GetHermes()
+	userSvc := hermes.NewUserService(db)
+	return aegis.Initialize(&aegis.InitConfig{
 		HermesSvc: hermesService,
 		UserSvc:   userSvc,
 	})
@@ -109,6 +122,34 @@ func provideUploadHandler() *upload.Handler {
 
 func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
 	return hermes.NewHandler(hermesService)
+}
+
+// Iris 用户信息模块 Handler
+func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
+	db := database.GetHermes()
+	userSvc := hermes.NewUserService(db)
+	credentialSvc := hermes.NewCredentialService(db)
+	handler := iris.NewHandler(userSvc, credentialSvc)
+
+	if aegisHandler.HasWebAuthn() {
+		handler.SetWebAuthnService(aegisHandler.WebAuthnService())
+	}
+
+	return handler
+}
+
+// provideGinMiddlewareFactory 创建 Gin 中间件工厂
+func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
+	endpoint := config.GetAegisIssuer()
+
+	keyProvider, err := middleware2.NewHermesKeyProvider()
+	if err != nil {
+		return nil, err
+	}
+
+	return middleware.NewGinFactory(
+		endpoint, keys.NewPublicKeyProvider(keyProvider), keys.NewSymmetricKeyProvider(keyProvider), keys.NewSecretKeyProvider(keyProvider),
+	), nil
 }
 
 // ProviderSet 提供者集合
@@ -123,14 +164,19 @@ var ProviderSet = wire.NewSet(recipe.NewService, favorite.NewService, history.Ne
 	provideHermesService,
 	provideHermesHandler,
 
-	provideAuthHandler,
+	provideAegisHandler,
 	provideUploadHandler,
+
+	provideIrisHandler,
+
+	provideGinMiddlewareFactory,
 )
 
 // App 应用依赖容器
 type App struct {
 	RecipeHandler     *recipe.Handler
-	AuthHandler       *auth.Handler
+	AegisHandler      *aegis.Handler
+	IrisHandler       *iris.Handler
 	FavoriteHandler   *favorite.Handler
 	HistoryHandler    *history.Handler
 	HomeHandler       *home.Handler
@@ -139,4 +185,5 @@ type App struct {
 	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
 	HermesHandler     *hermes.Handler
+	MiddlewareFactory *middleware.GinFactory
 }

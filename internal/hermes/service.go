@@ -10,10 +10,9 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/internal/database"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
+	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/json"
-	"github.com/heliannuuthus/helios/pkg/kms"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -23,10 +22,34 @@ type Service struct {
 }
 
 // NewService 创建管理服务
-func NewService() *Service {
+func NewService(db *gorm.DB) *Service {
 	return &Service{
-		db: database.GetHermes(),
+		db: db,
 	}
+}
+
+// generateEncryptedKey 生成 AES-256 密钥并用数据库加密密钥加密
+// aad 用于 AES-GCM 加密的附加认证数据
+func generateEncryptedKey(aad string) (string, error) {
+	// 生成 AES-256 密钥
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return "", fmt.Errorf("生成密钥失败: %w", err)
+	}
+
+	// 获取数据库加密密钥（原始字节）
+	domainEncryptKey, err := config.GetDBEncKeyRaw()
+	if err != nil {
+		return "", fmt.Errorf("获取数据库加密密钥失败: %w", err)
+	}
+
+	// 用域密钥加密密钥（AES-GCM，AAD=aad）
+	encryptedKey, err := cryptoutil.EncryptAESGCM(key, domainEncryptKey, aad)
+	if err != nil {
+		return "", fmt.Errorf("加密密钥失败: %w", err)
+	}
+
+	return base64.StdEncoding.EncodeToString(encryptedKey), nil
 }
 
 // ==================== Domain 相关 ====================
@@ -34,18 +57,18 @@ func NewService() *Service {
 // GetDomain 获取域（从配置读取，不含密钥）
 func (*Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
 	// 检查域配置是否存在
-	signKey := config.GetHermesDomainSignKey(domainID)
-	if signKey == "" {
+	signKeys := config.GetHermesDomainSignKeys(domainID)
+	if len(signKeys) == 0 {
 		return nil, fmt.Errorf("域 %s 配置不存在", domainID)
 	}
 
-	name := config.Hermes().GetString(config.HermesAuthDomains + "." + domainID + ".name")
+	name := config.Hermes().GetString(config.AegisDomains + "." + domainID + ".name")
 	if name == "" {
 		name = domainID
 	}
 
 	var description *string
-	if desc := config.Hermes().GetString(config.HermesAuthDomains + "." + domainID + ".description"); desc != "" {
+	if desc := config.Hermes().GetString(config.AegisDomains + "." + domainID + ".description"); desc != "" {
 		description = &desc
 	}
 
@@ -65,32 +88,36 @@ func (s *Service) GetDomainWithKey(ctx context.Context, domainID string) (*model
 		return nil, err
 	}
 
-	// 获取签名密钥（解码后的字节）
-	signKey, err := config.GetAuthDomainSignKeyBytes(domainID)
+	// 获取所有签名密钥（第一把是主密钥，其余是旧密钥）
+	signKeys, err := config.GetHermesDomainSignKeysBytes(domainID)
 	if err != nil {
 		return nil, fmt.Errorf("获取域签名密钥失败: %w", err)
 	}
 
-	return &models.DomainWithKey{Domain: *domain, SignKey: signKey}, nil
+	return &models.DomainWithKey{
+		Domain: *domain,
+		Main:   signKeys[0], // 第一把是主密钥
+		Keys:   signKeys,    // 所有密钥（用于验证）
+	}, nil
 }
 
 // ListDomains 列出所有域（从配置读取）
 func (*Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 	// 从配置读取 auth.domains 下的所有域
-	domainsMap := config.Hermes().GetStringMap(config.HermesAuthDomains)
+	domainsMap := config.Hermes().GetStringMap(config.AegisDomains)
 	if len(domainsMap) == 0 {
-		return nil, fmt.Errorf("auth.domains 配置为空")
+		return nil, fmt.Errorf("aegis.domains 配置为空")
 	}
 
 	domains := make([]models.Domain, 0, len(domainsMap))
 	for domainID := range domainsMap {
-		name := config.Hermes().GetString(config.HermesAuthDomains + "." + domainID + ".name")
+		name := config.Hermes().GetString(config.AegisDomains + "." + domainID + ".name")
 		if name == "" {
 			name = domainID
 		}
 
 		var description *string
-		if desc := config.Hermes().GetString(config.HermesAuthDomains + "." + domainID + ".description"); desc != "" {
+		if desc := config.Hermes().GetString(config.AegisDomains + "." + domainID + ".description"); desc != "" {
 			description = &desc
 		}
 
@@ -107,33 +134,10 @@ func (*Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 
 // ==================== Service 相关 ====================
 
-// generateServiceKey 生成服务密钥并加密
-func (*Service) generateServiceKey(domainID string) (string, error) {
-	// 生成 AES-256 密钥
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return "", fmt.Errorf("生成密钥失败: %w", err)
-	}
-
-	// 获取域加密密钥
-	domainEncryptKey, err := config.GetAuthDomainEncryptKeyBytes(domainID)
-	if err != nil {
-		return "", fmt.Errorf("获取域加密密钥失败: %w", err)
-	}
-
-	// 用域密钥加密服务密钥（AES-GCM，AAD=serviceID）
-	encryptedKey, err := kms.EncryptAESGCM(key, domainEncryptKey, domainID)
-	if err != nil {
-		return "", fmt.Errorf("加密服务密钥失败: %w", err)
-	}
-
-	return base64.StdEncoding.EncodeToString(encryptedKey), nil
-}
-
 // CreateService 创建服务
 func (s *Service) CreateService(ctx context.Context, req *ServiceCreateRequest) (*models.Service, error) {
 	// 生成并加密服务密钥
-	encryptedKey, err := s.generateServiceKey(req.DomainID)
+	encryptedKey, err := generateEncryptedKey(req.ServiceID)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +150,6 @@ func (s *Service) CreateService(ctx context.Context, req *ServiceCreateRequest) 
 		EncryptedKey:          encryptedKey,
 		AccessTokenExpiresIn:  7200,
 		RefreshTokenExpiresIn: 604800,
-		Status:                0,
 	}
 
 	if req.AccessTokenExpiresIn != nil {
@@ -190,9 +193,10 @@ func (s *Service) GetServiceWithKey(ctx context.Context, serviceID string) (*mod
 
 // decryptServiceKey 解密服务密钥
 func (s *Service) decryptServiceKey(svc *models.Service) ([]byte, error) {
-	domainKey, err := config.GetAuthDomainEncryptKeyBytes(svc.DomainID)
+	// 获取数据库加密密钥（原始字节）
+	domainKey, err := config.GetDBEncKeyRaw()
 	if err != nil {
-		return nil, fmt.Errorf("获取域加密密钥失败: %w", err)
+		return nil, fmt.Errorf("获取数据库加密密钥失败: %w", err)
 	}
 
 	encrypted, err := base64.StdEncoding.DecodeString(svc.EncryptedKey)
@@ -200,7 +204,7 @@ func (s *Service) decryptServiceKey(svc *models.Service) ([]byte, error) {
 		return nil, fmt.Errorf("解码服务密钥失败: %w", err)
 	}
 
-	key, err := kms.DecryptAESGCM(domainKey, encrypted, svc.ServiceID)
+	key, err := cryptoutil.DecryptAESGCM(domainKey, encrypted, svc.ServiceID)
 	if err != nil {
 		return nil, fmt.Errorf("解密服务密钥失败: %w", err)
 	}
@@ -236,9 +240,6 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, req *Serv
 	if req.RefreshTokenExpiresIn != nil {
 		updates["refresh_token_expires_in"] = *req.RefreshTokenExpiresIn
 	}
-	if req.Status != nil {
-		updates["status"] = *req.Status
-	}
 
 	if len(updates) == 0 {
 		return nil
@@ -254,29 +255,6 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, req *Serv
 
 // ==================== Application 相关 ====================
 
-// generateApplicationKey 生成应用密钥并加密
-func (s *Service) generateApplicationKey(domainID, appID string) (string, error) {
-	// 生成 AES-256 密钥
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return "", fmt.Errorf("生成密钥失败: %w", err)
-	}
-
-	// 获取域加密密钥
-	domainEncryptKey, err := config.GetAuthDomainEncryptKeyBytes(domainID)
-	if err != nil {
-		return "", fmt.Errorf("获取域加密密钥失败: %w", err)
-	}
-
-	// 用域密钥加密应用密钥（AES-GCM，AAD=appID）
-	encryptedKey, err := kms.EncryptAESGCM(key, domainEncryptKey, appID)
-	if err != nil {
-		return "", fmt.Errorf("加密应用密钥失败: %w", err)
-	}
-
-	return base64.StdEncoding.EncodeToString(encryptedKey), nil
-}
-
 // CreateApplication 创建应用
 func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateRequest) (*models.Application, error) {
 	var redirectURIs *string
@@ -291,7 +269,7 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 
 	var encryptedKey *string
 	if req.NeedKey {
-		key, err := s.generateApplicationKey(req.DomainID, req.AppID)
+		key, err := generateEncryptedKey(req.AppID)
 		if err != nil {
 			return nil, err
 		}
@@ -347,9 +325,10 @@ func (s *Service) decryptApplicationKey(app *models.Application) ([]byte, error)
 		return nil, nil
 	}
 
-	domainKey, err := config.GetAuthDomainEncryptKeyBytes(app.DomainID)
+	// 获取数据库加密密钥（原始字节）
+	domainKey, err := config.GetDBEncKeyRaw()
 	if err != nil {
-		return nil, fmt.Errorf("获取域加密密钥失败: %w", err)
+		return nil, fmt.Errorf("获取数据库加密密钥失败: %w", err)
 	}
 
 	encrypted, err := base64.StdEncoding.DecodeString(*app.EncryptedKey)
@@ -357,7 +336,7 @@ func (s *Service) decryptApplicationKey(app *models.Application) ([]byte, error)
 		return nil, fmt.Errorf("解码应用密钥失败: %w", err)
 	}
 
-	key, err := kms.DecryptAESGCM(domainKey, encrypted, app.AppID)
+	key, err := cryptoutil.DecryptAESGCM(domainKey, encrypted, app.AppID)
 	if err != nil {
 		return nil, fmt.Errorf("解密应用密钥失败: %w", err)
 	}
@@ -728,6 +707,7 @@ func (s *Service) DeleteAppServiceRelationship(ctx context.Context, appID, servi
 func (s *Service) CreateGroup(ctx context.Context, req *GroupCreateRequest) (*models.Group, error) {
 	group := &models.Group{
 		GroupID:     req.GroupID,
+		ServiceID:   req.ServiceID,
 		Name:        req.Name,
 		Description: req.Description,
 	}
@@ -822,4 +802,18 @@ func (s *Service) GetGroupMembers(ctx context.Context, groupID string) ([]string
 	}
 
 	return userIDs, nil
+}
+
+// ==================== Application IDP Config 相关 ====================
+
+// GetApplicationIDPConfigs 获取应用 IDP 配置列表（按 priority 降序）
+func (s *Service) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
+	var configs []*models.ApplicationIDPConfig
+	if err := s.db.WithContext(ctx).
+		Where("app_id = ?", appID).
+		Order("priority DESC").
+		Find(&configs).Error; err != nil {
+		return nil, fmt.Errorf("获取应用 IDP 配置失败: %w", err)
+	}
+	return configs, nil
 }
