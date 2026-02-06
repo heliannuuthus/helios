@@ -142,7 +142,8 @@ var ProviderSet = wire.NewSet(
 	provideUploadHandler,
 	// Iris 用户信息模块
 	provideIrisHandler,
-	// 中间件工厂
+	// 中间件
+	provideInterpreter,
 	provideGinMiddlewareFactory,
 )
 

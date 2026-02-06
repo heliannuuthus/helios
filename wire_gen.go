@@ -14,7 +14,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/upload"
 	"github.com/heliannuuthus/helios/internal/iris"
-	middleware2 "github.com/heliannuuthus/helios/internal/middleware"
+	"github.com/heliannuuthus/helios/internal/middleware"
 	"github.com/heliannuuthus/helios/internal/zwei/favorite"
 	"github.com/heliannuuthus/helios/internal/zwei/history"
 	"github.com/heliannuuthus/helios/internal/zwei/home"
@@ -24,8 +24,10 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
 	"github.com/heliannuuthus/helios/pkg/aegis/interpreter"
 	"github.com/heliannuuthus/helios/pkg/aegis/keys"
-	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
+	middleware2 "github.com/heliannuuthus/helios/pkg/aegis/middleware"
+)
 
+import (
 	_ "github.com/heliannuuthus/helios/docs"
 )
 
@@ -48,11 +50,11 @@ func InitializeApp() (*App, error) {
 	uploadHandler := provideUploadHandler()
 	preferenceHandler := providePreferenceHandler()
 	hermesHandler := provideHermesHandler(service)
-	interp, err := provideInterpreter()
+	ginFactory, err := provideGinMiddlewareFactory()
 	if err != nil {
 		return nil, err
 	}
-	ginFactory, err := provideGinMiddlewareFactory()
+	interpreter, err := provideInterpreter()
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +71,7 @@ func InitializeApp() (*App, error) {
 		PreferenceHandler: preferenceHandler,
 		HermesHandler:     hermesHandler,
 		MiddlewareFactory: ginFactory,
-		Interpreter:       interp,
+		Interpreter:       interpreter,
 	}
 	return app, nil
 }
@@ -138,29 +140,26 @@ func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
 	return iris.NewHandler(userSvc, credentialSvc, aegisHandler.Registry())
 }
 
-// provideInterpreter 创建 Token 解释器
+// provideInterpreter 创建 Token 解释器（用于 API 路由认证中间件）
 func provideInterpreter() (*interpreter.Interpreter, error) {
-	keyProvider, err := middleware2.NewHermesKeyProvider()
+	keyProvider, err := middleware.NewHermesKeyProvider()
 	if err != nil {
 		return nil, err
 	}
 
-	return interpreter.NewInterpreter(
-		keys.NewPublicKeyProvider(keyProvider),
-		keys.NewSymmetricKeyProvider(keyProvider),
-	), nil
+	return interpreter.NewInterpreter(keys.NewPublicKeyProvider(keyProvider), keys.NewSymmetricKeyProvider(keyProvider)), nil
 }
 
 // provideGinMiddlewareFactory 创建 Gin 中间件工厂
-func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
+func provideGinMiddlewareFactory() (*middleware2.GinFactory, error) {
 	endpoint := config.GetAegisIssuer()
 
-	keyProvider, err := middleware2.NewHermesKeyProvider()
+	keyProvider, err := middleware.NewHermesKeyProvider()
 	if err != nil {
 		return nil, err
 	}
 
-	return middleware.NewGinFactory(
+	return middleware2.NewGinFactory(
 		endpoint, keys.NewPublicKeyProvider(keyProvider), keys.NewSymmetricKeyProvider(keyProvider), keys.NewSecretKeyProvider(keyProvider),
 	), nil
 }
@@ -199,6 +198,6 @@ type App struct {
 	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
 	HermesHandler     *hermes.Handler
-	MiddlewareFactory *middleware.GinFactory
+	MiddlewareFactory *middleware2.GinFactory
 	Interpreter       *interpreter.Interpreter
 }
