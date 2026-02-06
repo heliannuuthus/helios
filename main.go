@@ -99,7 +99,7 @@ func main() {
 		authGroup.POST("/token", app.AegisHandler.Token)   // 获取/刷新 Token
 		authGroup.POST("/revoke", app.AegisHandler.Revoke) // 撤销 Token
 		authGroup.POST("/check", app.AegisHandler.Check)   // 关系检查（使用 CAT 认证）
-		authGroup.POST("/logout", middleware.RequireAuth(), app.AegisHandler.Logout)
+		authGroup.POST("/logout", middleware.RequireToken(app.Interpreter), app.AegisHandler.Logout)
 		authGroup.GET("/pubkeys", app.AegisHandler.PublicKeys) // 获取 PASETO 公钥
 	}
 
@@ -148,7 +148,7 @@ func main() {
 		{
 			// 收藏路由
 			favorites := user.Group("/favorites")
-			favorites.Use(middleware.RequireAuth())
+			favorites.Use(middleware.RequireToken(app.Interpreter))
 			{
 				favorites.GET("", app.FavoriteHandler.GetFavorites)
 				favorites.POST("", app.FavoriteHandler.AddFavorite)
@@ -159,7 +159,7 @@ func main() {
 
 			// 浏览历史路由
 			history := user.Group("/history")
-			history.Use(middleware.RequireAuth())
+			history.Use(middleware.RequireToken(app.Interpreter))
 			{
 				history.GET("", app.HistoryHandler.GetViewHistory)
 				history.POST("", app.HistoryHandler.AddViewHistory)
@@ -170,8 +170,8 @@ func main() {
 			// 用户偏好路由
 			preference := user.Group("/preference")
 			{
-				preference.GET("", middleware.RequireAuth(), app.PreferenceHandler.GetUserPreferences)    // 获取用户偏好（需登录）
-				preference.PUT("", middleware.RequireAuth(), app.PreferenceHandler.UpdateUserPreferences) // 更新用户偏好（需登录）
+				preference.GET("", middleware.RequireToken(app.Interpreter), app.PreferenceHandler.GetUserPreferences)    // 获取用户偏好（需登录）
+				preference.PUT("", middleware.RequireToken(app.Interpreter), app.PreferenceHandler.UpdateUserPreferences) // 更新用户偏好（需登录）
 			}
 		}
 
@@ -201,37 +201,33 @@ func main() {
 
 			// POST /api/tags - 创建标签/选项（后台管理）
 			// recipe_id 为空时创建选项，不为空时创建菜谱标签
-			tags.POST("", middleware.RequireAuth(), app.TagHandler.CreateTag)
+			tags.POST("", middleware.RequireToken(app.Interpreter), app.TagHandler.CreateTag)
 
 			// PUT /api/tags/{type}/{value} - 更新标签/选项（后台管理）
 			// recipe_id 查询参数为空时更新选项，不为空时更新菜谱标签
-			tags.PUT("/:type/:value", middleware.RequireAuth(), app.TagHandler.UpdateTag)
+			tags.PUT("/:type/:value", middleware.RequireToken(app.Interpreter), app.TagHandler.UpdateTag)
 
 			// DELETE /api/tags/{type}/{value} - 删除标签/选项（后台管理）
 			// recipe_id 查询参数为空时删除选项，不为空时删除菜谱标签
-			tags.DELETE("/:type/:value", middleware.RequireAuth(), app.TagHandler.DeleteTag)
+			tags.DELETE("/:type/:value", middleware.RequireToken(app.Interpreter), app.TagHandler.DeleteTag)
 
-			// 向后兼容的旧接口
-			tags.GET("/cuisines", app.TagHandler.GetCuisines)
-			tags.GET("/flavors", app.TagHandler.GetFlavors)
-			tags.GET("/scenes", app.TagHandler.GetScenes)
 		}
 
 		// 推荐路由
 		recommend := api.Group("/recommend")
 		{
 			// LLM 推荐菜谱（支持可选认证）
-			recommend.Use(middleware.AuthMiddleware())
+			recommend.Use(middleware.OptionalToken(app.Interpreter))
 			recommend.POST("", app.RecommendHandler.GetRecommendations)
 
 			// 获取推荐上下文信息（需要登录）
-			recommend.Use(middleware.RequireAuth())
+			recommend.Use(middleware.RequireToken(app.Interpreter))
 			recommend.POST("/context", app.RecommendHandler.GetContext)
 		}
 
 		// 上传路由
 		upload := api.Group("/upload")
-		upload.Use(middleware.RequireAuth())
+		upload.Use(middleware.RequireToken(app.Interpreter))
 		{
 			upload.POST("/image", app.UploadHandler.UploadImage)
 		}

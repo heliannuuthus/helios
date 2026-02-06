@@ -2,7 +2,6 @@ package idp
 
 import (
 	"context"
-	"sync"
 
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 )
@@ -47,52 +46,4 @@ type AdditionalInfo struct {
 	Type  string         `json:"type"`            // "phone", "email" 等
 	Value string         `json:"value"`           // 具体值
 	Extra map[string]any `json:"extra,omitempty"` // 额外数据
-}
-
-// Registry Provider 注册表
-type Registry struct {
-	mu        sync.RWMutex
-	providers map[string]Provider
-}
-
-// NewRegistry 创建注册表
-func NewRegistry() *Registry {
-	return &Registry{
-		providers: make(map[string]Provider),
-	}
-}
-
-// Register 注册 Provider
-func (r *Registry) Register(p Provider) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.providers[p.Type()] = p
-}
-
-// Get 获取 Provider
-func (r *Registry) Get(idpType string) (Provider, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	p, ok := r.providers[idpType]
-	return p, ok
-}
-
-// List 列出所有已注册的 IDP 类型
-func (r *Registry) List() []string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	types := make([]string, 0, len(r.providers))
-	for t := range r.providers {
-		types = append(types, t)
-	}
-	return types
-}
-
-// Has 检查是否已注册指定类型的 Provider
-func (r *Registry) Has(idpType string) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	_, ok := r.providers[idpType]
-	return ok
 }

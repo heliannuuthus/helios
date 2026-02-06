@@ -261,16 +261,6 @@ func splitScopes(scope string) []string {
 	return result
 }
 
-// AuthorizationCode 授权码
-type AuthorizationCode struct {
-	Code      string    `json:"code"`
-	FlowID    string    `json:"flow_id"`
-	State     string    `json:"state"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Used      bool      `json:"used"`
-}
-
 // ConnectionConfig Connection 配置（返回给前端的公开配置）
 // 统一结构，适用于 IDP 和 MFA
 type ConnectionConfig struct {

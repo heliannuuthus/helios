@@ -5,15 +5,17 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/internal/aegis/authenticate"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/captcha"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/alipay"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/github"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/google"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/system"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/tt"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp/wechat"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/webauthn"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/captcha"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/alipay"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/github"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/google"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/passkey"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/system"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/tt"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/wechat"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/totp"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/webauthn"
 	"github.com/heliannuuthus/helios/internal/aegis/authorize"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	"github.com/heliannuuthus/helios/internal/aegis/challenge"
@@ -27,8 +29,9 @@ import (
 
 // InitConfig 初始化配置
 type InitConfig struct {
-	HermesSvc *hermes.Service
-	UserSvc   *hermes.UserService
+	HermesSvc     *hermes.Service
+	UserSvc       *hermes.UserService
+	CredentialSvc *hermes.CredentialService
 }
 
 // Initialize 初始化 Auth 模块，返回 Handler
@@ -51,8 +54,8 @@ func Initialize(cfg *InitConfig) (*Handler, error) {
 	// 3. 初始化 Token Service
 	tokenSvc := token.NewService(cacheManager)
 
-	// 4. 初始化 IDP Registry
-	idpRegistry := initIDPRegistry(cfg.UserSvc)
+	// 4. 初始化全局 Authenticator Registry
+	registry := initRegistry(cfg, cacheManager)
 
 	// 5. 初始化邮件发送器（如果启用）
 	var emailSender *mail.Sender
@@ -65,8 +68,8 @@ func Initialize(cfg *InitConfig) (*Handler, error) {
 
 	// 6. 初始化 Authenticate Service
 	authenticateSvc := authenticate.NewService(&authenticate.ServiceConfig{
-		Cache:       cacheManager,
-		IDPRegistry: idpRegistry,
+		Cache:    cacheManager,
+		Registry: registry,
 	})
 
 	// 7. 初始化 Authorize Service
@@ -78,73 +81,86 @@ func Initialize(cfg *InitConfig) (*Handler, error) {
 		AuthCodeTTL:       5 * time.Minute,
 	})
 
-	// 8. 初始化 Captcha Verifier（如果启用）
-	var captchaVerifier captcha.Verifier
-	if isCaptchaEnabled() {
-		captchaVerifier = initCaptchaVerifier()
-		if captchaVerifier != nil {
-			logger.Infof("[Auth] Captcha 验证器初始化完成: provider=%s", captchaVerifier.GetProvider())
-		}
-	}
-
-	// 9. 初始化 Challenge Service
+	// 8. 初始化 Challenge Service
 	challengeSvc := challenge.NewService(&challenge.ServiceConfig{
 		Cache:        cacheManager,
-		Captcha:      captchaVerifier,
+		Captcha:      registry.GetCaptcha(),
 		EmailSender:  emailSender,
-		TOTPVerifier: nil, // TODO: 可选的 TOTP 验证器
+		TOTPVerifier: registry.GetTOTP(),
 	})
 
-	// 10. 创建 Handler
+	// 9. 创建 Handler
 	handler := NewHandler(&HandlerConfig{
 		AuthenticateSvc: authenticateSvc,
 		AuthorizeSvc:    authorizeSvc,
 		ChallengeSvc:    challengeSvc,
 		Cache:           cacheManager,
 		TokenSvc:        tokenSvc,
+		Registry:        registry,
 	})
-
-	// 11. 初始化 WebAuthn Service（如果启用）
-	if webauthn.IsEnabled() {
-		webauthnSvc, err := webauthn.NewService(cacheManager)
-		if err != nil {
-			logger.Warnf("[Auth] WebAuthn 初始化失败: %v", err)
-		} else {
-			handler.SetWebAuthnService(webauthnSvc)
-			logger.Info("[Auth] WebAuthn 初始化完成")
-		}
-	}
 
 	logger.Info("[Auth] 模块初始化完成")
 	return handler, nil
 }
 
-// initIDPRegistry 初始化 IDP 注册表
-func initIDPRegistry(userSvc *hermes.UserService) *idp.Registry {
-	registry := idp.NewRegistry()
+// initRegistry 初始化全局 Authenticator Registry
+func initRegistry(cfg *InitConfig, cacheManager *cache.Manager) *authenticator.Registry {
+	regCfg := &authenticator.RegistryConfig{}
 
-	// 注册微信小程序
-	registry.Register(wechat.NewMPProvider())
+	// ==================== WebAuthn / Passkey ====================
 
-	// 注册抖音小程序
-	registry.Register(tt.NewMPProvider())
-
-	// 注册支付宝小程序
-	registry.Register(alipay.NewMPProvider())
-
-	// 注册 GitHub
-	registry.Register(github.NewProvider())
-
-	// 注册 Google
-	registry.Register(google.NewProvider())
-
-	// 注册系统账号密码登录（user/oper）
-	if userSvc != nil {
-		registry.Register(system.NewUserProvider(userSvc))
-		registry.Register(system.NewOperProvider(userSvc))
+	var webauthnSvc *webauthn.Service
+	if webauthn.IsEnabled() {
+		var err error
+		webauthnSvc, err = webauthn.NewService(cacheManager)
+		if err != nil {
+			logger.Warnf("[Auth] WebAuthn 初始化失败: %v", err)
+		} else {
+			regCfg.WebAuthn = webauthnSvc
+			logger.Info("[Auth] WebAuthn 初始化完成")
+		}
 	}
 
-	logger.Infof("[Auth] IDP 注册完成: %v", registry.List())
+	// ==================== Captcha ====================
+
+	if isCaptchaEnabled() {
+		captchaVerifier := initCaptchaVerifier()
+		if captchaVerifier != nil {
+			regCfg.Captcha = captchaVerifier
+			logger.Infof("[Auth] Captcha 验证器初始化完成: provider=%s", captchaVerifier.GetProvider())
+		}
+	}
+
+	// ==================== TOTP ====================
+
+	if cfg.CredentialSvc != nil {
+		regCfg.TOTP = totp.NewVerifier(cfg.CredentialSvc)
+		logger.Info("[Auth] TOTP 验证器初始化完成")
+	}
+
+	// ==================== 创建 Registry ====================
+
+	registry := authenticator.NewRegistry(regCfg)
+
+	// ==================== IDP Providers ====================
+
+	registry.RegisterIDP(wechat.NewMPProvider())
+	registry.RegisterIDP(tt.NewMPProvider())
+	registry.RegisterIDP(alipay.NewMPProvider())
+	registry.RegisterIDP(github.NewProvider())
+	registry.RegisterIDP(google.NewProvider())
+
+	if cfg.UserSvc != nil {
+		registry.RegisterIDP(system.NewUserProvider(cfg.UserSvc))
+		registry.RegisterIDP(system.NewOperProvider(cfg.UserSvc))
+	}
+
+	if webauthnSvc != nil {
+		registry.RegisterIDP(passkey.NewProvider(webauthnSvc))
+		logger.Info("[Auth] Passkey IDP 注册完成")
+	}
+
+	logger.Infof("[Auth] Authenticator Registry 初始化完成: %v", registry.Summary())
 	return registry
 }
 

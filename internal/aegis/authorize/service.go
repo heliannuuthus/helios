@@ -185,10 +185,10 @@ func (s *Service) findMissingIdentities(required, existing []string) []string {
 }
 
 // GenerateAuthCode 生成授权码
-func (s *Service) GenerateAuthCode(ctx context.Context, flow *types.AuthFlow) (*types.AuthorizationCode, error) {
+func (s *Service) GenerateAuthCode(ctx context.Context, flow *types.AuthFlow) (*cache.AuthorizationCode, error) {
 	now := time.Now()
 
-	code := &types.AuthorizationCode{
+	code := &cache.AuthorizationCode{
 		Code:      types.GenerateAuthorizationCode(),
 		FlowID:    flow.ID,
 		State:     flow.Request.State,
@@ -197,16 +197,7 @@ func (s *Service) GenerateAuthCode(ctx context.Context, flow *types.AuthFlow) (*
 		Used:      false,
 	}
 
-	// 保存到缓存（转换为 cache.AuthorizationCode）
-	cacheCode := &cache.AuthorizationCode{
-		Code:      code.Code,
-		FlowID:    code.FlowID,
-		State:     code.State,
-		CreatedAt: code.CreatedAt,
-		ExpiresAt: code.ExpiresAt,
-		Used:      code.Used,
-	}
-	if err := s.cache.SaveAuthCode(ctx, cacheCode); err != nil {
+	if err := s.cache.SaveAuthCode(ctx, code); err != nil {
 		return nil, fmt.Errorf("save auth code failed: %w", err)
 	}
 

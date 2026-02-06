@@ -4,7 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/captcha"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/captcha"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
@@ -25,17 +26,12 @@ type EmailSender interface {
 	SendCode(ctx context.Context, email, code string) error
 }
 
-// TOTPVerifier TOTP 验证接口
-type TOTPVerifier interface {
-	Verify(ctx context.Context, userID, code string) (bool, error)
-}
-
 // Service Challenge 服务
 type Service struct {
 	cache        *cache.Manager
 	captcha      captcha.Verifier
 	emailSender  EmailSender
-	totpVerifier TOTPVerifier
+	totpVerifier authenticator.TOTPVerifier
 }
 
 // ServiceConfig 服务配置
@@ -43,7 +39,7 @@ type ServiceConfig struct {
 	Cache        *cache.Manager
 	Captcha      captcha.Verifier
 	EmailSender  EmailSender
-	TOTPVerifier TOTPVerifier
+	TOTPVerifier authenticator.TOTPVerifier
 }
 
 // NewService 创建 Challenge 服务

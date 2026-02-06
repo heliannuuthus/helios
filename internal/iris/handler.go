@@ -5,7 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/webauthn"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/webauthn"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
@@ -17,20 +18,21 @@ import (
 type Handler struct {
 	userSvc       *hermes.UserService
 	credentialSvc *hermes.CredentialService
-	webauthnSvc   *webauthn.Service
+	registry      *authenticator.Registry
 }
 
 // NewHandler 创建用户信息处理器
-func NewHandler(userSvc *hermes.UserService, credentialSvc *hermes.CredentialService) *Handler {
+func NewHandler(userSvc *hermes.UserService, credentialSvc *hermes.CredentialService, registry *authenticator.Registry) *Handler {
 	return &Handler{
 		userSvc:       userSvc,
 		credentialSvc: credentialSvc,
+		registry:      registry,
 	}
 }
 
-// SetWebAuthnService 设置 WebAuthn 服务（可选）
-func (h *Handler) SetWebAuthnService(svc *webauthn.Service) {
-	h.webauthnSvc = svc
+// webauthnSvc 获取 WebAuthn 服务（从 Registry 获取）
+func (h *Handler) webauthnSvc() *webauthn.Service {
+	return h.registry.GetWebAuthn()
 }
 
 // getToken 从上下文获取验证后的 Token
@@ -366,7 +368,8 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 
 // setupWebAuthn 处理 WebAuthn 设置流程
 func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challengeID string) {
-	if h.webauthnSvc == nil {
+	svc := h.webauthnSvc()
+	if svc == nil {
 		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
 		return
 	}
@@ -382,12 +385,12 @@ func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challe
 			return
 		}
 
-		existingCredentials, err := h.webauthnSvc.ListCredentials(ctx, user.OpenID)
+		existingCredentials, err := svc.ListCredentials(ctx, user.OpenID)
 		if err != nil {
 			// 列出凭证失败时，使用空列表继续（新用户可能没有凭证）
 			existingCredentials = nil
 		}
-		resp, err := h.webauthnSvc.BeginRegistration(ctx, user, existingCredentials)
+		resp, err := svc.BeginRegistration(ctx, user, existingCredentials)
 		if err != nil {
 			errorResponse(c, autherrors.NewServerError(err.Error()))
 			return
@@ -406,13 +409,13 @@ func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challe
 			return
 		}
 
-		credential, err := h.webauthnSvc.FinishRegistration(ctx, challengeID, c.Request)
+		credential, err := svc.FinishRegistration(ctx, challengeID, c.Request)
 		if err != nil {
 			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 			return
 		}
 
-		if err := h.webauthnSvc.SaveCredential(ctx, openID, credential); err != nil {
+		if err := svc.SaveCredential(ctx, openID, credential); err != nil {
 			errorResponse(c, autherrors.NewServerError("save credential failed"))
 			return
 		}
@@ -505,7 +508,8 @@ func (h *Handler) VerifyMFA(c *gin.Context) {
 
 // verifyWebAuthn 处理 WebAuthn 验证流程
 func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, challengeID string) {
-	if h.webauthnSvc == nil {
+	svc := h.webauthnSvc()
+	if svc == nil {
 		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
 		return
 	}
@@ -521,13 +525,13 @@ func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, chall
 			return
 		}
 
-		existingCredentials, err := h.webauthnSvc.ListCredentials(ctx, user.OpenID)
+		existingCredentials, err := svc.ListCredentials(ctx, user.OpenID)
 		if err != nil || len(existingCredentials) == 0 {
 			errorResponse(c, autherrors.NewInvalidRequest("no webauthn credentials found"))
 			return
 		}
 
-		resp, err := h.webauthnSvc.BeginLogin(ctx, user, existingCredentials)
+		resp, err := svc.BeginLogin(ctx, user, existingCredentials)
 		if err != nil {
 			errorResponse(c, autherrors.NewServerError(err.Error()))
 			return
@@ -546,14 +550,14 @@ func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, chall
 			return
 		}
 
-		userID, credential, err := h.webauthnSvc.FinishLogin(ctx, challengeID, c.Request)
+		userID, credential, err := svc.FinishLogin(ctx, challengeID, c.Request)
 		if err != nil {
 			errorResponse(c, autherrors.NewAccessDenied(err.Error()))
 			return
 		}
 
 		// 更新签名计数
-		if err := h.webauthnSvc.UpdateCredentialSignCount(ctx, encodeCredentialID(credential.ID), credential.Authenticator.SignCount); err != nil {
+		if err := svc.UpdateCredentialSignCount(ctx, encodeCredentialID(credential.ID), credential.Authenticator.SignCount); err != nil {
 			logger.Warnf("[WebAuthn] UpdateCredentialSignCount failed: %v", err)
 		}
 

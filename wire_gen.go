@@ -22,11 +22,10 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
+	"github.com/heliannuuthus/helios/pkg/aegis/interpreter"
 	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
-)
 
-import (
 	_ "github.com/heliannuuthus/helios/docs"
 )
 
@@ -49,6 +48,10 @@ func InitializeApp() (*App, error) {
 	uploadHandler := provideUploadHandler()
 	preferenceHandler := providePreferenceHandler()
 	hermesHandler := provideHermesHandler(service)
+	interp, err := provideInterpreter()
+	if err != nil {
+		return nil, err
+	}
 	ginFactory, err := provideGinMiddlewareFactory()
 	if err != nil {
 		return nil, err
@@ -66,6 +69,7 @@ func InitializeApp() (*App, error) {
 		PreferenceHandler: preferenceHandler,
 		HermesHandler:     hermesHandler,
 		MiddlewareFactory: ginFactory,
+		Interpreter:       interp,
 	}
 	return app, nil
 }
@@ -110,9 +114,11 @@ func provideHermesService() *hermes.Service {
 func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
 	db := database.GetHermes()
 	userSvc := hermes.NewUserService(db)
+	credentialSvc := hermes.NewCredentialService(db)
 	return aegis.Initialize(&aegis.InitConfig{
-		HermesSvc: hermesService,
-		UserSvc:   userSvc,
+		HermesSvc:     hermesService,
+		UserSvc:       userSvc,
+		CredentialSvc: credentialSvc,
 	})
 }
 
@@ -129,13 +135,20 @@ func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
 	db := database.GetHermes()
 	userSvc := hermes.NewUserService(db)
 	credentialSvc := hermes.NewCredentialService(db)
-	handler := iris.NewHandler(userSvc, credentialSvc)
+	return iris.NewHandler(userSvc, credentialSvc, aegisHandler.Registry())
+}
 
-	if aegisHandler.HasWebAuthn() {
-		handler.SetWebAuthnService(aegisHandler.WebAuthnService())
+// provideInterpreter 创建 Token 解释器
+func provideInterpreter() (*interpreter.Interpreter, error) {
+	keyProvider, err := middleware2.NewHermesKeyProvider()
+	if err != nil {
+		return nil, err
 	}
 
-	return handler
+	return interpreter.NewInterpreter(
+		keys.NewPublicKeyProvider(keyProvider),
+		keys.NewSymmetricKeyProvider(keyProvider),
+	), nil
 }
 
 // provideGinMiddlewareFactory 创建 Gin 中间件工厂
@@ -169,6 +182,7 @@ var ProviderSet = wire.NewSet(recipe.NewService, favorite.NewService, history.Ne
 
 	provideIrisHandler,
 
+	provideInterpreter,
 	provideGinMiddlewareFactory,
 )
 
@@ -186,4 +200,5 @@ type App struct {
 	PreferenceHandler *preference.Handler
 	HermesHandler     *hermes.Handler
 	MiddlewareFactory *middleware.GinFactory
+	Interpreter       *interpreter.Interpreter
 }

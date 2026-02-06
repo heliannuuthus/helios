@@ -7,8 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/heliannuuthus/helios/internal/aegis/authenticate"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/webauthn"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/authorize"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	"github.com/heliannuuthus/helios/internal/aegis/challenge"
@@ -17,7 +17,6 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
-	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -45,7 +44,7 @@ type Handler struct {
 	challengeSvc    *challenge.Service
 	cache           *cache.Manager
 	tokenSvc        *token.Service
-	webauthnSvc     *webauthn.Service
+	registry        *authenticator.Registry
 }
 
 // HandlerConfig Handler 配置
@@ -55,6 +54,7 @@ type HandlerConfig struct {
 	ChallengeSvc    *challenge.Service
 	Cache           *cache.Manager
 	TokenSvc        *token.Service
+	Registry        *authenticator.Registry
 }
 
 // NewHandler 创建认证处理器
@@ -65,6 +65,7 @@ func NewHandler(cfg *HandlerConfig) *Handler {
 		challengeSvc:    cfg.ChallengeSvc,
 		cache:           cfg.Cache,
 		tokenSvc:        cfg.TokenSvc,
+		registry:        cfg.Registry,
 	}
 }
 
@@ -95,19 +96,9 @@ func (h *Handler) CacheManager() *cache.Manager {
 	return h.cache
 }
 
-// WebAuthnService 返回 WebAuthn 服务（供其他模块使用，如 Iris）
-func (h *Handler) WebAuthnService() *webauthn.Service {
-	return h.webauthnSvc
-}
-
-// SetWebAuthnService 设置 WebAuthn 服务
-func (h *Handler) SetWebAuthnService(svc *webauthn.Service) {
-	h.webauthnSvc = svc
-}
-
-// HasWebAuthn 检查是否启用了 WebAuthn
-func (h *Handler) HasWebAuthn() bool {
-	return h.webauthnSvc != nil
+// Registry 返回全局 Authenticator Registry（供其他模块使用，如 Iris）
+func (h *Handler) Registry() *authenticator.Registry {
+	return h.registry
 }
 
 // ==================== 1. 认证会话创建 ====================
@@ -362,7 +353,7 @@ func (h *Handler) handleFlowCleanup(ctx context.Context, flowID string, flow *ty
 }
 
 // findOrCreateLoginUser 查找或创建登录用户
-func (h *Handler) findOrCreateLoginUser(ctx context.Context, connection string, authResult *authenticate.AuthResult) (*loginUserResult, error) {
+func (h *Handler) findOrCreateLoginUser(ctx context.Context, connection string, authResult *idp.LoginResult) (*loginUserResult, error) {
 	// 尝试查找用户
 	user, err := h.findUserByConnection(ctx, connection, authResult)
 	if err == nil {
@@ -381,7 +372,7 @@ func (h *Handler) findOrCreateLoginUser(ctx context.Context, connection string, 
 }
 
 // findUserByConnection 根据 connection 类型查找用户
-func (h *Handler) findUserByConnection(ctx context.Context, connection string, authResult *authenticate.AuthResult) (*models.UserWithDecrypted, error) {
+func (h *Handler) findUserByConnection(ctx context.Context, connection string, authResult *idp.LoginResult) (*models.UserWithDecrypted, error) {
 	if idp.RequiresEmailForBinding(connection) {
 		return h.findUserByEmailBinding(ctx, connection, authResult)
 	}
@@ -390,7 +381,7 @@ func (h *Handler) findUserByConnection(ctx context.Context, connection string, a
 }
 
 // findUserByEmailBinding 通过邮箱绑定查找用户（GitHub/Google 等 OAuth 登录）
-func (h *Handler) findUserByEmailBinding(ctx context.Context, connection string, authResult *authenticate.AuthResult) (*models.UserWithDecrypted, error) {
+func (h *Handler) findUserByEmailBinding(ctx context.Context, connection string, authResult *idp.LoginResult) (*models.UserWithDecrypted, error) {
 	// 验证邮箱信息
 	if authResult.UserInfo == nil || authResult.UserInfo.Email == "" {
 		logger.Warnf("[Handler] OAuth 登录缺少邮箱信息 - Connection: %s, ProviderID: %s", connection, authResult.ProviderID)
@@ -423,7 +414,7 @@ func (h *Handler) findUserByEmailBinding(ctx context.Context, connection string,
 }
 
 // createLoginUser 创建登录用户
-func (h *Handler) createLoginUser(ctx context.Context, connection string, authResult *authenticate.AuthResult) (*loginUserResult, error) {
+func (h *Handler) createLoginUser(ctx context.Context, connection string, authResult *idp.LoginResult) (*loginUserResult, error) {
 	logger.Infof("[Handler] 用户不存在，开始自动创建 - Connection: %s, ProviderID: %s, Domain: %s",
 		connection, authResult.ProviderID, idp.GetDomain(connection))
 
@@ -454,7 +445,7 @@ func (h *Handler) createLoginUser(ctx context.Context, connection string, authRe
 }
 
 // completeLoginFlow 完成登录流程（更新 flow、准备授权、生成授权码）
-func (h *Handler) completeLoginFlow(ctx context.Context, flow *types.AuthFlow, connection string, authResult *authenticate.AuthResult, userResult *loginUserResult) (*types.AuthorizationCode, error) {
+func (h *Handler) completeLoginFlow(ctx context.Context, flow *types.AuthFlow, connection string, authResult *idp.LoginResult, userResult *loginUserResult) (*cache.AuthorizationCode, error) {
 	// 更新 flow
 	flow.SetAuthenticated(connection, authResult.ProviderID, userResult.user, userResult.isNewUser)
 
@@ -686,20 +677,6 @@ func GetToken(c *gin.Context) token.Token {
 		}
 	}
 	return nil
-}
-
-// MarshalAuthFlow 序列化 AuthFlow
-func MarshalAuthFlow(flow *types.AuthFlow) ([]byte, error) {
-	return json.Marshal(flow)
-}
-
-// UnmarshalAuthFlow 反序列化 AuthFlow
-func UnmarshalAuthFlow(data []byte) (*types.AuthFlow, error) {
-	var flow types.AuthFlow
-	if err := json.Unmarshal(data, &flow); err != nil {
-		return nil, err
-	}
-	return &flow, nil
 }
 
 // ==================== 私有方法（Handler） ====================

@@ -6,7 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
@@ -18,30 +19,22 @@ import (
 
 // Service 认证服务
 type Service struct {
-	cache          *cache.Manager
-	idpRegistry    *idp.Registry
-	authenticators []Authenticator
+	cache    *cache.Manager
+	registry *authenticator.Registry
 }
 
 // ServiceConfig 服务配置
 type ServiceConfig struct {
-	Cache       *cache.Manager
-	IDPRegistry *idp.Registry
+	Cache    *cache.Manager
+	Registry *authenticator.Registry
 }
 
 // NewService 创建认证服务
 func NewService(cfg *ServiceConfig) *Service {
-	s := &Service{
-		cache:       cfg.Cache,
-		idpRegistry: cfg.IDPRegistry,
+	return &Service{
+		cache:    cfg.Cache,
+		registry: cfg.Registry,
 	}
-
-	// 注册认证器
-	s.authenticators = []Authenticator{
-		NewIDPAuthenticator(cfg.IDPRegistry),
-	}
-
-	return s
 }
 
 // ==================== AuthFlow 管理 ====================
@@ -197,34 +190,30 @@ func (s *Service) DeleteFlow(ctx context.Context, flowID string) error {
 // connection: IDP 类型（如 github, google, user, oper）
 // proof: 认证凭证（OAuth code / password / OTP code）
 // params: 额外参数（如 identifier）
-func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, connection string, proof string, params ...any) (*AuthResult, error) {
+func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, connection string, proof string, params ...any) (*idp.LoginResult, error) {
 	// 1. 验证 flow 状态
 	if !flow.CanAuthenticate() {
 		return nil, autherrors.NewFlowInvalid("flow state does not allow authentication")
 	}
 
-	// 2. 获取 ConnectionConfig
-	connCfg, ok := flow.ConnectionMap[connection]
-	if !ok {
+	// 2. 验证 connection 在 flow 中
+	if _, ok := flow.ConnectionMap[connection]; !ok {
 		return nil, autherrors.NewInvalidRequest("connection not found in flow")
 	}
 
-	// 3. 选择认证器
-	var authenticator Authenticator
-	for _, auth := range s.authenticators {
-		if auth.Supports(connection) {
-			authenticator = auth
-			break
-		}
-	}
-	if authenticator == nil {
-		return nil, autherrors.NewInvalidRequest("unsupported authentication type")
+	// 3. 获取 Provider
+	provider, ok := s.registry.GetIDP(connection)
+	if !ok {
+		return nil, autherrors.NewInvalidRequestf("unsupported idp: %s", connection)
 	}
 
 	// 4. 执行认证
-	result, err := authenticator.Authenticate(ctx, connCfg, proof, params...)
+	result, err := provider.Login(ctx, proof, params...)
 	if err != nil {
-		return nil, err
+		if connection == idp.TypeUser || connection == idp.TypeOper {
+			return nil, autherrors.NewInvalidCredentials("authentication failed")
+		}
+		return nil, autherrors.NewServerErrorf("idp exchange failed: %v", err)
 	}
 
 	logger.Infof("[Authenticate] 认证成功 - FlowID: %s, Connection: %s, ProviderID: %s", flow.ID, connection, result.ProviderID)
@@ -278,15 +267,14 @@ func (s *Service) GetAvailableConnections(flow *types.AuthFlow) *types.Connectio
 // buildVChanConfigs 根据 VChan 类型集合构建验证渠道配置列表
 // 只返回系统实际启用的 VChan（如 captcha）
 func (s *Service) buildVChanConfigs(vchanSet map[string]bool) []*types.ConnectionConfig {
-	authCfg := config.Aegis()
 	vchans := make([]*types.ConnectionConfig, 0)
 
-	// Captcha（人机验证）
-	if vchanSet["captcha"] && authCfg.GetBool("captcha.enabled") {
-		provider := authCfg.GetString("captcha.provider")
+	// Captcha（人机验证）- 从 Registry 获取
+	if vchanSet["captcha"] && s.registry.HasCaptcha() {
+		captchaVerifier := s.registry.GetCaptcha()
 		vchans = append(vchans, &types.ConnectionConfig{
-			Connection: "captcha:" + provider,
-			Identifier: authCfg.GetString("captcha.site-key"),
+			Connection: "captcha:" + captchaVerifier.GetProvider(),
+			Identifier: captchaVerifier.GetIdentifier(),
 		})
 	}
 
@@ -313,30 +301,30 @@ func (s *Service) buildMFAConfigs(mfaSet map[string]bool) []*types.ConnectionCon
 		})
 	}
 
-	// TOTP
-	if mfaSet["totp"] && authCfg.GetBool("mfa.totp.enabled") {
+	// TOTP - 从 Registry 检查
+	if mfaSet["totp"] && s.registry.HasTOTP() {
 		mfas = append(mfas, &types.ConnectionConfig{
 			Connection: "totp",
 		})
 	}
 
-	// WebAuthn
-	if mfaSet["webauthn"] && authCfg.GetBool("mfa.webauthn.enabled") {
+	// WebAuthn - 从 Registry 检查
+	if mfaSet["webauthn"] && s.registry.HasWebAuthn() {
 		cfg := &types.ConnectionConfig{
 			Connection: "webauthn",
 		}
-		if rpID := authCfg.GetString("mfa.webauthn.rp-id"); rpID != "" {
+		if rpID := s.registry.GetWebAuthn().GetRPID(); rpID != "" {
 			cfg.Identifier = rpID
 		}
 		mfas = append(mfas, cfg)
 	}
 
-	// Passkey（和 WebAuthn 共用底层但作为独立选项）
-	if mfaSet["passkey"] && authCfg.GetBool("mfa.passkey.enabled") {
+	// Passkey - 从 Registry 检查（和 WebAuthn 共用底层但作为独立选项）
+	if mfaSet["passkey"] && s.registry.HasWebAuthn() {
 		cfg := &types.ConnectionConfig{
 			Connection: "passkey",
 		}
-		if rpID := authCfg.GetString("mfa.webauthn.rp-id"); rpID != "" {
+		if rpID := s.registry.GetWebAuthn().GetRPID(); rpID != "" {
 			cfg.Identifier = rpID
 		}
 		mfas = append(mfas, cfg)
@@ -354,7 +342,7 @@ func (s *Service) setConnections(idpConfigs []*models.ApplicationIDPConfig) map[
 
 	for _, idpCfg := range idpConfigs {
 		// 获取 Provider 基础配置，未注册的 Provider 跳过
-		provider, ok := s.idpRegistry.Get(idpCfg.Type)
+		provider, ok := s.registry.GetIDP(idpCfg.Type)
 		if !ok {
 			continue
 		}
