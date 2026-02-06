@@ -992,51 +992,6 @@ paths:
       summary: 更新标签
       tags:
       - tags
-  /api/tags/cuisines:
-    get:
-      deprecated: true
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/tag.TagValueResponse'
-            type: array
-      summary: 获取所有菜系
-      tags:
-      - tags
-  /api/tags/flavors:
-    get:
-      deprecated: true
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/tag.TagValueResponse'
-            type: array
-      summary: 获取所有口味
-      tags:
-      - tags
-  /api/tags/scenes:
-    get:
-      deprecated: true
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/tag.TagValueResponse'
-            type: array
-      summary: 获取所有场景
-      tags:
-      - tags
   /api/upload/image:
     post:
       consumes:
