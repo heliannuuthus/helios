@@ -98,6 +98,16 @@ definitions:
       title:
         type: string
     type: object
+  patch.Optional-array_recipe_IngredientRequest:
+    type: object
+  patch.Optional-array_recipe_StepRequest:
+    type: object
+  patch.Optional-array_string:
+    type: object
+  patch.Optional-int:
+    type: object
+  patch.Optional-string:
+    type: object
   preference.OptionItem:
     properties:
       label:
@@ -303,41 +313,31 @@ definitions:
   recipe.RecipeUpdateRequest:
     properties:
       additional_notes:
-        items:
-          type: string
-        type: array
+        $ref: '#/definitions/patch.Optional-array_string'
       category:
-        type: string
+        $ref: '#/definitions/patch.Optional-string'
       cook_time_minutes:
-        type: integer
+        $ref: '#/definitions/patch.Optional-int'
       description:
-        type: string
+        $ref: '#/definitions/patch.Optional-string'
       difficulty:
-        type: integer
+        $ref: '#/definitions/patch.Optional-int'
       images:
-        items:
-          type: string
-        type: array
+        $ref: '#/definitions/patch.Optional-array_string'
       ingredients:
-        items:
-          $ref: '#/definitions/recipe.IngredientRequest'
-        type: array
+        $ref: '#/definitions/patch.Optional-array_recipe_IngredientRequest'
       name:
-        type: string
+        $ref: '#/definitions/patch.Optional-string'
       prep_time_minutes:
-        type: integer
+        $ref: '#/definitions/patch.Optional-int'
       servings:
-        type: integer
+        $ref: '#/definitions/patch.Optional-int'
       steps:
-        items:
-          $ref: '#/definitions/recipe.StepRequest'
-        type: array
+        $ref: '#/definitions/patch.Optional-array_recipe_StepRequest'
       tags:
-        items:
-          type: string
-        type: array
+        $ref: '#/definitions/patch.Optional-array_string'
       total_time_minutes:
-        type: integer
+        $ref: '#/definitions/patch.Optional-int'
     type: object
   recipe.StepRequest:
     properties:
@@ -716,7 +716,7 @@ paths:
       summary: 获取菜谱详情
       tags:
       - recipes
-    put:
+    patch:
       consumes:
       - application/json
       parameters:

@@ -315,7 +315,36 @@ const docTemplate = `{
                     }
                 }
             },
-            "put": {
+            "delete": {
+                "tags": [
+                    "recipes"
+                ],
+                "summary": "删除菜谱",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "菜谱ID",
+                        "name": "recipe_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            },
+            "patch": {
                 "consumes": [
                     "application/json"
                 ],
@@ -350,35 +379,6 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/recipe.RecipeResponse"
                         }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "tags": [
-                    "recipes"
-                ],
-                "summary": "删除菜谱",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "菜谱ID",
-                        "name": "recipe_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
                     },
                     "404": {
                         "description": "Not Found",
@@ -1417,6 +1417,21 @@ const docTemplate = `{
                 }
             }
         },
+        "patch.Optional-array_recipe_IngredientRequest": {
+            "type": "object"
+        },
+        "patch.Optional-array_recipe_StepRequest": {
+            "type": "object"
+        },
+        "patch.Optional-array_string": {
+            "type": "object"
+        },
+        "patch.Optional-int": {
+            "type": "object"
+        },
+        "patch.Optional-string": {
+            "type": "object"
+        },
         "preference.OptionItem": {
             "type": "object",
             "properties": {
@@ -1720,58 +1735,43 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "additional_notes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                    "$ref": "#/definitions/patch.Optional-array_string"
                 },
                 "category": {
-                    "type": "string"
+                    "$ref": "#/definitions/patch.Optional-string"
                 },
                 "cook_time_minutes": {
-                    "type": "integer"
+                    "$ref": "#/definitions/patch.Optional-int"
                 },
                 "description": {
-                    "type": "string"
+                    "$ref": "#/definitions/patch.Optional-string"
                 },
                 "difficulty": {
-                    "type": "integer"
+                    "$ref": "#/definitions/patch.Optional-int"
                 },
                 "images": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                    "$ref": "#/definitions/patch.Optional-array_string"
                 },
                 "ingredients": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/recipe.IngredientRequest"
-                    }
+                    "$ref": "#/definitions/patch.Optional-array_recipe_IngredientRequest"
                 },
                 "name": {
-                    "type": "string"
+                    "$ref": "#/definitions/patch.Optional-string"
                 },
                 "prep_time_minutes": {
-                    "type": "integer"
+                    "$ref": "#/definitions/patch.Optional-int"
                 },
                 "servings": {
-                    "type": "integer"
+                    "$ref": "#/definitions/patch.Optional-int"
                 },
                 "steps": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/recipe.StepRequest"
-                    }
+                    "$ref": "#/definitions/patch.Optional-array_recipe_StepRequest"
                 },
                 "tags": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
+                    "$ref": "#/definitions/patch.Optional-array_string"
                 },
                 "total_time_minutes": {
-                    "type": "integer"
+                    "$ref": "#/definitions/patch.Optional-int"
                 }
             }
         },

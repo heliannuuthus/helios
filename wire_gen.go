@@ -25,7 +25,9 @@ import (
 	"github.com/heliannuuthus/helios/pkg/aegis/interpreter"
 	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	middleware2 "github.com/heliannuuthus/helios/pkg/aegis/middleware"
+)
 
+import (
 	_ "github.com/heliannuuthus/helios/docs"
 )
 
@@ -115,8 +117,7 @@ func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) 
 	db := database.GetHermes()
 	userSvc := hermes.NewUserService(db)
 	credentialSvc := hermes.NewCredentialService(db)
-	handler, err := aegis.Initialize(hermesService, userSvc, credentialSvc)
-	return handler, err
+	return aegis.Initialize(hermesService, userSvc, credentialSvc)
 }
 
 func provideUploadHandler() *upload.Handler {
