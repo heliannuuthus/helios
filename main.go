@@ -110,7 +110,7 @@ func main() {
 	{
 		// /user/profile - 用户基本信息
 		userGroup.GET("/profile", app.IrisHandler.GetProfile)
-		userGroup.PUT("/profile", app.IrisHandler.UpdateProfile)
+		userGroup.PATCH("/profile", app.IrisHandler.UpdateProfile)
 		userGroup.POST("/profile/avatar", app.IrisHandler.UploadAvatar)
 		userGroup.PUT("/profile/email", app.IrisHandler.UpdateEmail)
 		userGroup.PUT("/profile/phone", app.IrisHandler.UpdatePhone)
@@ -139,7 +139,7 @@ func main() {
 			recipes.GET("/categories/list", app.RecipeHandler.GetCategories)
 			recipes.POST("/batch", app.RecipeHandler.CreateRecipesBatch)
 			recipes.GET("/:recipe_id", app.RecipeHandler.GetRecipe)
-			recipes.PUT("/:recipe_id", app.RecipeHandler.UpdateRecipe)
+			recipes.PATCH("/:recipe_id", app.RecipeHandler.UpdateRecipe)
 			recipes.DELETE("/:recipe_id", app.RecipeHandler.DeleteRecipe)
 		}
 
@@ -252,7 +252,7 @@ func main() {
 			services.GET("", app.HermesHandler.ListServices)
 			services.POST("", app.HermesHandler.CreateService)
 			services.GET("/:service_id", app.HermesHandler.GetService)
-			services.PUT("/:service_id", app.HermesHandler.UpdateService)
+			services.PATCH("/:service_id", app.HermesHandler.UpdateService)
 		}
 
 		// 应用管理
@@ -261,7 +261,7 @@ func main() {
 			applications.GET("", app.HermesHandler.ListApplications)
 			applications.POST("", app.HermesHandler.CreateApplication)
 			applications.GET("/:app_id", app.HermesHandler.GetApplication)
-			applications.PUT("/:app_id", app.HermesHandler.UpdateApplication)
+			applications.PATCH("/:app_id", app.HermesHandler.UpdateApplication)
 			applications.GET("/:app_id/applicable", app.HermesHandler.GetApplicationServiceRelations)
 			applications.POST("/:app_id/services/:service_id/applicable", app.HermesHandler.SetApplicationServiceRelations)
 
@@ -270,7 +270,7 @@ func main() {
 			{
 				appServices.GET("/relationships", app.HermesHandler.ListAppServiceRelationships)
 				appServices.POST("/relationships", app.HermesHandler.CreateAppServiceRelationship)
-				appServices.PUT("/relationships/:relationship_id", app.HermesHandler.UpdateAppServiceRelationship)
+				appServices.PATCH("/relationships/:relationship_id", app.HermesHandler.UpdateAppServiceRelationship)
 				appServices.DELETE("/relationships/:relationship_id", app.HermesHandler.DeleteAppServiceRelationship)
 			}
 		}
@@ -287,7 +287,7 @@ func main() {
 			groups.GET("", app.HermesHandler.ListGroups)
 			groups.POST("", app.HermesHandler.CreateGroup)
 			groups.GET("/:group_id", app.HermesHandler.GetGroup)
-			groups.PUT("/:group_id", app.HermesHandler.UpdateGroup)
+			groups.PATCH("/:group_id", app.HermesHandler.UpdateGroup)
 			groups.GET("/:group_id/members", app.HermesHandler.GetGroupMembers)
 			groups.POST("/:group_id/members", app.HermesHandler.SetGroupMembers)
 		}

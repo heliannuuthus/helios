@@ -28,9 +28,15 @@ INSERT INTO t_application_service_relation (app_id, service_id, relation) VALUES
 ON DUPLICATE KEY UPDATE relation = VALUES(relation);
 
 -- ==================== 用户 ====================
-INSERT INTO t_user (openid, domain_id, status, email_verified, nickname, picture, email) VALUES
-('heliannuuthus', 'piam', 0, 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
+INSERT INTO t_user (uid, status, email_verified, nickname, picture, email) VALUES
+('heliannuuthus', 0, 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
 ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified);
+
+-- ==================== 用户主身份 ====================
+-- 为初始管理员创建 oper 主身份（t_openid 为对外暴露的用户标识）
+INSERT INTO t_user_identity (uid, idp, t_openid) VALUES
+('heliannuuthus', 'oper', 'heliannuuthus')
+ON DUPLICATE KEY UPDATE t_openid = VALUES(t_openid);
 
 -- ==================== 服务关系（权限） ====================
 INSERT INTO t_relationship (service_id, subject_type, subject_id, relation, object_type, object_id) VALUES

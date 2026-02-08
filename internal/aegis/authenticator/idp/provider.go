@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/heliannuuthus/helios/internal/aegis/types"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 )
 
 // Provider IDP 提供者接口
@@ -14,7 +15,8 @@ type Provider interface {
 	// Login 执行登录认证
 	// proof: 认证凭证（OAuth code / password / OTP code）
 	// params: 额外参数（如 identifier）
-	Login(ctx context.Context, proof string, params ...any) (*LoginResult, error)
+	// 返回: 第三方 IDP 用户信息的通用模型
+	Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error)
 
 	// FetchAdditionalInfo 补充获取用户信息（手机号、邮箱等）
 	// infoType: "phone", "email", "realname" 等
@@ -24,21 +26,6 @@ type Provider interface {
 	// Prepare 准备前端所需的公开配置（不含密钥）
 	// 返回 ConnectionConfig，包含 connection 标识和可选的 identifier（如 client_id）
 	Prepare() *types.ConnectionConfig
-}
-
-// LoginResult 登录结果
-type LoginResult struct {
-	ProviderID string    // IDP 侧用户唯一标识（openid）
-	UserInfo   *UserInfo // 用户基础信息（结构化）
-	RawData    string    // 原始响应 JSON
-}
-
-// UserInfo 用户基础信息（从各 IDP 提取的通用字段）
-type UserInfo struct {
-	Nickname string `json:"nickname,omitempty"` // 昵称/显示名
-	Email    string `json:"email,omitempty"`    // 邮箱
-	Phone    string `json:"phone,omitempty"`    // 手机号
-	Picture  string `json:"picture,omitempty"`  // 头像 URL
 }
 
 // AdditionalInfo 补充信息结果

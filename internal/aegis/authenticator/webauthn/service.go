@@ -1,3 +1,4 @@
+// Package webauthn provides WebAuthn/Passkey authentication support.
 package webauthn
 
 import (
@@ -12,6 +13,7 @@ import (
 
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
+	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -22,9 +24,15 @@ const (
 	DefaultWebAuthnSessionTTL = 5 * time.Minute
 )
 
+// IsEnabled 检查 WebAuthn 是否启用
+func IsEnabled() bool {
+	return config.Aegis().GetBool("mfa.webauthn.enabled")
+}
+
 // Service WebAuthn 服务
 type Service struct {
 	webauthn *webauthn.WebAuthn
+	rpID     string
 	cache    *cache.Manager
 }
 
@@ -34,19 +42,42 @@ func NewService(cm *cache.Manager) (*Service, error) {
 		return nil, fmt.Errorf("webauthn is not enabled")
 	}
 
-	if err := Init(); err != nil {
+	cfg := config.Aegis()
+
+	rpID := cfg.GetString("mfa.webauthn.rp-id")
+	if rpID == "" {
+		rpID = "aegis.heliannuuthus.com"
+	}
+
+	rpDisplayName := cfg.GetString("mfa.webauthn.rp-display-name")
+	if rpDisplayName == "" {
+		rpDisplayName = "Helios Auth"
+	}
+
+	rpOrigins := cfg.GetStringSlice("mfa.webauthn.rp-origins")
+	if len(rpOrigins) == 0 {
+		rpOrigins = []string{"https://" + rpID}
+	}
+
+	wa, err := webauthn.New(&webauthn.Config{
+		RPID:          rpID,
+		RPDisplayName: rpDisplayName,
+		RPOrigins:     rpOrigins,
+	})
+	if err != nil {
 		return nil, fmt.Errorf("init webauthn failed: %w", err)
 	}
 
 	return &Service{
-		webauthn: GetInstance(),
+		webauthn: wa,
+		rpID:     rpID,
 		cache:    cm,
 	}, nil
 }
 
 // GetRPID 获取 RP ID
 func (s *Service) GetRPID() string {
-	return GetConfig().RPID
+	return s.rpID
 }
 
 // credentialsToExclusions 将凭证转换为排除列表
@@ -109,12 +140,11 @@ func (s *Service) BeginRegistration(ctx context.Context, user *models.UserWithDe
 
 	// 创建 Challenge 并保存会话数据
 	challenge := types.NewChallenge(types.ChallengeTypeWebAuthn, DefaultWebAuthnSessionTTL)
-	challenge.UserID = user.OpenID
 
 	// 保存会话数据到 Challenge
 	// session.Challenge 已经是 Base64URL 编码的字符串
 	sessionData := &SessionData{
-		UserID:      user.OpenID,
+		UserID:      user.UID,
 		Challenge:   session.Challenge,
 		SessionData: session,
 	}
@@ -130,7 +160,7 @@ func (s *Service) BeginRegistration(ctx context.Context, user *models.UserWithDe
 		return nil, fmt.Errorf("save challenge failed: %w", err)
 	}
 
-	logger.Infof("[WebAuthn] BeginRegistration success - UserID: %s, ChallengeID: %s", user.OpenID, challenge.ID)
+	logger.Infof("[WebAuthn] BeginRegistration success - UserID: %s, ChallengeID: %s", user.UID, challenge.ID)
 
 	return &RegistrationBeginResponse{
 		Options:     options,
@@ -176,7 +206,7 @@ func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r 
 	}
 
 	// 获取用户已有凭证
-	existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.OpenID)
+	existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.UID)
 	if err != nil {
 		logger.Warnf("[WebAuthn] get existing credentials failed: %v", err)
 		existingCredentials = nil
@@ -198,14 +228,13 @@ func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r 
 		return nil, fmt.Errorf("finish registration failed: %w", err)
 	}
 
-	// 标记 Challenge 为已验证
-	challenge.SetVerified()
-	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
-		logger.Warnf("[WebAuthn] SaveChallenge failed after registration: %v", err)
+	// 验证通过，删除临时 Challenge 会话
+	if err := s.cache.DeleteChallenge(ctx, challengeID); err != nil {
+		logger.Warnf("[WebAuthn] DeleteChallenge failed after registration: %v", err)
 	}
 
 	logger.Infof("[WebAuthn] FinishRegistration success - UserID: %s, CredentialID: %s",
-		user.OpenID, base64.RawURLEncoding.EncodeToString(credential.ID))
+		user.UID, base64.RawURLEncoding.EncodeToString(credential.ID))
 
 	return credential, nil
 }
@@ -244,11 +273,10 @@ func (s *Service) BeginLogin(ctx context.Context, user *models.UserWithDecrypted
 
 	// 创建 Challenge 并保存会话数据
 	challenge := types.NewChallenge(types.ChallengeTypeWebAuthn, DefaultWebAuthnSessionTTL)
-	challenge.UserID = user.OpenID
 
 	// 保存会话数据
 	sessionData := &SessionData{
-		UserID:      user.OpenID,
+		UserID:      user.UID,
 		Challenge:   session.Challenge,
 		SessionData: session,
 	}
@@ -264,7 +292,7 @@ func (s *Service) BeginLogin(ctx context.Context, user *models.UserWithDecrypted
 		return nil, fmt.Errorf("save challenge failed: %w", err)
 	}
 
-	logger.Infof("[WebAuthn] BeginLogin success - UserID: %s, ChallengeID: %s", user.OpenID, challenge.ID)
+	logger.Infof("[WebAuthn] BeginLogin success - UserID: %s, ChallengeID: %s", user.UID, challenge.ID)
 
 	return &LoginBeginResponse{
 		Options:     options,
@@ -367,7 +395,7 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, r *http.R
 		}
 
 		// 获取用户凭证
-		existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.OpenID)
+		existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.UID)
 		if err != nil {
 			return "", nil, fmt.Errorf("get credentials failed: %w", err)
 		}
@@ -388,10 +416,9 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, r *http.R
 		}
 	}
 
-	// 标记 Challenge 为已验证
-	challenge.SetVerified()
-	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
-		logger.Warnf("[WebAuthn] SaveChallenge failed after login: %v", err)
+	// 验证通过，删除临时 Challenge 会话
+	if err := s.cache.DeleteChallenge(ctx, challengeID); err != nil {
+		logger.Warnf("[WebAuthn] DeleteChallenge failed after login: %v", err)
 	}
 
 	logger.Infof("[WebAuthn] FinishLogin success - UserID: %s", userID)
@@ -421,7 +448,7 @@ func (s *Service) finishDiscoverableLogin(ctx context.Context, session *webauthn
 	}
 
 	// 获取用户凭证
-	existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.OpenID)
+	existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.UID)
 	if err != nil {
 		return nil, fmt.Errorf("get credentials failed: %w", err)
 	}

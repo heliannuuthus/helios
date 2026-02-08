@@ -9,14 +9,15 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/authenticate"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/webauthn"
 	"github.com/heliannuuthus/helios/internal/aegis/authorize"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	"github.com/heliannuuthus/helios/internal/aegis/challenge"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/aegis/token"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
+	"github.com/heliannuuthus/helios/internal/aegis/user"
 	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -34,7 +35,6 @@ const (
 	StageMFA      AuthStage = "mfa"      // MFA 验证阶段
 	StageCallback AuthStage = "callback" // IDP 回调阶段
 	StageComplete AuthStage = "complete" // 完成阶段（重定向回应用）
-	StageError    AuthStage = "error"    // 错误阶段
 )
 
 // Handler 认证处理器（编排层）
@@ -42,30 +42,30 @@ type Handler struct {
 	authenticateSvc *authenticate.Service
 	authorizeSvc    *authorize.Service
 	challengeSvc    *challenge.Service
+	userSvc         *user.Service
 	cache           *cache.Manager
 	tokenSvc        *token.Service
-	registry        *authenticator.Registry
-}
-
-// HandlerConfig Handler 配置
-type HandlerConfig struct {
-	AuthenticateSvc *authenticate.Service
-	AuthorizeSvc    *authorize.Service
-	ChallengeSvc    *challenge.Service
-	Cache           *cache.Manager
-	TokenSvc        *token.Service
-	Registry        *authenticator.Registry
+	webauthnSvc     *webauthn.Service
 }
 
 // NewHandler 创建认证处理器
-func NewHandler(cfg *HandlerConfig) *Handler {
+func NewHandler(
+	authenticateSvc *authenticate.Service,
+	authorizeSvc *authorize.Service,
+	challengeSvc *challenge.Service,
+	userSvc *user.Service,
+	cache *cache.Manager,
+	tokenSvc *token.Service,
+	webauthnSvc *webauthn.Service,
+) *Handler {
 	return &Handler{
-		authenticateSvc: cfg.AuthenticateSvc,
-		authorizeSvc:    cfg.AuthorizeSvc,
-		challengeSvc:    cfg.ChallengeSvc,
-		cache:           cfg.Cache,
-		tokenSvc:        cfg.TokenSvc,
-		registry:        cfg.Registry,
+		authenticateSvc: authenticateSvc,
+		authorizeSvc:    authorizeSvc,
+		challengeSvc:    challengeSvc,
+		userSvc:         userSvc,
+		cache:           cache,
+		tokenSvc:        tokenSvc,
+		webauthnSvc:     webauthnSvc,
 	}
 }
 
@@ -96,9 +96,9 @@ func (h *Handler) CacheManager() *cache.Manager {
 	return h.cache
 }
 
-// Registry 返回全局 Authenticator Registry（供其他模块使用，如 Iris）
-func (h *Handler) Registry() *authenticator.Registry {
-	return h.registry
+// WebAuthnSvc 返回 WebAuthn 服务（供 iris 等模块使用）
+func (h *Handler) WebAuthnSvc() *webauthn.Service {
+	return h.webauthnSvc
 }
 
 // ==================== 1. 认证会话创建 ====================
@@ -138,15 +138,20 @@ func (h *Handler) GetContext(c *gin.Context) {
 	// 从 Cookie 获取 flowID
 	flowID, err := getAuthSessionCookie(c)
 	if err != nil || flowID == "" {
-		h.errorResponse(c, autherrors.NewInvalidRequest("missing aegis-session cookie"))
+		h.errorResponse(c, autherrors.NewFlowNotFound("missing session"))
 		return
 	}
 
-	// 获取 AuthFlow
+	// 获取 AuthFlow（内部会续期内存中的 ExpiresAt）
 	flow := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
 	if flow.HasError() {
 		h.flowErrorResponse(c, flow)
 		return
+	}
+
+	// 持久化续期后的 Flow 到 Redis
+	if err := h.authenticateSvc.SaveFlow(c.Request.Context(), flow); err != nil {
+		logger.Errorf("[Handler] GetContext 保存续期 Flow 失败 - FlowID: %s, Error: %v", flowID, err)
 	}
 
 	// 为 aegis-session cookie 续期
@@ -180,15 +185,20 @@ func (h *Handler) GetConnections(c *gin.Context) {
 	// 从 Cookie 获取 flowID
 	flowID, err := getAuthSessionCookie(c)
 	if err != nil || flowID == "" {
-		h.errorResponse(c, autherrors.NewInvalidRequest("missing aegis-session cookie"))
+		h.errorResponse(c, autherrors.NewFlowNotFound("missing session"))
 		return
 	}
 
-	// 获取 AuthFlow
+	// 获取 AuthFlow（内部会续期内存中的 ExpiresAt）
 	flow := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
 	if flow.HasError() {
 		h.flowErrorResponse(c, flow)
 		return
+	}
+
+	// 持久化续期后的 Flow 到 Redis
+	if err := h.authenticateSvc.SaveFlow(c.Request.Context(), flow); err != nil {
+		logger.Errorf("[Handler] GetConnections 保存续期 Flow 失败 - FlowID: %s, Error: %v", flowID, err)
 	}
 
 	// 获取可用的 ConnectionsMap
@@ -260,12 +270,6 @@ func (h *Handler) ContinueChallenge(c *gin.Context) {
 
 // ==================== 4. 登录 ====================
 
-// loginUserResult 登录用户查找结果
-type loginUserResult struct {
-	user      *models.UserWithDecrypted
-	isNewUser bool
-}
-
 // Login POST /auth/login
 // 处理登录
 func (h *Handler) Login(c *gin.Context) {
@@ -278,7 +282,7 @@ func (h *Handler) Login(c *gin.Context) {
 	// 从 Cookie 获取 flowID
 	flowID, err := getAuthSessionCookie(c)
 	if err != nil || flowID == "" {
-		h.errorResponse(c, autherrors.NewInvalidRequest("missing aegis-session cookie"))
+		h.errorResponse(c, autherrors.NewFlowNotFound("missing session"))
 		return
 	}
 
@@ -294,30 +298,50 @@ func (h *Handler) Login(c *gin.Context) {
 	// 确保无论成功还是失败都保存 flow（续期已在 GetAndValidateFlow 中完成）
 	var loginSuccess bool
 	defer func() {
-		h.handleFlowCleanup(ctx, flowID, flow, loginSuccess)
+		h.authenticateSvc.CleanupFlow(ctx, flowID, flow, loginSuccess)
 	}()
 
-	// 2. 执行认证
-	proof, ok := req.Proof.(string)
-	if !ok {
-		proof = ""
+	// 2. 验证并设置当前 Connection
+	if !authenticator.GlobalRegistry().Has(req.Connection) {
+		h.errorResponse(c, autherrors.NewInvalidRequestf("unsupported connection: %s", req.Connection))
+		return
 	}
-	authResult, err := h.authenticateSvc.Authenticate(ctx, flow, req.Connection, proof, req.Principal, req.Strategy)
+	flow.SetConnection(req.Connection)
+
+	// 3. 执行认证（通过 Registry 统一分发）
+	success, err := h.authenticateSvc.Authenticate(ctx, flow, req)
 	if err != nil {
 		logger.Errorf("[Handler] 认证失败: %v", err)
 		h.errorResponse(c, autherrors.NewUnauthorized(err.Error()))
 		return
 	}
-
-	// 3. 查找或创建用户
-	userResult, authErr := h.findOrCreateLoginUser(ctx, req.Connection, authResult)
-	if authErr != nil {
-		h.errorResponse(c, authErr)
+	if !success {
+		h.errorResponse(c, autherrors.NewUnauthorized("authentication failed"))
 		return
 	}
 
-	// 4. 完成登录流程
-	authCode, err := h.completeLoginFlow(ctx, flow, req.Connection, authResult, userResult)
+	// 4. 检查前置验证和委托验证是否都通过
+	// 如果当前 connection 有 require/delegate 依赖且未全部通过，返回 200 + pending
+	if !flow.AllRequiredVerified() || !flow.AnyDelegateVerified() {
+		// 保存 flow 后返回 pending 状态
+		if err := h.authenticateSvc.SaveFlow(ctx, flow); err != nil {
+			logger.Warnf("[Handler] 保存 flow 失败: %v", err)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "pending",
+			"message": "additional verification required",
+		})
+		return
+	}
+
+	// 5. 查找或创建用户，回写用户信息和全部身份到 flow
+	if err := h.resolveUser(ctx, flow); err != nil {
+		h.errorResponse(c, err)
+		return
+	}
+
+	// 6. 完成登录流程
+	authCode, err := h.completeLoginFlow(ctx, flow)
 	if err != nil {
 		h.errorResponse(c, err)
 		return
@@ -326,7 +350,7 @@ func (h *Handler) Login(c *gin.Context) {
 	// 标记登录成功
 	loginSuccess = true
 
-	// 5. 构建响应
+	// 7. 构建响应
 	redirectURI := flow.Request.RedirectURI + "?code=" + authCode.Code
 	if authCode.State != "" {
 		redirectURI += "&state=" + authCode.State
@@ -339,116 +363,51 @@ func (h *Handler) Login(c *gin.Context) {
 	})
 }
 
-// handleFlowCleanup 处理 flow 清理（登录成功删除，失败保存）
-func (h *Handler) handleFlowCleanup(ctx context.Context, flowID string, flow *types.AuthFlow, loginSuccess bool) {
-	if loginSuccess {
-		if err := h.authenticateSvc.DeleteFlow(ctx, flowID); err != nil {
-			logger.Warnf("[Handler] 删除 flow 失败: %v", err)
-		}
-	} else {
-		if err := h.authenticateSvc.SaveFlow(ctx, flow); err != nil {
-			logger.Warnf("[Handler] 保存 flow 失败: %v", err)
-		}
-	}
-}
+// resolveUser 解析用户信息并回写到 flow
+func (h *Handler) resolveUser(ctx context.Context, flow *types.AuthFlow) error {
+	connection := flow.Connection
+	domain := flow.Application.DomainID
 
-// findOrCreateLoginUser 查找或创建登录用户
-func (h *Handler) findOrCreateLoginUser(ctx context.Context, connection string, authResult *idp.LoginResult) (*loginUserResult, error) {
-	// 尝试查找用户
-	user, err := h.findUserByConnection(ctx, connection, authResult)
-	if err == nil {
-		return &loginUserResult{user: user, isNewUser: false}, nil
+	identity := flow.GetIdentity(connection)
+	if identity == nil {
+		return autherrors.NewServerError("identity not found in flow")
 	}
 
-	// 用户不存在，检查是否支持自动创建
-	if !idp.SupportsAutoCreate(connection) {
-		logger.Warnf("[Handler] 用户不存在且不支持自动创建 - Connection: %s, ProviderID: %s, Domain: %s",
-			connection, authResult.ProviderID, idp.GetDomain(connection))
-		return nil, autherrors.NewUnauthorized("user not found")
-	}
-
-	// 创建用户
-	return h.createLoginUser(ctx, connection, authResult)
-}
-
-// findUserByConnection 根据 connection 类型查找用户
-func (h *Handler) findUserByConnection(ctx context.Context, connection string, authResult *idp.LoginResult) (*models.UserWithDecrypted, error) {
-	if idp.RequiresEmailForBinding(connection) {
-		return h.findUserByEmailBinding(ctx, connection, authResult)
-	}
-	// 其他 IDP：通过 (connection, provider_id) 查找身份绑定关系
-	return h.cache.GetUserByIdentity(ctx, connection, authResult.ProviderID)
-}
-
-// findUserByEmailBinding 通过邮箱绑定查找用户（GitHub/Google 等 OAuth 登录）
-func (h *Handler) findUserByEmailBinding(ctx context.Context, connection string, authResult *idp.LoginResult) (*models.UserWithDecrypted, error) {
-	// 验证邮箱信息
-	if authResult.UserInfo == nil || authResult.UserInfo.Email == "" {
-		logger.Warnf("[Handler] OAuth 登录缺少邮箱信息 - Connection: %s, ProviderID: %s", connection, authResult.ProviderID)
-		return nil, autherrors.NewUnauthorized("email is required for this login method")
-	}
-
-	identityType := idp.GetIdentityType(connection)
-
-	// 先通过 IDP 身份查找（已绑定过）
-	user, err := h.cache.GetUserByIdentity(ctx, connection, authResult.ProviderID)
-	if err == nil {
-		return user, nil
-	}
-
-	// 未绑定过，尝试通过邮箱查找对应域的用户
-	logger.Infof("[Handler] 未找到 IDP 身份绑定，尝试通过邮箱查找 - Email: %s, IdentityType: %s", authResult.UserInfo.Email, identityType)
-	user, err = h.cache.FindUserByEmailAndDomain(ctx, authResult.UserInfo.Email, string(idp.GetDomain(connection)))
+	// 1. 查询用户的全部身份
+	allIdentities, err := h.userSvc.GetIdentities(ctx, identity)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// 找到用户，检查身份互斥
-	if user.DomainID != string(idp.GetDomain(connection)) {
-		logger.Warnf("[Handler] 身份互斥 - Email: %s, 现有域: %s, 请求域: %s", authResult.UserInfo.Email, user.DomainID, idp.GetDomain(connection))
-		return nil, autherrors.NewAccessDenied("identity conflict: this email is already bound to a different identity type")
-	}
+	if len(allIdentities) == 0 {
+		// 用户不存在，检查当前域下该 IDP 是否允许注册
+		if !idp.IsIDPAllowedForDomain(connection, idp.Domain(domain)) {
+			return autherrors.NewUnauthorized("registration not allowed for this IDP")
+		}
 
-	logger.Infof("[Handler] 通过邮箱找到用户 - OpenID: %s, Email: %s", user.OpenID, authResult.UserInfo.Email)
-	return user, nil
-}
-
-// createLoginUser 创建登录用户
-func (h *Handler) createLoginUser(ctx context.Context, connection string, authResult *idp.LoginResult) (*loginUserResult, error) {
-	logger.Infof("[Handler] 用户不存在，开始自动创建 - Connection: %s, ProviderID: %s, Domain: %s",
-		connection, authResult.ProviderID, idp.GetDomain(connection))
-
-	userReq := &models.FindOrCreateUserRequest{
-		DomainID:   string(idp.GetDomain(connection)),
-		IDP:        connection,
-		ProviderID: authResult.ProviderID,
-		RawData:    authResult.RawData,
-	}
-
-	if authResult.UserInfo != nil {
-		userReq.UserInfo = &models.UserInfo{
-			Nickname: authResult.UserInfo.Nickname,
-			Email:    authResult.UserInfo.Email,
-			Phone:    authResult.UserInfo.Phone,
-			Picture:  authResult.UserInfo.Picture,
+		// 创建用户及当前认证身份
+		allIdentities, err = h.userSvc.CreateUser(ctx, identity, flow.GetUserInfo(connection))
+		if err != nil {
+			return err
 		}
 	}
 
-	user, isNewUser, err := h.cache.FindOrCreateUser(ctx, userReq)
+	// 2. 获取用户信息
+	u, err := h.userSvc.GetUser(ctx, allIdentities[0].UID)
 	if err != nil {
-		logger.Errorf("[Handler] 创建用户失败: %v", err)
-		return nil, autherrors.NewServerError("user creation failed")
+		return autherrors.NewUnauthorized("user not found")
 	}
 
-	logger.Infof("[Handler] 用户创建成功 - OpenID: %s, IsNew: %v, Domain: %s", user.OpenID, isNewUser, userReq.DomainID)
-	return &loginUserResult{user: user, isNewUser: isNewUser}, nil
+	// 回写到 flow
+	flow.Identities = allIdentities
+	flow.SetAuthenticated(u)
+
+	return nil
 }
 
-// completeLoginFlow 完成登录流程（更新 flow、准备授权、生成授权码）
-func (h *Handler) completeLoginFlow(ctx context.Context, flow *types.AuthFlow, connection string, authResult *idp.LoginResult, userResult *loginUserResult) (*cache.AuthorizationCode, error) {
-	// 更新 flow
-	flow.SetAuthenticated(connection, authResult.ProviderID, userResult.user, userResult.isNewUser)
-
+// completeLoginFlow 完成登录流程（准备授权、生成授权码）
+// 调用前需确保 flow 已通过 resolveUser 设置好 User 和 Identities
+func (h *Handler) completeLoginFlow(ctx context.Context, flow *types.AuthFlow) (*cache.AuthorizationCode, error) {
 	// 准备授权（检查身份要求）
 	if err := h.authorizeSvc.PrepareAuthorization(ctx, flow); err != nil {
 		logger.Errorf("[Handler] 准备授权失败: %v", err)
@@ -550,7 +509,7 @@ func (h *Handler) Check(c *gin.Context) {
 	}
 
 	// 5. 检查关系
-	hasRelation, err := h.checkRelation(ctx, serviceID, req.SubjectID, req.Relation, objectType, objectID)
+	hasRelation, err := h.authorizeSvc.CheckRelation(ctx, serviceID, req.SubjectID, req.Relation, objectType, objectID)
 	if err != nil {
 		logger.Warnf("[Handler] check relation failed: %v", err)
 		c.JSON(http.StatusInternalServerError, CheckResponse{
@@ -593,7 +552,7 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
-	if err := h.authorizeSvc.RevokeAllTokens(c.Request.Context(), getOpenID(claims)); err != nil {
+	if err := h.authorizeSvc.RevokeAllTokens(c.Request.Context(), getInternalUID(claims)); err != nil {
 		h.errorResponse(c, autherrors.NewServerError("failed to revoke tokens"))
 		return
 	}
@@ -637,8 +596,6 @@ func ForwardToStage(c *gin.Context, stage AuthStage) {
 		targetURL = config.GetAegisEndpointMFA()
 	case StageCallback:
 		targetURL = config.GetAegisEndpointCallback()
-	case StageError:
-		targetURL = config.GetAegisEndpointError()
 	default:
 		targetURL = config.GetAegisEndpointLogin()
 	}
@@ -658,15 +615,6 @@ func ForwardToApp(c *gin.Context, redirectURI, code, state string) {
 	// 但实际返回给前端的是 JSON，前端再执行跳转
 	// 如果是服务端直接重定向，使用 302
 	c.Redirect(http.StatusFound, targetURL)
-}
-
-// ForwardError 重定向到错误页面
-func ForwardError(c *gin.Context, errorCode, errorDesc string) {
-	targetURL := config.GetAegisEndpointError() + "?error=" + errorCode
-	if errorDesc != "" {
-		targetURL += "&error_description=" + errorDesc
-	}
-	redirect(c, targetURL)
 }
 
 // GetToken 从上下文获取验证后的 Token
@@ -693,42 +641,21 @@ func (h *Handler) flowErrorResponse(c *gin.Context, flow *types.AuthFlow) {
 		h.errorResponse(c, autherrors.NewServerError("unknown error"))
 		return
 	}
-	c.JSON(flow.Error.HTTPStatus, map[string]any{
+
+	resp := map[string]any{
 		"error":             flow.Error.Code,
 		"error_description": flow.Error.Description,
-		"data":              flow.Error.Data,
-	})
-}
-
-// checkRelation 检查用户是否具有指定的关系
-func (h *Handler) checkRelation(ctx context.Context, serviceID, subjectID, relation, objectType, objectID string) (bool, error) {
-	// 从 hermes 查询关系
-	relationships, err := h.cache.ListRelationships(ctx, serviceID, "user", subjectID)
-	if err != nil {
-		return false, err
+	}
+	if flow.Error.Data != nil {
+		resp["data"] = flow.Error.Data
 	}
 
-	// 检查是否有匹配的关系
-	for _, rel := range relationships {
-		// 检查关系类型匹配
-		if rel.Relation != relation && rel.Relation != "*" {
-			continue
-		}
-
-		// 检查资源类型匹配
-		if objectType != "*" && rel.ObjectType != objectType && rel.ObjectType != "*" {
-			continue
-		}
-
-		// 检查资源 ID 匹配
-		if objectID != "*" && rel.ObjectID != objectID && rel.ObjectID != "*" {
-			continue
-		}
-
-		return true, nil
+	// flow 失效时清除无效的 session cookie
+	if flow.Error.Code == autherrors.CodeFlowNotFound || flow.Error.Code == autherrors.CodeFlowExpired {
+		clearAuthSessionCookie(c)
 	}
 
-	return false, nil
+	c.JSON(flow.Error.HTTPStatus, resp)
 }
 
 // ==================== 私有辅助函数（包级别） ====================
@@ -791,43 +718,14 @@ func getAuthSessionCookie(c *gin.Context) (string, error) {
 func forwardNext(c *gin.Context, flow *types.AuthFlow) {
 	var targetURL string
 
-	// 如果有错误，跳转到错误页面
-	if flow.HasError() {
-		targetURL = config.GetAegisEndpointError()
-		targetURL += "?error=" + flow.Error.Code
-		if flow.Error.Description != "" {
-			targetURL += "&error_description=" + flow.Error.Description
-		}
-		redirect(c, targetURL)
-		return
-	}
-
-	// 处理 prompt=none：静默认证
-	if flow.Request != nil && flow.Request.HasPrompt(types.PromptNone) {
-		// 如果是 prompt=none 但用户未登录，返回错误
-		if flow.State == types.FlowStateInitialized {
-			targetURL = config.GetAegisEndpointError()
-			targetURL += "?error=login_required&error_description=User+is+not+authenticated"
-			redirect(c, targetURL)
-			return
-		}
-	}
+	// 统一跳转到登录页面，前端根据 API 返回的状态码展示不同的交互逻辑
+	// 错误、prompt=none 未登录等场景，前端通过调用 /auth/context 等接口获取状态
 
 	// 根据 flow 状态决定下一步
 	switch flow.State {
-	case types.FlowStateInitialized:
-		// 需要登录
-		targetURL = config.GetAegisEndpointLogin()
-
 	case types.FlowStateAuthenticated:
-		// 已认证，检查是否需要授权同意
-		// 如果 prompt=consent，强制显示授权页面
-		if flow.Request != nil && flow.Request.HasPrompt(types.PromptConsent) {
-			targetURL = config.GetAegisEndpointConsent()
-		} else {
-			// 默认跳转到 consent 页面（由前端决定是否显示）
-			targetURL = config.GetAegisEndpointConsent()
-		}
+		// 已认证，跳转到 consent 页面
+		targetURL = config.GetAegisEndpointConsent()
 
 	case types.FlowStateAuthorized, types.FlowStateCompleted:
 		// 已授权/已完成，准备跳转回应用
@@ -835,7 +733,7 @@ func forwardNext(c *gin.Context, flow *types.AuthFlow) {
 		targetURL = flow.Request.RedirectURI
 
 	default:
-		// 默认跳转到登录
+		// 初始化、失败等状态统一跳到登录页面
 		targetURL = config.GetAegisEndpointLogin()
 	}
 
@@ -854,10 +752,10 @@ func redirect(c *gin.Context, targetURL string) {
 	c.Redirect(statusCode, targetURL)
 }
 
-// getOpenID 从 Token 中获取 OpenID
-func getOpenID(t token.Token) string {
+// getInternalUID 从 Token 中获取内部用户 ID（t_user.openid，用于内部查询）
+func getInternalUID(t token.Token) string {
 	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
-		return uat.GetOpenID()
+		return uat.GetInternalUID()
 	}
 	return ""
 }

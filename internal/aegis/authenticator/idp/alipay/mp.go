@@ -16,6 +16,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -65,7 +66,7 @@ func (*MPProvider) Type() string {
 
 // Exchange 用授权码换取用户信息
 // proof: 小程序 login code
-func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*idp.LoginResult, error) {
+func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*models.TUserInfo, error) {
 	if proof == "" {
 		return nil, errors.New("code is required")
 	}
@@ -208,7 +209,7 @@ func (p *MPProvider) verifyResponseSign(bodyStr string) error {
 }
 
 // parseUserID 解析用户 ID
-func (p *MPProvider) parseUserID(bodyStr string) (*idp.LoginResult, error) {
+func (p *MPProvider) parseUserID(bodyStr string) (*models.TUserInfo, error) {
 	responseNode := gjson.Get(bodyStr, "alipay_system_oauth_token_response")
 	if !responseNode.Exists() {
 		logger.Errorf("[Alipay] 响应中缺少 alipay_system_oauth_token_response")
@@ -223,9 +224,9 @@ func (p *MPProvider) parseUserID(bodyStr string) (*idp.LoginResult, error) {
 
 	logger.Infof("[Alipay] 登录成功 - UserID: %s", userID)
 
-	return &idp.LoginResult{
-		ProviderID: userID,
-		RawData:    fmt.Sprintf(`{"openid":"%s"}`, userID),
+	return &models.TUserInfo{
+		TOpenID: userID,
+		RawData: fmt.Sprintf(`{"openid":"%s"}`, userID),
 	}, nil
 }
 

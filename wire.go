@@ -64,11 +64,7 @@ func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) 
 	db := database.GetHermes()
 	userSvc := hermes.NewUserService(db)
 	credentialSvc := hermes.NewCredentialService(db)
-	return aegis.Initialize(&aegis.InitConfig{
-		HermesSvc:     hermesService,
-		UserSvc:       userSvc,
-		CredentialSvc: credentialSvc,
-	})
+	return aegis.Initialize(hermesService, userSvc, credentialSvc)
 }
 
 func provideUploadHandler() *upload.Handler {
@@ -84,7 +80,7 @@ func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
 	db := database.GetHermes()
 	userSvc := hermes.NewUserService(db)
 	credentialSvc := hermes.NewCredentialService(db)
-	return iris.NewHandler(userSvc, credentialSvc, aegisHandler.Registry())
+	return iris.NewHandler(userSvc, credentialSvc, aegisHandler.WebAuthnSvc())
 }
 
 // provideInterpreter 创建 Token 解释器（用于 API 路由认证中间件）

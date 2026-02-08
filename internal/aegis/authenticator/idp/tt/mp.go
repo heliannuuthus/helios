@@ -14,6 +14,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -40,7 +41,7 @@ func (p *MPProvider) Type() string {
 
 // Exchange 用授权码换取用户信息
 // proof: 小程序 login code
-func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*idp.LoginResult, error) {
+func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*models.TUserInfo, error) {
 	if proof == "" {
 		return nil, errors.New("code is required")
 	}
@@ -137,7 +138,7 @@ func (p *MPProvider) checkError(bodyBytes []byte) error {
 }
 
 // parseUserInfo 解析用户信息
-func (p *MPProvider) parseUserInfo(bodyBytes []byte) (*idp.LoginResult, error) {
+func (p *MPProvider) parseUserInfo(bodyBytes []byte) (*models.TUserInfo, error) {
 	dataRaw := gjson.GetBytes(bodyBytes, "data")
 	if !dataRaw.Exists() || dataRaw.Raw == "null" {
 		logger.Errorf("[TT] 响应 data 字段为空或 null")
@@ -153,9 +154,9 @@ func (p *MPProvider) parseUserInfo(bodyBytes []byte) (*idp.LoginResult, error) {
 
 	logger.Infof("[TT] 登录成功 - OpenID: %s", openID)
 
-	return &idp.LoginResult{
-		ProviderID: openID,
-		RawData:    fmt.Sprintf(`{"openid":"%s"}`, openID),
+	return &models.TUserInfo{
+		TOpenID: openID,
+		RawData: fmt.Sprintf(`{"openid":"%s"}`, openID),
 	}, nil
 }
 

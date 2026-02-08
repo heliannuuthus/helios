@@ -7,6 +7,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/authenticate"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/captcha"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/alipay"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/github"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/google"
@@ -14,12 +15,14 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/system"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/tt"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/wechat"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/mfa"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/totp"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/webauthn"
 	"github.com/heliannuuthus/helios/internal/aegis/authorize"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	"github.com/heliannuuthus/helios/internal/aegis/challenge"
 	"github.com/heliannuuthus/helios/internal/aegis/token"
+	"github.com/heliannuuthus/helios/internal/aegis/user"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -27,15 +30,8 @@ import (
 	pkgstore "github.com/heliannuuthus/helios/pkg/store"
 )
 
-// InitConfig 初始化配置
-type InitConfig struct {
-	HermesSvc     *hermes.Service
-	UserSvc       *hermes.UserService
-	CredentialSvc *hermes.CredentialService
-}
-
 // Initialize 初始化 Auth 模块，返回 Handler
-func Initialize(cfg *InitConfig) (*Handler, error) {
+func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credentialSvc *hermes.CredentialService) (*Handler, error) {
 	// 1. 初始化 Redis
 	redisCfg := getRedisConfig()
 	redis, err := pkgstore.NewGoRedisClient(redisCfg)
@@ -45,19 +41,12 @@ func Initialize(cfg *InitConfig) (*Handler, error) {
 	logger.Infof("[Auth] Redis 连接成功: %s:%d", redisCfg.Host, redisCfg.Port)
 
 	// 2. 初始化 Cache Manager
-	cacheManager := cache.NewManager(&cache.ManagerConfig{
-		HermesSvc: cfg.HermesSvc,
-		UserSvc:   cfg.UserSvc,
-		Redis:     redis,
-	})
+	cacheManager := cache.NewManager(hermesSvc, userSvc, redis)
 
 	// 3. 初始化 Token Service
 	tokenSvc := token.NewService(cacheManager)
 
-	// 4. 初始化全局 Authenticator Registry
-	registry := initRegistry(cfg, cacheManager)
-
-	// 5. 初始化邮件发送器（如果启用）
+	// 4. 初始化邮件发送器（如果启用）
 	var emailSender *mail.Sender
 	if config.IsMailEnabled() {
 		emailSender = initMailSender()
@@ -66,49 +55,42 @@ func Initialize(cfg *InitConfig) (*Handler, error) {
 		}
 	}
 
-	// 6. 初始化 Authenticate Service
-	authenticateSvc := authenticate.NewService(&authenticate.ServiceConfig{
-		Cache:    cacheManager,
-		Registry: registry,
-	})
+	// 5. 初始化底层 Provider
+	webauthnSvc, captchaVerifier, totpVerifier := initProviders(credentialSvc, cacheManager)
 
-	// 7. 初始化 Authorize Service
+	// 6. 初始化全局 Registry（胶水层 Authenticator 统一注册）
+	initRegistry(userSvc, cacheManager, emailSender, webauthnSvc, captchaVerifier, totpVerifier)
+
+	// 7. 初始化 User Service
+	userService := user.NewService(cacheManager, userSvc)
+
+	// 8. 初始化 Authenticate Service
+	authenticateSvc := authenticate.NewService(cacheManager)
+
+	// 9. 初始化 Authorize Service
 	authorizeSvc := authorize.NewService(&authorize.ServiceConfig{
 		Cache:             cacheManager,
+		UserSvc:           userService,
 		TokenSvc:          tokenSvc,
 		DefaultAccessTTL:  getAccessTokenTTL(),
 		DefaultRefreshTTL: getRefreshTokenTTL(),
 		AuthCodeTTL:       5 * time.Minute,
 	})
 
-	// 8. 初始化 Challenge Service
-	challengeSvc := challenge.NewService(&challenge.ServiceConfig{
-		Cache:        cacheManager,
-		Captcha:      registry.GetCaptcha(),
-		EmailSender:  emailSender,
-		TOTPVerifier: registry.GetTOTP(),
-	})
+	// 10. 初始化 Challenge Service
+	challengeProviders := buildChallengeProviders(cacheManager, emailSender, webauthnSvc, totpVerifier)
+	challengeSvc := challenge.NewService(cacheManager, captchaVerifier, challengeProviders)
 
-	// 9. 创建 Handler
-	handler := NewHandler(&HandlerConfig{
-		AuthenticateSvc: authenticateSvc,
-		AuthorizeSvc:    authorizeSvc,
-		ChallengeSvc:    challengeSvc,
-		Cache:           cacheManager,
-		TokenSvc:        tokenSvc,
-		Registry:        registry,
-	})
+	// 11. 创建 Handler
+	handler := NewHandler(authenticateSvc, authorizeSvc, challengeSvc, userService, cacheManager, tokenSvc, webauthnSvc)
 
 	logger.Info("[Auth] 模块初始化完成")
 	return handler, nil
 }
 
-// initRegistry 初始化全局 Authenticator Registry
-func initRegistry(cfg *InitConfig, cacheManager *cache.Manager) *authenticator.Registry {
-	regCfg := &authenticator.RegistryConfig{}
-
-	// ==================== WebAuthn / Passkey ====================
-
+// initProviders 初始化底层 Provider（WebAuthn、Captcha、TOTP）
+func initProviders(credentialSvc *hermes.CredentialService, cacheManager *cache.Manager) (*webauthn.Service, captcha.Verifier, mfa.TOTPVerifier) {
+	// WebAuthn
 	var webauthnSvc *webauthn.Service
 	if webauthn.IsEnabled() {
 		var err error
@@ -116,52 +98,98 @@ func initRegistry(cfg *InitConfig, cacheManager *cache.Manager) *authenticator.R
 		if err != nil {
 			logger.Warnf("[Auth] WebAuthn 初始化失败: %v", err)
 		} else {
-			regCfg.WebAuthn = webauthnSvc
 			logger.Info("[Auth] WebAuthn 初始化完成")
 		}
 	}
 
-	// ==================== Captcha ====================
-
+	// Captcha
+	var captchaVerifier captcha.Verifier
 	if isCaptchaEnabled() {
-		captchaVerifier := initCaptchaVerifier()
+		captchaVerifier = initCaptchaVerifier()
 		if captchaVerifier != nil {
-			regCfg.Captcha = captchaVerifier
 			logger.Infof("[Auth] Captcha 验证器初始化完成: provider=%s", captchaVerifier.GetProvider())
 		}
 	}
 
-	// ==================== TOTP ====================
-
-	if cfg.CredentialSvc != nil {
-		regCfg.TOTP = totp.NewVerifier(cfg.CredentialSvc)
+	// TOTP
+	var totpVerifier mfa.TOTPVerifier
+	if credentialSvc != nil {
+		totpVerifier = totp.NewVerifier(credentialSvc)
 		logger.Info("[Auth] TOTP 验证器初始化完成")
 	}
 
-	// ==================== 创建 Registry ====================
+	return webauthnSvc, captchaVerifier, totpVerifier
+}
 
-	registry := authenticator.NewRegistry(regCfg)
+// initRegistry 初始化全局 Registry（注册胶水层 Authenticator）
+func initRegistry(userSvc *hermes.UserService, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier mfa.TOTPVerifier) {
+	registry := authenticator.NewRegistry()
 
-	// ==================== IDP Providers ====================
+	// ==================== IDP Authenticators ====================
 
-	registry.RegisterIDP(wechat.NewMPProvider())
-	registry.RegisterIDP(tt.NewMPProvider())
-	registry.RegisterIDP(alipay.NewMPProvider())
-	registry.RegisterIDP(github.NewProvider())
-	registry.RegisterIDP(google.NewProvider())
+	registerIDP := func(p idp.Provider) {
+		registry.Register(authenticate.NewIDPAuthenticator(p))
+	}
 
-	if cfg.UserSvc != nil {
-		registry.RegisterIDP(system.NewUserProvider(cfg.UserSvc))
-		registry.RegisterIDP(system.NewOperProvider(cfg.UserSvc))
+	registerIDP(wechat.NewMPProvider())
+	registerIDP(tt.NewMPProvider())
+	registerIDP(alipay.NewMPProvider())
+	registerIDP(github.NewProvider())
+	registerIDP(google.NewProvider())
+
+	if userSvc != nil {
+		registerIDP(system.NewUserProvider(userSvc))
+		registerIDP(system.NewOperProvider(userSvc))
 	}
 
 	if webauthnSvc != nil {
-		registry.RegisterIDP(passkey.NewProvider(webauthnSvc))
+		registerIDP(passkey.NewProvider(webauthnSvc))
 		logger.Info("[Auth] Passkey IDP 注册完成")
 	}
 
-	logger.Infof("[Auth] Authenticator Registry 初始化完成: %v", registry.Summary())
-	return registry
+	// ==================== VChan Authenticators ====================
+
+	if captchaVerifier != nil {
+		registry.Register(authenticate.NewVChanAuthenticator(captchaVerifier))
+	}
+
+	// ==================== MFA Authenticators ====================
+
+	aegisCfg := config.Aegis()
+
+	// Email OTP
+	if aegisCfg.GetBool("mfa.email-otp.enabled") && emailSender != nil {
+		registry.Register(authenticate.NewMFAAuthenticator(mfa.NewEmailOTPProvider(emailSender, cacheManager)))
+	}
+
+	// TOTP
+	if aegisCfg.GetBool("mfa.totp.enabled") && totpVerifier != nil {
+		registry.Register(authenticate.NewMFAAuthenticator(mfa.NewTOTPProvider(totpVerifier)))
+	}
+
+	// WebAuthn MFA
+	if aegisCfg.GetBool("mfa.webauthn.enabled") && webauthnSvc != nil {
+		registry.Register(authenticate.NewMFAAuthenticator(mfa.NewWebAuthnProvider(webauthnSvc)))
+	}
+
+	logger.Infof("[Auth] Registry 初始化完成: %v", registry.Summary())
+}
+
+// buildChallengeProviders 构建 Challenge 可用的 MFA provider 列表
+func buildChallengeProviders(cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, totpVerifier mfa.TOTPVerifier) []mfa.Provider {
+	var providers []mfa.Provider
+
+	if emailSender != nil {
+		providers = append(providers, mfa.NewEmailOTPProvider(emailSender, cacheManager))
+	}
+	if totpVerifier != nil {
+		providers = append(providers, mfa.NewTOTPProvider(totpVerifier))
+	}
+	if webauthnSvc != nil {
+		providers = append(providers, mfa.NewWebAuthnProvider(webauthnSvc))
+	}
+
+	return providers
 }
 
 // getRedisConfig 获取 Redis 配置

@@ -17,7 +17,6 @@ const (
 	DefaultAegisEndpointLogin    = "/login"
 	DefaultAegisEndpointConsent  = "/consent"
 	DefaultAegisEndpointMFA      = "/mfa"
-	DefaultAegisEndpointError    = "/error"
 	DefaultAegisEndpointCallback = "/callback"
 
 	// Cache 默认值
@@ -28,6 +27,7 @@ const (
 
 	// Redis 缓存过期时间默认值
 	DefaultAegisAuthFlowExpiresIn     = 10 * time.Minute
+	DefaultAegisAuthFlowMaxLifetime   = 1 * time.Hour
 	DefaultAegisAuthCodeExpiresIn     = 5 * time.Minute
 	DefaultAegisOTPExpiresIn          = 5 * time.Minute
 	DefaultAegisChallengeExpiresIn    = 5 * time.Minute
@@ -123,15 +123,6 @@ func GetAegisEndpointMFA() string {
 	return endpoint
 }
 
-// GetAegisEndpointError 获取错误端点
-func GetAegisEndpointError() string {
-	endpoint := Aegis().GetString(AegisEndpoint + "/error")
-	if endpoint == "" {
-		return DefaultAegisEndpointError
-	}
-	return endpoint
-}
-
 // GetAegisEndpointCallback 获取回调端点
 func GetAegisEndpointCallback() string {
 	endpoint := Aegis().GetString(AegisEndpoint + "/callback")
@@ -209,6 +200,14 @@ func GetAegisAuthFlowExpiresIn() time.Duration {
 		return val
 	}
 	return DefaultAegisAuthFlowExpiresIn
+}
+
+// GetAegisAuthFlowMaxLifetime 获取 AuthFlow 最大生命周期
+func GetAegisAuthFlowMaxLifetime() time.Duration {
+	if val := Aegis().GetDuration("aegis.cache.auth_flow.max_lifetime"); val > 0 {
+		return val
+	}
+	return DefaultAegisAuthFlowMaxLifetime
 }
 
 // GetAegisAuthCodeExpiresIn 获取 AuthCode 过期时间

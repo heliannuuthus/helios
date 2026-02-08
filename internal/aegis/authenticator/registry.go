@@ -5,163 +5,102 @@ import (
 	"context"
 	"sync"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticator/captcha"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticator/webauthn"
+	"github.com/heliannuuthus/helios/internal/aegis/types"
 )
 
+// Authenticator 统一认证器接口
+// 所有认证方式（IDP、VChan、MFA）都实现此接口
+type Authenticator interface {
+	// Type 返回认证器类型标识（github, google, captcha:turnstile, email-otp, totp...）
+	Type() string
+
+	// Prepare 返回该认证器的公开配置（给前端渲染用）
+	Prepare() *types.ConnectionConfig
+
+	// Authenticate 执行认证
+	// flow: 认证流程上下文（包含当前 Connection、ConnectionMap 等）
+	// params: 认证参数（proof、remoteIP 等，由各实现自行解析）
+	// 返回: (是否成功, 错误)
+	// 认证器内部负责更新 flow 的副作用（如 Identities、Verified 等）
+	Authenticate(ctx context.Context, flow *types.AuthFlow, params ...any) (bool, error)
+}
+
 // Registry 全局认证器注册表
-// 统一管理所有 Connection 类型：IDP、WebAuthn/Passkey、TOTP、Captcha 等
+// 统一管理所有 Connection 类型：IDP、VChan、MFA
 type Registry struct {
-	mu sync.RWMutex
-
-	// IDP Providers（github, google, user, oper, wechat:mp, tt:mp, alipay:mp, passkey...）
-	idpProviders map[string]idp.Provider
-
-	// WebAuthn 服务（MFA/Passkey 共用底层）
-	webauthnSvc *webauthn.Service
-
-	// Captcha 验证器
-	captchaVerifier captcha.Verifier
-
-	// TOTP 验证器
-	totpVerifier TOTPVerifier
+	mu             sync.RWMutex
+	authenticators map[string]Authenticator
 }
 
-// TOTPVerifier TOTP 验证接口
-type TOTPVerifier interface {
-	Verify(ctx context.Context, userID, code string) (bool, error)
+// 全局 Registry 实例
+var globalRegistry *Registry
+
+// GlobalRegistry 获取全局 Registry 实例
+func GlobalRegistry() *Registry {
+	return globalRegistry
 }
 
-// RegistryConfig Registry 构造配置
-type RegistryConfig struct {
-	WebAuthn *webauthn.Service
-	Captcha  captcha.Verifier
-	TOTP     TOTPVerifier
-}
-
-// NewRegistry 创建全局注册表
-func NewRegistry(cfg *RegistryConfig) *Registry {
+// NewRegistry 创建并设置全局注册表
+func NewRegistry() *Registry {
 	r := &Registry{
-		idpProviders: make(map[string]idp.Provider),
+		authenticators: make(map[string]Authenticator),
 	}
-	if cfg != nil {
-		r.webauthnSvc = cfg.WebAuthn
-		r.captchaVerifier = cfg.Captcha
-		r.totpVerifier = cfg.TOTP
-	}
+	globalRegistry = r
 	return r
 }
 
-// ==================== IDP Provider 注册 ====================
+// ==================== Authenticator 注册与查询 ====================
 
-// RegisterIDP 注册 IDP Provider
-func (r *Registry) RegisterIDP(p idp.Provider) {
+// Register 注册 Authenticator
+func (r *Registry) Register(a Authenticator) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.idpProviders[p.Type()] = p
+	r.authenticators[a.Type()] = a
 }
 
-// GetIDP 获取 IDP Provider
-func (r *Registry) GetIDP(idpType string) (idp.Provider, bool) {
+// Get 获取 Authenticator
+func (r *Registry) Get(connection string) (Authenticator, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	p, ok := r.idpProviders[idpType]
-	return p, ok
+	a, ok := r.authenticators[connection]
+	return a, ok
 }
 
-// HasIDP 检查是否已注册指定类型的 IDP Provider
-func (r *Registry) HasIDP(idpType string) bool {
+// Has 检查是否已注册指定的 Authenticator
+func (r *Registry) Has(connection string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	_, ok := r.idpProviders[idpType]
+	_, ok := r.authenticators[connection]
 	return ok
 }
 
-// ListIDPs 列出所有已注册的 IDP 类型
-func (r *Registry) ListIDPs() []string {
+// List 列出所有已注册的 Authenticator 类型
+func (r *Registry) List() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	types := make([]string, 0, len(r.idpProviders))
-	for t := range r.idpProviders {
-		types = append(types, t)
+	result := make([]string, 0, len(r.authenticators))
+	for t := range r.authenticators {
+		result = append(result, t)
 	}
-	return types
+	return result
 }
 
-// ==================== WebAuthn 服务 ====================
-
-// GetWebAuthn 获取 WebAuthn 服务
-func (r *Registry) GetWebAuthn() *webauthn.Service {
+// All 返回所有已注册的 Authenticator
+func (r *Registry) All() []Authenticator {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.webauthnSvc
+
+	result := make([]Authenticator, 0, len(r.authenticators))
+	for _, a := range r.authenticators {
+		result = append(result, a)
+	}
+	return result
 }
-
-// HasWebAuthn 检查 WebAuthn 是否可用
-func (r *Registry) HasWebAuthn() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.webauthnSvc != nil
-}
-
-// ==================== Captcha 验证器 ====================
-
-// GetCaptcha 获取 Captcha 验证器
-func (r *Registry) GetCaptcha() captcha.Verifier {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.captchaVerifier
-}
-
-// HasCaptcha 检查 Captcha 是否可用
-func (r *Registry) HasCaptcha() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.captchaVerifier != nil
-}
-
-// ==================== TOTP 验证器 ====================
-
-// GetTOTP 获取 TOTP 验证器
-func (r *Registry) GetTOTP() TOTPVerifier {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.totpVerifier
-}
-
-// HasTOTP 检查 TOTP 是否可用
-func (r *Registry) HasTOTP() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.totpVerifier != nil
-}
-
-// ==================== 统一查询 ====================
 
 // Supports 检查是否支持指定的 connection 类型
 func (r *Registry) Supports(connection string) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	if _, ok := r.idpProviders[connection]; ok {
-		return true
-	}
-
-	if (connection == "webauthn" || connection == "passkey") && r.webauthnSvc != nil {
-		return true
-	}
-
-	if connection == "totp" && r.totpVerifier != nil {
-		return true
-	}
-
-	if len(connection) > 8 && connection[:8] == "captcha:" && r.captchaVerifier != nil {
-		return true
-	}
-
-	return false
+	return r.Has(connection)
 }
 
 // Summary 返回注册表摘要信息
@@ -169,16 +108,13 @@ func (r *Registry) Summary() map[string]any {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	idps := make([]string, 0, len(r.idpProviders))
-	for t := range r.idpProviders {
-		idps = append(idps, t)
+	all := make([]string, 0, len(r.authenticators))
+	for t := range r.authenticators {
+		all = append(all, t)
 	}
 
 	return map[string]any{
-		"idp_count": len(r.idpProviders),
-		"idps":      idps,
-		"webauthn":  r.webauthnSvc != nil,
-		"captcha":   r.captchaVerifier != nil,
-		"totp":      r.totpVerifier != nil,
+		"authenticators": all,
+		"count":          len(r.authenticators),
 	}
 }

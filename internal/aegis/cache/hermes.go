@@ -152,23 +152,6 @@ func (cm *Manager) ListRelationships(ctx context.Context, serviceID, subjectType
 	return cm.hermesSvc.ListRelationships(ctx, serviceID, subjectType, subjectID)
 }
 
-// FindUserByEmail 根据邮箱查找用户
-func (cm *Manager) FindUserByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error) {
-	result, err := cm.userSvc.FindByEmail(ctx, email)
-	if err != nil {
-		return nil, err
-	}
-
-	// 存入缓存
-	if cm.userCache != nil {
-		cacheKey := config.GetAegisCacheKeyPrefix("user") + result.OpenID
-		ttl := config.GetAegisCacheTTL("user")
-		cm.userCache.SetWithTTL(cacheKey, result, 1, ttl)
-	}
-
-	return result, nil
-}
-
 // GetAppAllowedOrigins 获取应用的允许跨域源（带缓存）
 func (cm *Manager) GetAppAllowedOrigins(ctx context.Context, appID string) ([]string, error) {
 	cacheKey := config.GetAegisCacheKeyPrefix("app-origins") + appID
