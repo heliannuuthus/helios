@@ -10,6 +10,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei"
 	"github.com/heliannuuthus/helios/internal/zwei/models"
 	"github.com/heliannuuthus/helios/pkg/helperutil"
+	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
 // Handler 菜谱处理器
@@ -67,19 +68,19 @@ type RecipeCreateRequest struct {
 }
 
 type RecipeUpdateRequest struct {
-	Name             *string              `json:"name"`
-	Description      *string              `json:"description"`
-	Images           *[]string            `json:"images"`
-	Category         *string              `json:"category"`
-	Difficulty       *int                 `json:"difficulty"`
-	Tags             *[]string            `json:"tags"`
-	Servings         *int                 `json:"servings"`
-	PrepTimeMinutes  *int                 `json:"prep_time_minutes"`
-	CookTimeMinutes  *int                 `json:"cook_time_minutes"`
-	TotalTimeMinutes *int                 `json:"total_time_minutes"`
-	Ingredients      *[]IngredientRequest `json:"ingredients"`
-	Steps            *[]StepRequest       `json:"steps"`
-	AdditionalNotes  *[]string            `json:"additional_notes"`
+	Name             patch.Optional[string]              `json:"name"`
+	Description      patch.Optional[string]              `json:"description"`
+	Images           patch.Optional[[]string]            `json:"images"`
+	Category         patch.Optional[string]              `json:"category"`
+	Difficulty       patch.Optional[int]                 `json:"difficulty"`
+	Tags             patch.Optional[[]string]            `json:"tags"`
+	Servings         patch.Optional[int]                 `json:"servings"`
+	PrepTimeMinutes  patch.Optional[int]                 `json:"prep_time_minutes"`
+	CookTimeMinutes  patch.Optional[int]                 `json:"cook_time_minutes"`
+	TotalTimeMinutes patch.Optional[int]                 `json:"total_time_minutes"`
+	Ingredients      patch.Optional[[]IngredientRequest] `json:"ingredients"`
+	Steps            patch.Optional[[]StepRequest]       `json:"steps"`
+	AdditionalNotes  patch.Optional[[]string]            `json:"additional_notes"`
 }
 
 type RecipeResponse struct {
@@ -270,8 +271,7 @@ func (h *Handler) GetRecipe(c *gin.Context) {
 // @Param recipe body RecipeUpdateRequest true "更新内容"
 // @Success 200 {object} RecipeResponse
 // @Failure 404 {object} map[string]string
-// @Router /api/recipes/{recipe_id} [put]
-// nolint:gocyclo // TODO: 考虑拆分更新逻辑以降低复杂度
+// @Router /api/recipes/{recipe_id} [patch]
 func (h *Handler) UpdateRecipe(c *gin.Context) {
 	id := c.Param("recipe_id")
 
@@ -281,39 +281,33 @@ func (h *Handler) UpdateRecipe(c *gin.Context) {
 		return
 	}
 
-	updates := make(map[string]interface{})
-	if req.Name != nil {
-		updates["name"] = *req.Name
-	}
-	if req.Description != nil {
-		updates["description"] = *req.Description
-	}
-	if req.Images != nil {
-		updates["images"] = models.StringSlice(*req.Images)
-	}
-	if req.Category != nil {
-		updates["category"] = *req.Category
-	}
-	if req.Difficulty != nil {
-		updates["difficulty"] = *req.Difficulty
-	}
-	if req.Servings != nil {
-		updates["servings"] = *req.Servings
-	}
-	if req.PrepTimeMinutes != nil {
-		updates["prep_time_minutes"] = *req.PrepTimeMinutes
-	}
-	if req.CookTimeMinutes != nil {
-		updates["cook_time_minutes"] = *req.CookTimeMinutes
-	}
-	if req.TotalTimeMinutes != nil {
-		updates["total_time_minutes"] = *req.TotalTimeMinutes
+	// 构建标量字段更新（JSON Merge Patch 语义）
+	updates := patch.Collect(
+		patch.Field("name", req.Name),
+		patch.Field("description", req.Description),
+		patch.Field("category", req.Category),
+		patch.Field("difficulty", req.Difficulty),
+		patch.Field("servings", req.Servings),
+		patch.Field("prep_time_minutes", req.PrepTimeMinutes),
+		patch.Field("cook_time_minutes", req.CookTimeMinutes),
+		patch.Field("total_time_minutes", req.TotalTimeMinutes),
+	)
+
+	// images 需要特殊处理：转换为 models.StringSlice
+	if req.Images.IsPresent() {
+		if req.Images.IsNull() {
+			updates["images"] = nil
+		} else {
+			updates["images"] = models.StringSlice(req.Images.Value())
+		}
 	}
 
+	// 关联数据：ingredients
 	var ingredients []models.Ingredient
-	if req.Ingredients != nil {
-		ingredients = make([]models.Ingredient, len(*req.Ingredients))
-		for i, ing := range *req.Ingredients {
+	if req.Ingredients.HasValue() {
+		ings := req.Ingredients.Value()
+		ingredients = make([]models.Ingredient, len(ings))
+		for i, ing := range ings {
 			ingredients[i] = models.Ingredient{
 				Name:         ing.Name,
 				Quantity:     ing.Quantity,
@@ -324,10 +318,12 @@ func (h *Handler) UpdateRecipe(c *gin.Context) {
 		}
 	}
 
+	// 关联数据：steps
 	var steps []models.Step
-	if req.Steps != nil {
-		steps = make([]models.Step, len(*req.Steps))
-		for i, step := range *req.Steps {
+	if req.Steps.HasValue() {
+		stps := req.Steps.Value()
+		steps = make([]models.Step, len(stps))
+		for i, step := range stps {
 			steps[i] = models.Step{
 				Step:        step.Step,
 				Description: step.Description,
@@ -335,9 +331,10 @@ func (h *Handler) UpdateRecipe(c *gin.Context) {
 		}
 	}
 
+	// 关联数据：additional_notes
 	var notes []string
-	if req.AdditionalNotes != nil {
-		notes = *req.AdditionalNotes
+	if req.AdditionalNotes.HasValue() {
+		notes = req.AdditionalNotes.Value()
 	}
 
 	recipeModel, err := h.service.UpdateRecipe(
@@ -346,9 +343,9 @@ func (h *Handler) UpdateRecipe(c *gin.Context) {
 		ingredients,
 		steps,
 		notes,
-		req.Ingredients != nil,
-		req.Steps != nil,
-		req.AdditionalNotes != nil,
+		req.Ingredients.IsPresent(),
+		req.Steps.IsPresent(),
+		req.AdditionalNotes.IsPresent(),
 	)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"detail": err.Error()})

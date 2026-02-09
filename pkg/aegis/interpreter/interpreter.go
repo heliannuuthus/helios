@@ -17,11 +17,12 @@ var ErrUnsupportedAudience = fmt.Errorf("unsupported audience")
 
 // footerUserInfo footer 中存储的用户信息结构（用于 JSON 反序列化）
 type footerUserInfo struct {
-	Subject  string `json:"sub,omitempty"`
-	Nickname string `json:"nickname,omitempty"`
-	Picture  string `json:"picture,omitempty"`
-	Email    string `json:"email,omitempty"`
-	Phone    string `json:"phone,omitempty"`
+	Subject     string `json:"sub,omitempty"`
+	InternalUID string `json:"uid,omitempty"`
+	Nickname    string `json:"nickname,omitempty"`
+	Picture     string `json:"picture,omitempty"`
+	Email       string `json:"email,omitempty"`
+	Phone       string `json:"phone,omitempty"`
 }
 
 // Interpreter Token 解释器
@@ -84,7 +85,7 @@ func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (token.
 				return nil, err
 			}
 			if userInfo != nil {
-				uat.SetUserInfo(userInfo.Subject, userInfo.Nickname, userInfo.Picture, userInfo.Email, userInfo.Phone)
+				uat.SetUserInfo(userInfo.Subject, userInfo.InternalUID, userInfo.Nickname, userInfo.Picture, userInfo.Email, userInfo.Phone)
 			}
 		}
 	}

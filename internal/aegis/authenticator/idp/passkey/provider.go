@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/webauthn"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/webauthn"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -38,7 +39,7 @@ func (*Provider) Type() string {
 // Login 执行 Passkey 登录
 // proof: challengeID（前端完成 WebAuthn 认证后返回的 challenge ID）
 // params[0]: *http.Request（用于解析 WebAuthn 响应）
-func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*idp.LoginResult, error) {
+func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error) {
 	if p.webauthnSvc == nil {
 		return nil, fmt.Errorf("webauthn service not configured")
 	}
@@ -75,9 +76,9 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*idp
 
 	logger.Infof("[Passkey] Login success - UserID: %s", userID)
 
-	return &idp.LoginResult{
-		ProviderID: userID,
-		RawData:    fmt.Sprintf(`{"user_id":"%s","challenge_id":"%s"}`, userID, challengeID),
+	return &models.TUserInfo{
+		TOpenID: userID,
+		RawData: fmt.Sprintf(`{"user_id":"%s","challenge_id":"%s"}`, userID, challengeID),
 	}, nil
 }
 

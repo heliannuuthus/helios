@@ -10,25 +10,27 @@ import (
 // UserAccessToken 用户访问令牌
 // 包含用户身份信息，用户信息加密后存储在 footer 中
 type UserAccessToken struct {
-	Claims          // 内嵌基础 Claims
-	scope    string // 授权范围
-	openID   string // 用户 OpenID
-	nickname string // 昵称
-	picture  string // 头像
-	email    string // 邮箱
-	phone    string // 手机号
+	Claims             // 内嵌基础 Claims
+	scope       string // 授权范围
+	openID      string // 对外标识（主身份 t_openid，作为 sub 对外暴露）
+	internalUID string // 内部用户 ID（t_user.openid，不对外暴露，用于内部查询）
+	nickname    string // 昵称
+	picture     string // 头像
+	email       string // 邮箱
+	phone       string // 手机号
 }
 
 // ==================== UAT TokenTypeBuilder ====================
 
 // UAT UAT 类型构建器，实现 TokenTypeBuilder 接口
 type UAT struct {
-	scope    string
-	openID   string
-	nickname string
-	picture  string
-	email    string
-	phone    string
+	scope       string
+	openID      string
+	internalUID string
+	nickname    string
+	picture     string
+	email       string
+	phone       string
 }
 
 // NewUserAccessTokenBuilder 创建 UAT 类型构建器
@@ -42,9 +44,15 @@ func (u *UAT) Scope(scope string) *UAT {
 	return u
 }
 
-// OpenID 设置用户 OpenID
+// OpenID 设置用户对外标识（主身份 t_openid）
 func (u *UAT) OpenID(openID string) *UAT {
 	u.openID = openID
+	return u
+}
+
+// InternalUID 设置用户内部 ID（t_user.openid，不对外暴露）
+func (u *UAT) InternalUID(uid string) *UAT {
+	u.internalUID = uid
 	return u
 }
 
@@ -75,9 +83,10 @@ func (u *UAT) Phone(phone string) *UAT {
 // build 实现 TokenTypeBuilder 接口
 func (u *UAT) build(claims Claims) Token {
 	uat := &UserAccessToken{
-		Claims: claims,
-		scope:  u.scope,
-		openID: u.openID,
+		Claims:      claims,
+		scope:       u.scope,
+		openID:      u.openID,
+		internalUID: u.internalUID,
 	}
 
 	// 根据 scope 过滤用户信息
@@ -162,9 +171,14 @@ func (u *UserAccessToken) HasScope(scope string) bool {
 
 // ==================== 用户信息 Getter ====================
 
-// GetOpenID 返回用户 OpenID
+// GetOpenID 返回用户对外标识（主身份 t_openid，即 token 的 sub）
 func (u *UserAccessToken) GetOpenID() string {
 	return u.openID
+}
+
+// GetInternalUID 返回用户内部 ID（t_user.openid，用于内部查询）
+func (u *UserAccessToken) GetInternalUID() string {
+	return u.internalUID
 }
 
 // GetNickname 返回用户昵称
@@ -195,8 +209,9 @@ func (u *UserAccessToken) HasUser() bool {
 // ==================== 内部方法 ====================
 
 // SetUserInfo 设置用户信息（供 interpreter 解密后调用）
-func (u *UserAccessToken) SetUserInfo(openID, nickname, picture, email, phone string) {
+func (u *UserAccessToken) SetUserInfo(openID, internalUID, nickname, picture, email, phone string) {
 	u.openID = openID
+	u.internalUID = internalUID
 	u.nickname = nickname
 	u.picture = picture
 	u.email = email
@@ -211,6 +226,9 @@ func (u *UserAccessToken) GetUserForFooter() map[string]string {
 	result := make(map[string]string)
 	if u.openID != "" {
 		result["sub"] = u.openID
+	}
+	if u.internalUID != "" {
+		result["uid"] = u.internalUID
 	}
 	if u.nickname != "" {
 		result["nickname"] = u.nickname

@@ -2,22 +2,22 @@ package models
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 )
 
-// User 用户（C 端用户和 B 端运营人员通过 domain_id 区分）
+// User 用户（内部模型，uid 为纯内部关联 ID，不对外暴露）
+// 域的概念由 t_user_identity 中的 domain 列承载，global 身份的 t_openid 为域级对外标识
 type User struct {
 	// 主键
 	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
 	// 业务字段
-	DomainID      string  `json:"domain_id" gorm:"column:domain_id;size:32;not null"`
-	OpenID        string  `json:"id" gorm:"column:openid;size:64;not null;uniqueIndex"`
-	Status        int8    `json:"status" gorm:"column:status;not null;default:0"` // 0=active, 1=disabled
-	Username      *string `json:"-" gorm:"column:username;size:64;uniqueIndex"`   // 用户名（唯一）
-	PasswordHash  *string `json:"-" gorm:"column:password_hash;size:256"`         // 密码哈希（bcrypt）
+	UID           string  `json:"-" gorm:"column:uid;size:64;not null;uniqueIndex"` // 内部关联 ID，不对外暴露
+	Status        int8    `json:"status" gorm:"column:status;not null;default:0"`   // 0=active, 1=disabled
+	Username      *string `json:"-" gorm:"column:username;size:64;uniqueIndex"`     // 用户名（唯一）
+	PasswordHash  *string `json:"-" gorm:"column:password_hash;size:256"`           // 密码哈希（bcrypt）
 	Nickname      *string `json:"nickname" gorm:"column:nickname;size:128"`
 	Picture       *string `json:"picture" gorm:"column:picture;size:512"`
 	Email         *string `json:"email" gorm:"column:email;size:256;uniqueIndex"`
@@ -39,14 +39,15 @@ func (u *User) IsActive() bool {
 	return u.Status == 0
 }
 
-// UserIdentity 用户身份（IDP 绑定）
+// UserIdentity 用户身份（IDP 绑定），每个身份归属一个域
 type UserIdentity struct {
 	// 主键
 	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
 	// 业务字段
-	OpenID  string `gorm:"column:openid;size:64;not null;index"`
-	IDP     string `gorm:"column:idp;size:64;not null;uniqueIndex:uk_idp_t_openid,priority:1"`
-	TOpenID string `gorm:"column:t_openid;size:256;not null;uniqueIndex:uk_idp_t_openid,priority:2"`
+	Domain  string `gorm:"column:domain;size:16;not null;uniqueIndex:uk_domain_idp_t_openid,priority:1"`
+	UID     string `gorm:"column:uid;size:64;not null;index"`
+	IDP     string `gorm:"column:idp;size:64;not null;uniqueIndex:uk_domain_idp_t_openid,priority:2"`
+	TOpenID string `gorm:"column:t_openid;size:256;not null;uniqueIndex:uk_domain_idp_t_openid,priority:3"`
 	RawData string `gorm:"column:raw_data;type:text"`
 	// 时间戳
 	CreatedAt time.Time `gorm:"column:created_at;not null"`
@@ -65,9 +66,9 @@ type UserWithDecrypted struct {
 
 // ==================== 实现 token.UserInfo 接口 ====================
 
-// GetOpenID 返回用户 OpenID
-func (u *UserWithDecrypted) GetOpenID() string {
-	return u.OpenID
+// GetUID 返回用户内部 ID
+func (u *UserWithDecrypted) GetUID() string {
+	return u.UID
 }
 
 // GetNickname 返回用户昵称
@@ -107,9 +108,8 @@ func (u *UserWithDecrypted) SafeString() string {
 	if u.Nickname != nil {
 		nickname = *u.Nickname
 	}
-	return fmt.Sprintf("User{OpenID:%s, DomainID:%s, Nickname:%s, Email:%s, Phone:%s}",
-		u.OpenID,
-		u.DomainID,
+	return fmt.Sprintf("User{UID:%s, Nickname:%s, Email:%s, Phone:%s}",
+		u.UID,
 		nickname,
 		maskEmail(u.Email),
 		maskPhone(u.Phone),
@@ -121,13 +121,50 @@ func (u *UserWithDecrypted) String() string {
 	return u.SafeString()
 }
 
-// GenerateOpenID 生成用户 OpenID
-func GenerateOpenID() string {
-	bytes := make([]byte, 16)
-	if _, err := rand.Read(bytes); err != nil {
-		panic(fmt.Sprintf("generate openid failed: %v", err))
+// base62Chars base62 编码字符集
+const base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+// base62Encode 将字节切片编码为 base62 字符串
+func base62Encode(data []byte) string {
+	n := new(big.Int).SetBytes(data)
+	if n.Sign() == 0 {
+		return string(base62Chars[0])
 	}
-	return hex.EncodeToString(bytes)
+
+	base := big.NewInt(62)
+	mod := new(big.Int)
+	var result []byte
+
+	for n.Sign() > 0 {
+		n.DivMod(n, base, mod)
+		result = append(result, base62Chars[mod.Int64()])
+	}
+
+	// 反转
+	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
+		result[i], result[j] = result[j], result[i]
+	}
+
+	return string(result)
+}
+
+// generateRandomBase62 生成指定字节数的随机数据并 base62 编码
+func generateRandomBase62(byteLen int) string {
+	b := make([]byte, byteLen)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("generate random id failed: %v", err))
+	}
+	return base62Encode(b)
+}
+
+// GenerateUID 生成用户内部 ID（128 位随机，base62 编码，~22 字符）
+func GenerateUID() string {
+	return generateRandomBase62(16)
+}
+
+// GenerateGID 生成全局对外标识（128 位随机，base62 编码，~22 字符）
+func GenerateGID() string {
+	return generateRandomBase62(16)
 }
 
 // maskEmail 邮箱脱敏：a**@example.com
@@ -158,19 +195,24 @@ func maskPhone(phone string) string {
 	return phone[:3] + "****" + phone[len(phone)-4:]
 }
 
-// FindOrCreateUserRequest 查找或创建用户请求
-type FindOrCreateUserRequest struct {
-	DomainID   string    // 域 ID（身份所属域）
-	IDP        string    // 身份提供方
-	ProviderID string    // IDP 侧用户标识
-	UserInfo   *UserInfo // 用户基础信息（结构化）
-	RawData    string    // 原始数据
+// TUserInfo 第三方 IDP 返回的用户信息（通用模型）
+// 各 IDP Provider 的 Login() 方法统一返回此类型
+// IDP 胶水层从此类型构造 UserIdentity 存入 AuthFlow
+type TUserInfo struct {
+	TOpenID  string `json:"t_openid"`           // 第三方用户唯一标识（IDP 返回的 openid）
+	Nickname string `json:"nickname,omitempty"` // 昵称/显示名
+	Email    string `json:"email,omitempty"`    // 邮箱
+	Phone    string `json:"phone,omitempty"`    // 手机号
+	Picture  string `json:"picture,omitempty"`  // 头像 URL
+	RawData  string `json:"raw_data,omitempty"` // IDP 返回的原始数据（JSON）
 }
 
-// UserInfo 用户基础信息（从 IDP 提取的通用字段）
-type UserInfo struct {
-	Nickname string // 昵称/显示名
-	Email    string // 邮箱
-	Phone    string // 手机号
-	Picture  string // 头像 URL
+// ToUserIdentity 将 TUserInfo 转换为 UserIdentity
+func (t *TUserInfo) ToUserIdentity(domain, idp string) *UserIdentity {
+	return &UserIdentity{
+		Domain:  domain,
+		IDP:     idp,
+		TOpenID: t.TOpenID,
+		RawData: t.RawData,
+	}
 }

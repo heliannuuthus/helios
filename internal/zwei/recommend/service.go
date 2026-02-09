@@ -328,7 +328,7 @@ func (s *Service) getUserHistory(userID string) (*UserHistory, error) {
 
 	// 获取收藏的菜谱（最近30个）
 	var favorites []models.Favorite
-	err := s.db.Where("openid = ?", userID).
+	err := s.db.Where("user_id = ?", userID).
 		Order("created_at DESC").
 		Limit(30).
 		Find(&favorites).Error

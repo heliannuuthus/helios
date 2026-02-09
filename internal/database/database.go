@@ -134,9 +134,3 @@ func GetHermes() *gorm.DB {
 	}
 	return hermesDB
 }
-
-// GetAuth 获取 Auth 数据库连接（兼容旧代码，返回 Hermes 数据源）
-// Deprecated: 请使用 GetHermes()
-func GetAuth() *gorm.DB {
-	return GetHermes()
-}

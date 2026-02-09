@@ -23,16 +23,16 @@ func NewUser(user *models.UserWithDecrypted, credentials []webauthn.Credential) 
 
 // WebAuthnID 返回用户的唯一标识（用于 WebAuthn）
 func (u *User) WebAuthnID() []byte {
-	return []byte(u.user.OpenID)
+	return []byte(u.user.UID)
 }
 
 // WebAuthnName 返回用户名（用于显示）
 func (u *User) WebAuthnName() string {
-	// 优先使用邮箱，其次使用 OpenID
+	// 优先使用邮箱，其次使用 UID
 	if u.user.Email != nil && *u.user.Email != "" {
 		return *u.user.Email
 	}
-	return u.user.OpenID
+	return u.user.UID
 }
 
 // WebAuthnDisplayName 返回显示名称
@@ -56,7 +56,7 @@ func (u *User) WebAuthnIcon() string {
 	return ""
 }
 
-// GetOpenID 获取用户 OpenID
-func (u *User) GetOpenID() string {
-	return u.user.OpenID
+// GetUID 获取用户 UID
+func (u *User) GetUID() string {
+	return u.user.UID
 }

@@ -25,6 +25,9 @@ const (
 
 	// 通用 - Passkey（无密码登录）
 	TypePasskey = "passkey" // Passkey/WebAuthn 无密码登录
+
+	// 系统 - 全局身份
+	TypeGlobal = "global" // 全局身份（每个域一个，t_openid 作为该域下的 sub）
 )
 
 // Domain 用户域
@@ -33,14 +36,6 @@ type Domain string
 const (
 	DomainCIAM Domain = "ciam" // Customer Identity（C 端用户）
 	DomainPIAM Domain = "piam" // Partner/Employee Identity（B 端用户）
-)
-
-// IdentityType 身份类型
-type IdentityType string
-
-const (
-	IdentityUser IdentityType = "user" // C 端用户
-	IdentityOper IdentityType = "oper" // B 端运营人员
 )
 
 // GetDomain 获取 IDP 所属域（基于配置）
@@ -67,21 +62,6 @@ func GetDomain(idpType string) Domain {
 	return DomainCIAM
 }
 
-// GetIdentityType 获取 IDP 对应的身份类型
-func GetIdentityType(idpType string) IdentityType {
-	domain := GetDomain(idpType)
-	if domain == DomainPIAM {
-		return IdentityOper
-	}
-	return IdentityUser
-}
-
-// SupportsAutoCreate 是否支持自动创建用户
-// 默认允许自动创建，所有域的 IDP 都支持首次登录自动注册
-func SupportsAutoCreate(_ string) bool {
-	return true
-}
-
 // IsIDPAllowedForDomain 检查 IDP 是否允许用于指定域
 func IsIDPAllowedForDomain(idpType string, domain Domain) bool {
 	cfg := config.Aegis()
@@ -99,25 +79,6 @@ func IsIDPAllowedForDomain(idpType string, domain Domain) bool {
 		}
 	}
 	return false
-}
-
-// AreIdentitiesExclusive 检查两个身份类型是否互斥
-func AreIdentitiesExclusive(identity1, identity2 IdentityType) bool {
-	cfg := config.Aegis()
-	exclusiveList := cfg.GetStringSlice("identity.identity-exclusive")
-
-	// 检查两个身份是否都在互斥列表中
-	found1, found2 := false, false
-	for _, id := range exclusiveList {
-		if IdentityType(id) == identity1 {
-			found1 = true
-		}
-		if IdentityType(id) == identity2 {
-			found2 = true
-		}
-	}
-
-	return found1 && found2
 }
 
 // RequiresEmailForBinding 是否需要邮箱来绑定身份（用于 PIAM 域的 OAuth 登录）

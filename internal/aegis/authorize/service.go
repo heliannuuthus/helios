@@ -10,10 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/aegis/token"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
+	"github.com/heliannuuthus/helios/internal/aegis/user"
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/aegis/keys"
@@ -26,6 +28,7 @@ import (
 // Service 授权服务
 type Service struct {
 	cache    *cache.Manager
+	userSvc  *user.Service
 	tokenSvc *token.Service
 
 	// 配置
@@ -37,6 +40,7 @@ type Service struct {
 // ServiceConfig 服务配置
 type ServiceConfig struct {
 	Cache    *cache.Manager
+	UserSvc  *user.Service
 	TokenSvc *token.Service
 
 	DefaultAccessTTL  time.Duration
@@ -48,6 +52,7 @@ type ServiceConfig struct {
 func NewService(cfg *ServiceConfig) *Service {
 	return &Service{
 		cache:             cfg.Cache,
+		userSvc:           cfg.UserSvc,
 		tokenSvc:          cfg.TokenSvc,
 		defaultAccessTTL:  defaultDuration(cfg.DefaultAccessTTL, 2*time.Hour),
 		defaultRefreshTTL: defaultDuration(cfg.DefaultRefreshTTL, 7*24*time.Hour),
@@ -141,16 +146,16 @@ func (s *Service) checkIdentityRequirements(ctx context.Context, flow *types.Aut
 	}
 
 	// 获取用户已绑定的身份
-	userIdentities, err := s.getUserIdentities(ctx, flow.User.OpenID)
+	userIdentities, err := s.getUserIdentities(ctx, flow.User.UID)
 	if err != nil {
 		logger.Warnf("[Authorize] 获取用户身份失败: %v", err)
 		return autherrors.NewServerError("failed to check identity requirements")
 	}
 
 	// 检查是否缺少必要的身份
-	missingIdentities := s.findMissingIdentities(requiredIdentities, userIdentities)
+	missingIdentities := s.getMissingIdentities(requiredIdentities, userIdentities)
 	if len(missingIdentities) > 0 {
-		logger.Infof("[Authorize] 用户 %s 缺少必要身份: %v", flow.User.OpenID, missingIdentities)
+		logger.Infof("[Authorize] 用户 %s 缺少必要身份: %v", flow.User.UID, missingIdentities)
 		return autherrors.NewIdentityRequired(missingIdentities)
 	}
 
@@ -158,18 +163,12 @@ func (s *Service) checkIdentityRequirements(ctx context.Context, flow *types.Aut
 }
 
 // getUserIdentities 获取用户已绑定的身份类型列表
-func (s *Service) getUserIdentities(ctx context.Context, openID string) ([]string, error) {
-	// 通过 cache manager 获取用户身份
-	// 这里需要调用 hermes 服务获取用户的身份绑定信息
-	identities, err := s.cache.GetUserIdentities(ctx, openID)
-	if err != nil {
-		return nil, err
-	}
-	return identities, nil
+func (s *Service) getUserIdentities(ctx context.Context, uid string) ([]string, error) {
+	return s.userSvc.GetIdentityTypes(ctx, uid)
 }
 
-// findMissingIdentities 找出缺少的身份类型
-func (s *Service) findMissingIdentities(required, existing []string) []string {
+// getMissingIdentities 获取缺少的身份类型
+func (s *Service) getMissingIdentities(required, existing []string) []string {
 	existingSet := make(map[string]bool)
 	for _, id := range existing {
 		existingSet[id] = true
@@ -185,10 +184,10 @@ func (s *Service) findMissingIdentities(required, existing []string) []string {
 }
 
 // GenerateAuthCode 生成授权码
-func (s *Service) GenerateAuthCode(ctx context.Context, flow *types.AuthFlow) (*types.AuthorizationCode, error) {
+func (s *Service) GenerateAuthCode(ctx context.Context, flow *types.AuthFlow) (*cache.AuthorizationCode, error) {
 	now := time.Now()
 
-	code := &types.AuthorizationCode{
+	code := &cache.AuthorizationCode{
 		Code:      types.GenerateAuthorizationCode(),
 		FlowID:    flow.ID,
 		State:     flow.Request.State,
@@ -197,16 +196,7 @@ func (s *Service) GenerateAuthCode(ctx context.Context, flow *types.AuthFlow) (*
 		Used:      false,
 	}
 
-	// 保存到缓存（转换为 cache.AuthorizationCode）
-	cacheCode := &cache.AuthorizationCode{
-		Code:      code.Code,
-		FlowID:    code.FlowID,
-		State:     code.State,
-		CreatedAt: code.CreatedAt,
-		ExpiresAt: code.ExpiresAt,
-		Used:      code.Used,
-	}
-	if err := s.cache.SaveAuthCode(ctx, cacheCode); err != nil {
+	if err := s.cache.SaveAuthCode(ctx, code); err != nil {
 		return nil, fmt.Errorf("save auth code failed: %w", err)
 	}
 
@@ -287,7 +277,7 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 	}
 
 	// 3. 获取用户、应用、服务信息
-	user, err := s.cache.GetUser(ctx, rt.UserID)
+	user, err := s.userSvc.GetUser(ctx, rt.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -302,8 +292,8 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 		return nil, fmt.Errorf("service not found: %w", err)
 	}
 
-	// 4. 生成新的 access token
-	tokenResp, err := s.generateAccessToken(ctx, app, svc, user, rt.Scope)
+	// 4. 生成新的 access token（使用 refresh token 中保存的 sub）
+	tokenResp, err := s.generateAccessToken(ctx, app, svc, user, rt.Sub, rt.Scope)
 	if err != nil {
 		return nil, err
 	}
@@ -318,8 +308,12 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 func (s *Service) generateTokens(ctx context.Context, flow *types.AuthFlow) (*TokenResponse, error) {
 	scope := strings.Join(flow.GrantedScopes, " ")
 
-	// 生成 access token
-	tokenResp, err := s.generateAccessToken(ctx, flow.Application, flow.Service, flow.User, scope)
+	sub := getSub(flow.Identities, flow.Application.DomainID)
+	if sub == "" {
+		return nil, autherrors.NewServerError("failed to resolve user subject")
+	}
+
+	tokenResp, err := s.generateAccessToken(ctx, flow.Application, flow.Service, flow.User, sub, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -341,6 +335,7 @@ func (s *Service) generateAccessToken(
 	app *models.ApplicationWithKey,
 	svc *models.ServiceWithKey,
 	user *models.UserWithDecrypted,
+	sub string,
 	scope string,
 ) (*TokenResponse, error) {
 	// 计算 TTL
@@ -350,6 +345,8 @@ func (s *Service) generateAccessToken(
 	}
 
 	// 构建 UAT（用户信息根据 scope 自动过滤）
+	// OpenID = sub（主身份 t_openid，对外暴露）
+	// InternalUID = user.UID（内部关联 ID，不对外暴露，加密在 footer 中）
 	uat := token.NewClaimsBuilder().
 		Issuer(s.tokenSvc.GetIssuerName()).
 		ClientID(app.AppID).
@@ -357,7 +354,8 @@ func (s *Service) generateAccessToken(
 		ExpiresIn(accessTTL).
 		Build(token.NewUserAccessTokenBuilder().
 			Scope(scope).
-			OpenID(user.OpenID).
+			OpenID(sub).
+			InternalUID(user.UID).
 			Nickname(user.GetNickname()).
 			Picture(user.GetPicture()).
 			Email(user.GetEmail()).
@@ -384,7 +382,7 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 	}
 
 	// 清理旧的 refresh token
-	s.cleanupOldRefreshTokens(ctx, flow.User.OpenID, flow.Application.AppID)
+	s.cleanupOldRefreshTokens(ctx, flow.User.UID, flow.Application.AppID)
 
 	// 生成 refresh token 值
 	tokenValue, err := generateRefreshTokenValue()
@@ -396,7 +394,8 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 	now := time.Now()
 	rt := &cache.RefreshToken{
 		Token:     tokenValue,
-		UserID:    flow.User.OpenID,
+		UserID:    flow.User.UID,
+		Sub:       getSub(flow.Identities, flow.Application.DomainID),
 		ClientID:  flow.Application.AppID,
 		Audience:  flow.Service.ServiceID,
 		Scope:     scope,
@@ -432,6 +431,39 @@ func (s *Service) cleanupOldRefreshTokens(ctx context.Context, userID, clientID 
 	}
 }
 
+// ==================== 关系检查 ====================
+
+// CheckRelation 检查用户是否具有指定的关系
+func (s *Service) CheckRelation(ctx context.Context, serviceID, subjectID, relation, objectType, objectID string) (bool, error) {
+	// 从 hermes 查询关系
+	relationships, err := s.cache.ListRelationships(ctx, serviceID, "user", subjectID)
+	if err != nil {
+		return false, err
+	}
+
+	// 检查是否有匹配的关系
+	for _, rel := range relationships {
+		// 检查关系类型匹配
+		if rel.Relation != relation && rel.Relation != "*" {
+			continue
+		}
+
+		// 检查资源类型匹配
+		if objectType != "*" && rel.ObjectType != objectType && rel.ObjectType != "*" {
+			continue
+		}
+
+		// 检查资源 ID 匹配
+		if objectID != "*" && rel.ObjectID != objectID && rel.ObjectID != "*" {
+			continue
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
 // ==================== Token 撤销 ====================
 
 // RevokeToken 撤销 Token
@@ -447,14 +479,16 @@ func (s *Service) RevokeAllTokens(ctx context.Context, userID string) error {
 // ==================== UserInfo ====================
 
 // GetUserInfo 获取用户信息（根据 scope 脱敏）
-func (s *Service) GetUserInfo(ctx context.Context, openID, scope string) (*UserInfoResponse, error) {
-	user, err := s.cache.GetUser(ctx, openID)
+// sub 是主身份的 t_openid（来自 token），用于对外返回
+// internalOpenID 是内部 OpenID，用于查询用户信息
+func (s *Service) GetUserInfo(ctx context.Context, sub, internalOpenID, scope string) (*UserInfoResponse, error) {
+	user, err := s.userSvc.GetUser(ctx, internalOpenID)
 	if err != nil {
 		return nil, err
 	}
 
 	resp := &UserInfoResponse{
-		Sub: user.OpenID,
+		Sub: sub,
 	}
 
 	scopes := parseScopeSet(scope)
@@ -593,4 +627,14 @@ func DecryptPhone(cipher, openID string) (string, error) {
 		return "", err
 	}
 	return cryptoutil.Decrypt(key, cipher, openID)
+}
+
+// getSub 从身份列表中获取指定域的对外用户标识
+func getSub(identities []*models.UserIdentity, domain string) string {
+	for _, id := range identities {
+		if id.Domain == domain && id.IDP == idp.TypeGlobal {
+			return id.TOpenID
+		}
+	}
+	return ""
 }

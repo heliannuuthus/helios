@@ -89,7 +89,8 @@ func (cm *Manager) MarkAuthCodeUsed(ctx context.Context, code string) error {
 // RefreshToken 刷新令牌
 type RefreshToken struct {
 	Token     string    `json:"token"`
-	UserID    string    `json:"user_id"`
+	UserID    string    `json:"user_id"` // 内部 OpenID（用于关联查询）
+	Sub       string    `json:"sub"`     // 对外标识（主身份 t_openid，用于 token 签发）
 	ClientID  string    `json:"client_id"`
 	Audience  string    `json:"audience"`
 	Scope     string    `json:"scope"`

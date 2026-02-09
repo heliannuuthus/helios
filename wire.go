@@ -20,6 +20,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/zwei/recipe"
 	"github.com/heliannuuthus/helios/internal/zwei/recommend"
 	"github.com/heliannuuthus/helios/internal/zwei/tag"
+	"github.com/heliannuuthus/helios/pkg/aegis/interpreter"
 	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
 )
@@ -62,10 +63,8 @@ func provideHermesService() *hermes.Service {
 func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
 	db := database.GetHermes()
 	userSvc := hermes.NewUserService(db)
-	return aegis.Initialize(&aegis.InitConfig{
-		HermesSvc: hermesService,
-		UserSvc:   userSvc,
-	})
+	credentialSvc := hermes.NewCredentialService(db)
+	return aegis.Initialize(hermesService, userSvc, credentialSvc)
 }
 
 func provideUploadHandler() *upload.Handler {
@@ -81,14 +80,20 @@ func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
 	db := database.GetHermes()
 	userSvc := hermes.NewUserService(db)
 	credentialSvc := hermes.NewCredentialService(db)
-	handler := iris.NewHandler(userSvc, credentialSvc)
+	return iris.NewHandler(userSvc, credentialSvc, aegisHandler.WebAuthnSvc())
+}
 
-	// 如果 Aegis 有 WebAuthn，设置到 Iris Handler
-	if aegisHandler.HasWebAuthn() {
-		handler.SetWebAuthnService(aegisHandler.WebAuthnService())
+// provideInterpreter 创建 Token 解释器（用于 API 路由认证中间件）
+func provideInterpreter() (*interpreter.Interpreter, error) {
+	keyProvider, err := intMw.NewHermesKeyProvider()
+	if err != nil {
+		return nil, err
 	}
 
-	return handler
+	return interpreter.NewInterpreter(
+		keys.NewPublicKeyProvider(keyProvider),
+		keys.NewSymmetricKeyProvider(keyProvider),
+	), nil
 }
 
 // provideGinMiddlewareFactory 创建 Gin 中间件工厂
@@ -133,7 +138,8 @@ var ProviderSet = wire.NewSet(
 	provideUploadHandler,
 	// Iris 用户信息模块
 	provideIrisHandler,
-	// 中间件工厂
+	// 中间件
+	provideInterpreter,
 	provideGinMiddlewareFactory,
 )
 
@@ -151,6 +157,7 @@ type App struct {
 	PreferenceHandler *preference.Handler
 	HermesHandler     *hermes.Handler
 	MiddlewareFactory *middleware.GinFactory
+	Interpreter       *interpreter.Interpreter
 }
 
 // InitializeApp 初始化应用（由 wire 生成）

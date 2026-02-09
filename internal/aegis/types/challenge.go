@@ -22,26 +22,19 @@ const (
 	ChallengeTypeWebAuthn = token.ChallengeTypeWebAuthn
 )
 
-// Challenge 额外的身份验证步骤
+// Challenge 额外身份验证步骤的临时会话状态
+// 验证通过后签发 PASETO ChallengeToken，此记录即可删除
 type Challenge struct {
 	ID        string         `json:"id"`
-	FlowID    string         `json:"flow_id,omitempty"` // 关联的 AuthFlow ID（可选）
-	UserID    string         `json:"user_id,omitempty"` // 关联的用户 ID（可选）
 	Type      ChallengeType  `json:"type"`
 	CreatedAt time.Time      `json:"created_at"`
 	ExpiresAt time.Time      `json:"expires_at"`
-	Verified  bool           `json:"verified"`
-	Data      map[string]any `json:"data,omitempty"` // 附加数据（如 masked_email）
+	Data      map[string]any `json:"data,omitempty"` // 临时验证数据（如 email、OTP secret 等）
 }
 
 // IsExpired 检查是否已过期
 func (c *Challenge) IsExpired() bool {
 	return time.Now().After(c.ExpiresAt)
-}
-
-// IsValid 检查是否有效（未过期且未验证）
-func (c *Challenge) IsValid() bool {
-	return !c.IsExpired() && !c.Verified
 }
 
 // GenerateChallengeID 生成 Challenge ID（16位 Base62）
@@ -57,13 +50,7 @@ func NewChallenge(challengeType ChallengeType, ttl time.Duration) *Challenge {
 		Type:      challengeType,
 		CreatedAt: now,
 		ExpiresAt: now.Add(ttl),
-		Verified:  false,
 	}
-}
-
-// SetVerified 设置为已验证
-func (c *Challenge) SetVerified() {
-	c.Verified = true
 }
 
 // SetData 设置附加数据
