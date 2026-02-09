@@ -213,8 +213,8 @@ func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, params
 
 // GetAvailableConnections 获取可用的 ConnectionsMap
 // 组装三部分数据：
-// 1. IDP - 身份提供商（github, google, user, oper, wechat:mp...）
-// 2. VChan - 验证渠道/前置验证（captcha:turnstile...）
+// 1. IDP - 身份提供商（github, google, user, oper, wechat-mp...）
+// 2. VChan - 验证渠道/前置验证（captcha-turnstile...）
 // 3. MFA - 多因素认证（email-otp, totp, webauthn...），从 IDP 的 delegate 配置中派生
 func (s *Service) GetAvailableConnections(flow *types.AuthFlow) *types.ConnectionsMap {
 	if flow.ConnectionMap == nil {
@@ -257,10 +257,10 @@ func resolveVChanConfigs(vchanSet map[string]bool) []*types.ConnectionConfig {
 			configs = append(configs, auth.Prepare())
 			continue
 		}
-		// 兼容 require 中配置的是 "captcha" 而非 "captcha:turnstile" 的情况
+		// 兼容 require 中配置的是 "captcha" 而非 "captcha-turnstile" 的情况
 		if conn == "captcha" {
 			for _, a := range authenticator.GlobalRegistry().All() {
-				if strings.HasPrefix(a.Type(), "captcha:") {
+				if strings.HasPrefix(a.Type(), "captcha-") {
 					configs = append(configs, a.Prepare())
 				}
 			}

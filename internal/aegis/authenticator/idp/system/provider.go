@@ -167,18 +167,12 @@ func (*Provider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...an
 }
 
 // Prepare 准备前端所需的公开配置
+// Strategy（认证方式：password, email-otp, webauthn）由数据库 ApplicationIDPConfig 配置提供，
+// Prepare() 只返回 Provider 自身的基础配置。
 func (p *Provider) Prepare() *types.ConnectionConfig {
-	cfg := &types.ConnectionConfig{
+	return &types.ConnectionConfig{
 		Connection: p.idpType,
 	}
-
-	if p.idpType == idp.TypeUser {
-		cfg.Strategy = []string{"username", "email", "phone"}
-	} else {
-		cfg.Strategy = []string{"username"}
-	}
-
-	return cfg
 }
 
 // maskIdentifier 脱敏标识符（用于日志）

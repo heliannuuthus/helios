@@ -8,11 +8,11 @@
 
 CREATE DATABASE IF NOT EXISTS `hermes` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-GRANT ALL PRIVILEGES ON `hermes`.* TO 'helios'@'%';
+GRANT ALL PRIVILEGES ON `hermes`.* TO 'helios' @'%';
+
 FLUSH PRIVILEGES;
 
 USE `hermes`;
-
 
 -- ============================================================================
 -- 一、平台配置层（Domain > Application > Service）
@@ -35,10 +35,9 @@ CREATE TABLE IF NOT EXISTS t_application (
     created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- 索引：主查询 WHERE app_id = ?
-    UNIQUE KEY uk_app_id (app_id)
+-- 索引：主查询 WHERE app_id = ?
+UNIQUE KEY uk_app_id (app_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='OAuth2 应用';
-
 
 -- ==================== 应用 IDP 配置表 ====================
 -- 应用级别的 IDP 配置（登录方式、委托验证、前置验证）
@@ -47,7 +46,7 @@ CREATE TABLE IF NOT EXISTS t_application_idp_config (
     _id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
     app_id       VARCHAR(64)  NOT NULL COMMENT '应用 ID',
-    `type`       VARCHAR(32)  NOT NULL COMMENT 'IDP 类型：github/google/wechat:mp/user/oper',
+    `type`       VARCHAR(32)  NOT NULL COMMENT 'IDP 类型：github/google/wechat-mp/user/oper',
     priority     INT          NOT NULL DEFAULT 0 COMMENT '排序优先级（值越大越靠前）',
     strategy     VARCHAR(256) DEFAULT NULL COMMENT '登录策略（仅 user/oper）：password,email_otp,webauthn',
     delegate     VARCHAR(256) DEFAULT NULL COMMENT '委托 MFA：email_otp,totp,webauthn',
@@ -56,11 +55,10 @@ CREATE TABLE IF NOT EXISTS t_application_idp_config (
     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- 索引：主查询 WHERE app_id = ? ORDER BY priority DESC
-    UNIQUE KEY uk_app_type (app_id, `type`),
+-- 索引：主查询 WHERE app_id = ? ORDER BY priority DESC
+UNIQUE KEY uk_app_type (app_id, `type`),
     INDEX idx_app_priority (app_id, priority DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='应用 IDP 配置';
-
 
 -- ==================== 服务表 ====================
 -- 业务服务定义，每个服务有独立的密钥和 Token 配置
@@ -80,10 +78,9 @@ CREATE TABLE IF NOT EXISTS t_service (
     created_at                DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at                DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- 索引：主查询 WHERE service_id = ?
-    UNIQUE KEY uk_service_id (service_id)
+-- 索引：主查询 WHERE service_id = ?
+UNIQUE KEY uk_service_id (service_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='业务服务';
-
 
 -- ==================== 服务 Challenge 配置表 ====================
 -- 服务级别的 Challenge 配置（限流等），覆盖全局默认
@@ -98,10 +95,9 @@ CREATE TABLE IF NOT EXISTS t_service_challenge_config (
     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- 索引：主查询 WHERE service_id = ? AND type = ?
-    UNIQUE KEY uk_service_type (service_id, `type`)
+-- 索引：主查询 WHERE service_id = ? AND type = ?
+UNIQUE KEY uk_service_type (service_id, `type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='服务 Challenge 配置';
-
 
 -- ==================== 应用服务关系表 ====================
 -- 定义应用可以访问哪些服务的哪些关系
@@ -115,10 +111,9 @@ CREATE TABLE IF NOT EXISTS t_application_service_relation (
     -- 时间戳
     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    -- 索引：主查询 WHERE app_id = ? / WHERE app_id = ? AND service_id = ?
-    UNIQUE KEY uk_app_service_relation (app_id, service_id, relation)
+-- 索引：主查询 WHERE app_id = ? / WHERE app_id = ? AND service_id = ?
+UNIQUE KEY uk_app_service_relation (app_id, service_id, relation)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='应用服务关系';
-
 
 -- ============================================================================
 -- 二、用户层（User、Identity、Credential）
@@ -144,14 +139,13 @@ CREATE TABLE IF NOT EXISTS t_user (
     created_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- 索引
-    -- 主查询：WHERE uid = ?
-    UNIQUE KEY uk_uid (uid),
+-- 索引
+-- 主查询：WHERE uid = ?
+UNIQUE KEY uk_uid (uid),
     -- 登录查询：WHERE email = ? / WHERE phone = ?
     UNIQUE KEY uk_email (email),
     UNIQUE KEY uk_phone (phone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户';
-
 
 -- ==================== 用户身份表 ====================
 -- 用户与 IDP 的绑定关系，每个身份归属一个域（ciam/piam）
@@ -162,16 +156,16 @@ CREATE TABLE IF NOT EXISTS t_user_identity (
     -- 业务字段
     domain       VARCHAR(16)   NOT NULL COMMENT '身份所属域：ciam/piam',
     uid          VARCHAR(64)   NOT NULL COMMENT '用户内部标识（关联 t_user.uid）',
-    idp          VARCHAR(64)   NOT NULL COMMENT 'IDP 标识：global/user/oper/github/wechat:mp/google 等',
+    idp          VARCHAR(64)   NOT NULL COMMENT 'IDP 标识：global/user/oper/github/wechat-mp/google 等',
     t_openid     VARCHAR(256)  NOT NULL COMMENT 'IDP 侧用户标识（global 为域级对外标识，第三方为 IDP 返回的 openid）',
     raw_data     TEXT          DEFAULT NULL COMMENT 'IDP 返回的原始数据（JSON）',
     -- 时间戳
     created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- 索引
-    -- 登录查询：WHERE domain = ? AND idp = ? AND t_openid = ?
-    UNIQUE KEY uk_domain_idp_t_openid (domain, idp, t_openid),
+-- 索引
+-- 登录查询：WHERE domain = ? AND idp = ? AND t_openid = ?
+UNIQUE KEY uk_domain_idp_t_openid (domain, idp, t_openid),
     -- 查询用户绑定的身份：WHERE uid = ?
     INDEX idx_uid (uid),
     -- 查询用户在指定域的 global 身份：WHERE domain = ? AND uid = ? AND idp = 'global'
@@ -179,7 +173,6 @@ CREATE TABLE IF NOT EXISTS t_user_identity (
     -- 外键
     CONSTRAINT fk_identity_user FOREIGN KEY (uid) REFERENCES t_user(uid) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户身份';
-
 
 -- ==================== 用户凭证表 ====================
 -- 用户安全凭证（MFA：TOTP、WebAuthn、Passkey）
@@ -197,13 +190,12 @@ CREATE TABLE IF NOT EXISTS t_user_credential (
     created_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- 索引
-    -- WebAuthn 认证查询：WHERE credential_id = ?
-    UNIQUE KEY uk_credential_id (credential_id),
+-- 索引
+-- WebAuthn 认证查询：WHERE credential_id = ?
+UNIQUE KEY uk_credential_id (credential_id),
     -- 查询用户凭证：WHERE uid = ? AND type = ?
     INDEX idx_uid_type (uid, `type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户安全凭证（MFA）';
-
 
 -- ============================================================================
 -- 三、权限层（Group、Relationship）
@@ -223,12 +215,11 @@ CREATE TABLE IF NOT EXISTS t_group (
     created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    -- 索引：主查询 WHERE group_id = ?
-    UNIQUE KEY uk_group_id (group_id),
+-- 索引：主查询 WHERE group_id = ?
+UNIQUE KEY uk_group_id (group_id),
     -- 按服务查询：WHERE service_id = ?
     INDEX idx_service_id (service_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户组';
-
 
 -- ==================== 权限关系表 ====================
 -- ReBAC 核心表：定义主体与资源之间的关系
@@ -246,9 +237,9 @@ CREATE TABLE IF NOT EXISTS t_relationship (
     expires_at     DATETIME      DEFAULT NULL COMMENT '过期时间（NULL=永不过期）',
     created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    -- 索引
-    -- 唯一约束
-    UNIQUE KEY uk_relationship (service_id, subject_type, subject_id, relation, object_type, object_id),
+-- 索引
+-- 唯一约束
+UNIQUE KEY uk_relationship (service_id, subject_type, subject_id, relation, object_type, object_id),
     -- 权限检查（最高频）：WHERE service_id = ? AND subject_type = ? AND subject_id = ? AND object_type = ? AND object_id = ?
     INDEX idx_permission_check (service_id, subject_type, subject_id, object_type, object_id),
     -- 组成员查询：WHERE service_id = ? AND object_type = ? AND object_id = ? AND relation = ?

@@ -5,14 +5,14 @@ import "github.com/heliannuuthus/helios/internal/config"
 // IDP 类型常量
 const (
 	// CIAM 域 - 小程序
-	TypeWechatMP = "wechat:mp" // 微信小程序
-	TypeTTMP     = "tt:mp"     // 抖音小程序
-	TypeAlipayMP = "alipay:mp" // 支付宝小程序
+	TypeWechatMP = "wechat-mp" // 微信小程序
+	TypeTTMP     = "tt-mp"     // 抖音小程序
+	TypeAlipayMP = "alipay-mp" // 支付宝小程序
 
 	// CIAM 域 - Web 授权
-	TypeWechatWeb = "wechat:web" // 微信网页授权
-	TypeAlipayWeb = "alipay:web" // 支付宝网页授权
-	TypeTTWeb     = "tt:web"     // 抖音网页授权
+	TypeWechatWeb = "wechat-web" // 微信网页授权
+	TypeAlipayWeb = "alipay-web" // 支付宝网页授权
+	TypeTTWeb     = "tt-web"     // 抖音网页授权
 
 	// CIAM 域 - 账号密码
 	TypeUser = "user" // C 端用户账号密码登录

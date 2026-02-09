@@ -13,14 +13,14 @@ import (
 // 包装 captcha.Verifier，实现统一的 Authenticator 接口
 type VChanAuthenticator struct {
 	verifier   captcha.Verifier
-	connection string // 如 "captcha:turnstile"
+	connection string // 如 "captcha-turnstile"
 }
 
 // NewVChanAuthenticator 创建验证渠道认证器
 func NewVChanAuthenticator(verifier captcha.Verifier) *VChanAuthenticator {
 	return &VChanAuthenticator{
 		verifier:   verifier,
-		connection: fmt.Sprintf("captcha:%s", verifier.GetProvider()),
+		connection: fmt.Sprintf("captcha-%s", verifier.GetProvider()),
 	}
 }
 
