@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -35,6 +36,69 @@ type UploadImageRequest struct {
 
 type UploadImageResponse struct {
 	URL string `json:"url"` // 上传后的图片 URL
+}
+
+// validateImageFile 验证上传文件的大小和类型
+func validateImageFile(c *gin.Context, file *multipart.FileHeader) bool {
+	if file.Size > 5*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "图片大小不能超过 5MB"})
+		return false
+	}
+
+	contentType := file.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "只支持上传图片文件"})
+		return false
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "读取文件失败"})
+		return false
+	}
+	defer func() {
+		if closeErr := src.Close(); closeErr != nil {
+			logger.Warnf("[Upload] close file for magic bytes check failed: %v", closeErr)
+		}
+	}()
+
+	header := make([]byte, 512)
+	n, err := src.Read(header)
+	if err != nil && n == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "读取文件头失败"})
+		return false
+	}
+	detectedType := http.DetectContentType(header[:n])
+	if !strings.HasPrefix(detectedType, "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "文件内容不是有效的图片格式"})
+		return false
+	}
+
+	return true
+}
+
+// resolveObjectKey 根据请求参数和认证信息确定上传的 object-key
+func resolveObjectKey(req UploadImageRequest, identity aegis.Token, filename string) string {
+	objectKey := req.ObjectKey
+	if objectKey == "" {
+		prefix := req.Prefix
+		if prefix == "" {
+			prefix = "images"
+		}
+		if prefix == "avatars" {
+			return fmt.Sprintf("avatars/%s.jpg", aegis.GetInternalUIDFromToken(identity))
+		}
+		now := time.Now()
+		return fmt.Sprintf("%s/%04d/%02d/%02d/%s", prefix, now.Year(), now.Month(), now.Day(), filename)
+	}
+
+	if strings.HasPrefix(objectKey, "avatars/") && strings.HasSuffix(objectKey, ".jpg") {
+		uid := aegis.GetInternalUIDFromToken(identity)
+		logger.Infof("[Upload] 检测到头像上传，强制使用认证 UID 生成路径 - UID: %s", uid)
+		return fmt.Sprintf("avatars/%s.jpg", uid)
+	}
+
+	return objectKey
 }
 
 // UploadImage 上传图片（通用 API）
@@ -79,60 +143,11 @@ func (h *Handler) UploadImage(c *gin.Context) {
 		return
 	}
 
-	// 验证文件大小（限制 5MB）
-	if file.Size > 5*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "图片大小不能超过 5MB"})
+	if !validateImageFile(c, file) {
 		return
 	}
 
-	// 验证文件类型：先检查 Content-Type header，再通过 magic bytes 校验实际内容
-	contentType := file.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "image/") {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "只支持上传图片文件"})
-		return
-	}
-
-	// 通过文件头部 magic bytes 验证实际文件类型（防止伪造 Content-Type）
-	src, err := file.Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"message": "读取文件失败"})
-		return
-	}
-	header := make([]byte, 512)
-	n, _ := src.Read(header)
-	src.Close()
-	detectedType := http.DetectContentType(header[:n])
-	if !strings.HasPrefix(detectedType, "image/") {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "文件内容不是有效的图片格式"})
-		return
-	}
-
-	// 确定 object-key
-	objectKey := req.ObjectKey
-	if objectKey == "" {
-		prefix := req.Prefix
-		if prefix == "" {
-			prefix = "images"
-		}
-
-		// 如果是头像上传（prefix 为 "avatars"），强制使用认证用户的 uid 生成固定路径
-		// 这样可以防止前端传入错误的 uid 导致安全风险
-		if prefix == "avatars" {
-			objectKey = fmt.Sprintf("avatars/%s.jpg", aegis.GetInternalUIDFromToken(identity))
-		} else {
-			// 其他类型使用 prefix + filename（按日期组织）
-			now := time.Now()
-			objectKey = fmt.Sprintf("%s/%04d/%02d/%02d/%s", prefix, now.Year(), now.Month(), now.Day(), file.Filename)
-		}
-	} else {
-		// 如果前端传入了 object-key，检查是否是头像路径
-		// 如果是头像路径，强制使用认证用户的 uid（防止路径篡改）
-		if strings.HasPrefix(objectKey, "avatars/") && strings.HasSuffix(objectKey, ".jpg") {
-			// 忽略前端传入的 uid，使用认证 token 中的 uid
-			objectKey = fmt.Sprintf("avatars/%s.jpg", aegis.GetInternalUIDFromToken(identity))
-			logger.Infof("[Upload] 检测到头像上传，强制使用认证 UID 生成路径 - UID: %s", aegis.GetInternalUIDFromToken(identity))
-		}
-	}
+	objectKey := resolveObjectKey(req, identity, file.Filename)
 
 	// 构建预期的 OSS URL（立即返回给前端）
 	expectedURL := oss.BuildObjectURL(objectKey)

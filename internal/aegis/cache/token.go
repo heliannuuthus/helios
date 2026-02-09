@@ -73,7 +73,11 @@ func (cm *Manager) MarkAuthCodeUsed(ctx context.Context, code string) error {
 	if err != nil {
 		return fmt.Errorf("mark auth code used: %w", err)
 	}
-	switch r, _ := result.(int64); r {
+	r, ok := result.(int64)
+	if !ok {
+		return fmt.Errorf("mark auth code used: unexpected result type %T", result)
+	}
+	switch r {
 	case 1:
 		return nil
 	case 0:

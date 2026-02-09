@@ -94,7 +94,7 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 	remaining, allowed := h.rateLimiter.Check(ctx.UserID)
 	if !allowed {
 		c.JSON(http.StatusTooManyRequests, gin.H{
-			"message":    "今日推荐次数已用完，明天再来吧",
+			"message":   "今日推荐次数已用完，明天再来吧",
 			"remaining": 0,
 		})
 		return

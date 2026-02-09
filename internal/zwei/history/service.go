@@ -2,7 +2,6 @@ package history
 
 import (
 	"errors"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -122,95 +121,4 @@ func (s *Service) GetViewHistory(openID, category, search string, limit, offset 
 	}
 
 	return history, total, nil
-}
-
-// fetchUserHistory 获取用户所有浏览历史
-func (s *Service) fetchUserHistory(openID string) ([]models.ViewHistory, error) {
-	var history []models.ViewHistory
-	err := s.db.Where("user_id = ?", openID).
-		Order("viewed_at DESC").
-		Find(&history).Error
-	return history, err
-}
-
-// fetchHistoryRecipeMap 获取菜谱映射
-func (s *Service) fetchHistoryRecipeMap(history []models.ViewHistory) (map[string]*models.Recipe, error) {
-	recipeIDs := make([]string, len(history))
-	for i, h := range history {
-		recipeIDs[i] = h.RecipeID
-	}
-
-	var recipes []models.Recipe
-	if err := s.db.Where("recipe_id IN ?", recipeIDs).Find(&recipes).Error; err != nil {
-		return nil, err
-	}
-
-	recipeMap := make(map[string]*models.Recipe)
-	for i := range recipes {
-		recipeMap[recipes[i].RecipeID] = &recipes[i]
-	}
-	return recipeMap, nil
-}
-
-// filterHistory 筛选浏览历史
-func (s *Service) filterHistory(history []models.ViewHistory, recipeMap map[string]*models.Recipe, category, search string) []models.ViewHistory {
-	var filtered []models.ViewHistory
-	for i := range history {
-		recipe, ok := recipeMap[history[i].RecipeID]
-		if !ok {
-			continue
-		}
-
-		if !matchHistoryCategory(recipe, category) {
-			continue
-		}
-
-		if !matchHistorySearch(recipe, search) {
-			continue
-		}
-
-		history[i].Recipe = recipe
-		filtered = append(filtered, history[i])
-	}
-	return filtered
-}
-
-// matchHistoryCategory 检查分类是否匹配
-func matchHistoryCategory(recipe *models.Recipe, category string) bool {
-	if category == "" {
-		return true
-	}
-	return recipe.Category == category
-}
-
-// matchHistorySearch 检查搜索关键词是否匹配
-func matchHistorySearch(recipe *models.Recipe, search string) bool {
-	if search == "" {
-		return true
-	}
-	searchLower := strings.ToLower(search)
-	nameLower := strings.ToLower(recipe.Name)
-	if strings.Contains(nameLower, searchLower) {
-		return true
-	}
-	if recipe.Description != nil {
-		descLower := strings.ToLower(*recipe.Description)
-		if strings.Contains(descLower, searchLower) {
-			return true
-		}
-	}
-	return false
-}
-
-// paginateHistory 分页
-func paginateHistory(items []models.ViewHistory, offset, limit int) []models.ViewHistory {
-	start := offset
-	if start > len(items) {
-		start = len(items)
-	}
-	end := start + limit
-	if end > len(items) {
-		end = len(items)
-	}
-	return items[start:end]
 }
