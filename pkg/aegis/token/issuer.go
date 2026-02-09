@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/heliannuuthus/helios/pkg/aegis/keys"
 )
 
@@ -43,7 +41,6 @@ func (i *Issuer) Issue(ctx context.Context, clientID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("build token: %w", err)
 	}
-	pasetoToken.SetJti(uuid.New().String())
 
 	return pasetoToken.V4Sign(secretKey, nil), nil
 }

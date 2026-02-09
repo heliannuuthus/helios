@@ -175,7 +175,8 @@ func (c *Claims) IsExpired() bool             { return time.Now().After(c.Expire
 func generateJTI() string {
 	jtiBytes := make([]byte, 16)
 	if _, err := rand.Read(jtiBytes); err != nil {
-		return hex.EncodeToString([]byte(time.Now().String()))
+		// crypto/rand 失败说明系统熵源不可用，不应回退到可预测值
+		panic(fmt.Sprintf("crypto/rand.Read failed: %v", err))
 	}
 	return hex.EncodeToString(jtiBytes)
 }

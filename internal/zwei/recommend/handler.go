@@ -60,7 +60,7 @@ type RecommendResponse struct {
 func (h *Handler) GetRecommendations(c *gin.Context) {
 	var req RecommendRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "缺少必要参数: latitude, longitude"})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "缺少必要参数: latitude, longitude"})
 		return
 	}
 
@@ -94,7 +94,7 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 	remaining, allowed := h.rateLimiter.Check(ctx.UserID)
 	if !allowed {
 		c.JSON(http.StatusTooManyRequests, gin.H{
-			"detail":    "今日推荐次数已用完，明天再来吧",
+			"message":    "今日推荐次数已用完，明天再来吧",
 			"remaining": 0,
 		})
 		return
@@ -103,7 +103,7 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 	result, err := h.service.GetRecommendations(ctx, limit)
 	if err != nil {
 		logger.Errorf("[RecommendHandler] 获取推荐失败: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "服务器内部错误"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "服务器内部错误"})
 		return
 	}
 

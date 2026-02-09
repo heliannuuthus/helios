@@ -2,6 +2,7 @@
 package checker
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -93,7 +94,7 @@ func (c *Checker) Check(ctx context.Context, t token.Token, relation, objectType
 
 	// 构建 HTTP 请求
 	checkURL := c.endpoint + "/auth/check"
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, checkURL, strings.NewReader(string(bodyBytes)))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, checkURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return false, fmt.Errorf("create request: %w", err)
 	}

@@ -62,26 +62,25 @@ func (cm *Manager) GetAuthCode(ctx context.Context, code string) (*Authorization
 	return &authCode, nil
 }
 
-// MarkAuthCodeUsed 标记授权码已使用
+// MarkAuthCodeUsed 原子标记授权码已使用（防止重放攻击）
+// 使用 Lua 脚本保证 read-check-write 的原子性
 func (cm *Manager) MarkAuthCodeUsed(ctx context.Context, code string) error {
 	prefix := config.GetAegisCacheKeyPrefix("auth_code")
-	authCode, err := cm.GetAuthCode(ctx, code)
+	key := prefix + code
+	// Lua 脚本: 读取->检查未使用->标记已使用, 返回 1=成功 0=已使用 -1=不存在
+	script := "local d=redis.call('GET',KEYS[1]) if not d then return -1 end local c=cjson.decode(d) if c.used then return 0 end c.used=true local t=redis.call('TTL',KEYS[1]) if t<=0 then t=1 end redis.call('SET',KEYS[1],cjson.encode(c),'EX',t) return 1"
+	result, err := cm.redis.Eval(ctx, script, []string{key})
 	if err != nil {
-		return err
+		return fmt.Errorf("mark auth code used: %w", err)
 	}
-
-	authCode.Used = true
-	data, err := json.Marshal(authCode)
-	if err != nil {
-		return fmt.Errorf("marshal auth code: %w", err)
+	switch r, _ := result.(int64); r {
+	case 1:
+		return nil
+	case 0:
+		return ErrAuthCodeUsed
+	default:
+		return ErrAuthCodeNotFound
 	}
-
-	remaining := time.Until(authCode.ExpiresAt)
-	if remaining <= 0 {
-		remaining = time.Second
-	}
-
-	return cm.redis.Set(ctx, prefix+code, string(data), remaining)
 }
 
 // ==================== RefreshToken（Redis）====================

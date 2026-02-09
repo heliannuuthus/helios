@@ -68,26 +68,26 @@ type BatchCheckResponse struct {
 func (h *Handler) AddFavorite(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
 
 	identity, ok := user.(aegis.Token)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的用户信息"})
 		return
 	}
 	openID := aegis.GetOpenIDFromToken(identity)
 
 	var req FavoriteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
 	fav, err := h.service.AddFavorite(openID, req.RecipeID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -107,20 +107,20 @@ func (h *Handler) AddFavorite(c *gin.Context) {
 func (h *Handler) RemoveFavorite(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
 
 	identity, ok := user.(aegis.Token)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的用户信息"})
 		return
 	}
 	openID := aegis.GetOpenIDFromToken(identity)
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveFavorite(openID, recipeID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -138,13 +138,13 @@ func (h *Handler) RemoveFavorite(c *gin.Context) {
 func (h *Handler) CheckFavorite(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
 
 	identity, ok := user.(aegis.Token)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的用户信息"})
 		return
 	}
 	openID := aegis.GetOpenIDFromToken(identity)
@@ -152,7 +152,7 @@ func (h *Handler) CheckFavorite(c *gin.Context) {
 
 	isFavorite, err := h.service.IsFavorite(openID, recipeID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -175,13 +175,13 @@ func (h *Handler) CheckFavorite(c *gin.Context) {
 func (h *Handler) GetFavorites(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
 
 	identity, ok := user.(aegis.Token)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的用户信息"})
 		return
 	}
 	openID := aegis.GetOpenIDFromToken(identity)
@@ -203,7 +203,7 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 
 	favorites, total, err := h.service.GetFavorites(openID, category, search, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -248,26 +248,26 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 func (h *Handler) BatchCheckFavorites(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
 
 	identity, ok := user.(aegis.Token)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的用户信息"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的用户信息"})
 		return
 	}
 	openID := aegis.GetOpenIDFromToken(identity)
 
 	var req BatchCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
 	favoritedIDs, err := h.service.GetFavoriteRecipeIDs(openID, req.RecipeIDs)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 

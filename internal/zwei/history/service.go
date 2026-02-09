@@ -91,26 +91,37 @@ func (s *Service) ClearViewHistory(openID string) error {
 	return nil
 }
 
-// GetViewHistory 获取浏览历史列表
+// GetViewHistory 获取浏览历史列表（数据库层过滤+分页）
 func (s *Service) GetViewHistory(openID, category, search string, limit, offset int) ([]models.ViewHistory, int64, error) {
-	allHistory, err := s.fetchUserHistory(openID)
-	if err != nil {
-		return nil, 0, err
+	query := s.db.Model(&models.ViewHistory{}).
+		Joins("JOIN recipes ON recipes.recipe_id = view_histories.recipe_id").
+		Where("view_histories.user_id = ?", openID)
+
+	if category != "" {
+		query = query.Where("recipes.category = ?", category)
+	}
+	if search != "" {
+		like := "%" + search + "%"
+		query = query.Where("(recipes.name LIKE ? OR recipes.description LIKE ?)", like, like)
 	}
 
-	if len(allHistory) == 0 {
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
 		return []models.ViewHistory{}, 0, nil
 	}
 
-	recipeMap, err := s.fetchHistoryRecipeMap(allHistory)
-	if err != nil {
+	var history []models.ViewHistory
+	if err := query.Preload("Recipe").
+		Order("view_histories.viewed_at DESC").
+		Offset(offset).Limit(limit).
+		Find(&history).Error; err != nil {
 		return nil, 0, err
 	}
 
-	filtered := s.filterHistory(allHistory, recipeMap, category, search)
-	total := int64(len(filtered))
-
-	return paginateHistory(filtered, offset, limit), total, nil
+	return history, total, nil
 }
 
 // fetchUserHistory 获取用户所有浏览历史

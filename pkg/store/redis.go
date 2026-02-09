@@ -29,4 +29,7 @@ type RedisClient interface {
 
 	// 检查存在
 	Exists(ctx context.Context, keys ...string) (int64, error)
+
+	// Lua 脚本
+	Eval(ctx context.Context, script string, keys []string, args ...any) (any, error)
 }

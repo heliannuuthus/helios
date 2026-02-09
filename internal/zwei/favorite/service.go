@@ -71,26 +71,37 @@ func (s *Service) IsFavorite(openID, recipeID string) (bool, error) {
 	return count > 0, nil
 }
 
-// GetFavorites 获取收藏列表
+// GetFavorites 获取收藏列表（数据库层过滤+分页）
 func (s *Service) GetFavorites(openID, category, search string, limit, offset int) ([]models.Favorite, int64, error) {
-	allFavorites, err := s.fetchUserFavorites(openID)
-	if err != nil {
-		return nil, 0, err
+	query := s.db.Model(&models.Favorite{}).
+		Joins("JOIN recipes ON recipes.recipe_id = favorites.recipe_id").
+		Where("favorites.user_id = ?", openID)
+
+	if category != "" {
+		query = query.Where("recipes.category = ?", category)
+	}
+	if search != "" {
+		like := "%" + search + "%"
+		query = query.Where("(recipes.name LIKE ? OR recipes.description LIKE ?)", like, like)
 	}
 
-	if len(allFavorites) == 0 {
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
 		return []models.Favorite{}, 0, nil
 	}
 
-	recipeMap, err := s.fetchRecipeMap(allFavorites)
-	if err != nil {
+	var favorites []models.Favorite
+	if err := query.Preload("Recipe").
+		Order("favorites.created_at DESC").
+		Offset(offset).Limit(limit).
+		Find(&favorites).Error; err != nil {
 		return nil, 0, err
 	}
 
-	filtered := s.filterFavorites(allFavorites, recipeMap, category, search)
-	total := int64(len(filtered))
-
-	return paginate(filtered, offset, limit), total, nil
+	return favorites, total, nil
 }
 
 // fetchUserFavorites 获取用户所有收藏
