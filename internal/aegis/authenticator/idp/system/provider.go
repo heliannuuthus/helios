@@ -7,9 +7,10 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/hermes"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -96,10 +97,10 @@ func (p *Provider) Type() string {
 	return p.idpType
 }
 
-// Exchange 验证账号密码
+// Login 验证账号密码
 // proof: password (明文密码)
 // params[0]: identifier (用户名/邮箱/手机号)
-func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*idp.LoginResult, error) {
+func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error) {
 	if proof == "" {
 		return nil, errors.New("password is required")
 	}
@@ -119,7 +120,7 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*idp
 }
 
 // login 登录
-func (p *Provider) login(ctx context.Context, identifier, password string) (*idp.LoginResult, error) {
+func (p *Provider) login(ctx context.Context, identifier, password string) (*models.TUserInfo, error) {
 	if p.store == nil {
 		return nil, errors.New("credential store not configured")
 	}
@@ -151,14 +152,12 @@ func (p *Provider) login(ctx context.Context, identifier, password string) (*idp
 
 	logger.Infof("[%s] 登录成功 - Identifier: %s, OpenID: %s", p.idpType, maskIdentifier(identifier), cred.OpenID)
 
-	return &idp.LoginResult{
-		ProviderID: cred.OpenID,
-		UserInfo: &idp.UserInfo{
-			Nickname: cred.Nickname,
-			Email:    cred.Email,
-			Picture:  cred.Picture,
-		},
-		RawData: fmt.Sprintf(`{"identifier":"%s","type":"%s"}`, identifier, p.idpType),
+	return &models.TUserInfo{
+		TOpenID:  cred.OpenID,
+		Nickname: cred.Nickname,
+		Email:    cred.Email,
+		Picture:  cred.Picture,
+		RawData:  fmt.Sprintf(`{"identifier":"%s","type":"%s"}`, identifier, p.idpType),
 	}, nil
 }
 

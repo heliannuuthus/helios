@@ -93,7 +93,7 @@ func (h *Handler) ListServices(c *gin.Context) {
 	c.JSON(http.StatusOK, services)
 }
 
-// UpdateService PUT /hermes/services/:service_id
+// UpdateService PATCH /hermes/services/:service_id
 func (h *Handler) UpdateService(c *gin.Context) {
 	serviceID := c.Param("service_id")
 	var req ServiceUpdateRequest
@@ -161,7 +161,7 @@ func (h *Handler) ListApplications(c *gin.Context) {
 	c.JSON(http.StatusOK, apps)
 }
 
-// UpdateApplication PUT /hermes/applications/:app_id
+// UpdateApplication PATCH /hermes/applications/:app_id
 func (h *Handler) UpdateApplication(c *gin.Context) {
 	appID := c.Param("app_id")
 	var req ApplicationUpdateRequest
@@ -261,7 +261,7 @@ func (h *Handler) ListRelationships(c *gin.Context) {
 	c.JSON(http.StatusOK, rels)
 }
 
-// UpdateRelationship PUT /hermes/relationships
+// UpdateRelationship PATCH /hermes/relationships
 func (h *Handler) UpdateRelationship(c *gin.Context) {
 	var req RelationshipUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -316,7 +316,7 @@ func (h *Handler) CreateAppServiceRelationship(c *gin.Context) {
 	c.JSON(http.StatusCreated, rel)
 }
 
-// UpdateAppServiceRelationship PUT /hermes/applications/:app_id/services/:service_id/relationships/:relationship_id
+// UpdateAppServiceRelationship PATCH /hermes/applications/:app_id/services/:service_id/relationships/:relationship_id
 func (h *Handler) UpdateAppServiceRelationship(c *gin.Context) {
 	appID := c.Param("app_id")
 	serviceID := c.Param("service_id")
@@ -405,7 +405,7 @@ func (h *Handler) ListGroups(c *gin.Context) {
 	c.JSON(http.StatusOK, groups)
 }
 
-// UpdateGroup PUT /hermes/groups/:group_id
+// UpdateGroup PATCH /hermes/groups/:group_id
 func (h *Handler) UpdateGroup(c *gin.Context) {
 	groupID := c.Param("group_id")
 	var req GroupUpdateRequest

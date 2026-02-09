@@ -5,32 +5,34 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/webauthn"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/webauthn"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/hermes"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
 // Handler 用户信息处理器
 type Handler struct {
 	userSvc       *hermes.UserService
 	credentialSvc *hermes.CredentialService
-	webauthnSvc   *webauthn.Service
+	webauthn      *webauthn.Service
 }
 
 // NewHandler 创建用户信息处理器
-func NewHandler(userSvc *hermes.UserService, credentialSvc *hermes.CredentialService) *Handler {
+func NewHandler(userSvc *hermes.UserService, credentialSvc *hermes.CredentialService, webauthnSvc *webauthn.Service) *Handler {
 	return &Handler{
 		userSvc:       userSvc,
 		credentialSvc: credentialSvc,
+		webauthn:      webauthnSvc,
 	}
 }
 
-// SetWebAuthnService 设置 WebAuthn 服务（可选）
-func (h *Handler) SetWebAuthnService(svc *webauthn.Service) {
-	h.webauthnSvc = svc
+// webauthnSvc 获取 WebAuthn 服务
+func (h *Handler) webauthnSvc() *webauthn.Service {
+	return h.webauthn
 }
 
 // getToken 从上下文获取验证后的 Token
@@ -43,10 +45,18 @@ func getToken(c *gin.Context) token.Token {
 	return nil
 }
 
-// getOpenID 从 Token 中获取 OpenID
+// getOpenID 从 Token 中获取对外标识（主身份 t_openid）
 func getOpenID(t token.Token) string {
 	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
 		return uat.GetOpenID()
+	}
+	return ""
+}
+
+// getInternalUID 从 Token 中获取内部用户 ID（t_user.openid，用于数据库查询）
+func getInternalUID(t token.Token) string {
+	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
+		return uat.GetInternalUID()
 	}
 	return ""
 }
@@ -78,14 +88,14 @@ func (h *Handler) GetProfile(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userSvc.GetUserWithDecrypted(c.Request.Context(), getOpenID(claims))
+	user, err := h.userSvc.GetUserWithDecrypted(c.Request.Context(), getInternalUID(claims))
 	if err != nil {
 		errorResponse(c, autherrors.NewNotFound("user not found"))
 		return
 	}
 
 	c.JSON(http.StatusOK, &ProfileResponse{
-		OpenID:        user.OpenID,
+		OpenID:        getOpenID(claims),
 		Nickname:      user.Nickname,
 		Picture:       user.Picture,
 		Email:         user.Email,
@@ -94,13 +104,15 @@ func (h *Handler) GetProfile(c *gin.Context) {
 	})
 }
 
-// UpdateProfileRequest 更新用户信息请求
+// UpdateProfileRequest 更新用户信息请求（JSON Merge Patch 语义）
 type UpdateProfileRequest struct {
-	Nickname *string `json:"nickname,omitempty"`
-	Picture  *string `json:"picture,omitempty"`
+	Nickname    patch.Optional[string] `json:"nickname,omitempty"`
+	Picture     patch.Optional[string] `json:"picture,omitempty"`
+	OldPassword string                 `json:"old_password,omitempty"` // 修改密码时需提供旧密码
+	Password    patch.Optional[string] `json:"password,omitempty"`     // 新密码
 }
 
-// UpdateProfile PUT /user/profile
+// UpdateProfile PATCH /user/profile
 // 更新用户信息
 func (h *Handler) UpdateProfile(c *gin.Context) {
 	claims := getToken(c)
@@ -115,22 +127,37 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 		return
 	}
 
-	updates := make(map[string]any)
-	if req.Nickname != nil {
-		updates["nickname"] = *req.Nickname
-	}
-	if req.Picture != nil {
-		updates["picture"] = *req.Picture
-	}
+	ctx := c.Request.Context()
+	uid := getInternalUID(claims)
 
-	if len(updates) == 0 {
+	// 收集基础字段更新
+	updates := patch.Collect(
+		patch.Field("nickname", req.Nickname),
+		patch.Field("picture", req.Picture),
+	)
+
+	hasProfileUpdates := len(updates) > 0
+	hasPasswordUpdate := req.Password.HasValue()
+
+	if !hasProfileUpdates && !hasPasswordUpdate {
 		errorResponse(c, autherrors.NewInvalidRequest("no fields to update"))
 		return
 	}
 
-	if err := h.userSvc.Update(c.Request.Context(), getOpenID(claims), updates); err != nil {
-		errorResponse(c, autherrors.NewServerError(err.Error()))
-		return
+	// 处理密码修改
+	if hasPasswordUpdate {
+		if err := h.userSvc.UpdatePassword(ctx, uid, req.OldPassword, req.Password.Value()); err != nil {
+			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+			return
+		}
+	}
+
+	// 处理其他字段更新
+	if hasProfileUpdates {
+		if err := h.userSvc.Update(ctx, uid, updates); err != nil {
+			errorResponse(c, autherrors.NewServerError(err.Error()))
+			return
+		}
 	}
 
 	// 返回更新后的信息
@@ -220,7 +247,7 @@ func (h *Handler) ListIdentities(c *gin.Context) {
 		return
 	}
 
-	identities, err := h.userSvc.GetIdentities(c.Request.Context(), getOpenID(claims))
+	identities, err := h.userSvc.GetIdentities(c.Request.Context(), getInternalUID(claims))
 	if err != nil {
 		errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
@@ -290,13 +317,13 @@ func (h *Handler) GetMFAStatus(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	status, err := h.credentialSvc.GetUserMFAStatus(ctx, getOpenID(claims))
+	status, err := h.credentialSvc.GetUserMFAStatus(ctx, getInternalUID(claims))
 	if err != nil {
 		errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
 	}
 
-	summaries, err := h.credentialSvc.GetUserCredentialSummaries(ctx, getOpenID(claims))
+	summaries, err := h.credentialSvc.GetUserCredentialSummaries(ctx, getInternalUID(claims))
 	if err != nil {
 		errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
@@ -342,7 +369,7 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
 		resp, err := h.credentialSvc.SetupTOTP(ctx, &hermes.TOTPSetupRequest{
-			OpenID:  getOpenID(claims),
+			UID:     getInternalUID(claims),
 			AppName: req.AppName,
 		})
 		if err != nil {
@@ -357,7 +384,7 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 		})
 
 	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		h.setupWebAuthn(c, getOpenID(claims), req.Type, req.Action, req.ChallengeID)
+		h.setupWebAuthn(c, getInternalUID(claims), req.Type, req.Action, req.ChallengeID)
 
 	default:
 		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
@@ -366,7 +393,8 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 
 // setupWebAuthn 处理 WebAuthn 设置流程
 func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challengeID string) {
-	if h.webauthnSvc == nil {
+	svc := h.webauthnSvc()
+	if svc == nil {
 		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
 		return
 	}
@@ -382,12 +410,12 @@ func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challe
 			return
 		}
 
-		existingCredentials, err := h.webauthnSvc.ListCredentials(ctx, user.OpenID)
+		existingCredentials, err := svc.ListCredentials(ctx, user.UID)
 		if err != nil {
 			// 列出凭证失败时，使用空列表继续（新用户可能没有凭证）
 			existingCredentials = nil
 		}
-		resp, err := h.webauthnSvc.BeginRegistration(ctx, user, existingCredentials)
+		resp, err := svc.BeginRegistration(ctx, user, existingCredentials)
 		if err != nil {
 			errorResponse(c, autherrors.NewServerError(err.Error()))
 			return
@@ -406,13 +434,13 @@ func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challe
 			return
 		}
 
-		credential, err := h.webauthnSvc.FinishRegistration(ctx, challengeID, c.Request)
+		credential, err := svc.FinishRegistration(ctx, challengeID, c.Request)
 		if err != nil {
 			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 			return
 		}
 
-		if err := h.webauthnSvc.SaveCredential(ctx, openID, credential); err != nil {
+		if err := svc.SaveCredential(ctx, openID, credential); err != nil {
 			errorResponse(c, autherrors.NewServerError("save credential failed"))
 			return
 		}
@@ -475,7 +503,7 @@ func (h *Handler) VerifyMFA(c *gin.Context) {
 				return
 			}
 			err := h.credentialSvc.ConfirmTOTP(ctx, &hermes.ConfirmTOTPRequest{
-				OpenID:       getOpenID(claims),
+				UID:          getInternalUID(claims),
 				CredentialID: req.CredentialID,
 				Code:         req.Code,
 			})
@@ -485,8 +513,8 @@ func (h *Handler) VerifyMFA(c *gin.Context) {
 			}
 		} else {
 			err := h.credentialSvc.VerifyTOTP(ctx, &hermes.VerifyTOTPRequest{
-				OpenID: getOpenID(claims),
-				Code:   req.Code,
+				UID:  getInternalUID(claims),
+				Code: req.Code,
 			})
 			if err != nil {
 				errorResponse(c, autherrors.NewAccessDenied(err.Error()))
@@ -496,7 +524,7 @@ func (h *Handler) VerifyMFA(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"type": "totp", "success": true})
 
 	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		h.verifyWebAuthn(c, getOpenID(claims), req.Type, req.Action, req.ChallengeID)
+		h.verifyWebAuthn(c, getInternalUID(claims), req.Type, req.Action, req.ChallengeID)
 
 	default:
 		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
@@ -505,7 +533,8 @@ func (h *Handler) VerifyMFA(c *gin.Context) {
 
 // verifyWebAuthn 处理 WebAuthn 验证流程
 func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, challengeID string) {
-	if h.webauthnSvc == nil {
+	svc := h.webauthnSvc()
+	if svc == nil {
 		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
 		return
 	}
@@ -521,13 +550,13 @@ func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, chall
 			return
 		}
 
-		existingCredentials, err := h.webauthnSvc.ListCredentials(ctx, user.OpenID)
+		existingCredentials, err := svc.ListCredentials(ctx, user.UID)
 		if err != nil || len(existingCredentials) == 0 {
 			errorResponse(c, autherrors.NewInvalidRequest("no webauthn credentials found"))
 			return
 		}
 
-		resp, err := h.webauthnSvc.BeginLogin(ctx, user, existingCredentials)
+		resp, err := svc.BeginLogin(ctx, user, existingCredentials)
 		if err != nil {
 			errorResponse(c, autherrors.NewServerError(err.Error()))
 			return
@@ -546,14 +575,14 @@ func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, chall
 			return
 		}
 
-		userID, credential, err := h.webauthnSvc.FinishLogin(ctx, challengeID, c.Request)
+		userID, credential, err := svc.FinishLogin(ctx, challengeID, c.Request)
 		if err != nil {
 			errorResponse(c, autherrors.NewAccessDenied(err.Error()))
 			return
 		}
 
 		// 更新签名计数
-		if err := h.webauthnSvc.UpdateCredentialSignCount(ctx, encodeCredentialID(credential.ID), credential.Authenticator.SignCount); err != nil {
+		if err := svc.UpdateCredentialSignCount(ctx, encodeCredentialID(credential.ID), credential.Authenticator.SignCount); err != nil {
 			logger.Warnf("[WebAuthn] UpdateCredentialSignCount failed: %v", err)
 		}
 
@@ -600,7 +629,7 @@ func (h *Handler) UpdateMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		err := h.credentialSvc.SetTOTPEnabled(ctx, getOpenID(claims), *req.Enabled)
+		err := h.credentialSvc.SetTOTPEnabled(ctx, getInternalUID(claims), *req.Enabled)
 		if err != nil {
 			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 			return
@@ -611,7 +640,7 @@ func (h *Handler) UpdateMFA(c *gin.Context) {
 			errorResponse(c, autherrors.NewInvalidRequest("credential_id is required"))
 			return
 		}
-		err := h.credentialSvc.SetWebAuthnEnabled(ctx, getOpenID(claims), req.CredentialID, *req.Enabled)
+		err := h.credentialSvc.SetWebAuthnEnabled(ctx, getInternalUID(claims), req.CredentialID, *req.Enabled)
 		if err != nil {
 			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 			return
@@ -650,7 +679,7 @@ func (h *Handler) DeleteMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		err := h.credentialSvc.DisableTOTP(ctx, getOpenID(claims))
+		err := h.credentialSvc.DisableTOTP(ctx, getInternalUID(claims))
 		if err != nil {
 			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 			return
@@ -661,7 +690,7 @@ func (h *Handler) DeleteMFA(c *gin.Context) {
 			errorResponse(c, autherrors.NewInvalidRequest("credential_id is required"))
 			return
 		}
-		err := h.credentialSvc.DeleteWebAuthn(ctx, getOpenID(claims), req.CredentialID)
+		err := h.credentialSvc.DeleteWebAuthn(ctx, getInternalUID(claims), req.CredentialID)
 		if err != nil {
 			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 			return

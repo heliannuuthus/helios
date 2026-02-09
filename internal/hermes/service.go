@@ -14,6 +14,7 @@ import (
 	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
 // Service 管理服务
@@ -225,21 +226,14 @@ func (s *Service) ListServices(ctx context.Context, domainID string) ([]models.S
 	return services, nil
 }
 
-// UpdateService 更新服务
+// UpdateService 更新服务（JSON Merge Patch 语义）
 func (s *Service) UpdateService(ctx context.Context, serviceID string, req *ServiceUpdateRequest) error {
-	updates := make(map[string]interface{})
-	if req.Name != nil {
-		updates["name"] = *req.Name
-	}
-	if req.Description != nil {
-		updates["description"] = *req.Description
-	}
-	if req.AccessTokenExpiresIn != nil {
-		updates["access_token_expires_in"] = *req.AccessTokenExpiresIn
-	}
-	if req.RefreshTokenExpiresIn != nil {
-		updates["refresh_token_expires_in"] = *req.RefreshTokenExpiresIn
-	}
+	updates := patch.Collect(
+		patch.Field("name", req.Name),
+		patch.Field("description", req.Description),
+		patch.Field("access_token_expires_in", req.AccessTokenExpiresIn),
+		patch.Field("refresh_token_expires_in", req.RefreshTokenExpiresIn),
+	)
 
 	if len(updates) == 0 {
 		return nil
@@ -357,18 +351,23 @@ func (s *Service) ListApplications(ctx context.Context, domainID string) ([]mode
 	return apps, nil
 }
 
-// UpdateApplication 更新应用
+// UpdateApplication 更新应用（JSON Merge Patch 语义）
 func (s *Service) UpdateApplication(ctx context.Context, appID string, req *ApplicationUpdateRequest) error {
-	updates := make(map[string]interface{})
-	if req.Name != nil {
-		updates["name"] = *req.Name
-	}
-	if len(req.RedirectURIs) > 0 {
-		urisJSON, err := json.Marshal(req.RedirectURIs)
-		if err != nil {
-			return fmt.Errorf("序列化 redirect_uris 失败: %w", err)
+	updates := patch.Collect(
+		patch.Field("name", req.Name),
+	)
+
+	// redirect_uris 需要序列化为 JSON 字符串
+	if req.RedirectURIs.IsPresent() {
+		if req.RedirectURIs.IsNull() {
+			updates["redirect_uris"] = nil
+		} else {
+			urisJSON, err := json.Marshal(req.RedirectURIs.Value())
+			if err != nil {
+				return fmt.Errorf("序列化 redirect_uris 失败: %w", err)
+			}
+			updates["redirect_uris"] = string(urisJSON)
 		}
-		updates["redirect_uris"] = string(urisJSON)
 	}
 
 	if len(updates) == 0 {
@@ -473,7 +472,7 @@ func (s *Service) ListRelationships(ctx context.Context, serviceID, subjectType,
 	return rels, nil
 }
 
-// UpdateRelationship 更新关系
+// UpdateRelationship 更新关系（JSON Merge Patch 语义）
 func (s *Service) UpdateRelationship(ctx context.Context, req *RelationshipUpdateRequest) (*models.Relationship, error) {
 	// 1. 查找关系
 	var rel models.Relationship
@@ -485,21 +484,16 @@ func (s *Service) UpdateRelationship(ctx context.Context, req *RelationshipUpdat
 	}
 
 	// 2. 构建更新字段
-	updates := make(map[string]interface{})
+	updates := patch.Collect(
+		patch.Field("relation", req.NewRelation),
+	)
 
-	// 更新关系类型（如果提供）
-	if req.NewRelation != nil && *req.NewRelation != "" {
-		updates["relation"] = *req.NewRelation
-	}
-
-	// 更新过期时间（如果提供）
-	if req.ExpiresAt != nil {
-		if *req.ExpiresAt == "" {
-			// 传空字符串表示清除过期时间
+	// 过期时间需要特殊处理：null → 清除，有值 → 解析时间
+	if req.ExpiresAt.IsPresent() {
+		if req.ExpiresAt.IsNull() {
 			updates["expires_at"] = nil
 		} else {
-			// 解析 ISO 8601 格式的过期时间
-			exp, err := time.Parse(time.RFC3339, *req.ExpiresAt)
+			exp, err := time.Parse(time.RFC3339, req.ExpiresAt.Value())
 			if err != nil {
 				return nil, fmt.Errorf("解析过期时间失败: %w", err)
 			}
@@ -608,7 +602,7 @@ func (s *Service) CreateAppServiceRelationship(ctx context.Context, appID, servi
 	return rel, nil
 }
 
-// UpdateAppServiceRelationship 在应用服务下更新关系
+// UpdateAppServiceRelationship 在应用服务下更新关系（JSON Merge Patch 语义）
 func (s *Service) UpdateAppServiceRelationship(ctx context.Context, appID, serviceID string, relationshipID uint, req *AppServiceRelationshipUpdateRequest) (*models.Relationship, error) {
 	// 1. 验证应用和服务是否存在
 	var app models.Application
@@ -634,21 +628,16 @@ func (s *Service) UpdateAppServiceRelationship(ctx context.Context, appID, servi
 	}
 
 	// 4. 构建更新字段
-	updates := make(map[string]interface{})
+	updates := patch.Collect(
+		patch.Field("relation", req.NewRelation),
+	)
 
-	// 更新关系类型（如果提供）
-	if req.NewRelation != nil && *req.NewRelation != "" {
-		updates["relation"] = *req.NewRelation
-	}
-
-	// 更新过期时间（如果提供）
-	if req.ExpiresAt != nil {
-		if *req.ExpiresAt == "" {
-			// 传空字符串表示清除过期时间
+	// 过期时间需要特殊处理：null → 清除，有值 → 解析时间
+	if req.ExpiresAt.IsPresent() {
+		if req.ExpiresAt.IsNull() {
 			updates["expires_at"] = nil
 		} else {
-			// 解析 ISO 8601 格式的过期时间
-			exp, err := time.Parse(time.RFC3339, *req.ExpiresAt)
+			exp, err := time.Parse(time.RFC3339, req.ExpiresAt.Value())
 			if err != nil {
 				return nil, fmt.Errorf("解析过期时间失败: %w", err)
 			}
@@ -737,15 +726,12 @@ func (s *Service) ListGroups(ctx context.Context) ([]models.Group, error) {
 	return groups, nil
 }
 
-// UpdateGroup 更新组
+// UpdateGroup 更新组（JSON Merge Patch 语义）
 func (s *Service) UpdateGroup(ctx context.Context, groupID string, req *GroupUpdateRequest) error {
-	updates := make(map[string]interface{})
-	if req.Name != nil {
-		updates["name"] = *req.Name
-	}
-	if req.Description != nil {
-		updates["description"] = *req.Description
-	}
+	updates := patch.Collect(
+		patch.Field("name", req.Name),
+		patch.Field("description", req.Description),
+	)
 
 	if len(updates) == 0 {
 		return nil

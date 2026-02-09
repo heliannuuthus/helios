@@ -55,19 +55,12 @@ type Manager struct {
 	redis pkgstore.RedisClient
 }
 
-// ManagerConfig 配置
-type ManagerConfig struct {
-	HermesSvc *hermes.Service
-	UserSvc   *hermes.UserService
-	Redis     pkgstore.RedisClient
-}
-
 // NewManager 创建缓存管理器
-func NewManager(cfg *ManagerConfig) *Manager {
+func NewManager(hermesSvc *hermes.Service, userSvc *hermes.UserService, redis pkgstore.RedisClient) *Manager {
 	cm := &Manager{
-		hermesSvc: cfg.HermesSvc,
-		userSvc:   cfg.UserSvc,
-		redis:     cfg.Redis,
+		hermesSvc: hermesSvc,
+		userSvc:   userSvc,
+		redis:     redis,
 	}
 
 	// 创建本地缓存

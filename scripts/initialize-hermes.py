@@ -105,12 +105,20 @@ class AppServiceRelation:
 @dataclass
 class User:
     """用户定义"""
-    openid: str
-    domain_id: str
+    uid: str
     email: str
     email_verified: bool = True
     nickname: Optional[str] = None
     status: int = 0
+
+
+@dataclass
+class UserIdentity:
+    """用户身份定义"""
+    domain: str       # 身份所属域：ciam/piam
+    uid: str          # 内部 uid（关联 t_user.uid）
+    idp: str          # IDP 类型：global/user/oper
+    t_openid: str     # 对外标识（global 为域级 sub，其他为 IDP 返回的 openid）
 
 
 @dataclass
@@ -161,12 +169,17 @@ APP_SERVICE_RELATIONS = [
 
 USERS = [
     User(
-        openid="heliannuuthus",
-        domain_id="piam",
+        uid="heliannuuthus",
         email="heliannuuthus@gmail.com",
         email_verified=True,
         nickname="Heliannuuthus",
     ),
+]
+
+# 用户身份（global 身份为域级对外标识，user/oper 为认证身份）
+USER_IDENTITIES = [
+    UserIdentity(domain="piam", uid="heliannuuthus", idp="global", t_openid=secrets.token_hex(16)),
+    UserIdentity(domain="piam", uid="heliannuuthus", idp="oper", t_openid="heliannuuthus"),
 ]
 
 RELATIONSHIPS = [
@@ -360,14 +373,26 @@ class Initializer:
         # Users
         if USERS:
             lines.append("-- ==================== 用户 ====================")
-            lines.append("INSERT INTO t_user (openid, domain_id, status, email_verified, nickname, picture, email) VALUES")
+            lines.append("INSERT INTO t_user (uid, status, email_verified, nickname, picture, email) VALUES")
             user_values = []
             for user in USERS:
                 nickname = f"'{user.nickname}'" if user.nickname else "NULL"
                 email_verified = 1 if user.email_verified else 0
-                user_values.append(f"('{user.openid}', '{user.domain_id}', {user.status}, {email_verified}, {nickname}, NULL, '{user.email}')")
+                user_values.append(f"('{user.uid}', {user.status}, {email_verified}, {nickname}, NULL, '{user.email}')")
             lines.append(",\n".join(user_values))
             lines.append("ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified);")
+            lines.append("")
+
+        # User Identities
+        if USER_IDENTITIES:
+            lines.append("-- ==================== 用户身份 ====================")
+            lines.append("-- global 身份为域级对外标识（token 中的 sub），其他为认证身份")
+            lines.append("INSERT INTO t_user_identity (domain, uid, idp, t_openid) VALUES")
+            identity_values = []
+            for identity in USER_IDENTITIES:
+                identity_values.append(f"('{identity.domain}', '{identity.uid}', '{identity.idp}', '{identity.t_openid}')")
+            lines.append(",\n".join(identity_values))
+            lines.append("ON DUPLICATE KEY UPDATE t_openid = VALUES(t_openid);")
             lines.append("")
 
         # Relationships

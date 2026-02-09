@@ -8,8 +8,7 @@ import (
 // CreateRequest 创建 Challenge 请求
 type CreateRequest struct {
 	Type         types.ChallengeType `json:"type" binding:"required,oneof=captcha email-otp totp sms-otp tg-otp"`
-	FlowID       string              `json:"flow_id,omitempty"`       // 关联的 AuthFlow ID
-	UserID       string              `json:"user_id,omitempty"`       // 关联的用户 ID
+	UserID       string              `json:"user_id,omitempty"`       // TOTP 类型时必填（用于查找 TOTP secret）
 	Email        string              `json:"email,omitempty"`         // email-otp 类型时必填
 	Phone        string              `json:"phone,omitempty"`         // sms-otp 类型时必填
 	CaptchaToken string              `json:"captcha_token,omitempty"` // captcha 前置验证 token（正常用户静默获取）
@@ -26,7 +25,7 @@ type CreateResponse struct {
 
 // VerifyRequest 验证 Challenge 请求（challenge_id 从 query 获取）
 type VerifyRequest struct {
-	Proof string `json:"proof" binding:"required"` // 验证证明（captcha token / OTP code）
+	Proof any `json:"proof" binding:"required"` // 验证证明（string: captcha token / OTP code, object: WebAuthn assertion）
 }
 
 // VerifyResponse 验证 Challenge 响应

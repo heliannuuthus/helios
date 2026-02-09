@@ -8,9 +8,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -37,7 +38,7 @@ func (p *MPProvider) Type() string {
 
 // Exchange 用授权码换取用户信息
 // proof: 小程序 login code
-func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*idp.LoginResult, error) {
+func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*models.TUserInfo, error) {
 	if proof == "" {
 		return nil, errors.New("code is required")
 	}
@@ -85,9 +86,9 @@ func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*idp.Lo
 
 	logger.Infof("[Wechat] 登录成功 - OpenID: %s", result.OpenID)
 
-	return &idp.LoginResult{
-		ProviderID: result.OpenID,
-		RawData:    fmt.Sprintf(`{"openid":"%s"}`, result.OpenID),
+	return &models.TUserInfo{
+		TOpenID: result.OpenID,
+		RawData: fmt.Sprintf(`{"openid":"%s"}`, result.OpenID),
 	}, nil
 }
 

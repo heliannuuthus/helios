@@ -24,10 +24,11 @@ const (
 // AuthFlow 认证流程上下文
 // auth session = flowID
 type AuthFlow struct {
-	ID        string    `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	State     FlowState `json:"state"`
+	ID           string    `json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	MaxExpiresAt time.Time `json:"max_expires_at"` // 最大生命周期截止时间，超过后不可续期
+	State        FlowState `json:"state"`
 
 	// 请求参数
 	Request *AuthRequest `json:"request"`
@@ -39,11 +40,11 @@ type AuthFlow struct {
 
 	// Connection 配置
 	ConnectionMap map[string]*ConnectionConfig `json:"connection_map,omitempty"` // 所有可用的 Connection 配置
-	Connection    string                       `json:"connection,omitempty"`     // 当前使用的 Connection（已认证则不可回退）
+	Connection    string                       `json:"connection,omitempty"`     // 当前正在验证的 Connection
 
 	// 认证结果
-	ProviderID string `json:"provider_id,omitempty"` // 认证源侧用户标识
-	IsNewUser  bool   `json:"is_new_user,omitempty"` // 是否新用户
+	Identities  []*models.UserIdentity       `json:"identities,omitempty"`    // 用户全部身份绑定
+	UserInfoMap map[string]*models.TUserInfo `json:"user_info_map,omitempty"` // IDP 返回的用户信息（connection -> TUserInfo）
 
 	// 授权结果
 	GrantedScopes []string `json:"granted_scopes,omitempty"`
@@ -261,24 +262,15 @@ func splitScopes(scope string) []string {
 	return result
 }
 
-// AuthorizationCode 授权码
-type AuthorizationCode struct {
-	Code      string    `json:"code"`
-	FlowID    string    `json:"flow_id"`
-	State     string    `json:"state"`
-	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Used      bool      `json:"used"`
-}
-
 // ConnectionConfig Connection 配置（返回给前端的公开配置）
-// 统一结构，适用于 IDP 和 MFA
+// 统一结构，适用于 IDP、VChan 和 MFA
 type ConnectionConfig struct {
-	Connection string   `json:"connection"`          // 标识（github, google, wechat:mp, user, oper, email_otp, totp, captcha:turnstile...）
+	Connection string   `json:"connection"`          // 标识（github, google, wechat:mp, user, oper, email-otp, totp, captcha:turnstile...）
 	Identifier string   `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
-	Strategy   []string `json:"strategy,omitzero"`   // 登录策略（仅 user/oper 需要：password, email_otp, webauthn）
-	Delegate   []string `json:"delegate,omitzero"`   // 委托验证/MFA（totp, email_otp）
+	Strategy   []string `json:"strategy,omitzero"`   // 登录策略（仅 user/oper 需要：password, email-otp, webauthn）
+	Delegate   []string `json:"delegate,omitzero"`   // 委托验证/MFA（totp, email-otp）
 	Require    []string `json:"require,omitzero"`    // 前置验证（captcha）
+	Verified   bool     `json:"verified,omitempty"`  // 是否已通过验证
 }
 
 // VChanConfig 验证渠道配置（用于 Challenge 响应）
@@ -291,7 +283,7 @@ type VChanConfig struct {
 type ConnectionsMap struct {
 	IDP   []*ConnectionConfig `json:"idp,omitzero"`   // 身份提供商（github, google, user, oper, wechat:mp...）
 	VChan []*ConnectionConfig `json:"vchan,omitzero"` // 验证渠道/前置验证（captcha:turnstile, captcha:recaptcha...）
-	MFA   []*ConnectionConfig `json:"mfa,omitzero"`   // MFA 方式（email_otp, totp, webauthn...）
+	MFA   []*ConnectionConfig `json:"mfa,omitzero"`   // MFA 方式（email-otp, totp, webauthn...）
 }
 
 // ==================== 辅助函数 ====================
@@ -307,25 +299,37 @@ func GenerateAuthorizationCode() string {
 }
 
 // NewAuthFlow 创建新的 AuthFlow
-func NewAuthFlow(req *AuthRequest, ttl time.Duration) *AuthFlow {
+func NewAuthFlow(req *AuthRequest, ttl time.Duration, maxLifetime time.Duration) *AuthFlow {
 	now := time.Now()
 	return &AuthFlow{
-		ID:        GenerateFlowID(),
-		CreatedAt: now,
-		ExpiresAt: now.Add(ttl),
-		State:     FlowStateInitialized,
-		Request:   req,
+		ID:           GenerateFlowID(),
+		CreatedAt:    now,
+		ExpiresAt:    now.Add(ttl),
+		MaxExpiresAt: now.Add(maxLifetime),
+		State:        FlowStateInitialized,
+		Request:      req,
 	}
 }
 
-// IsExpired 检查是否已过期
+// IsExpired 检查是否已过期（滑动窗口过期）
 func (f *AuthFlow) IsExpired() bool {
 	return time.Now().After(f.ExpiresAt)
 }
 
-// Renew 续期 AuthFlow
+// IsMaxExpired 检查是否超过最大生命周期
+func (f *AuthFlow) IsMaxExpired() bool {
+	return !f.MaxExpiresAt.IsZero() && time.Now().After(f.MaxExpiresAt)
+}
+
+// Renew 续期 AuthFlow（滑动窗口续期，不超过最大生命周期）
 func (f *AuthFlow) Renew(ttl time.Duration) {
-	f.ExpiresAt = time.Now().Add(ttl)
+	now := time.Now()
+	newExpiresAt := now.Add(ttl)
+	// 不超过最大生命周期
+	if !f.MaxExpiresAt.IsZero() && newExpiresAt.After(f.MaxExpiresAt) {
+		newExpiresAt = f.MaxExpiresAt
+	}
+	f.ExpiresAt = newExpiresAt
 }
 
 // CanAuthenticate 检查是否可以进行认证
@@ -333,18 +337,83 @@ func (f *AuthFlow) CanAuthenticate() bool {
 	return f.State == FlowStateInitialized && !f.IsExpired()
 }
 
-// CanAuthorize 检查是否可以进行授权
-func (f *AuthFlow) CanAuthorize() bool {
-	return f.State == FlowStateAuthenticated && !f.IsExpired()
+// SetConnection 设置当前正在验证的 Connection
+func (f *AuthFlow) SetConnection(connection string) {
+	f.Connection = connection
+}
+
+// GetCurrentConnConfig 获取当前 Connection 的配置
+func (f *AuthFlow) GetCurrentConnConfig() *ConnectionConfig {
+	if f.Connection == "" || f.ConnectionMap == nil {
+		return nil
+	}
+	return f.ConnectionMap[f.Connection]
+}
+
+// AddIdentity 添加已认证的身份绑定及对应的用户信息
+func (f *AuthFlow) AddIdentity(identity *models.UserIdentity, userInfo *models.TUserInfo) {
+	f.Identities = append(f.Identities, identity)
+	if userInfo != nil && identity.IDP != "" {
+		if f.UserInfoMap == nil {
+			f.UserInfoMap = make(map[string]*models.TUserInfo)
+		}
+		f.UserInfoMap[identity.IDP] = userInfo
+	}
+}
+
+// FindIdentity 从已认证的身份中查找指定 connection 对应的身份
+func (f *AuthFlow) GetIdentity(connection string) *models.UserIdentity {
+	for _, id := range f.Identities {
+		if id.IDP == connection {
+			return id
+		}
+	}
+	return nil
+}
+
+// GetUserInfo 获取指定 connection 的用户信息
+func (f *AuthFlow) GetUserInfo(connection string) *models.TUserInfo {
+	if f.UserInfoMap == nil {
+		return nil
+	}
+	return f.UserInfoMap[connection]
 }
 
 // SetAuthenticated 设置为已认证状态
-func (f *AuthFlow) SetAuthenticated(connection, providerID string, user *models.UserWithDecrypted, isNewUser bool) {
+func (f *AuthFlow) SetAuthenticated(user *models.UserWithDecrypted) {
 	f.State = FlowStateAuthenticated
-	f.Connection = connection
-	f.ProviderID = providerID
 	f.User = user
-	f.IsNewUser = isNewUser
+}
+
+// AllRequiredVerified 检查当前 Connection 的所有 Require 依赖是否已验证
+func (f *AuthFlow) AllRequiredVerified() bool {
+	connCfg := f.GetCurrentConnConfig()
+	if connCfg == nil {
+		return false
+	}
+	for _, reqConn := range connCfg.Require {
+		if cfg, ok := f.ConnectionMap[reqConn]; !ok || !cfg.Verified {
+			return false
+		}
+	}
+	return true
+}
+
+// AnyDelegateVerified 检查当前 Connection 的 Delegate 中是否有至少一个已验证
+func (f *AuthFlow) AnyDelegateVerified() bool {
+	connCfg := f.GetCurrentConnConfig()
+	if connCfg == nil {
+		return false
+	}
+	if len(connCfg.Delegate) == 0 {
+		return true // 没有配置 delegate，无需验证
+	}
+	for _, delConn := range connCfg.Delegate {
+		if cfg, ok := f.ConnectionMap[delConn]; ok && cfg.Verified {
+			return true
+		}
+	}
+	return false
 }
 
 // SetAuthorized 设置为已授权状态
@@ -367,28 +436,18 @@ type AuthErrorInterface interface {
 	GetData() map[string]any
 }
 
-// SetError 设置错误状态并阻断流程
-func (f *AuthFlow) SetError(httpStatus int, code, description string, data map[string]any) {
+// Fail 设置错误状态并阻断流程
+func (f *AuthFlow) Fail(err AuthErrorInterface) {
 	f.State = FlowStateFailed
 	f.Error = &FlowError{
-		HTTPStatus:  httpStatus,
-		Code:        code,
-		Description: description,
-		Data:        data,
+		HTTPStatus:  err.GetHTTPStatus(),
+		Code:        err.GetCode(),
+		Description: err.GetDescription(),
+		Data:        err.GetData(),
 	}
-}
-
-// Fail 使用 AuthError 设置错误状态
-func (f *AuthFlow) Fail(err AuthErrorInterface) {
-	f.SetError(err.GetHTTPStatus(), err.GetCode(), err.GetDescription(), err.GetData())
 }
 
 // HasError 检查是否有错误
 func (f *AuthFlow) HasError() bool {
 	return f.Error != nil || f.State == FlowStateFailed
-}
-
-// GetError 获取错误信息
-func (f *AuthFlow) GetError() *FlowError {
-	return f.Error
 }

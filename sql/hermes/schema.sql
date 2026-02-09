@@ -126,12 +126,12 @@ CREATE TABLE IF NOT EXISTS t_application_service_relation (
 
 -- ==================== 用户表 ====================
 -- 用户基本信息
+-- 注意：domain 的概念由 t_user_identity 中的主身份（user/oper）承载，不在 t_user 表中存储
 
 CREATE TABLE IF NOT EXISTS t_user (
     _id              INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
-    domain_id        VARCHAR(32)   NOT NULL COMMENT '所属域：ciam/piam',
-    openid           VARCHAR(64)   NOT NULL COMMENT '用户唯一标识',
+    uid              VARCHAR(64)   NOT NULL COMMENT '用户内部关联 ID（不对外暴露）',
     status           TINYINT       NOT NULL DEFAULT 0 COMMENT '状态：0=active, 1=disabled',
     email_verified   TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '邮箱是否已验证',
     nickname         VARCHAR(128)  DEFAULT NULL COMMENT '昵称',
@@ -145,8 +145,8 @@ CREATE TABLE IF NOT EXISTS t_user (
     updated_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     -- 索引
-    -- 主查询：WHERE openid = ?
-    UNIQUE KEY uk_openid (openid),
+    -- 主查询：WHERE uid = ?
+    UNIQUE KEY uk_uid (uid),
     -- 登录查询：WHERE email = ? / WHERE phone = ?
     UNIQUE KEY uk_email (email),
     UNIQUE KEY uk_phone (phone)
@@ -154,26 +154,30 @@ CREATE TABLE IF NOT EXISTS t_user (
 
 
 -- ==================== 用户身份表 ====================
--- 用户与第三方 IDP 的绑定关系
+-- 用户与 IDP 的绑定关系，每个身份归属一个域（ciam/piam）
+-- idp=global 的身份为该域下的对外标识（token 中的 sub）
 
 CREATE TABLE IF NOT EXISTS t_user_identity (
     _id          INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
-    openid       VARCHAR(64)   NOT NULL COMMENT '用户标识（关联 t_user.openid）',
-    idp          VARCHAR(64)   NOT NULL COMMENT 'IDP 标识：wechat:mp/github/google',
-    t_openid     VARCHAR(256)  NOT NULL COMMENT '第三方用户标识（IDP 返回的 openid）',
+    domain       VARCHAR(16)   NOT NULL COMMENT '身份所属域：ciam/piam',
+    uid          VARCHAR(64)   NOT NULL COMMENT '用户内部标识（关联 t_user.uid）',
+    idp          VARCHAR(64)   NOT NULL COMMENT 'IDP 标识：global/user/oper/github/wechat:mp/google 等',
+    t_openid     VARCHAR(256)  NOT NULL COMMENT 'IDP 侧用户标识（global 为域级对外标识，第三方为 IDP 返回的 openid）',
     raw_data     TEXT          DEFAULT NULL COMMENT 'IDP 返回的原始数据（JSON）',
     -- 时间戳
     created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     -- 索引
-    -- 登录查询：WHERE idp = ? AND t_openid = ?
-    UNIQUE KEY uk_idp_t_openid (idp, t_openid),
-    -- 查询用户绑定的身份：WHERE openid = ?
-    INDEX idx_openid (openid),
+    -- 登录查询：WHERE domain = ? AND idp = ? AND t_openid = ?
+    UNIQUE KEY uk_domain_idp_t_openid (domain, idp, t_openid),
+    -- 查询用户绑定的身份：WHERE uid = ?
+    INDEX idx_uid (uid),
+    -- 查询用户在指定域的 global 身份：WHERE domain = ? AND uid = ? AND idp = 'global'
+    INDEX idx_domain_uid_idp (domain, uid, idp),
     -- 外键
-    CONSTRAINT fk_identity_user FOREIGN KEY (openid) REFERENCES t_user(openid) ON DELETE CASCADE
+    CONSTRAINT fk_identity_user FOREIGN KEY (uid) REFERENCES t_user(uid) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户身份';
 
 
@@ -183,7 +187,7 @@ CREATE TABLE IF NOT EXISTS t_user_identity (
 CREATE TABLE IF NOT EXISTS t_user_credential (
     _id              INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
-    openid           VARCHAR(64)   NOT NULL COMMENT '用户唯一标识（关联 t_user）',
+    uid              VARCHAR(64)   NOT NULL COMMENT '用户唯一标识（关联 t_user.uid）',
     `type`           VARCHAR(32)   NOT NULL COMMENT '凭证类型：totp/webauthn/passkey',
     credential_id    VARCHAR(256)  DEFAULT NULL COMMENT 'WebAuthn 凭证 ID（Base64 编码）',
     secret           VARCHAR(2048) NOT NULL COMMENT '凭证数据（AES-GCM 加密，Base64 编码的 JSON）',
@@ -196,8 +200,8 @@ CREATE TABLE IF NOT EXISTS t_user_credential (
     -- 索引
     -- WebAuthn 认证查询：WHERE credential_id = ?
     UNIQUE KEY uk_credential_id (credential_id),
-    -- 查询用户凭证：WHERE openid = ? AND type = ?
-    INDEX idx_openid_type (openid, `type`)
+    -- 查询用户凭证：WHERE uid = ? AND type = ?
+    INDEX idx_uid_type (uid, `type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户安全凭证（MFA）';
 
 

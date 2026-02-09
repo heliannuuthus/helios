@@ -11,9 +11,10 @@ import (
 
 	"github.com/tidwall/gjson"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -44,9 +45,9 @@ func (*Provider) Type() string {
 	return idp.TypeGoogle
 }
 
-// Exchange 用授权码换取用户信息
+// Login 用授权码换取用户信息
 // proof: OAuth authorization code
-func (p *Provider) Login(ctx context.Context, proof string, _ ...any) (*idp.LoginResult, error) {
+func (p *Provider) Login(ctx context.Context, proof string, _ ...any) (*models.TUserInfo, error) {
 	if proof == "" {
 		return nil, errors.New("code is required")
 	}
@@ -120,7 +121,7 @@ func (p *Provider) getAccessToken(ctx context.Context, code string) (string, err
 }
 
 // getUserInfo 获取用户信息
-func (p *Provider) getUserInfo(ctx context.Context, accessToken string) (*idp.LoginResult, error) {
+func (p *Provider) getUserInfo(ctx context.Context, accessToken string) (*models.TUserInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, userInfoURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("创建请求失败: %w", err)
@@ -171,14 +172,12 @@ func (p *Provider) getUserInfo(ctx context.Context, accessToken string) (*idp.Lo
 
 	logger.Infof("[Google] 登录成功 - UserID: %s, Email: %s", userID, email)
 
-	return &idp.LoginResult{
-		ProviderID: userID,
-		UserInfo: &idp.UserInfo{
-			Nickname: nickname,
-			Email:    email,
-			Picture:  picture,
-		},
-		RawData: bodyStr,
+	return &models.TUserInfo{
+		TOpenID:  userID,
+		Nickname: nickname,
+		Email:    email,
+		Picture:  picture,
+		RawData:  bodyStr,
 	}, nil
 }
 

@@ -2,11 +2,12 @@ package authenticate
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticate/authenticator/idp"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
@@ -18,30 +19,14 @@ import (
 
 // Service 认证服务
 type Service struct {
-	cache          *cache.Manager
-	idpRegistry    *idp.Registry
-	authenticators []Authenticator
-}
-
-// ServiceConfig 服务配置
-type ServiceConfig struct {
-	Cache       *cache.Manager
-	IDPRegistry *idp.Registry
+	cache *cache.Manager
 }
 
 // NewService 创建认证服务
-func NewService(cfg *ServiceConfig) *Service {
-	s := &Service{
-		cache:       cfg.Cache,
-		idpRegistry: cfg.IDPRegistry,
+func NewService(cache *cache.Manager) *Service {
+	return &Service{
+		cache: cache,
 	}
-
-	// 注册认证器
-	s.authenticators = []Authenticator{
-		NewIDPAuthenticator(cfg.IDPRegistry),
-	}
-
-	return s
 }
 
 // ==================== AuthFlow 管理 ====================
@@ -110,7 +95,7 @@ func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) (*types.Aut
 
 	// ==================== 创建 Flow ====================
 
-	flow := types.NewAuthFlow(req, time.Duration(config.GetAegisCookieMaxAge())*time.Second)
+	flow := types.NewAuthFlow(req, time.Duration(config.GetAegisCookieMaxAge())*time.Second, config.GetAegisAuthFlowMaxLifetime())
 	flow.Application = app
 	flow.Service = svc
 	flow.ConnectionMap = s.setConnections(idpConfigs)
@@ -129,7 +114,7 @@ func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) (*types.Aut
 
 // GetAndValidateFlow 获取并验证 AuthFlow
 // 错误信息存储在返回的 flow.Error 中
-// 验证成功后会更新内存中的过期时间（需要调用方在适当时机调用 SaveFlow 持久化）
+// 验证成功后会更新内存中的过期时间（需要调用方调用 SaveFlow 持久化）
 func (s *Service) GetAndValidateFlow(ctx context.Context, flowID string) *types.AuthFlow {
 	flow, err := s.GetFlow(ctx, flowID)
 	if err != nil {
@@ -140,14 +125,21 @@ func (s *Service) GetAndValidateFlow(ctx context.Context, flowID string) *types.
 		return flow
 	}
 
+	// 检查最大生命周期（绝对过期，不可续期）
+	if flow.IsMaxExpired() {
+		logger.Warnf("[Authenticate] Flow 已超过最大生命周期 - FlowID: %s, MaxExpiresAt: %v", flowID, flow.MaxExpiresAt)
+		flow.Fail(autherrors.NewFlowExpired("session expired"))
+		return flow
+	}
+
 	if flow.IsExpired() {
 		logger.Warnf("[Authenticate] Flow 已过期 - FlowID: %s, ExpiredAt: %v", flowID, flow.ExpiresAt)
 		flow.Fail(autherrors.NewFlowExpired("session expired"))
 		return flow
 	}
 
-	// 验证成功，更新内存中的过期时间（续期）
-	// 注意：需要调用方在流程结束时调用 SaveFlow 持久化
+	// 验证成功，更新内存中的过期时间（滑动窗口续期，受 MaxExpiresAt 限制）
+	// 注意：需要调用方调用 SaveFlow 持久化
 	s.RenewFlow(flow)
 
 	return flow
@@ -194,49 +186,36 @@ func (s *Service) DeleteFlow(ctx context.Context, flowID string) error {
 // ==================== 认证 ====================
 
 // Authenticate 执行认证
-// connection: IDP 类型（如 github, google, user, oper）
-// proof: 认证凭证（OAuth code / password / OTP code）
-// params: 额外参数（如 identifier）
-func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, connection string, proof string, params ...any) (*AuthResult, error) {
+// 调用方需先完成 flow.SetConnection 设置当前 Connection
+// params: 认证参数（proof 等，传递给 Authenticator.Authenticate）
+func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, params ...any) (bool, error) {
 	// 1. 验证 flow 状态
 	if !flow.CanAuthenticate() {
-		return nil, autherrors.NewFlowInvalid("flow state does not allow authentication")
+		return false, autherrors.NewFlowInvalid("flow state does not allow authentication")
 	}
 
-	// 2. 获取 ConnectionConfig
-	connCfg, ok := flow.ConnectionMap[connection]
+	// 2. 从注册表获取认证器
+	auth, ok := authenticator.GlobalRegistry().Get(flow.Connection)
 	if !ok {
-		return nil, autherrors.NewInvalidRequest("connection not found in flow")
+		return false, autherrors.NewInvalidRequestf("unsupported connection: %s", flow.Connection)
 	}
 
-	// 3. 选择认证器
-	var authenticator Authenticator
-	for _, auth := range s.authenticators {
-		if auth.Supports(connection) {
-			authenticator = auth
-			break
-		}
-	}
-	if authenticator == nil {
-		return nil, autherrors.NewInvalidRequest("unsupported authentication type")
-	}
-
-	// 4. 执行认证
-	result, err := authenticator.Authenticate(ctx, connCfg, proof, params...)
+	// 3. 执行认证
+	success, err := auth.Authenticate(ctx, flow, params...)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
-	logger.Infof("[Authenticate] 认证成功 - FlowID: %s, Connection: %s, ProviderID: %s", flow.ID, connection, result.ProviderID)
+	logger.Infof("[Authenticate] 认证成功 - FlowID: %s, Connection: %s", flow.ID, flow.Connection)
 
-	return result, nil
+	return success, nil
 }
 
 // GetAvailableConnections 获取可用的 ConnectionsMap
 // 组装三部分数据：
 // 1. IDP - 身份提供商（github, google, user, oper, wechat:mp...）
 // 2. VChan - 验证渠道/前置验证（captcha:turnstile...）
-// 3. MFA - 多因素认证（email_otp, totp, webauthn...），从 IDP 的 delegate 配置中派生
+// 3. MFA - 多因素认证（email-otp, totp, webauthn...），从 IDP 的 delegate 配置中派生
 func (s *Service) GetAvailableConnections(flow *types.AuthFlow) *types.ConnectionsMap {
 	if flow.ConnectionMap == nil {
 		return nil
@@ -256,109 +235,80 @@ func (s *Service) GetAvailableConnections(flow *types.AuthFlow) *types.Connectio
 	for _, cfg := range flow.ConnectionMap {
 		result.IDP = append(result.IDP, cfg)
 
-		// 从 delegate 中收集 MFA（如 email_otp, totp, webauthn）
-		for _, mfa := range cfg.Delegate {
-			mfaSet[mfa] = true
+		for _, m := range cfg.Delegate {
+			mfaSet[m] = true
 		}
-		// 从 require 中收集 VChan（如 captcha）
 		for _, req := range cfg.Require {
 			vchanSet[req] = true
 		}
 	}
 
-	// 构建 VChan 配置（前置验证渠道）
-	result.VChan = s.buildVChanConfigs(vchanSet)
-
-	// 构建 MFA 配置（多因素认证）
-	result.MFA = s.buildMFAConfigs(mfaSet)
+	result.VChan = resolveVChanConfigs(vchanSet)
+	result.MFA = resolveMFAConfigs(mfaSet)
 
 	return result
 }
 
-// buildVChanConfigs 根据 VChan 类型集合构建验证渠道配置列表
-// 只返回系统实际启用的 VChan（如 captcha）
-func (s *Service) buildVChanConfigs(vchanSet map[string]bool) []*types.ConnectionConfig {
-	authCfg := config.Aegis()
-	vchans := make([]*types.ConnectionConfig, 0)
-
-	// Captcha（人机验证）
-	if vchanSet["captcha"] && authCfg.GetBool("captcha.enabled") {
-		provider := authCfg.GetString("captcha.provider")
-		vchans = append(vchans, &types.ConnectionConfig{
-			Connection: "captcha:" + provider,
-			Identifier: authCfg.GetString("captcha.site-key"),
-		})
+// resolveVChanConfigs 从注册表解析 VChan 认证器配置
+func resolveVChanConfigs(vchanSet map[string]bool) []*types.ConnectionConfig {
+	var configs []*types.ConnectionConfig
+	for conn := range vchanSet {
+		if auth, ok := authenticator.GlobalRegistry().Get(conn); ok {
+			configs = append(configs, auth.Prepare())
+			continue
+		}
+		// 兼容 require 中配置的是 "captcha" 而非 "captcha:turnstile" 的情况
+		if conn == "captcha" {
+			for _, a := range authenticator.GlobalRegistry().All() {
+				if strings.HasPrefix(a.Type(), "captcha:") {
+					configs = append(configs, a.Prepare())
+				}
+			}
+		}
 	}
-
-	return vchans
+	return configs
 }
 
-// buildMFAConfigs 根据 MFA 类型集合构建 MFA 配置列表
-// 只返回系统实际启用的 MFA
-func (s *Service) buildMFAConfigs(mfaSet map[string]bool) []*types.ConnectionConfig {
-	authCfg := config.Aegis()
-	mfas := make([]*types.ConnectionConfig, 0)
-
-	// Email OTP
-	if mfaSet["email_otp"] && authCfg.GetBool("mfa.email-otp.enabled") {
-		mfas = append(mfas, &types.ConnectionConfig{
-			Connection: "email_otp",
-		})
-	}
-
-	// Telegram OTP
-	if mfaSet["tg_otp"] && authCfg.GetBool("mfa.tg-otp.enabled") {
-		mfas = append(mfas, &types.ConnectionConfig{
-			Connection: "tg_otp",
-		})
-	}
-
-	// TOTP
-	if mfaSet["totp"] && authCfg.GetBool("mfa.totp.enabled") {
-		mfas = append(mfas, &types.ConnectionConfig{
-			Connection: "totp",
-		})
-	}
-
-	// WebAuthn
-	if mfaSet["webauthn"] && authCfg.GetBool("mfa.webauthn.enabled") {
-		cfg := &types.ConnectionConfig{
-			Connection: "webauthn",
+// resolveMFAConfigs 从注册表解析 MFA 认证器配置
+func resolveMFAConfigs(mfaSet map[string]bool) []*types.ConnectionConfig {
+	var configs []*types.ConnectionConfig
+	for conn := range mfaSet {
+		if auth, ok := authenticator.GlobalRegistry().Get(conn); ok {
+			configs = append(configs, auth.Prepare())
 		}
-		if rpID := authCfg.GetString("mfa.webauthn.rp-id"); rpID != "" {
-			cfg.Identifier = rpID
-		}
-		mfas = append(mfas, cfg)
 	}
+	return configs
+}
 
-	// Passkey（和 WebAuthn 共用底层但作为独立选项）
-	if mfaSet["passkey"] && authCfg.GetBool("mfa.passkey.enabled") {
-		cfg := &types.ConnectionConfig{
-			Connection: "passkey",
+// ==================== Flow 清理 ====================
+
+// CleanupFlow 处理 flow 清理（登录成功删除，失败保存）
+func (s *Service) CleanupFlow(ctx context.Context, flowID string, flow *types.AuthFlow, loginSuccess bool) {
+	if loginSuccess {
+		if err := s.DeleteFlow(ctx, flowID); err != nil {
+			logger.Warnf("[Authenticate] 删除 flow 失败: %v", err)
 		}
-		if rpID := authCfg.GetString("mfa.webauthn.rp-id"); rpID != "" {
-			cfg.Identifier = rpID
+	} else {
+		if err := s.SaveFlow(ctx, flow); err != nil {
+			logger.Warnf("[Authenticate] 保存 flow 失败: %v", err)
 		}
-		mfas = append(mfas, cfg)
 	}
-
-	return mfas
 }
 
 // ==================== 辅助方法 ====================
 
 // setConnections 根据应用 IDP 配置构建 ConnectionMap
-// 合并 Provider.Prepare() 基础配置与应用级配置（strategy, delegate, require）
+// 合并 Authenticator.Prepare() 基础配置与应用级配置（strategy, delegate, require）
 func (s *Service) setConnections(idpConfigs []*models.ApplicationIDPConfig) map[string]*types.ConnectionConfig {
 	result := make(map[string]*types.ConnectionConfig, len(idpConfigs))
 
 	for _, idpCfg := range idpConfigs {
-		// 获取 Provider 基础配置，未注册的 Provider 跳过
-		provider, ok := s.idpRegistry.Get(idpCfg.Type)
+		// 获取已注册的 Authenticator 基础配置，未注册的跳过
+		auth, ok := authenticator.GlobalRegistry().Get(idpCfg.Type)
 		if !ok {
 			continue
 		}
-		cfg := provider.Prepare()
+		cfg := auth.Prepare()
 
 		if cfg == nil {
 			continue

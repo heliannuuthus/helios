@@ -1,9 +1,5 @@
 package authorize
 
-import (
-	"time"
-)
-
 // TokenRequest Token 请求
 type TokenRequest struct {
 	GrantType    string `form:"grant_type" binding:"required,oneof=authorization_code refresh_token"`
@@ -30,23 +26,6 @@ type UserInfoResponse struct {
 	Picture  string `json:"picture,omitempty"`
 	Email    string `json:"email,omitempty"` // 脱敏
 	Phone    string `json:"phone,omitempty"` // 脱敏
-}
-
-// RefreshToken 刷新令牌
-type RefreshToken struct {
-	Token     string    `json:"token"`
-	UserID    string    `json:"user_id"`
-	ClientID  string    `json:"client_id"`
-	Audience  string    `json:"audience"`
-	Scope     string    `json:"scope"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Revoked   bool      `json:"revoked"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-// IsValid 检查是否有效
-func (r *RefreshToken) IsValid() bool {
-	return !r.Revoked && time.Now().Before(r.ExpiresAt)
 }
 
 // GrantType 授权类型
