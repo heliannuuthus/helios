@@ -187,6 +187,8 @@ func extractAudience(tokenString string) (string, error) {
 }
 
 // UnsafeParseToken 不验证签名解析 token（仅用于提取 claims）
+// 安全警告：此方法跳过签名验证，返回的数据不可信，仅用于在验证前提取 clientID/audience 以查找对应密钥
+// PASETO v4.public 使用 Ed25519，签名固定 64 字节
 func UnsafeParseToken(tokenString string) (*paseto.Token, error) {
 	parts := strings.Split(tokenString, ".")
 	if len(parts) < 3 || parts[0] != "v4" || parts[1] != "public" {

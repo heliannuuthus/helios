@@ -125,11 +125,6 @@ func ParseChallengeToken(pasetoToken *paseto.Token) (*ChallengeToken, error) {
 
 // ==================== Token 接口实现 ====================
 
-// TokenType 实现 Token 接口（返回 Token 类型）
-func (c *ChallengeToken) TokenType() TokenType {
-	return TokenTypeChallenge
-}
-
 // Type 实现 Token 接口
 func (c *ChallengeToken) Type() TokenType {
 	return TokenTypeChallenge

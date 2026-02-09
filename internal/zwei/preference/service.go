@@ -1,6 +1,7 @@
 package preference
 
 import (
+	"fmt"
 	"sync"
 
 	"gorm.io/gorm"
@@ -154,12 +155,13 @@ type OptionItemWithSelected struct {
 }
 
 // UpdateUserPreferences 更新用户偏好（全量替换）
-func (s *Service) UpdateUserPreferences(openid string, req *UpdatePreferencesRequest) error {
+func (s *Service) UpdateUserPreferences(openid string, req *UpdatePreferencesRequest) (err error) {
 	// 开始事务
 	tx := s.db.Begin()
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
+			err = fmt.Errorf("panic in UpdateUserPreferences: %v", r)
 		}
 	}()
 

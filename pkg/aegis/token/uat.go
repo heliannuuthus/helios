@@ -224,9 +224,7 @@ func (u *UserAccessToken) GetUserForFooter() map[string]string {
 		return nil
 	}
 	result := make(map[string]string)
-	if u.openID != "" {
-		result["sub"] = u.openID
-	}
+	result["sub"] = u.openID
 	if u.internalUID != "" {
 		result["uid"] = u.internalUID
 	}

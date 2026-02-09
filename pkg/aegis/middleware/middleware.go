@@ -254,7 +254,8 @@ func extractToken(r *http.Request) string {
 	if strings.HasPrefix(authorization, "Bearer ") {
 		return authorization[7:]
 	}
-	return authorization
+	// 非 Bearer 格式视为无效，避免泄漏原始 header 值
+	return ""
 }
 
 // GetToken 从 context 中获取验证后的 Token

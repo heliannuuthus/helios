@@ -9,66 +9,72 @@ import (
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 
-	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 var (
-	client *oss.Client
-	bucket *oss.Bucket
+	client     *oss.Client
+	bucket     *oss.Bucket
+	cfg        Config
+	configured bool
 )
 
-// getOSSEndpoint 根据环境变量获取 OSS endpoint（内网或公网）
-func getOSSEndpoint() string {
-	endpoint := config.GetOSSEndpoint()
+// Config OSS 客户端配置
+type Config struct {
+	Endpoint        string // OSS 地域节点，如 oss-cn-hangzhou.aliyuncs.com
+	AccessKeyID     string // AccessKey ID
+	AccessKeySecret string // AccessKey Secret
+	Bucket          string // Bucket 名称
+	Domain          string // 自定义域名（可选）
+	Region          string // STS 区域（可选，默认从 Endpoint 提取）
+	RoleARN         string // RAM 角色 ARN（STS 临时凭证）
+	UseInternal     bool   // 是否使用内网端点（生产环境）
+}
+
+// resolveEndpoint 根据配置决定使用公网还是内网端点
+func resolveEndpoint(c Config) string {
+	endpoint := c.Endpoint
 	if endpoint == "" {
 		return ""
 	}
 
-	// 检查是否使用内网（从配置 app.env 读取）
-	appEnv := config.GetEnv()
-	useInternal := appEnv == "prod"
-
-	if !useInternal {
+	if !c.UseInternal {
 		return endpoint
 	}
 
 	// 转换为内网 endpoint：oss-cn-beijing.aliyuncs.com -> oss-cn-beijing-internal.aliyuncs.com
 	if strings.Contains(endpoint, "-internal.") {
-		// 已经是内网地址，直接返回
 		return endpoint
 	}
 
-	// 替换为内网地址
 	internalEndpoint := strings.Replace(endpoint, ".aliyuncs.com", "-internal.aliyuncs.com", 1)
-	logger.Infof("[OSS] 使用内网 endpoint: %s -> %s (Env: %s)", endpoint, internalEndpoint, appEnv)
+	logger.Infof("[OSS] 使用内网 endpoint: %s -> %s", endpoint, internalEndpoint)
 	return internalEndpoint
 }
 
 // Init 初始化 OSS 客户端
-func Init() error {
-	endpoint := getOSSEndpoint()
-	accessKeyID := config.GetOSSAccessKeyID()
-	accessKeySecret := config.GetOSSAccessKeySecret()
-	bucketName := config.GetOSSBucket()
+func Init(c Config) error {
+	cfg = c
+	endpoint := resolveEndpoint(c)
 
-	if endpoint == "" || accessKeyID == "" || accessKeySecret == "" || bucketName == "" {
-		return fmt.Errorf("OSS 配置不完整，请检查 config.toml 中的 [oss] 配置")
+	if endpoint == "" || c.AccessKeyID == "" || c.AccessKeySecret == "" || c.Bucket == "" {
+		return fmt.Errorf("OSS 配置不完整: endpoint, access-key-id, access-key-secret, bucket 均为必填")
 	}
 
 	var err error
-	client, err = oss.New(endpoint, accessKeyID, accessKeySecret)
+	client, err = oss.New(endpoint, c.AccessKeyID, c.AccessKeySecret)
 	if err != nil {
 		return fmt.Errorf("初始化 OSS 客户端失败: %w", err)
 	}
 
-	bucket, err = client.Bucket(bucketName)
+	bucket, err = client.Bucket(c.Bucket)
 	if err != nil {
 		return fmt.Errorf("获取 OSS Bucket 失败: %w", err)
 	}
 
+	configured = true
 	logger.Infof("[OSS] 初始化成功 - Endpoint: %s, Bucket: %s, Internal: %v",
-		endpoint, bucketName, strings.Contains(endpoint, "-internal"))
+		endpoint, c.Bucket, strings.Contains(endpoint, "-internal"))
 	return nil
 }
 
@@ -133,13 +139,16 @@ func uploadByObjectKey(objectKey string, reader io.Reader) (string, error) {
 // credentials: STS 临时凭证
 // 返回: OSS 文件 URL
 func UploadImageWithSTS(objectKey string, reader io.Reader, credentials *STSCredentials) (string, error) {
+	if !configured {
+		return "", fmt.Errorf("OSS 客户端未初始化")
+	}
+
 	// 确保 objectKey 不以 / 开头
 	if len(objectKey) > 0 && objectKey[0] == '/' {
 		objectKey = objectKey[1:]
 	}
 
-	endpoint := getOSSEndpoint()
-	bucketName := config.GetOSSBucket()
+	endpoint := resolveEndpoint(cfg)
 
 	// 使用 STS 凭证创建临时客户端
 	stsClient, err := oss.New(endpoint, credentials.AccessKeyID, credentials.AccessKeySecret,
@@ -148,7 +157,7 @@ func UploadImageWithSTS(objectKey string, reader io.Reader, credentials *STSCred
 		return "", fmt.Errorf("创建 STS OSS 客户端失败: %w", err)
 	}
 
-	stsBucket, err := stsClient.Bucket(bucketName)
+	stsBucket, err := stsClient.Bucket(cfg.Bucket)
 	if err != nil {
 		return "", fmt.Errorf("获取 STS Bucket 失败: %w", err)
 	}
@@ -166,25 +175,21 @@ func UploadImageWithSTS(objectKey string, reader io.Reader, credentials *STSCred
 
 // buildObjectURL 构建对象 URL
 func buildObjectURL(objectKey string) string {
-	domain := config.GetOSSDomain()
-	if domain == "" {
+	d := cfg.Domain
+	if d == "" {
 		// 如果没有配置自定义域名，使用 OSS 默认域名
-		endpoint := config.GetOSSEndpoint()
-		bucketName := config.GetOSSBucket()
-		domain = fmt.Sprintf("https://%s.%s", bucketName, endpoint)
+		d = fmt.Sprintf("https://%s.%s", cfg.Bucket, cfg.Endpoint)
 	} else {
 		// 如果配置了自定义域名，确保有协议前缀
-		if !strings.HasPrefix(domain, "http://") && !strings.HasPrefix(domain, "https://") {
-			domain = "https://" + domain
+		if !strings.HasPrefix(d, "http://") && !strings.HasPrefix(d, "https://") {
+			d = "https://" + d
 		}
 	}
 
 	// 确保 domain 不以 / 结尾
-	if len(domain) > 0 && domain[len(domain)-1] == '/' {
-		domain = domain[:len(domain)-1]
-	}
+	d = strings.TrimRight(d, "/")
 
-	return fmt.Sprintf("%s/%s", domain, objectKey)
+	return fmt.Sprintf("%s/%s", d, objectKey)
 }
 
 // BuildObjectURL 构建对象 URL（不实际上传，仅构建 URL）

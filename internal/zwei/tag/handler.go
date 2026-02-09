@@ -47,14 +47,14 @@ func (h *Handler) ListTags(c *gin.Context) {
 		// 验证类型
 		validType := models.TagType(tagType)
 		if !h.isValidTagType(validType, false) && !h.isValidTagType(validType, true) {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "无效的标签类型"})
+			c.JSON(http.StatusBadRequest, gin.H{"message": "无效的标签类型"})
 			return
 		}
 
 		// 选项类型（taboo/allergy）只返回选项，不支持 recipe_id
 		if validType == models.TagTypeTaboo || validType == models.TagTypeAllergy {
 			if recipeID != "" {
-				c.JSON(http.StatusBadRequest, gin.H{"detail": "选项类型不支持 recipe_id 参数"})
+				c.JSON(http.StatusBadRequest, gin.H{"message": "选项类型不支持 recipe_id 参数"})
 				return
 			}
 			results, err = h.service.GetOptions(validType)
@@ -71,14 +71,14 @@ func (h *Handler) ListTags(c *gin.Context) {
 	} else {
 		// 获取所有标签（需要指定 recipe_id）
 		if recipeID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "请指定 type 或 recipe_id"})
+			c.JSON(http.StatusBadRequest, gin.H{"message": "请指定 type 或 recipe_id"})
 			return
 		}
 		results, err = h.service.GetTagsByRecipeAsTagValue(recipeID)
 	}
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -103,7 +103,7 @@ func (h *Handler) GetTagsByType(c *gin.Context) {
 
 	// 验证类型
 	if !h.isValidTagType(tagType, false) && !h.isValidTagType(tagType, true) {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "无效的标签类型"})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "无效的标签类型"})
 		return
 	}
 
@@ -119,7 +119,7 @@ func (h *Handler) GetTagsByType(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -151,7 +151,7 @@ type CreateTagRequest struct {
 func (h *Handler) CreateTag(c *gin.Context) {
 	var req CreateTagRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -159,7 +159,7 @@ func (h *Handler) CreateTag(c *gin.Context) {
 
 	// 验证类型
 	if !h.isValidTagType(tagType, false) && !h.isValidTagType(tagType, true) {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "无效的标签类型"})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "无效的标签类型"})
 		return
 	}
 
@@ -167,14 +167,14 @@ func (h *Handler) CreateTag(c *gin.Context) {
 	if req.RecipeID == "" {
 		// 创建标签定义（选项，仅支持 taboo/allergy）
 		if tagType != models.TagTypeTaboo && tagType != models.TagTypeAllergy {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "选项类型仅支持 taboo 和 allergy"})
+			c.JSON(http.StatusBadRequest, gin.H{"message": "选项类型仅支持 taboo 和 allergy"})
 			return
 		}
 		err = h.service.AddOption(req.Value, req.Label, tagType)
 	} else {
 		// 创建菜谱标签（不支持 taboo/allergy）
 		if tagType == models.TagTypeTaboo || tagType == models.TagTypeAllergy {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "taboo 和 allergy 类型不能关联菜谱"})
+			c.JSON(http.StatusBadRequest, gin.H{"message": "taboo 和 allergy 类型不能关联菜谱"})
 			return
 		}
 		// AddTag 会自动创建标签定义（如果不存在）并关联到菜谱
@@ -182,7 +182,7 @@ func (h *Handler) CreateTag(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -218,13 +218,13 @@ func (h *Handler) UpdateTag(c *gin.Context) {
 
 	// 验证类型
 	if !h.isValidTagType(tagType, false) && !h.isValidTagType(tagType, true) {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "无效的标签类型"})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "无效的标签类型"})
 		return
 	}
 
 	var req UpdateTagRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -239,7 +239,7 @@ func (h *Handler) UpdateTag(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -267,7 +267,7 @@ func (h *Handler) DeleteTag(c *gin.Context) {
 
 	// 验证类型
 	if !h.isValidTagType(tagType, false) && !h.isValidTagType(tagType, true) {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "无效的标签类型"})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "无效的标签类型"})
 		return
 	}
 
@@ -275,7 +275,7 @@ func (h *Handler) DeleteTag(c *gin.Context) {
 	if recipeID == "" {
 		// 删除标签定义（选项）
 		if tagType != models.TagTypeTaboo && tagType != models.TagTypeAllergy {
-			c.JSON(http.StatusBadRequest, gin.H{"detail": "选项类型仅支持 taboo 和 allergy"})
+			c.JSON(http.StatusBadRequest, gin.H{"message": "选项类型仅支持 taboo 和 allergy"})
 			return
 		}
 		err = h.service.DeleteOption(value, tagType)
@@ -285,7 +285,7 @@ func (h *Handler) DeleteTag(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
