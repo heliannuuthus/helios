@@ -28,8 +28,8 @@ Helios 项目中的 "Connection" 是认证系统（Aegis 模块）的核心概�
 
 | 类别 | 缩写 | 含义 | 示例 |
 |------|------|------|------|
-| **IDP** | Identity Provider | 身份提供商 | github, google, wechat:mp, user, oper, passkey |
-| **VChan** | Verification Channel | 验证渠道/前置验证 | captcha:turnstile, captcha:recaptcha |
+| **IDP** | Identity Provider | 身份提供商 | github, google, wechat-mp, user, oper, passkey |
+| **VChan** | Verification Channel | 验证渠道/前置验证 | captcha-turnstile, captcha-recaptcha |
 | **MFA** | Multi-Factor Auth | 多因素认证 | email-otp, totp, webauthn |
 
 整个认证流程遵循 **OAuth 2.1 + PKCE** 标准，使用 **PASETO v4** 代替 JWT 进行 Token 签发。
@@ -64,7 +64,7 @@ hermes.Service / hermes.UserService (DB)
 
 返回给前端的公开配置，统一结构适用于 IDP、VChan 和 MFA。
 
-- `Connection` (string): 唯一标识（如 github, captcha:turnstile, email-otp）
+- `Connection` (string): 唯一标识（如 github, captcha-turnstile, email-otp）
 - `Identifier` (string): 公开标识（client_id / site_key / rp_id）
 - `Strategy` ([]string): 登录策略（仅 user/oper 需要：password, email-otp, webauthn）
 - `Delegate` ([]string): 委托验证/MFA（totp, email-otp），登录后需完成其中一种
@@ -128,12 +128,12 @@ types.go 中定义了全部常量，但并非每个都有 Provider 实现。下�
 
 | 常量 | 值 | 域 | 说明 | 实现状态 |
 |------|------|------|------|----------|
-| TypeWechatMP | wechat:mp | CIAM | 微信小程序 | 已实现 (wechat/mp.go) |
-| TypeTTMP | tt:mp | CIAM | 抖音小程序 | 已实现 (tt/mp.go) |
-| TypeAlipayMP | alipay:mp | CIAM | 支付宝小程序 | 已实现 (alipay/mp.go + common.go) |
-| TypeWechatWeb | wechat:web | CIAM | 微信网页授权 | 仅定义常量，无 Provider 实现 |
-| TypeAlipayWeb | alipay:web | CIAM | 支付宝网页授权 | 仅定义常量，无 Provider 实现 |
-| TypeTTWeb | tt:web | CIAM | 抖音网页授权 | 仅定义常量，无 Provider 实现 |
+| TypeWechatMP | wechat-mp | CIAM | 微信小程序 | 已实现 (wechat/mp.go) |
+| TypeTTMP | tt-mp | CIAM | 抖音小程序 | 已实现 (tt/mp.go) |
+| TypeAlipayMP | alipay-mp | CIAM | 支付宝小程序 | 已实现 (alipay/mp.go + common.go) |
+| TypeWechatWeb | wechat-web | CIAM | 微信网页授权 | 仅定义常量，无 Provider 实现 |
+| TypeAlipayWeb | alipay-web | CIAM | 支付宝网页授权 | 仅定义常量，无 Provider 实现 |
+| TypeTTWeb | tt-web | CIAM | 抖音网页授权 | 仅定义常量，无 Provider 实现 |
 | TypeUser | user | CIAM | C端用户账号密码 | 已实现 (system/provider.go) |
 | TypeWecom | wecom | PIAM | 企业微信 | 仅定义常量，无 Provider 实现 |
 | TypeGithub | github | PIAM | GitHub | 已实现 (github/provider.go) |
@@ -142,7 +142,7 @@ types.go 中定义了全部常量，但并非每个都有 Provider 实现。下�
 | TypePasskey | passkey | 通用 | Passkey/WebAuthn 无密码登录 | 已实现 (passkey/provider.go) |
 | TypeGlobal | global | 系统 | 全局身份（每域一个，作为 sub） | 非认证用，无 Provider |
 
-**实际注册到 Registry 的 IDP（init.go）：** wechat:mp, tt:mp, alipay:mp, github, google, user, oper, passkey（共 8 个）
+**实际注册到 Registry 的 IDP（init.go）：** wechat-mp, tt-mp, alipay-mp, github, google, user, oper, passkey（共 8 个）
 
 域划分由配置 `identity.ciam-idps` / `identity.piam-idps` 决定。
 
@@ -150,9 +150,9 @@ types.go 中定义了全部常量，但并非每个都有 Provider 实现。下�
 
 | 标识 | 说明 | 实现状态 |
 |------|------|----------|
-| captcha:turnstile | Cloudflare Turnstile 人机验证 | 已实现 (captcha/turnstile.go) |
+| captcha-turnstile | Cloudflare Turnstile 人机验证 | 已实现 (captcha/turnstile.go) |
 
-> 注：注释中提到 captcha:recaptcha，但代码中未实现 reCAPTCHA Verifier。
+> 注：注释中提到 captcha-recaptcha，但代码中未实现 reCAPTCHA Verifier。
 
 ### 3.3 MFA Connection 类型
 
@@ -305,12 +305,12 @@ Handler.GetConnections(c)
 ```json
 {
   "idp": [
-    {"connection":"user","strategy":["password","email-otp"],"delegate":["totp"],"require":["captcha:turnstile"]},
+    {"connection":"user","strategy":["password","email-otp"],"delegate":["totp"],"require":["captcha-turnstile"]},
     {"connection":"github","identifier":"Iv1.abc123..."},
-    {"connection":"wechat:mp","identifier":"wx1234567890"}
+    {"connection":"wechat-mp","identifier":"wx1234567890"}
   ],
   "vchan": [
-    {"connection":"captcha:turnstile","identifier":"0x4AAAAAAA..."}
+    {"connection":"captcha-turnstile","identifier":"0x4AAAAAAA..."}
   ],
   "mfa": [
     {"connection":"email-otp"},
@@ -344,9 +344,9 @@ Handler.Login(c)
   |       |   |-- provider.Login(ctx, proof, extraParams...)
   |       |   |   |-- [github]    -> getAccessToken() + getUserInfo() + getPrimaryEmail()
   |       |   |   |-- [google]    -> getAccessToken() + getUserInfo()
-  |       |   |   |-- [wechat:mp] -> 微信 jscode2session API
-  |       |   |   |-- [tt:mp]     -> sendSessionRequest()
-  |       |   |   |-- [alipay:mp] -> sendOAuthRequest() (RSA2签名+验签)
+  |       |   |   |-- [wechat-mp] -> 微信 jscode2session API
+  |       |   |   |-- [tt-mp]     -> sendSessionRequest()
+  |       |   |   |-- [alipay-mp] -> sendOAuthRequest() (RSA2签名+验签)
   |       |   |   |-- [user/oper] -> login() bcrypt 密码验证
   |       |   |   \-- [passkey]   -> webauthnSvc.FinishLogin()
   |       |   |-- userInfo.ToUserIdentity(domain, connection)
@@ -569,10 +569,10 @@ initMailSender() (init.go:265)
 
 | 连接目标 | 触发 Connection | 文件 |
 |----------|----------------|------|
-| Cloudflare Turnstile siteverify API | captcha:turnstile | authenticator/captcha/turnstile.go |
-| 微信小程序 jscode2session + getuserphonenumber | wechat:mp | authenticator/idp/wechat/mp.go |
-| 抖音小程序 jscode2session + getphonenumber | tt:mp | authenticator/idp/tt/mp.go |
-| 支付宝小程序 OAuth (RSA2 签名) | alipay:mp | authenticator/idp/alipay/mp.go + common.go |
+| Cloudflare Turnstile siteverify API | captcha-turnstile | authenticator/captcha/turnstile.go |
+| 微信小程序 jscode2session + getuserphonenumber | wechat-mp | authenticator/idp/wechat/mp.go |
+| 抖音小程序 jscode2session + getphonenumber | tt-mp | authenticator/idp/tt/mp.go |
+| 支付宝小程序 OAuth (RSA2 签名) | alipay-mp | authenticator/idp/alipay/mp.go + common.go |
 | GitHub OAuth token + user API + emails API | github | authenticator/idp/github/provider.go |
 | Google OAuth token + userinfo API | google | authenticator/idp/google/provider.go |
 
@@ -589,9 +589,9 @@ initRegistry()
   |-- authenticator.NewRegistry()
   |
   |-- === IDP Authenticators (共 8 个，全部有实际 Provider 实现) ===
-  |-- register(IDPAuthenticator(wechat.NewMPProvider()))     -> "wechat:mp"
-  |-- register(IDPAuthenticator(tt.NewMPProvider()))          -> "tt:mp"
-  |-- register(IDPAuthenticator(alipay.NewMPProvider()))      -> "alipay:mp"
+  |-- register(IDPAuthenticator(wechat.NewMPProvider()))     -> "wechat-mp"
+  |-- register(IDPAuthenticator(tt.NewMPProvider()))          -> "tt-mp"
+  |-- register(IDPAuthenticator(alipay.NewMPProvider()))      -> "alipay-mp"
   |-- register(IDPAuthenticator(github.NewProvider()))        -> "github"
   |-- register(IDPAuthenticator(google.NewProvider()))        -> "google"
   |-- register(IDPAuthenticator(system.NewUserProvider()))    -> "user" [需 userSvc != nil]
@@ -599,7 +599,7 @@ initRegistry()
   |-- register(IDPAuthenticator(passkey.NewProvider()))       -> "passkey" [需 webauthnSvc != nil]
   |
   |-- === VChan Authenticators (仅 Turnstile，无 reCAPTCHA 实现) ===
-  |-- register(VChanAuthenticator(captchaVerifier))           -> "captcha:turnstile" [需 captcha 配置启用]
+  |-- register(VChanAuthenticator(captchaVerifier))           -> "captcha-turnstile" [需 captcha 配置启用]
   |
   |-- === MFA Authenticators ===
   |-- register(MFAAuthenticator(EmailOTPProvider))            -> "email-otp" [需 mfa.email-otp.enabled + emailSender]
