@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/pkg/json"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 const (
@@ -74,7 +75,11 @@ func (v *TurnstileVerifier) Verify(ctx context.Context, proof, remoteIP string) 
 	if err != nil {
 		return false, fmt.Errorf("send request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			logger.Warnf("[Turnstile] close response body failed: %v", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("unexpected status: %d", resp.StatusCode)

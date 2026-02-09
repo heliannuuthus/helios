@@ -68,6 +68,12 @@ const (
 	OSSDomain          = "oss.domain"
 	OSSRegion          = "oss.region"
 	OSSRoleARN         = "oss.role-arn"
+
+	R2AccountID       = "r2.account-id"
+	R2AccessKeyID     = "r2.access-key-id"
+	R2AccessKeySecret = "r2.access-key-secret"
+	R2Bucket          = "r2.bucket"
+	R2Domain          = "r2.domain"
 )
 
 // Cfg 配置实例包装器
@@ -377,6 +383,33 @@ func GetOSSRegion() string {
 // GetOSSRoleARN 获取 OSS STS Role ARN
 func GetOSSRoleARN() string {
 	return Config().GetString("oss.role-arn")
+}
+
+// ==================== R2 (Cloudflare) 配置访问函数 ====================
+
+// GetR2AccountID 获取 Cloudflare Account ID
+func GetR2AccountID() string {
+	return Config().GetString("r2.account-id")
+}
+
+// GetR2AccessKeyID 获取 R2 Access Key ID
+func GetR2AccessKeyID() string {
+	return Config().GetString("r2.access-key-id")
+}
+
+// GetR2AccessKeySecret 获取 R2 Access Key Secret
+func GetR2AccessKeySecret() string {
+	return Config().GetString("r2.access-key-secret")
+}
+
+// GetR2Bucket 获取 R2 Bucket 名称
+func GetR2Bucket() string {
+	return Config().GetString("r2.bucket")
+}
+
+// GetR2Domain 获取 R2 自定义域名
+func GetR2Domain() string {
+	return Config().GetString("r2.domain")
 }
 
 // Name 返回配置名称

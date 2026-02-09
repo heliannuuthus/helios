@@ -134,7 +134,7 @@ type CategoryResponse struct {
 func (h *Handler) CreateRecipe(c *gin.Context) {
 	var req RecipeCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -176,13 +176,13 @@ func (h *Handler) CreateRecipe(c *gin.Context) {
 	}
 
 	if err := h.service.CreateRecipe(&recipeModel, ingredients, steps, req.AdditionalNotes); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
 	createdRecipe, err := h.service.GetRecipe(recipeModel.RecipeID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 	c.JSON(http.StatusCreated, h.toRecipeResponse(createdRecipe))
@@ -216,7 +216,7 @@ func (h *Handler) GetRecipes(c *gin.Context) {
 
 	recipes, err := h.service.GetRecipes(category, search, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -250,12 +250,12 @@ func (h *Handler) GetRecipe(c *gin.Context) {
 
 	recipeModel, err := h.service.GetRecipe(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
 	if recipeModel == nil {
-		c.JSON(http.StatusNotFound, gin.H{"detail": "菜谱 ID '" + id + "' 不存在"})
+		c.JSON(http.StatusNotFound, gin.H{"message": "菜谱 ID '" + id + "' 不存在"})
 		return
 	}
 
@@ -277,7 +277,7 @@ func (h *Handler) UpdateRecipe(c *gin.Context) {
 
 	var req RecipeUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -348,7 +348,7 @@ func (h *Handler) UpdateRecipe(c *gin.Context) {
 		req.AdditionalNotes.IsPresent(),
 	)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -371,7 +371,7 @@ func (h *Handler) DeleteRecipe(c *gin.Context) {
 	id := c.Param("recipe_id")
 
 	if err := h.service.DeleteRecipe(id); err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -387,7 +387,7 @@ func (h *Handler) DeleteRecipe(c *gin.Context) {
 func (h *Handler) GetCategories(c *gin.Context) {
 	categories, err := h.service.GetCategories()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -417,7 +417,7 @@ func (h *Handler) GetCategories(c *gin.Context) {
 func (h *Handler) CreateRecipesBatch(c *gin.Context) {
 	var reqs []RecipeCreateRequest
 	if err := c.ShouldBindJSON(&reqs); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -470,7 +470,7 @@ func (h *Handler) CreateRecipesBatch(c *gin.Context) {
 
 	created, err := h.service.CreateRecipesBatch(recipes, ingredientsList, stepsList, notesList)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 

@@ -209,13 +209,20 @@ ttl = "5m"                   # 缓存过期时间（支持热更新）
 key-prefix = "aegis:ch:"      # 缓存 key 前缀
 expires_in = "5m"            # Challenge 过期时间（支持热更新）
 
-# 阿里云 OSS 配置（用于图片上传）
-[oss]
-endpoint = ""           # OSS 地域节点，如 oss-cn-hangzhou.aliyuncs.com
-access-key-id = ""      # AccessKey ID
-access-key-secret = ""  # AccessKey Secret
-bucket = ""             # Bucket 名称
-domain = ""             # 自定义域名（可选），如 https://cdn.example.com，不配置则使用 OSS 默认域名
-region = ""             # STS 区域（可选，默认从 endpoint 提取）
+# 阿里云 OSS 配置（用于图片上传）[已废弃，迁移至 R2]
+# [oss]
+# endpoint = ""           # OSS 地域节点，如 oss-cn-hangzhou.aliyuncs.com
+# access-key-id = ""      # AccessKey ID
+# access-key-secret = ""  # AccessKey Secret
+# bucket = ""             # Bucket 名称
+# domain = ""             # 自定义域名（可选），如 https://cdn.example.com
+# region = ""             # STS 区域（可选，默认从 endpoint 提取）
+# role-arn = ""           # RAM 角色 ARN
 
-role-arn = ""           # RAM 角色 ARN，如 acs:ram::123456789012:role/oss-upload-role（STS 临时凭证配置，用于安全上传，1小时有效期）
+# Cloudflare R2 配置（用于图片上传，S3 兼容）
+[r2]
+account-id = ""         # Cloudflare Account ID
+access-key-id = ""      # R2 API Token (Access Key ID)，在 Cloudflare Dashboard -> R2 -> Manage R2 API Tokens 创建
+access-key-secret = ""  # R2 API Token (Secret Access Key)
+bucket = ""             # R2 Bucket 名称
+domain = ""             # 自定义域名（R2 Custom Domain 或 Workers 域名），如 https://cdn.example.com

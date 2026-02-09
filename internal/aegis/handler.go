@@ -3,6 +3,7 @@ package aegis
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"github.com/gin-gonic/gin"
 
@@ -351,9 +352,9 @@ func (h *Handler) Login(c *gin.Context) {
 	loginSuccess = true
 
 	// 7. 构建响应
-	redirectURI := flow.Request.RedirectURI + "?code=" + authCode.Code
+	redirectURI := flow.Request.RedirectURI + "?code=" + url.QueryEscape(authCode.Code)
 	if authCode.State != "" {
-		redirectURI += "&state=" + authCode.State
+		redirectURI += "&state=" + url.QueryEscape(authCode.State)
 	}
 
 	clearAuthSessionCookie(c)
@@ -606,9 +607,9 @@ func ForwardToStage(c *gin.Context, stage AuthStage) {
 //
 // 使用 302 Found 重定向回 redirect_uri，携带授权码和 state
 func ForwardToApp(c *gin.Context, redirectURI, code, state string) {
-	targetURL := redirectURI + "?code=" + code
+	targetURL := redirectURI + "?code=" + url.QueryEscape(code)
 	if state != "" {
-		targetURL += "&state=" + state
+		targetURL += "&state=" + url.QueryEscape(state)
 	}
 
 	// 授权完成后始终使用 302，因为这是从 POST /login 完成后的跳转

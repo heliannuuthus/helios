@@ -8,7 +8,6 @@ import (
 	"github.com/aliyun/alibaba-cloud-sdk-go/sdk/requests"
 	"github.com/aliyun/alibaba-cloud-sdk-go/services/sts"
 
-	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -17,19 +16,25 @@ var (
 	stsClient *sts.Client
 )
 
-// InitSTS 初始化 STS 客户端
-func InitSTS() error {
-	accessKeyID := config.GetOSSAccessKeyID()
-	accessKeySecret := config.GetOSSAccessKeySecret()
-	region := config.GetOSSRegion()
+// STSConfig STS 客户端配置
+type STSConfig struct {
+	AccessKeyID     string // AccessKey ID
+	AccessKeySecret string // AccessKey Secret
+	Region          string // STS 区域（可选，从 Endpoint 提取）
+	Endpoint        string // OSS Endpoint（用于 Region 自动提取）
+}
 
-	if accessKeyID == "" || accessKeySecret == "" {
+// InitSTS 初始化 STS 客户端
+func InitSTS(stsCfg STSConfig) error {
+	if stsCfg.AccessKeyID == "" || stsCfg.AccessKeySecret == "" {
 		return fmt.Errorf("OSS AccessKey 未配置")
 	}
 
+	region := stsCfg.Region
+
 	// 如果没有配置 region，从 endpoint 提取
 	if region == "" {
-		endpoint := config.GetOSSEndpoint()
+		endpoint := stsCfg.Endpoint
 		// 从 oss-cn-beijing.aliyuncs.com 提取 cn-beijing
 		if len(endpoint) > 4 && endpoint[:4] == "oss-" {
 			region = endpoint[4:]
@@ -42,7 +47,7 @@ func InitSTS() error {
 	}
 
 	var err error
-	stsClient, err = sts.NewClientWithAccessKey(region, accessKeyID, accessKeySecret)
+	stsClient, err = sts.NewClientWithAccessKey(region, stsCfg.AccessKeyID, stsCfg.AccessKeySecret)
 	if err != nil {
 		return fmt.Errorf("初始化 STS 客户端失败: %w", err)
 	}
@@ -67,6 +72,10 @@ func GenerateSTSCredentials(objectKey string, durationSeconds int64) (*STSCreden
 		return nil, fmt.Errorf("STS 客户端未初始化")
 	}
 
+	if !configured {
+		return nil, fmt.Errorf("OSS 客户端未初始化，无法获取 RoleARN 和 Bucket")
+	}
+
 	if durationSeconds <= 0 {
 		durationSeconds = 3600 // 默认 1 小时
 	}
@@ -74,12 +83,12 @@ func GenerateSTSCredentials(objectKey string, durationSeconds int64) (*STSCreden
 		durationSeconds = 3600 // 最大 1 小时
 	}
 
-	roleArn := config.GetOSSRoleARN()
+	roleArn := cfg.RoleARN
 	if roleArn == "" {
 		return nil, fmt.Errorf("OSS STS Role ARN 未配置")
 	}
 
-	bucketName := config.GetOSSBucket()
+	bucketName := cfg.Bucket
 	if bucketName == "" {
 		return nil, fmt.Errorf("OSS Bucket 未配置")
 	}

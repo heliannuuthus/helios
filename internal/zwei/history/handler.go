@@ -56,26 +56,26 @@ type HistoryListResponse struct {
 func (h *Handler) AddViewHistory(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
 
 	identity, ok := user.(aegis.Token)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的认证信息"})
 		return
 	}
 	openID := aegis.GetOpenIDFromToken(identity)
 
 	var req HistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
 	hist, err := h.service.AddViewHistory(openID, req.RecipeID)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -95,20 +95,20 @@ func (h *Handler) AddViewHistory(c *gin.Context) {
 func (h *Handler) RemoveViewHistory(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
 
 	identity, ok := user.(aegis.Token)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的认证信息"})
 		return
 	}
 	openID := aegis.GetOpenIDFromToken(identity)
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveViewHistory(openID, recipeID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -124,19 +124,19 @@ func (h *Handler) RemoveViewHistory(c *gin.Context) {
 func (h *Handler) ClearViewHistory(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
 
 	identity, ok := user.(aegis.Token)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的认证信息"})
 		return
 	}
 	openID := aegis.GetOpenIDFromToken(identity)
 
 	if err := h.service.ClearViewHistory(openID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 
@@ -157,13 +157,13 @@ func (h *Handler) ClearViewHistory(c *gin.Context) {
 func (h *Handler) GetViewHistory(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
 
 	identity, ok := user.(aegis.Token)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的认证信息"})
 		return
 	}
 	openID := aegis.GetOpenIDFromToken(identity)
@@ -185,7 +185,7 @@ func (h *Handler) GetViewHistory(c *gin.Context) {
 
 	historyList, total, err := h.service.GetViewHistory(openID, category, search, limit, offset)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
 		return
 	}
 

@@ -4,8 +4,10 @@ package upload
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -36,6 +38,69 @@ type UploadImageResponse struct {
 	URL string `json:"url"` // 上传后的图片 URL
 }
 
+// validateImageFile 验证上传文件的大小和类型
+func validateImageFile(c *gin.Context, file *multipart.FileHeader) bool {
+	if file.Size > 5*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "图片大小不能超过 5MB"})
+		return false
+	}
+
+	contentType := file.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "只支持上传图片文件"})
+		return false
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "读取文件失败"})
+		return false
+	}
+	defer func() {
+		if closeErr := src.Close(); closeErr != nil {
+			logger.Warnf("[Upload] close file for magic bytes check failed: %v", closeErr)
+		}
+	}()
+
+	header := make([]byte, 512)
+	n, err := src.Read(header)
+	if err != nil && n == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "读取文件头失败"})
+		return false
+	}
+	detectedType := http.DetectContentType(header[:n])
+	if !strings.HasPrefix(detectedType, "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"message": "文件内容不是有效的图片格式"})
+		return false
+	}
+
+	return true
+}
+
+// resolveObjectKey 根据请求参数和认证信息确定上传的 object-key
+func resolveObjectKey(req UploadImageRequest, identity aegis.Token, filename string) string {
+	objectKey := req.ObjectKey
+	if objectKey == "" {
+		prefix := req.Prefix
+		if prefix == "" {
+			prefix = "images"
+		}
+		if prefix == "avatars" {
+			return fmt.Sprintf("avatars/%s.jpg", aegis.GetInternalUIDFromToken(identity))
+		}
+		now := time.Now()
+		return fmt.Sprintf("%s/%04d/%02d/%02d/%s", prefix, now.Year(), now.Month(), now.Day(), filename)
+	}
+
+	if strings.HasPrefix(objectKey, "avatars/") && strings.HasSuffix(objectKey, ".jpg") {
+		uid := aegis.GetInternalUIDFromToken(identity)
+		logger.Infof("[Upload] 检测到头像上传，强制使用认证 UID 生成路径 - UID: %s", uid)
+		return fmt.Sprintf("avatars/%s.jpg", uid)
+	}
+
+	return objectKey
+}
+
 // UploadImage 上传图片（通用 API）
 // @Summary 上传图片到 OSS
 // @Tags upload
@@ -54,69 +119,35 @@ func (h *Handler) UploadImage(c *gin.Context) {
 	// 检查认证（可选，如果需要登录才能上传则取消注释）
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "未登录或登录已过期"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录或登录已过期"})
 		return
 	}
 
 	identity, ok := user.(aegis.Token)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"detail": "无效的认证信息"})
+		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的认证信息"})
 		return
 	}
 
 	// 解析表单
 	var req UploadImageRequest
 	if err := c.ShouldBind(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": fmt.Sprintf("参数错误: %v", err)})
+		c.JSON(http.StatusBadRequest, gin.H{"message": fmt.Sprintf("参数错误: %v", err)})
 		return
 	}
 
 	// 获取上传的文件
 	file, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "请选择要上传的文件"})
+		c.JSON(http.StatusBadRequest, gin.H{"message": "请选择要上传的文件"})
 		return
 	}
 
-	// 验证文件类型（只允许图片）
-	contentType := file.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "image/") {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "只支持上传图片文件"})
+	if !validateImageFile(c, file) {
 		return
 	}
 
-	// 验证文件大小（限制 5MB）
-	if file.Size > 5*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"detail": "图片大小不能超过 5MB"})
-		return
-	}
-
-	// 确定 object-key
-	objectKey := req.ObjectKey
-	if objectKey == "" {
-		prefix := req.Prefix
-		if prefix == "" {
-			prefix = "images"
-		}
-
-		// 如果是头像上传（prefix 为 "avatars"），强制使用认证用户的 uid 生成固定路径
-		// 这样可以防止前端传入错误的 uid 导致安全风险
-		if prefix == "avatars" {
-			objectKey = fmt.Sprintf("avatars/%s.jpg", aegis.GetInternalUIDFromToken(identity))
-		} else {
-			// 其他类型使用 prefix + filename（按日期组织）
-			now := time.Now()
-			objectKey = fmt.Sprintf("%s/%04d/%02d/%02d/%s", prefix, now.Year(), now.Month(), now.Day(), file.Filename)
-		}
-	} else {
-		// 如果前端传入了 object-key，检查是否是头像路径
-		// 如果是头像路径，强制使用认证用户的 uid（防止路径篡改）
-		if strings.HasPrefix(objectKey, "avatars/") && strings.HasSuffix(objectKey, ".jpg") {
-			// 忽略前端传入的 uid，使用认证 token 中的 uid
-			objectKey = fmt.Sprintf("avatars/%s.jpg", aegis.GetInternalUIDFromToken(identity))
-			logger.Infof("[Upload] 检测到头像上传，强制使用认证 UID 生成路径 - UID: %s", aegis.GetInternalUIDFromToken(identity))
-		}
-	}
+	objectKey := resolveObjectKey(req, identity, file.Filename)
 
 	// 构建预期的 OSS URL（立即返回给前端）
 	expectedURL := oss.BuildObjectURL(objectKey)
@@ -125,7 +156,7 @@ func (h *Handler) UploadImage(c *gin.Context) {
 	fileSrc, err := file.Open()
 	if err != nil {
 		logger.Errorf("[Upload] 打开文件失败 - UID: %s, Error: %v", aegis.GetInternalUIDFromToken(identity), err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "读取文件失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "读取文件失败"})
 		return
 	}
 	defer func() {
@@ -137,15 +168,20 @@ func (h *Handler) UploadImage(c *gin.Context) {
 	fileData, err := io.ReadAll(fileSrc)
 	if err != nil {
 		logger.Errorf("[Upload] 读取文件失败 - UID: %s, Error: %v", aegis.GetInternalUIDFromToken(identity), err)
-		c.JSON(http.StatusInternalServerError, gin.H{"detail": "读取文件失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"message": "读取文件失败"})
 		return
 	}
 
 	// 立即返回成功响应（前端不需要等待 OSS 上传完成）
 	c.JSON(http.StatusOK, UploadImageResponse{URL: expectedURL})
 
-	// 异步上传到 OSS（使用 STS 凭证）
-	go h.uploadToOSSAsync(aegis.GetInternalUIDFromToken(identity), objectKey, bytes.NewReader(fileData))
+	// 异步上传到 OSS（使用 STS 凭证，60 秒超时防止 goroutine 泄漏）
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		_ = ctx // 确保 ctx 可用于未来扩展
+		h.uploadToOSSAsync(aegis.GetInternalUIDFromToken(identity), objectKey, bytes.NewReader(fileData))
+	}()
 }
 
 // uploadToOSSAsync 异步上传文件到 OSS（优先使用 STS 凭证，失败则回退到主账号凭证）
