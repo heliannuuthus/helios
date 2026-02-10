@@ -38,7 +38,7 @@ type ApplicationIDPConfig struct {
 	CreatedAt time.Time `gorm:"column:created_at;not null"`
 	UpdatedAt time.Time `gorm:"column:updated_at;not null"`
 	// 变长字段（逗号分隔）
-	Strategy *string `gorm:"column:strategy;size:256"` // password,email_otp,webauthn
+	Strategy *string `gorm:"column:strategy;size:256"` // password,webauthn（仅 user/oper 需要）
 	Delegate *string `gorm:"column:delegate;size:256"` // email_otp,totp,webauthn
 	Require  *string `gorm:"column:require;size:256"`  // captcha
 }

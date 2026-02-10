@@ -1,6 +1,7 @@
 package iris
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -575,7 +576,12 @@ func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, chall
 			return
 		}
 
-		userID, credential, err := svc.FinishLogin(ctx, challengeID, c.Request)
+		assertionBody, readErr := io.ReadAll(c.Request.Body)
+		if readErr != nil {
+			errorResponse(c, autherrors.NewInvalidRequest("failed to read request body"))
+			return
+		}
+		userID, credential, err := svc.FinishLogin(ctx, challengeID, assertionBody)
 		if err != nil {
 			errorResponse(c, autherrors.NewAccessDenied(err.Error()))
 			return

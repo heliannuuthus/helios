@@ -33,8 +33,8 @@ type LoginRequest struct {
 	// 必填：身份标识
 	Connection string `json:"connection" binding:"required"` // 身份标识（user, oper, github, wechat...）
 
-	// 可选：登录策略（用于同一 connection 多种策略的情况）
-	Strategy string `json:"strategy,omitempty"` // 登录策略（oauth, web, mp, oa...）
+	// 可选：认证方式（用于同一 connection 支持多种策略的情况）
+	Strategy string `json:"strategy,omitempty"` // 认证方式（user/oper: password/webauthn; captcha: turnstile; 其余忽略）
 
 	// 身份主体（用户名/邮箱/手机号/OpenID...）
 	Principal string `json:"principal,omitempty"`

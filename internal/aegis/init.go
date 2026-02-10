@@ -11,9 +11,10 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/alipay"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/github"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/google"
+	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/oper"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/passkey"
-	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/system"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/tt"
+	idpuser "github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/user"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp/wechat"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/mfa"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/totp"
@@ -138,8 +139,8 @@ func initRegistry(userSvc *hermes.UserService, cacheManager *cache.Manager, emai
 	registerIDP(google.NewProvider())
 
 	if userSvc != nil {
-		registerIDP(system.NewUserProvider(userSvc))
-		registerIDP(system.NewOperProvider(userSvc))
+		registerIDP(idpuser.NewProvider(userSvc))
+		registerIDP(oper.NewProvider(userSvc))
 	}
 
 	if webauthnSvc != nil {

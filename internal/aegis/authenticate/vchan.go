@@ -2,7 +2,6 @@ package authenticate
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/captcha"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
@@ -13,14 +12,14 @@ import (
 // 包装 captcha.Verifier，实现统一的 Authenticator 接口
 type VChanAuthenticator struct {
 	verifier   captcha.Verifier
-	connection string // 如 "captcha-turnstile"
+	connection string // "captcha"
 }
 
 // NewVChanAuthenticator 创建验证渠道认证器
 func NewVChanAuthenticator(verifier captcha.Verifier) *VChanAuthenticator {
 	return &VChanAuthenticator{
 		verifier:   verifier,
-		connection: fmt.Sprintf("captcha-%s", verifier.GetProvider()),
+		connection: "captcha",
 	}
 }
 
@@ -34,6 +33,7 @@ func (a *VChanAuthenticator) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
 		Connection: a.connection,
 		Identifier: a.verifier.GetIdentifier(),
+		Strategy:   []string{a.verifier.GetProvider()}, // e.g. ["turnstile"]
 	}
 }
 

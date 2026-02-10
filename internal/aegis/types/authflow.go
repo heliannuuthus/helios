@@ -265,9 +265,9 @@ func splitScopes(scope string) []string {
 // ConnectionConfig Connection 配置（返回给前端的公开配置）
 // 统一结构，适用于 IDP、VChan 和 MFA
 type ConnectionConfig struct {
-	Connection string   `json:"connection"`          // 标识（github, google, wechat-mp, user, oper, email-otp, totp, captcha-turnstile...）
+	Connection string   `json:"connection"`          // 标识（github, google, wechat-mp, user, oper, email-otp, totp, captcha...）
 	Identifier string   `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
-	Strategy   []string `json:"strategy,omitzero"`   // 认证方式（仅 user/oper 需要：password, email-otp, webauthn）
+	Strategy   []string `json:"strategy,omitzero"`   // 认证方式（user/oper: password, webauthn; captcha: turnstile; 其余忽略）
 	Delegate   []string `json:"delegate,omitzero"`   // 委托验证/MFA（totp, email-otp）
 	Require    []string `json:"require,omitzero"`    // 前置验证（captcha）
 	Verified   bool     `json:"verified,omitempty"`  // 是否已通过验证
@@ -275,14 +275,14 @@ type ConnectionConfig struct {
 
 // VChanConfig 验证渠道配置（用于 Challenge 响应）
 type VChanConfig struct {
-	Connection string `json:"connection"` // 标识（captcha-turnstile）
+	Connection string `json:"connection"` // 标识（captcha）
 	Identifier string `json:"identifier"` // 站点标识（site_key）
 }
 
 // ConnectionsMap Connections 响应（按类别分类）
 type ConnectionsMap struct {
 	IDP   []*ConnectionConfig `json:"idp,omitzero"`   // 身份提供商（github, google, user, oper, wechat-mp...）
-	VChan []*ConnectionConfig `json:"vchan,omitzero"` // 验证渠道/前置验证（captcha-turnstile, captcha-recaptcha...）
+	VChan []*ConnectionConfig `json:"vchan,omitzero"` // 验证渠道/前置验证（captcha...）
 	MFA   []*ConnectionConfig `json:"mfa,omitzero"`   // MFA 方式（email-otp, totp, webauthn...）
 }
 

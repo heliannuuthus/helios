@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS t_application_idp_config (
     app_id       VARCHAR(64)  NOT NULL COMMENT '应用 ID',
     `type`       VARCHAR(32)  NOT NULL COMMENT 'IDP 类型：github/google/wechat-mp/user/oper',
     priority     INT          NOT NULL DEFAULT 0 COMMENT '排序优先级（值越大越靠前）',
-    strategy     VARCHAR(256) DEFAULT NULL COMMENT '登录策略（仅 user/oper）：password,email_otp,webauthn',
+    strategy     VARCHAR(256) DEFAULT NULL COMMENT '认证方式（仅 user/oper）：password,webauthn',
     delegate     VARCHAR(256) DEFAULT NULL COMMENT '委托 MFA：email_otp,totp,webauthn',
     `require`    VARCHAR(256) DEFAULT NULL COMMENT '前置验证：captcha',
     -- 时间戳

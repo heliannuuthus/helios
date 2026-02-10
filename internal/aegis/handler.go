@@ -310,7 +310,10 @@ func (h *Handler) Login(c *gin.Context) {
 	flow.SetConnection(req.Connection)
 
 	// 3. 执行认证（通过 Registry 统一分发）
-	success, err := h.authenticateSvc.Authenticate(ctx, flow, req)
+	// 从 LoginRequest 解包已知字段，以独立 params 传入
+	// 约定顺序：proof, principal, strategy, remoteIP
+	// proof 保持 any 类型，由各 authenticator 内部自行断言和校验
+	success, err := h.authenticateSvc.Authenticate(ctx, flow, req.Proof, req.Principal, req.Strategy, c.ClientIP())
 	if err != nil {
 		logger.Errorf("[Handler] 认证失败: %v", err)
 		h.errorResponse(c, autherrors.NewUnauthorized(err.Error()))

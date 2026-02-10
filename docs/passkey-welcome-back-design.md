@@ -1,125 +1,149 @@
 # Passkey Welcome Back 遮盖层设计
 
-> 状态：RFC（待讨论） | 创建：2026-02-09
+> 状态：Ready for Implementation | 更新：2026-02-10
 
-## 概述
+## 1. 目标
 
-当用户曾通过 Passkey 登录且当前设备有平台认证器时，用 "Welcome Back" 遮盖层替换登录表单，展示用户基础信息（nickname/picture），提供一键指纹/面容登录入口。
+在登录页提供一个品牌化的 Passkey 快速入口（"头盔盖下来"式遮盖层），在不启用 Conditional UI 的前提下：
 
-## 核心流程
+1. 用户可看到熟悉的欢迎信息（昵称/头像）
+2. 用户可一键触发安全验证（指纹/面容/PIN）
+3. 用户可随时切换到其他登录方式
 
-用户通过 Passkey 登录成功 -> 后端在响应中注入 `nickname`/`picture` -> 前端缓存 -> 下次访问登录页检测条件 -> 满足则展示 WelcomeBack 遮盖层。
+## 2. 设计结论（已定）
 
-## 条件判断
+### 2.1 不依赖 Conditional UI
 
-三个条件全部满足时展示 WelcomeBack：
+本方案采用自定义遮盖层，不依赖浏览器输入框联想的 Conditional UI。
 
-1. **有缓存的用户信息**：上次通过 Passkey 登录成功后缓存的用户信息
-2. **当前设备有平台认证器**：`isPlatformAuthenticatorAvailable()` 返回 true
-3. **应用配置了 webauthn/passkey connection**：从 connections 列表中检测
+### 2.2 不新增后端协议字段
 
-```mermaid
-flowchart TD
-    PageLoad[Page Load] --> CheckCache{缓存中有用户信息?}
-    CheckCache -->|No| NormalForm[展示正常登录表单]
-    CheckCache -->|Yes| CheckPlatform{平台认证器可用?}
-    CheckPlatform -->|No| NormalForm
-    CheckPlatform -->|Yes| CheckConfig{应用配置了 WebAuthn?}
-    CheckConfig -->|No| NormalForm
-    CheckConfig -->|Yes| WelcomeBack[展示 WelcomeBack 遮盖层]
+`user_hints` 不是 WebAuthn 协议标准字段，本方案不要求后端新增该字段。  
+用户信息来源为前端已登录态页面（个人信息页）中的现有数据。
 
-    WelcomeBack --> PasskeyBtn["点击: 使用指纹或面容登录"]
-    WelcomeBack --> SwitchBtn["点击: 使用其他账号"]
+### 2.3 本地缓存采用单用户覆盖策略
 
-    PasskeyBtn --> AuthResult{认证结果}
-    AuthResult -->|成功| Redirect[重定向]
-    AuthResult -->|失败| ErrorRetry[显示错误 + 重试]
+当前策略：同一浏览器同一站点仅缓存最近一次设置 Passkey 的用户提示信息。  
+后续如业务明确要求多用户列表，可在同一 key 上扩展为数组结构。
 
-    SwitchBtn --> ClearCache[清除缓存]
-    ClearCache --> NormalForm
+## 3. WebAuthn 域配置规范
 
-    NormalForm --> LoginSuccess[通过 Passkey 登录成功]
-    LoginSuccess --> ExtractData[从响应中提取 user hints]
-    ExtractData --> StoreCache[存入缓存]
-    StoreCache --> Redirect
+当认证入口可能来自 `heliannuuthus.com` 及其子域（例如 `app.heliannuuthus.com`、`aegis.heliannuuthus.com`）时：
+
+- `rpId`: `heliannuuthus.com`
+- `RPOrigins`: 明确列出所有实际发起 WebAuthn 的页面 origin（精确匹配）
+
+示例：
+
+```toml
+[aegis.mfa.webauthn]
+rp-id = "heliannuuthus.com"
+rp-display-name = "Helios Auth"
+rp-origins = [
+  "https://heliannuuthus.com",
+  "https://app.heliannuuthus.com",
+  "https://aegis.heliannuuthus.com"
+]
 ```
 
-## 后端改动
+说明：
+- `rp-display-name` 仅用于用户可见展示，不参与安全校验
+- `rp-origins` 校验的是前端页面 origin，不是 API 服务地址
 
-### Challenge 发起时注入用户信息
+## 4. 本地存储设计
 
-当 WebAuthn challenge 发起时（`POST /challenge` with `type: webauthn`），如果提供了 `principal`（email），
-后端已经知道用户身份。此时在 challenge 创建响应的 `Data` 字段中注入用户基础信息：
+### 4.1 Key 命名
 
-```go
-// CreateResponse.Data 中注入
+统一采用带命名空间前缀的 key：
+
+```text
+heliannuuthus@aegis:passkey_user
+```
+
+### 4.2 Value 结构（单用户）
+
+```json
 {
-    "nickname": "用户昵称",
-    "picture":  "头像 URL"
+  "uid": "u_xxx",
+  "nickname": "heliannuuthus",
+  "picture": "https://cdn.xxx/avatar.png",
+  "updated_at": 1739100000000
 }
 ```
 
-**注意**：不返回 email 等敏感信息。仅返回 nickname 和 picture。
+字段说明：
+- `uid`: 用户稳定标识（用于校验与清理）
+- `nickname`: 遮盖层展示名称
+- `picture`: 头像 URL（可空）
+- `updated_at`: 最后更新时间戳（用于调试与过期策略）
 
-**两种场景**：
+## 5. 前端流程
 
-| 场景 | 发起时有 principal? | 用户信息何时可知? |
-|------|-------------------|-----------------|
-| OperLogin (email 后 WebAuthn) | 有 email | 发起时即可返回 hints |
-| Standalone Passkey (discoverable) | 无 | 验证完成后才知道用户 |
+### 5.1 写入时机（个人信息页）
 
-### 需要的改动
+用户完成 Passkey 注册后：
+1. 从当前页面状态读取 `uid/nickname/picture`
+2. 覆盖写入 `heliannuuthus@aegis:passkey_user`
 
-1. 扩展 `CreateRequest` 验证，支持 `webauthn` 类型
-2. 在 Handler 的 `InitiateChallenge` 中，WebAuthn 类型走独立路径
-3. 当有 `principal` 时，查找用户并在响应 `Data` 中注入 hints
-4. Discoverable 场景，在验证成功后（`VerifyResponse.Data`）补充返回
+用户删除最后一个 Passkey 后：
+1. 删除该 key
 
-## 前端改动
+### 5.2 展示判断（登录页）
 
-### WelcomeBack 组件
+登录页加载时依次判断：
 
-**位置**：`aegis-ui/src/pages/Login/components/WelcomeBack/`
+1. 本地是否有 `passkey_user` 缓存
+2. 设备是否支持平台认证器（`isUserVerifyingPlatformAuthenticatorAvailable()`）
+3. 当前应用配置中是否存在 `passkey` connection
 
-展示内容：
-- 用户头像（来自 `picture`，无则显示 nickname 首字母）
-- 问候语："欢迎回来，[nickname]" 或 "欢迎回来"
-- 主按钮："使用指纹或面容登录"（触发 Passkey 认证）
-- 链接："使用其他账号登录"（清除缓存，切回正常登录表单）
+全部满足才显示 Welcome Back 遮盖层，否则显示普通登录表单。
 
-### 组件层级
+### 5.3 交互
 
-```
-LoginPage
-├── WelcomeBack (条件满足时展示，替换下方所有内容)
-│   ├── Avatar + Nickname
-│   ├── "使用指纹或面容登录" Button
-│   └── "使用其他账号登录" Link
-│
-└── Normal Login Form (默认或 WelcomeBack 被关闭时)
-    ├── Passkey (standalone)
-    ├── OperLogin (EmailStep -> VerifyStep)
-    └── IDP Buttons
-```
+- 主按钮：`使用安全验证登录`
+  - 触发现有 Passkey 登录流程（challenge + assertion + `/auth/login`）
+- 次按钮：`使用其他账号登录`
+  - 仅关闭遮盖层（可选是否清缓存，建议默认不清）
 
-### LoginPage 集成
+## 6. 失败与降级策略
 
-- 新增 `showWelcomeBack` state
-- 在 `useEffect` 中检测三个条件，满足则 `setShowWelcomeBack(true)`
-- 渲染时：`showWelcomeBack ? <WelcomeBack /> : <正常登录表单>`
-- `WelcomeBack` 的 Passkey 认证复用现有的 `handleManualPasskeyLogin` 逻辑
+1. **用户取消系统验证弹窗**  
+   仅提示"已取消"，保持遮盖层，不清缓存。
 
-## 边界情况
+2. **凭证不存在/已删除（服务端明确返回）**  
+   清除 `passkey_user` 缓存，切回普通登录。
 
-- **首次访问**：无缓存 -> 正常登录表单
-- **Passkey 被删除/吊销**：认证失败 -> 显示错误 + 提供重试/"使用其他账号"
-- **设备无平台认证器**：条件不满足 -> 正常登录表单
+3. **设备不支持平台认证器**  
+   不展示遮盖层，走普通登录。
 
-## 开放问题
+4. **配置中移除 passkey connection**  
+   不展示遮盖层，走普通登录。
 
-### 用户信息缓存方案
+## 7. UI 文案建议
 
-WebAuthn 规范出于隐私设计，不允许在用户交互前枚举或读取已存储的 Passkey 信息。
-因此在 WebAuthn 交互前展示用户信息，需要通过服务端已知的信息（session cookie、已输入的 email 等）来获取。
+- 标题：`欢迎回来`
+- 副标题：`通过安全验证快速登录`
+- 主按钮：`使用安全验证登录`
+- 次按钮：`使用其他账号登录`
+- 错误提示：
+  - `未检测到可用的安全凭证，请使用其他方式登录`
+  - `本次验证已取消`
 
-**待讨论**：用户信息的前端缓存策略（localStorage vs cookie vs 其他）。
+## 8. 实施清单
+
+1. 登录页新增 Welcome Back 遮盖层组件
+2. 接入三条件判断逻辑（缓存/设备能力/connections）
+3. 个人信息页 Passkey 注册成功后写入缓存
+4. Passkey 删除后清理缓存
+5. 补充端到端测试：
+   - 首次无缓存
+   - 有缓存且验证成功
+   - 有缓存但凭证已删除
+   - 用户取消验证
+
+## 9. 兼容性与安全说明
+
+- 本地缓存仅用于 UI 提示，不作为认证依据
+- 实际身份仍由 WebAuthn 验签与后端流程确认
+- 避免在缓存中写入邮箱、手机号等高敏字段
+- 建议在登出时保留缓存（提升回访体验），但可提供用户可控开关

@@ -341,7 +341,8 @@ func (s *Service) BeginDiscoverableLogin(ctx context.Context) (*LoginBeginRespon
 
 // FinishLogin 完成登录
 // 验证前端返回的 assertion 并返回用户信息
-func (s *Service) FinishLogin(ctx context.Context, challengeID string, r *http.Request) (string, *webauthn.Credential, error) {
+// assertionBody: WebAuthn assertion JSON（前端 navigator.credentials.get() 的序列化结果）
+func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertionBody []byte) (string, *webauthn.Credential, error) {
 	// 获取 Challenge
 	challenge, err := s.cache.GetChallenge(ctx, challengeID)
 	if err != nil {
@@ -364,6 +365,12 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, r *http.R
 		return "", nil, fmt.Errorf("unmarshal session data failed: %w", err)
 	}
 
+	// 解析 WebAuthn assertion
+	parsedResponse, err := protocol.ParseCredentialRequestResponseBytes(assertionBody)
+	if err != nil {
+		return "", nil, fmt.Errorf("parse credential assertion failed: %w", err)
+	}
+
 	// 检查操作类型
 	operation := challenge.GetStringData("operation")
 
@@ -372,7 +379,7 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, r *http.R
 
 	if operation == "discoverable_login" {
 		// Discoverable 登录：需要通过凭证 ID 查找用户
-		credential, err = s.finishDiscoverableLogin(ctx, sessionData.SessionData, r)
+		credential, err = s.finishDiscoverableLogin(ctx, sessionData.SessionData, parsedResponse)
 		if err != nil {
 			return "", nil, err
 		}
@@ -408,11 +415,11 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, r *http.R
 		// 创建 WebAuthn 用户
 		webauthnUser := NewUser(user, credentials)
 
-		// 完成登录验证
-		credential, err = s.webauthn.FinishLogin(webauthnUser, *sessionData.SessionData, r)
+		// 完成登录验证（使用 ValidateLogin 替代 FinishLogin，不依赖 *http.Request）
+		credential, err = s.webauthn.ValidateLogin(webauthnUser, *sessionData.SessionData, parsedResponse)
 		if err != nil {
-			logger.Errorf("[WebAuthn] FinishLogin failed: %v", err)
-			return "", nil, fmt.Errorf("finish login failed: %w", err)
+			logger.Errorf("[WebAuthn] ValidateLogin failed: %v", err)
+			return "", nil, fmt.Errorf("validate login failed: %w", err)
 		}
 	}
 
@@ -427,13 +434,7 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, r *http.R
 }
 
 // finishDiscoverableLogin 完成可发现凭证登录
-func (s *Service) finishDiscoverableLogin(ctx context.Context, session *webauthn.SessionData, r *http.Request) (*webauthn.Credential, error) {
-	// 解析请求以获取凭证 ID
-	parsedResponse, err := protocol.ParseCredentialRequestResponse(r)
-	if err != nil {
-		return nil, fmt.Errorf("parse credential request failed: %w", err)
-	}
-
+func (s *Service) finishDiscoverableLogin(ctx context.Context, session *webauthn.SessionData, parsedResponse *protocol.ParsedCredentialAssertionData) (*webauthn.Credential, error) {
 	// 通过凭证 ID 查找用户
 	credentialID := base64.RawURLEncoding.EncodeToString(parsedResponse.RawID)
 	userID, err := s.cache.GetUserIDByCredentialID(ctx, credentialID)

@@ -4,7 +4,6 @@ package passkey
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/webauthn"
@@ -37,31 +36,33 @@ func (*Provider) Type() string {
 }
 
 // Login 执行 Passkey 登录
-// proof: challengeID（前端完成 WebAuthn 认证后返回的 challenge ID）
-// params[0]: *http.Request（用于解析 WebAuthn 响应）
+// proof: WebAuthn assertion JSON（前端 navigator.credentials.get() 序列化结果，包含 challengeID）
+// params[0]: principal（忽略）
+// params[1]: strategy（忽略）
+// params[2]: remoteIP（忽略）
 func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error) {
 	if p.webauthnSvc == nil {
 		return nil, fmt.Errorf("webauthn service not configured")
 	}
 
-	challengeID := proof
-	if challengeID == "" {
-		return nil, fmt.Errorf("challenge_id is required")
+	if proof == "" {
+		return nil, fmt.Errorf("webauthn assertion is required")
 	}
 
-	// 从 params 中获取 http.Request
-	var r *http.Request
+	// proof 即 assertion JSON，从中提取 challengeID
+	// TODO: challengeID 应从 assertion 或 params 中获取，当前暂用 principal 传递
+	var challengeID string
 	if len(params) > 0 {
-		if req, ok := params[0].(*http.Request); ok {
-			r = req
+		if id, ok := params[0].(string); ok && id != "" {
+			challengeID = id
 		}
 	}
-	if r == nil {
-		return nil, fmt.Errorf("http request is required for passkey login")
+	if challengeID == "" {
+		return nil, fmt.Errorf("challenge_id is required (pass via principal)")
 	}
 
-	// 完成 WebAuthn 登录验证
-	userID, credential, err := p.webauthnSvc.FinishLogin(ctx, challengeID, r)
+	// 完成 WebAuthn 登录验证（从 proof 解析 assertion，不依赖 *http.Request）
+	userID, credential, err := p.webauthnSvc.FinishLogin(ctx, challengeID, []byte(proof))
 	if err != nil {
 		logger.Errorf("[Passkey] FinishLogin failed: %v", err)
 		return nil, fmt.Errorf("passkey authentication failed: %w", err)
