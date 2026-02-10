@@ -8,7 +8,7 @@ import (
 )
 
 // ChallengeType Challenge 类型
-// 命名规范：{channel}-{method}，与 MFA 配置保持一致
+// 命名规范：{delivery}-{method}（如 email-otp, sms-otp），与 MFA 配置保持一致
 type ChallengeType string
 
 const (

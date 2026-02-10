@@ -239,7 +239,7 @@ func (*MPProvider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...
 // Prepare 准备前端所需的公开配置
 func (p *MPProvider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		Connection: "alipay:mp",
+		Connection: "alipay-mp",
 		Identifier: p.appID,
 	}
 }

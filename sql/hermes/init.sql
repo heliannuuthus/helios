@@ -6,8 +6,8 @@ USE `hermes`;
 -- ==================== 服务 ====================
 -- domain_id = '-' 表示跨域内置服务，属于全部域
 INSERT INTO t_service (service_id, domain_id, name, description, encrypted_key, access_token_expires_in, refresh_token_expires_in) VALUES
-('hermes', '-', 'Hermes 管理服务', '身份与访问管理服务', 'PV7on0OWsNBf/i1PKFzz+zVEWpL2as1ue3Sgc9OO8an0eEPWRq2yO0RcyT5rN8DLIMcKfGiJH+D1LrLw', 7200, 604800),
-('iris', '-', 'Iris 用户服务', '用户信息管理服务', '3iGXRAF/jAJPV+ckuIUH/L54TL79tcrXdeUU0KgW0akQLFCUjiRWnC/PcCPuN9SmOc1rE6h73TGpO9NE', 7200, 604800)
+('hermes', '-', 'Hermes 管理服务', '身份与访问管理服务', 'hoLR+UoMh5EUMYvAgPVrkIbOjGI+GZ629N4rmL+3309SMXvQmaE1XT76jgkni9tF7CWOmhGVvYyoNlmP', 7200, 604800),
+('iris', '-', 'Iris 用户服务', '用户信息管理服务', 'kTxgHk7TxtVX2A5qo//wJX/PwIxO2+o7S4kXPrf8ZR3CNvRrNTl2xxfM5q9CHCVk9DpS6l3n/NRpLyK2', 7200, 604800)
 ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), encrypted_key = VALUES(encrypted_key), domain_id = VALUES(domain_id);
 
 -- ==================== 应用 ====================
@@ -32,10 +32,11 @@ INSERT INTO t_user (uid, status, email_verified, nickname, picture, email) VALUE
 ('heliannuuthus', 0, 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
 ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified);
 
--- ==================== 用户主身份 ====================
--- 为初始管理员创建 oper 主身份（t_openid 为对外暴露的用户标识）
-INSERT INTO t_user_identity (uid, idp, t_openid) VALUES
-('heliannuuthus', 'oper', 'heliannuuthus')
+-- ==================== 用户身份 ====================
+-- global 身份为域级对外标识（token 中的 sub），其他为认证身份
+INSERT INTO t_user_identity (domain, uid, idp, t_openid) VALUES
+('piam', 'heliannuuthus', 'global', 'e52df52fdecab7cbc795ee69322f21bc'),
+('piam', 'heliannuuthus', 'oper', 'heliannuuthus')
 ON DUPLICATE KEY UPDATE t_openid = VALUES(t_openid);
 
 -- ==================== 服务关系（权限） ====================

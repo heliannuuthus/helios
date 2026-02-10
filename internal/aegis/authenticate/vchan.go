@@ -2,7 +2,6 @@ package authenticate
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/captcha"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
@@ -13,14 +12,14 @@ import (
 // 包装 captcha.Verifier，实现统一的 Authenticator 接口
 type VChanAuthenticator struct {
 	verifier   captcha.Verifier
-	connection string // 如 "captcha:turnstile"
+	connection string // "captcha"
 }
 
 // NewVChanAuthenticator 创建验证渠道认证器
 func NewVChanAuthenticator(verifier captcha.Verifier) *VChanAuthenticator {
 	return &VChanAuthenticator{
 		verifier:   verifier,
-		connection: fmt.Sprintf("captcha:%s", verifier.GetProvider()),
+		connection: "captcha",
 	}
 }
 
@@ -34,13 +33,14 @@ func (a *VChanAuthenticator) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
 		Connection: a.connection,
 		Identifier: a.verifier.GetIdentifier(),
+		Strategy:   []string{a.verifier.GetProvider()}, // e.g. ["turnstile"]
 	}
 }
 
 // Authenticate 执行人机验证
-// params: [proof string, remoteIP string]
+// params 约定顺序（与 handler.Login 解包一致）：[0]proof, [1]principal, [2]strategy, [3]remoteIP
 func (a *VChanAuthenticator) Authenticate(ctx context.Context, flow *types.AuthFlow, params ...any) (bool, error) {
-	// 从 params 提取 proof
+	// 从 params[0] 提取 proof（captcha token）
 	if len(params) < 1 {
 		return false, autherrors.NewInvalidRequest("captcha proof is required")
 	}
@@ -49,10 +49,10 @@ func (a *VChanAuthenticator) Authenticate(ctx context.Context, flow *types.AuthF
 		return false, autherrors.NewInvalidRequest("captcha proof must be a string")
 	}
 
-	// 从 params 提取 remoteIP（可选）
+	// 从 params[3] 提取 remoteIP（可选）
 	var remoteIP string
-	if len(params) >= 2 {
-		if ip, ok := params[1].(string); ok {
+	if len(params) >= 4 {
+		if ip, ok := params[3].(string); ok {
 			remoteIP = ip
 		}
 	}

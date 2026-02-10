@@ -119,7 +119,7 @@ func (p *MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, p
 // Prepare 准备前端所需的公开配置
 func (p *MPProvider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		Connection: "wechat:mp",
+		Connection: "wechat-mp",
 		Identifier: p.appID,
 	}
 }

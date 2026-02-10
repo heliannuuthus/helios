@@ -3,7 +3,6 @@ package mfa
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/heliannuuthus/helios/internal/aegis/authenticator/webauthn"
 	"github.com/heliannuuthus/helios/internal/aegis/types"
@@ -29,30 +28,30 @@ func (*WebAuthnProvider) Type() string {
 }
 
 // Verify 验证 WebAuthn 凭证
-// proof: challengeID
-// params[0]: *http.Request（用于解析 WebAuthn 响应）
+// proof: WebAuthn assertion JSON（前端 navigator.credentials.get() 序列化结果）
+// params[0]: challengeID (string)
 func (p *WebAuthnProvider) Verify(ctx context.Context, proof string, params ...any) (bool, error) {
 	if p.webauthnSvc == nil {
 		return false, fmt.Errorf("webauthn service not configured")
 	}
 
-	challengeID := proof
+	if proof == "" {
+		return false, fmt.Errorf("webauthn assertion is required")
+	}
+
+	// 从 params 获取 challengeID
+	var challengeID string
+	if len(params) > 0 {
+		if id, ok := params[0].(string); ok {
+			challengeID = id
+		}
+	}
 	if challengeID == "" {
 		return false, fmt.Errorf("challenge_id is required")
 	}
 
-	var r *http.Request
-	if len(params) > 0 {
-		if req, ok := params[0].(*http.Request); ok {
-			r = req
-		}
-	}
-	if r == nil {
-		return false, fmt.Errorf("http request is required for webauthn verification")
-	}
-
-	// 完成 WebAuthn 验证
-	_, credential, err := p.webauthnSvc.FinishLogin(ctx, challengeID, r)
+	// 完成 WebAuthn 验证（从 proof 解析 assertion，不依赖 *http.Request）
+	_, credential, err := p.webauthnSvc.FinishLogin(ctx, challengeID, []byte(proof))
 	if err != nil {
 		logger.Errorf("[WebAuthn MFA] FinishLogin failed: %v", err)
 		return false, fmt.Errorf("webauthn verification failed: %w", err)

@@ -87,9 +87,9 @@ class Application:
 class AppIdpConfig:
     """应用 IDP 配置"""
     app_id: str
-    idp_type: str  # IDP 类型：email/google/github/wechat:mp 等
+    idp_type: str  # IDP 类型：email/google/github/wechat-mp 等
     priority: int = 0  # 排序优先级（值越大越靠前）
-    strategy: Optional[str] = None  # 登录策略（仅 user/oper）：password,email_otp,webauthn
+    strategy: Optional[str] = None  # 认证方式（仅 user/oper）：password,webauthn
     delegate: Optional[str] = None  # 委托 MFA：email_otp,totp,webauthn
     require: Optional[str] = None  # 前置验证：captcha
 
