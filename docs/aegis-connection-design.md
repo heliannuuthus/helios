@@ -638,8 +638,8 @@ Authenticator 接口 (统一)
 
 ```
 handler.Login() 解包 LoginRequest:
-  proofStr, _ := req.Proof.(string)
-  authenticateSvc.Authenticate(ctx, flow, proofStr, req.Principal, req.Strategy, c.ClientIP())
+  // proof 保持 any 类型，由各 authenticator 内部自行断言
+  authenticateSvc.Authenticate(ctx, flow, req.Proof, req.Principal, req.Strategy, c.ClientIP())
 
 authenticateSvc.Authenticate(ctx, flow, params...)  // service 透传
   |-- flow.CanAuthenticate()
