@@ -18,7 +18,7 @@ type UserCredential struct {
 	// 主键
 	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
 	// 固定长度字段（高频访问）
-	UID          string  `gorm:"column:uid;size:64;not null;index"`
+	OpenID       string  `gorm:"column:openid;size:64;not null;index"`
 	CredentialID *string `gorm:"column:credential_id;size:256;uniqueIndex"`
 	Type         string  `gorm:"column:type;size:32;not null"`
 	Enabled      bool    `gorm:"column:enabled;not null;default:0"`

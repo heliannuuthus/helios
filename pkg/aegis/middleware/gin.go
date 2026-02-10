@@ -152,7 +152,7 @@ func GetTokenFromGin(c *gin.Context) token.Token {
 	return result
 }
 
-// GetOpenIDFromGin 从 Gin context 中获取用户对外标识（主身份 t_openid）
+// GetOpenIDFromGin 从 Gin context 中获取用户标识（t_user.openid）
 func GetOpenIDFromGin(c *gin.Context) string {
 	t := GetTokenFromGin(c)
 	if t == nil {
@@ -160,18 +160,6 @@ func GetOpenIDFromGin(c *gin.Context) string {
 	}
 	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
 		return uat.GetOpenID()
-	}
-	return ""
-}
-
-// GetInternalUIDFromGin 从 Gin context 中获取用户内部 ID（t_user.openid，用于内部查询）
-func GetInternalUIDFromGin(c *gin.Context) string {
-	t := GetTokenFromGin(c)
-	if t == nil {
-		return ""
-	}
-	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
-		return uat.GetInternalUID()
 	}
 	return ""
 }

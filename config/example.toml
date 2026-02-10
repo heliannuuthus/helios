@@ -209,16 +209,6 @@ ttl = "5m"                   # 缓存过期时间（支持热更新）
 key-prefix = "aegis:ch:"      # 缓存 key 前缀
 expires_in = "5m"            # Challenge 过期时间（支持热更新）
 
-# 阿里云 OSS 配置（用于图片上传）[已废弃，迁移至 R2]
-# [oss]
-# endpoint = ""           # OSS 地域节点，如 oss-cn-hangzhou.aliyuncs.com
-# access-key-id = ""      # AccessKey ID
-# access-key-secret = ""  # AccessKey Secret
-# bucket = ""             # Bucket 名称
-# domain = ""             # 自定义域名（可选），如 https://cdn.example.com
-# region = ""             # STS 区域（可选，默认从 endpoint 提取）
-# role-arn = ""           # RAM 角色 ARN
-
 # Cloudflare R2 配置（用于图片上传，S3 兼容）
 [r2]
 account-id = ""         # Cloudflare Account ID

@@ -23,20 +23,20 @@ func NewVerifier(credentialSvc *hermes.CredentialService) *Verifier {
 
 // Verify 验证 TOTP 码
 // 实现 mfa.TOTPVerifier 接口
-func (v *Verifier) Verify(ctx context.Context, userID, code string) (bool, error) {
-	if userID == "" || code == "" {
+func (v *Verifier) Verify(ctx context.Context, openid, code string) (bool, error) {
+	if openid == "" || code == "" {
 		return false, nil
 	}
 
 	err := v.credentialSvc.VerifyTOTP(ctx, &hermes.VerifyTOTPRequest{
-		UID:  userID,
-		Code: code,
+		OpenID: openid,
+		Code:   code,
 	})
 	if err != nil {
-		logger.Debugf("[TOTP] 验证失败 - UserID: %s, Error: %v", userID, err)
+		logger.Debugf("[TOTP] 验证失败 - OpenID: %s, Error: %v", openid, err)
 		return false, nil
 	}
 
-	logger.Infof("[TOTP] 验证成功 - UserID: %s", userID)
+	logger.Infof("[TOTP] 验证成功 - OpenID: %s", openid)
 	return true, nil
 }

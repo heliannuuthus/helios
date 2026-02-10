@@ -8,7 +8,7 @@ import (
 )
 
 // ChallengeType Challenge 类型
-// 命名规范：{delivery}-{method}（如 email-otp, sms-otp），与 MFA 配置保持一致
+// 命名规范：{delivery}_{method}（如 email_otp, sms_otp），与数据库及前端保持一致
 type ChallengeType string
 
 const (
@@ -16,10 +16,10 @@ const (
 	ChallengeTypeCaptcha ChallengeType = "captcha" // 人机验证（Turnstile）
 
 	// MFA 类型（多因素认证）
-	ChallengeTypeEmailOTP ChallengeType = "email-otp" // 邮箱 OTP
+	ChallengeTypeEmailOTP ChallengeType = "email_otp" // 邮箱 OTP
 	ChallengeTypeTOTP     ChallengeType = "totp"      // TOTP 动态口令（Authenticator App）
-	ChallengeTypeSmsOTP   ChallengeType = "sms-otp"   // 短信 OTP（预留）
-	ChallengeTypeTgOTP    ChallengeType = "tg-otp"    // Telegram OTP（预留）
+	ChallengeTypeSmsOTP   ChallengeType = "sms_otp"   // 短信 OTP（预留）
+	ChallengeTypeTgOTP    ChallengeType = "tg_otp"    // Telegram OTP（预留）
 	ChallengeTypeWebAuthn ChallengeType = "webauthn"  // WebAuthn/Passkey
 )
 
@@ -49,12 +49,12 @@ func (t ChallengeType) IsMFA() bool {
 //
 // 设计说明：
 // - sub: 完成挑战的 principal（凭证标识）
-//   - email-otp → 邮箱地址
-//   - sms-otp → 手机号
+//   - email_otp → 邮箱地址
+//   - sms_otp → 手机号
 //   - totp → 用户 OpenID（TOTP 绑定在用户上）
 //   - webauthn → credential ID
 //
-// - typ: Challenge 类型（如 email-otp、totp、webauthn）
+// - typ: Challenge 类型（如 email_otp、totp、webauthn）
 // - aud: 目标服务 ID
 // - cli: 发起挑战的应用 ID
 type ChallengeToken struct {
@@ -112,7 +112,7 @@ func ParseChallengeToken(pasetoToken *paseto.Token) (*ChallengeToken, error) {
 	}
 
 	var challengeType string
-	if err := pasetoToken.Get("typ", &challengeType); err != nil {
+	if err := pasetoToken.Get(ClaimType, &challengeType); err != nil {
 		return nil, fmt.Errorf("get typ: %w", err)
 	}
 
@@ -142,7 +142,7 @@ func (c *ChallengeToken) BuildPaseto() (*paseto.Token, error) {
 		return nil, fmt.Errorf("set standard claims: %w", err)
 	}
 	t.SetSubject(c.subject) // sub = principal（email、phone、credential_id 等）
-	if err := t.Set("typ", c.challengeType); err != nil {
+	if err := t.Set(ClaimType, c.challengeType); err != nil {
 		return nil, fmt.Errorf("set typ: %w", err)
 	}
 	return &t, nil

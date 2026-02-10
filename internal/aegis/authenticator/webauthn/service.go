@@ -144,7 +144,7 @@ func (s *Service) BeginRegistration(ctx context.Context, user *models.UserWithDe
 	// 保存会话数据到 Challenge
 	// session.Challenge 已经是 Base64URL 编码的字符串
 	sessionData := &SessionData{
-		UserID:      user.UID,
+		OpenID:      user.OpenID,
 		Challenge:   session.Challenge,
 		SessionData: session,
 	}
@@ -152,15 +152,15 @@ func (s *Service) BeginRegistration(ctx context.Context, user *models.UserWithDe
 	if err != nil {
 		return nil, fmt.Errorf("marshal session data failed: %w", err)
 	}
-	challenge.SetData("session", string(sessionBytes))
-	challenge.SetData("operation", "registration")
+	challenge.SetData(types.ChallengeDataSession, string(sessionBytes))
+	challenge.SetData(types.ChallengeDataOperation, OperationRegistration)
 
 	// 保存 Challenge
 	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
 		return nil, fmt.Errorf("save challenge failed: %w", err)
 	}
 
-	logger.Infof("[WebAuthn] BeginRegistration success - UserID: %s, ChallengeID: %s", user.UID, challenge.ID)
+	logger.Infof("[WebAuthn] BeginRegistration success - OpenID: %s, ChallengeID: %s", user.OpenID, challenge.ID)
 
 	return &RegistrationBeginResponse{
 		Options:     options,
@@ -183,13 +183,13 @@ func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r 
 	}
 
 	// 检查操作类型
-	operation := challenge.GetStringData("operation")
-	if operation != "registration" {
+	operation := challenge.GetStringData(types.ChallengeDataOperation)
+	if operation != OperationRegistration {
 		return nil, fmt.Errorf("invalid challenge operation")
 	}
 
 	// 获取会话数据
-	sessionStr := challenge.GetStringData("session")
+	sessionStr := challenge.GetStringData(types.ChallengeDataSession)
 	if sessionStr == "" {
 		return nil, fmt.Errorf("session data not found")
 	}
@@ -200,13 +200,13 @@ func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r 
 	}
 
 	// 获取用户
-	user, err := s.cache.GetUser(ctx, sessionData.UserID)
+	user, err := s.cache.GetUser(ctx, sessionData.OpenID)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
 
 	// 获取用户已有凭证
-	existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.UID)
+	existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.OpenID)
 	if err != nil {
 		logger.Warnf("[WebAuthn] get existing credentials failed: %v", err)
 		existingCredentials = nil
@@ -233,8 +233,8 @@ func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r 
 		logger.Warnf("[WebAuthn] DeleteChallenge failed after registration: %v", err)
 	}
 
-	logger.Infof("[WebAuthn] FinishRegistration success - UserID: %s, CredentialID: %s",
-		user.UID, base64.RawURLEncoding.EncodeToString(credential.ID))
+	logger.Infof("[WebAuthn] FinishRegistration success - OpenID: %s, CredentialID: %s",
+		user.OpenID, base64.RawURLEncoding.EncodeToString(credential.ID))
 
 	return credential, nil
 }
@@ -276,7 +276,7 @@ func (s *Service) BeginLogin(ctx context.Context, user *models.UserWithDecrypted
 
 	// 保存会话数据
 	sessionData := &SessionData{
-		UserID:      user.UID,
+		OpenID:      user.OpenID,
 		Challenge:   session.Challenge,
 		SessionData: session,
 	}
@@ -284,15 +284,15 @@ func (s *Service) BeginLogin(ctx context.Context, user *models.UserWithDecrypted
 	if err != nil {
 		return nil, fmt.Errorf("marshal session data failed: %w", err)
 	}
-	challenge.SetData("session", string(sessionBytes))
-	challenge.SetData("operation", "login")
+	challenge.SetData(types.ChallengeDataSession, string(sessionBytes))
+	challenge.SetData(types.ChallengeDataOperation, OperationLogin)
 
 	// 保存 Challenge
 	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
 		return nil, fmt.Errorf("save challenge failed: %w", err)
 	}
 
-	logger.Infof("[WebAuthn] BeginLogin success - UserID: %s, ChallengeID: %s", user.UID, challenge.ID)
+	logger.Infof("[WebAuthn] BeginLogin success - OpenID: %s, ChallengeID: %s", user.OpenID, challenge.ID)
 
 	return &LoginBeginResponse{
 		Options:     options,
@@ -323,8 +323,8 @@ func (s *Service) BeginDiscoverableLogin(ctx context.Context) (*LoginBeginRespon
 	if err != nil {
 		return nil, fmt.Errorf("marshal session data failed: %w", err)
 	}
-	challenge.SetData("session", string(sessionBytes))
-	challenge.SetData("operation", "discoverable_login")
+	challenge.SetData(types.ChallengeDataSession, string(sessionBytes))
+	challenge.SetData(types.ChallengeDataOperation, OperationDiscoverableLogin)
 
 	// 保存 Challenge
 	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
@@ -355,7 +355,7 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertion
 	}
 
 	// 获取会话数据
-	sessionStr := challenge.GetStringData("session")
+	sessionStr := challenge.GetStringData(types.ChallengeDataSession)
 	if sessionStr == "" {
 		return "", nil, fmt.Errorf("session data not found")
 	}
@@ -372,37 +372,37 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertion
 	}
 
 	// 检查操作类型
-	operation := challenge.GetStringData("operation")
+	operation := challenge.GetStringData(types.ChallengeDataOperation)
 
-	var userID string
+	var openid string
 	var credential *webauthn.Credential
 
-	if operation == "discoverable_login" {
+	if operation == OperationDiscoverableLogin {
 		// Discoverable 登录：需要通过凭证 ID 查找用户
 		credential, err = s.finishDiscoverableLogin(ctx, sessionData.SessionData, parsedResponse)
 		if err != nil {
 			return "", nil, err
 		}
 		// 通过凭证 ID 查找用户
-		userID, err = s.cache.GetUserIDByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credential.ID))
+		openid, err = s.cache.GetOpenIDByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credential.ID))
 		if err != nil {
 			return "", nil, fmt.Errorf("user not found for credential: %w", err)
 		}
 	} else {
 		// 普通登录
-		userID = sessionData.UserID
-		if userID == "" {
-			return "", nil, fmt.Errorf("user id not found in session")
+		openid = sessionData.OpenID
+		if openid == "" {
+			return "", nil, fmt.Errorf("openid not found in session")
 		}
 
 		// 获取用户
-		user, err := s.cache.GetUser(ctx, userID)
+		user, err := s.cache.GetUser(ctx, openid)
 		if err != nil {
 			return "", nil, fmt.Errorf("user not found: %w", err)
 		}
 
 		// 获取用户凭证
-		existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.UID)
+		existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.OpenID)
 		if err != nil {
 			return "", nil, fmt.Errorf("get credentials failed: %w", err)
 		}
@@ -428,28 +428,28 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertion
 		logger.Warnf("[WebAuthn] DeleteChallenge failed after login: %v", err)
 	}
 
-	logger.Infof("[WebAuthn] FinishLogin success - UserID: %s", userID)
+	logger.Infof("[WebAuthn] FinishLogin success - OpenID: %s", openid)
 
-	return userID, credential, nil
+	return openid, credential, nil
 }
 
 // finishDiscoverableLogin 完成可发现凭证登录
 func (s *Service) finishDiscoverableLogin(ctx context.Context, session *webauthn.SessionData, parsedResponse *protocol.ParsedCredentialAssertionData) (*webauthn.Credential, error) {
 	// 通过凭证 ID 查找用户
 	credentialID := base64.RawURLEncoding.EncodeToString(parsedResponse.RawID)
-	userID, err := s.cache.GetUserIDByCredentialID(ctx, credentialID)
+	openid, err := s.cache.GetOpenIDByCredentialID(ctx, credentialID)
 	if err != nil {
 		return nil, fmt.Errorf("credential not found: %w", err)
 	}
 
 	// 获取用户
-	user, err := s.cache.GetUser(ctx, userID)
+	user, err := s.cache.GetUser(ctx, openid)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
 
 	// 获取用户凭证
-	existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.UID)
+	existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.OpenID)
 	if err != nil {
 		return nil, fmt.Errorf("get credentials failed: %w", err)
 	}
@@ -480,9 +480,9 @@ func (s *Service) finishDiscoverableLogin(ctx context.Context, session *webauthn
 // ==================== 凭证管理 ====================
 
 // SaveCredential 保存凭证到数据库
-func (s *Service) SaveCredential(ctx context.Context, userID string, credential *webauthn.Credential) error {
+func (s *Service) SaveCredential(ctx context.Context, openid string, credential *webauthn.Credential) error {
 	stored := cache.FromWebAuthnCredential(credential)
-	return s.cache.SaveUserWebAuthnCredential(ctx, userID, stored)
+	return s.cache.SaveUserWebAuthnCredential(ctx, openid, stored)
 }
 
 // UpdateCredentialSignCount 更新凭证签名计数
@@ -491,11 +491,11 @@ func (s *Service) UpdateCredentialSignCount(ctx context.Context, credentialID st
 }
 
 // DeleteCredential 删除凭证
-func (s *Service) DeleteCredential(ctx context.Context, userID, credentialID string) error {
-	return s.cache.DeleteUserWebAuthnCredential(ctx, userID, credentialID)
+func (s *Service) DeleteCredential(ctx context.Context, openid, credentialID string) error {
+	return s.cache.DeleteUserWebAuthnCredential(ctx, openid, credentialID)
 }
 
 // ListCredentials 列出用户的所有 WebAuthn 凭证
-func (s *Service) ListCredentials(ctx context.Context, userID string) ([]*cache.StoredWebAuthnCredential, error) {
-	return s.cache.GetUserWebAuthnCredentials(ctx, userID)
+func (s *Service) ListCredentials(ctx context.Context, openid string) ([]*cache.StoredWebAuthnCredential, error) {
+	return s.cache.GetUserWebAuthnCredentials(ctx, openid)
 }

@@ -11,7 +11,7 @@ import (
 // Authenticator 统一认证器接口
 // 所有认证方式（IDP、VChan、MFA）都实现此接口
 type Authenticator interface {
-	// Type 返回认证器类型标识（github, google, captcha, email-otp, totp...）
+	// Type 返回认证器类型标识（github, google, captcha, email_otp, totp...）
 	Type() string
 
 	// Prepare 返回该认证器的公开配置（给前端渲染用）

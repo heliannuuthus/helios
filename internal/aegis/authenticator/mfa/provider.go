@@ -9,7 +9,7 @@ import (
 
 // MFA 类型常量
 const (
-	TypeEmailOTP = "email-otp" // 邮件验证码
+	TypeEmailOTP = "email_otp" // 邮件验证码
 	TypeTOTP     = "totp"      // 时间动态口令
 	TypeWebAuthn = "webauthn"  // WebAuthn/FIDO2
 )

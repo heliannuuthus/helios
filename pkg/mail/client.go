@@ -12,6 +12,8 @@ import (
 	"net/smtp"
 	"strings"
 	"time"
+
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 const (
@@ -180,13 +182,19 @@ func (c *Client) createSMTPClient(ctx context.Context) (*smtp.Client, func(), er
 
 	client, err := smtp.NewClient(conn, c.host)
 	if err != nil {
-		_ = conn.Close() //nolint:errcheck
+		if closeErr := conn.Close(); closeErr != nil {
+			logger.Warnf("[Mail] 关闭连接失败: %v", closeErr)
+		}
 		return nil, nil, fmt.Errorf("create smtp client failed: %w", err)
 	}
 
 	cleanup := func() {
-		_ = client.Close() //nolint:errcheck
-		_ = conn.Close()   //nolint:errcheck
+		if err := client.Close(); err != nil {
+			logger.Warnf("[Mail] 关闭 SMTP 客户端失败: %v", err)
+		}
+		if err := conn.Close(); err != nil {
+			logger.Warnf("[Mail] 关闭连接失败: %v", err)
+		}
 	}
 
 	return client, cleanup, nil
@@ -560,13 +568,21 @@ func (c *Client) Verify(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("dial failed: %w", err)
 	}
-	defer func() { _ = conn.Close() }() //nolint:errcheck
+	defer func() {
+		if err := conn.Close(); err != nil {
+			logger.Warnf("[Mail] 关闭连接失败: %v", err)
+		}
+	}()
 
 	client, err := smtp.NewClient(conn, c.host)
 	if err != nil {
 		return fmt.Errorf("create smtp client failed: %w", err)
 	}
-	defer func() { _ = client.Close() }() //nolint:errcheck
+	defer func() {
+		if err := client.Close(); err != nil {
+			logger.Warnf("[Mail] 关闭 SMTP 客户端失败: %v", err)
+		}
+	}()
 
 	if err := client.Hello(c.localName); err != nil {
 		return fmt.Errorf("hello failed: %w", err)

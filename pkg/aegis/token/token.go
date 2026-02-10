@@ -150,9 +150,9 @@ func extractClientIDAndType(tokenString string) (clientID string, tokenType Toke
 
 	// 检查是否有 typ 字段（ChallengeToken）
 	var typ string
-	if token.Get("typ", &typ) == nil && typ != "" {
+	if token.Get(ClaimType, &typ) == nil && typ != "" {
 		var cli string
-		if token.Get("cli", &cli) != nil || cli == "" {
+		if token.Get(ClaimCli, &cli) != nil || cli == "" {
 			return "", "", errors.New("missing cli (client_id)")
 		}
 		return cli, TokenTypeChallenge, nil
@@ -160,7 +160,7 @@ func extractClientIDAndType(tokenString string) (clientID string, tokenType Toke
 
 	// 检查是否有 cli 字段
 	var cli string
-	if token.Get("cli", &cli) == nil && cli != "" {
+	if token.Get(ClaimCli, &cli) == nil && cli != "" {
 		return cli, TokenTypeUAT, nil
 	}
 
@@ -191,7 +191,7 @@ func extractAudience(tokenString string) (string, error) {
 // PASETO v4.public 使用 Ed25519，签名固定 64 字节
 func UnsafeParseToken(tokenString string) (*paseto.Token, error) {
 	parts := strings.Split(tokenString, ".")
-	if len(parts) < 3 || parts[0] != "v4" || parts[1] != "public" {
+	if len(parts) < 3 || parts[0] != PasetoVersion || parts[1] != PasetoPurpose {
 		return nil, fmt.Errorf("%w: invalid PASETO token format", pasetokit.ErrInvalidSignature)
 	}
 

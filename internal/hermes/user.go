@@ -27,10 +27,10 @@ func NewUserService(db *gorm.DB) *UserService {
 	return &UserService{db: db}
 }
 
-// GetByUID 根据 UID 查找用户
-func (s *UserService) GetByUID(ctx context.Context, uid string) (*models.User, error) {
+// GetByOpenID 根据 OpenID 查找用户
+func (s *UserService) GetByOpenID(ctx context.Context, openid string) (*models.User, error) {
 	var user models.User
-	if err := s.db.WithContext(ctx).Where("uid = ?", uid).First(&user).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("openid = ?", openid).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
@@ -45,12 +45,12 @@ func (s *UserService) GetByIdentity(ctx context.Context, identity *models.UserId
 		return nil, err
 	}
 
-	return s.GetByUID(ctx, matched.UID)
+	return s.GetByOpenID(ctx, matched.OpenID)
 }
 
 // GetIdentitiesByIdentity 根据身份模型查找该用户的全部身份
 // 用户不存在返回空切片（非 error），仅基础设施故障才返回 error
-func (s *UserService) GetIdentitiesByIdentity(ctx context.Context, identity *models.UserIdentity) ([]*models.UserIdentity, error) {
+func (s *UserService) GetIdentitiesByIdentity(ctx context.Context, identity *models.UserIdentity) (models.Identities, error) {
 	var matched models.UserIdentity
 	if err := s.db.WithContext(ctx).
 		Where("domain = ? AND idp = ? AND t_openid = ?", identity.Domain, identity.IDP, identity.TOpenID).
@@ -61,7 +61,7 @@ func (s *UserService) GetIdentitiesByIdentity(ctx context.Context, identity *mod
 		return nil, err
 	}
 
-	return s.GetIdentities(ctx, matched.UID)
+	return s.GetIdentities(ctx, matched.OpenID)
 }
 
 // getByEmail 根据邮箱查找用户（内部使用，返回基础 User）
@@ -79,13 +79,13 @@ func (s *UserService) GetByEmail(ctx context.Context, email string) (*models.Use
 	if err != nil {
 		return nil, err
 	}
-	return s.GetUserWithDecrypted(ctx, user.UID)
+	return s.GetUserWithDecrypted(ctx, user.OpenID)
 }
 
 // GetIdentityByType 获取用户指定域和 IDP 类型的身份
-func (s *UserService) GetIdentityByType(ctx context.Context, domain, uid, idpType string) (*models.UserIdentity, error) {
+func (s *UserService) GetIdentityByType(ctx context.Context, domain, openid, idpType string) (*models.UserIdentity, error) {
 	var identity models.UserIdentity
-	if err := s.db.WithContext(ctx).Where("domain = ? AND uid = ? AND idp = ?", domain, uid, idpType).First(&identity).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("domain = ? AND openid = ? AND idp = ?", domain, openid, idpType).First(&identity).Error; err != nil {
 		return nil, err
 	}
 	return &identity, nil
@@ -115,14 +115,14 @@ func (s *UserService) Create(ctx context.Context, user *models.User) error {
 }
 
 // CreateWithIdentities 创建用户及多个身份关联（事务）
-func (s *UserService) CreateWithIdentities(ctx context.Context, user *models.User, identities []*models.UserIdentity) error {
+func (s *UserService) CreateWithIdentities(ctx context.Context, user *models.User, identities models.Identities) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(user).Error; err != nil {
 			return fmt.Errorf("创建用户失败: %w", err)
 		}
 
 		for _, identity := range identities {
-			identity.UID = user.UID
+			identity.OpenID = user.OpenID
 			if err := tx.Create(identity).Error; err != nil {
 				return fmt.Errorf("创建身份关联失败: %w", err)
 			}
@@ -133,18 +133,18 @@ func (s *UserService) CreateWithIdentities(ctx context.Context, user *models.Use
 }
 
 // Update 更新用户
-func (s *UserService) Update(ctx context.Context, uid string, updates map[string]any) error {
-	return s.db.WithContext(ctx).Model(&models.User{}).Where("uid = ?", uid).Updates(updates).Error
+func (s *UserService) Update(ctx context.Context, openid string, updates map[string]any) error {
+	return s.db.WithContext(ctx).Model(&models.User{}).Where("openid = ?", openid).Updates(updates).Error
 }
 
 // UpdateLastLogin 更新最后登录时间
-func (s *UserService) UpdateLastLogin(ctx context.Context, uid string) error {
-	return s.Update(ctx, uid, map[string]any{"last_login_at": time.Now()})
+func (s *UserService) UpdateLastLogin(ctx context.Context, openid string) error {
+	return s.Update(ctx, openid, map[string]any{"last_login_at": time.Now()})
 }
 
 // UpdatePassword 修改用户密码（验证旧密码后更新）
-func (s *UserService) UpdatePassword(ctx context.Context, uid, oldPassword, newPassword string) error {
-	user, err := s.GetByUID(ctx, uid)
+func (s *UserService) UpdatePassword(ctx context.Context, openid, oldPassword, newPassword string) error {
+	user, err := s.GetByOpenID(ctx, openid)
 	if err != nil {
 		return errors.New("user not found")
 	}
@@ -166,7 +166,7 @@ func (s *UserService) UpdatePassword(ctx context.Context, uid, oldPassword, newP
 	}
 
 	hashStr := string(hash)
-	return s.Update(ctx, uid, map[string]any{"password_hash": hashStr})
+	return s.Update(ctx, openid, map[string]any{"password_hash": hashStr})
 }
 
 // AddIdentity 添加身份关联
@@ -175,17 +175,17 @@ func (s *UserService) AddIdentity(ctx context.Context, identity *models.UserIden
 }
 
 // GetIdentities 获取用户所有身份关联
-func (s *UserService) GetIdentities(ctx context.Context, uid string) ([]*models.UserIdentity, error) {
-	var identities []*models.UserIdentity
-	if err := s.db.WithContext(ctx).Where("uid = ?", uid).Find(&identities).Error; err != nil {
+func (s *UserService) GetIdentities(ctx context.Context, openid string) (models.Identities, error) {
+	var identities models.Identities
+	if err := s.db.WithContext(ctx).Where("openid = ?", openid).Find(&identities).Error; err != nil {
 		return nil, err
 	}
 	return identities, nil
 }
 
 // GetUserWithDecrypted 获取解密后的用户（解密手机号）
-func (s *UserService) GetUserWithDecrypted(ctx context.Context, uid string) (*models.UserWithDecrypted, error) {
-	user, err := s.GetByUID(ctx, uid)
+func (s *UserService) GetUserWithDecrypted(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
+	user, err := s.GetByOpenID(ctx, openid)
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func (s *UserService) GetUserWithDecrypted(ctx context.Context, uid string) (*mo
 		if err != nil {
 			logger.Warnf("[UserService] 获取数据库加密密钥失败: %v", err)
 		} else {
-			phone, err := cryptoutil.Decrypt(key, *user.PhoneCipher, user.UID)
+			phone, err := cryptoutil.Decrypt(key, *user.PhoneCipher, user.OpenID)
 			if err != nil {
 				logger.Warnf("[UserService] 解密手机号失败: %v", err)
 			} else {
@@ -219,12 +219,14 @@ func (s *UserService) GetUserWithDecryptedByIdentity(ctx context.Context, identi
 		return nil, err
 	}
 
-	return s.GetUserWithDecrypted(ctx, user.UID)
+	return s.GetUserWithDecrypted(ctx, user.OpenID)
 }
 
 // CreateUser 创建用户及其身份关联（认证身份 + global 身份）
+// openid 在此处生成一次，同时作为 t_user.openid 和 global identity 的 t_openid
 func (s *UserService) CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error) {
 	now := time.Now()
+	openid := models.GenerateOpenID()
 
 	// 优先使用 IDP 提供的用户信息，否则生成随机值
 	var nickname, picture string
@@ -240,7 +242,7 @@ func (s *UserService) CreateUser(ctx context.Context, identity *models.UserIdent
 	}
 
 	newUser := &models.User{
-		UID:         models.GenerateUID(),
+		OpenID:      openid,
 		Nickname:    &nickname,
 		Picture:     &picture,
 		LastLoginAt: &now,
@@ -264,43 +266,24 @@ func (s *UserService) CreateUser(ctx context.Context, identity *models.UserIdent
 		UpdatedAt: now,
 	}
 
-	// 全局身份（该域下的对外标识）
+	// 全局身份（该域下的对外标识，t_openid = openid）
 	globalIdentity := &models.UserIdentity{
 		Domain:    identity.Domain,
 		IDP:       "global",
-		TOpenID:   models.GenerateGID(),
+		TOpenID:   openid,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 
-	if err := s.CreateWithIdentities(ctx, newUser, []*models.UserIdentity{authIdentity, globalIdentity}); err != nil {
+	if err := s.CreateWithIdentities(ctx, newUser, models.Identities{authIdentity, globalIdentity}); err != nil {
 		return nil, err
 	}
 
-	logger.Infof("[UserService] 创建新用户 - Domain: %s, UID: %s, IDP: %s", identity.Domain, newUser.UID, identity.IDP)
+	logger.Infof("[UserService] 创建新用户 - Domain: %s, OpenID: %s, IDP: %s", identity.Domain, openid, identity.IDP)
 
 	return &models.UserWithDecrypted{User: *newUser}, nil
 }
 
-// GetOrCreate 查找或创建用户
-// 通过 identity 查找用户，不存在则创建
-func (s *UserService) GetOrCreate(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, bool, error) {
-	user, err := s.GetByIdentity(ctx, identity)
-	if err == nil {
-		if err := s.UpdateLastLogin(ctx, user.UID); err != nil {
-			logger.Warnf("[UserService] update last login failed: %v", err)
-		}
-		result, err := s.GetUserWithDecrypted(ctx, user.UID)
-		return result, false, err
-	}
-
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, false, fmt.Errorf("查找用户失败: %w", err)
-	}
-
-	result, err := s.CreateUser(ctx, identity, userInfo)
-	return result, true, err
-}
 
 // generateRandomName 生成随机昵称
 func generateRandomName() string {
@@ -348,27 +331,27 @@ func (s *UserService) GetCredentialByID(ctx context.Context, credentialID string
 }
 
 // GetUserCredentials 获取用户所有凭证
-func (s *UserService) GetUserCredentials(ctx context.Context, uid string) ([]models.UserCredential, error) {
+func (s *UserService) GetUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
-	if err := s.db.WithContext(ctx).Where("uid = ?", uid).Find(&credentials).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("openid = ?", openid).Find(&credentials).Error; err != nil {
 		return nil, err
 	}
 	return credentials, nil
 }
 
 // GetUserCredentialsByType 获取用户指定类型的凭证
-func (s *UserService) GetUserCredentialsByType(ctx context.Context, uid, credType string) ([]models.UserCredential, error) {
+func (s *UserService) GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
-	if err := s.db.WithContext(ctx).Where("uid = ? AND type = ?", uid, credType).Find(&credentials).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Find(&credentials).Error; err != nil {
 		return nil, err
 	}
 	return credentials, nil
 }
 
 // GetEnabledUserCredentialsByType 获取用户已启用的指定类型的凭证
-func (s *UserService) GetEnabledUserCredentialsByType(ctx context.Context, uid, credType string) ([]models.UserCredential, error) {
+func (s *UserService) GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
-	if err := s.db.WithContext(ctx).Where("uid = ? AND type = ? AND enabled = ?", uid, credType, true).Find(&credentials).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("openid = ? AND type = ? AND enabled = ?", openid, credType, true).Find(&credentials).Error; err != nil {
 		return nil, err
 	}
 	return credentials, nil
@@ -398,17 +381,17 @@ func (s *UserService) DisableCredential(ctx context.Context, credentialID string
 }
 
 // DeleteCredential 删除凭证
-func (s *UserService) DeleteCredential(ctx context.Context, uid, credentialID string) error {
-	return s.db.WithContext(ctx).Where("uid = ? AND credential_id = ?", uid, credentialID).Delete(&models.UserCredential{}).Error
+func (s *UserService) DeleteCredential(ctx context.Context, openid, credentialID string) error {
+	return s.db.WithContext(ctx).Where("openid = ? AND credential_id = ?", openid, credentialID).Delete(&models.UserCredential{}).Error
 }
 
-// GetUserIDByCredentialID 根据凭证 ID 获取用户 UID
-func (s *UserService) GetUserIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
+// GetOpenIDByCredentialID 根据凭证 ID 获取用户 OpenID
+func (s *UserService) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
 	cred, err := s.GetCredentialByID(ctx, credentialID)
 	if err != nil {
 		return "", err
 	}
-	return cred.UID, nil
+	return cred.OpenID, nil
 }
 
 // ==================== PasswordStore 接口实现（供 password IDP 使用）====================
@@ -470,7 +453,7 @@ func (s *UserService) getByIdentifierWithIDP(ctx context.Context, identifier, id
 func (s *UserService) toPasswordStoreCredentialWithIDP(ctx context.Context, user *models.User, idpType string) (*PasswordStoreCredential, error) {
 	// 查找用户在该 IDP 类型下的身份（任意域均可）
 	var identity models.UserIdentity
-	if err := s.db.WithContext(ctx).Where("uid = ? AND idp = ?", user.UID, idpType).First(&identity).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("openid = ? AND idp = ?", user.OpenID, idpType).First(&identity).Error; err != nil {
 		return nil, errors.New("user not found")
 	}
 

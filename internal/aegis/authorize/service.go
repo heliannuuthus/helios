@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/heliannuuthus/helios/internal/aegis/authenticator/idp"
 	"github.com/heliannuuthus/helios/internal/aegis/cache"
 	autherrors "github.com/heliannuuthus/helios/internal/aegis/errors"
 	"github.com/heliannuuthus/helios/internal/aegis/token"
@@ -19,7 +18,8 @@ import (
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/aegis/keys"
-	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
+	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/token"
+	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helperutil"
 	"github.com/heliannuuthus/helios/pkg/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -30,11 +30,10 @@ type Service struct {
 	cache    *cache.Manager
 	userSvc  *user.Service
 	tokenSvc *token.Service
+	pool     *async.Pool
 
 	// 配置
-	defaultAccessTTL  time.Duration
-	defaultRefreshTTL time.Duration
-	authCodeTTL       time.Duration
+	authCodeExpiresIn time.Duration
 }
 
 // ServiceConfig 服务配置
@@ -42,10 +41,9 @@ type ServiceConfig struct {
 	Cache    *cache.Manager
 	UserSvc  *user.Service
 	TokenSvc *token.Service
+	Pool     *async.Pool
 
-	DefaultAccessTTL  time.Duration
-	DefaultRefreshTTL time.Duration
-	AuthCodeTTL       time.Duration
+	AuthCodeExpiresIn time.Duration
 }
 
 // NewService 创建授权服务
@@ -54,9 +52,8 @@ func NewService(cfg *ServiceConfig) *Service {
 		cache:             cfg.Cache,
 		userSvc:           cfg.UserSvc,
 		tokenSvc:          cfg.TokenSvc,
-		defaultAccessTTL:  defaultDuration(cfg.DefaultAccessTTL, 2*time.Hour),
-		defaultRefreshTTL: defaultDuration(cfg.DefaultRefreshTTL, 7*24*time.Hour),
-		authCodeTTL:       defaultDuration(cfg.AuthCodeTTL, 5*time.Minute),
+		pool:              cfg.Pool,
+		authCodeExpiresIn: defaultDuration(cfg.AuthCodeExpiresIn, 5*time.Minute),
 	}
 }
 
@@ -146,7 +143,7 @@ func (s *Service) checkIdentityRequirements(ctx context.Context, flow *types.Aut
 	}
 
 	// 获取用户已绑定的身份
-	userIdentities, err := s.getUserIdentities(ctx, flow.User.UID)
+	userIdentities, err := s.getUserIdentities(ctx, flow.User.OpenID)
 	if err != nil {
 		logger.Warnf("[Authorize] 获取用户身份失败: %v", err)
 		return autherrors.NewServerError("failed to check identity requirements")
@@ -155,7 +152,7 @@ func (s *Service) checkIdentityRequirements(ctx context.Context, flow *types.Aut
 	// 检查是否缺少必要的身份
 	missingIdentities := s.getMissingIdentities(requiredIdentities, userIdentities)
 	if len(missingIdentities) > 0 {
-		logger.Infof("[Authorize] 用户 %s 缺少必要身份: %v", flow.User.UID, missingIdentities)
+		logger.Infof("[Authorize] 用户 %s 缺少必要身份: %v", flow.User.OpenID, missingIdentities)
 		return autherrors.NewIdentityRequired(missingIdentities)
 	}
 
@@ -163,8 +160,8 @@ func (s *Service) checkIdentityRequirements(ctx context.Context, flow *types.Aut
 }
 
 // getUserIdentities 获取用户已绑定的身份类型列表
-func (s *Service) getUserIdentities(ctx context.Context, uid string) ([]string, error) {
-	return s.userSvc.GetIdentityTypes(ctx, uid)
+func (s *Service) getUserIdentities(ctx context.Context, openid string) ([]string, error) {
+	return s.userSvc.GetIdentityTypes(ctx, openid)
 }
 
 // getMissingIdentities 获取缺少的身份类型
@@ -192,8 +189,7 @@ func (s *Service) GenerateAuthCode(ctx context.Context, flow *types.AuthFlow) (*
 		FlowID:    flow.ID,
 		State:     flow.Request.State,
 		CreatedAt: now,
-		ExpiresAt: now.Add(s.authCodeTTL),
-		Used:      false,
+		ExpiresAt: now.Add(s.authCodeExpiresIn),
 	}
 
 	if err := s.cache.SaveAuthCode(ctx, code); err != nil {
@@ -223,8 +219,8 @@ func (s *Service) ExchangeToken(ctx context.Context, req *TokenRequest) (*TokenR
 }
 
 func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
-	// 1. 获取授权码
-	authCode, err := s.cache.GetAuthCode(ctx, req.Code)
+	// 1. 原子消费授权码（读取并删除，防止重放）
+	authCode, err := s.cache.ConsumeAuthCode(ctx, req.Code)
 	if err != nil {
 		return nil, autherrors.NewInvalidGrant("invalid authorization code")
 	}
@@ -255,12 +251,7 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 		return nil, autherrors.NewInvalidGrant("invalid code verifier")
 	}
 
-	// 6. 标记授权码已使用
-	if err := s.cache.MarkAuthCodeUsed(ctx, req.Code); err != nil {
-		logger.Warnf("[Authorize] 标记授权码已使用失败: %v", err)
-	}
-
-	// 7. 生成 Token
+	// 6. 生成 Token
 	return s.generateTokens(ctx, &flow)
 }
 
@@ -277,7 +268,7 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 	}
 
 	// 3. 获取用户、应用、服务信息
-	user, err := s.userSvc.GetUser(ctx, rt.UserID)
+	user, err := s.userSvc.GetUser(ctx, rt.OpenID)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -292,8 +283,8 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 		return nil, fmt.Errorf("service not found: %w", err)
 	}
 
-	// 4. 生成新的 access token（使用 refresh token 中保存的 sub）
-	tokenResp, err := s.generateAccessToken(ctx, app, svc, user, rt.Sub, rt.Scope)
+	// 4. 生成新的 access token（使用 refresh token 中保存的 openid 作为 sub）
+	tokenResp, err := s.generateAccessToken(ctx, app, svc, user, rt.OpenID, rt.Scope)
 	if err != nil {
 		return nil, err
 	}
@@ -308,12 +299,11 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 func (s *Service) generateTokens(ctx context.Context, flow *types.AuthFlow) (*TokenResponse, error) {
 	scope := strings.Join(flow.GrantedScopes, " ")
 
-	sub := getSub(flow.Identities, flow.Application.DomainID)
-	if sub == "" {
+	if flow.Sub == "" {
 		return nil, autherrors.NewServerError("failed to resolve user subject")
 	}
 
-	tokenResp, err := s.generateAccessToken(ctx, flow.Application, flow.Service, flow.User, sub, scope)
+	tokenResp, err := s.generateAccessToken(ctx, flow.Application, flow.Service, flow.User, flow.Sub, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -338,28 +328,33 @@ func (s *Service) generateAccessToken(
 	sub string,
 	scope string,
 ) (*TokenResponse, error) {
-	// 计算 TTL
-	accessTTL := time.Duration(svc.AccessTokenExpiresIn) * time.Second //nolint:gosec // AccessTokenExpiresIn 是配置的小整数，不会溢出
-	if accessTTL == 0 {
-		accessTTL = s.defaultAccessTTL
+	if svc.AccessTokenExpiresIn == 0 {
+		return nil, autherrors.NewInvalidRequestf("access_token_expires_in not configured for service %s", svc.ServiceID)
+	}
+	accessExpiresIn := time.Duration(svc.AccessTokenExpiresIn) * time.Second //nolint:gosec // AccessTokenExpiresIn 是配置的小整数，不会溢出
+
+	// 构建 UAT，用户信息根据 granted scope 过滤
+	scopes := parseScopeSet(scope)
+	uatBuilder := token.NewUserAccessTokenBuilder().
+		Scope(scope).
+		OpenID(sub)
+
+	if scopes[ScopeProfile] {
+		uatBuilder.Nickname(user.GetNickname()).Picture(user.GetPicture())
+	}
+	if scopes[ScopeEmail] {
+		uatBuilder.Email(user.GetEmail())
+	}
+	if scopes[ScopePhone] {
+		uatBuilder.Phone(user.GetPhone())
 	}
 
-	// 构建 UAT（用户信息根据 scope 自动过滤）
-	// OpenID = sub（主身份 t_openid，对外暴露）
-	// InternalUID = user.UID（内部关联 ID，不对外暴露，加密在 footer 中）
 	uat := token.NewClaimsBuilder().
 		Issuer(s.tokenSvc.GetIssuerName()).
 		ClientID(app.AppID).
 		Audience(svc.ServiceID).
-		ExpiresIn(accessTTL).
-		Build(token.NewUserAccessTokenBuilder().
-			Scope(scope).
-			OpenID(sub).
-			InternalUID(user.UID).
-			Nickname(user.GetNickname()).
-			Picture(user.GetPicture()).
-			Email(user.GetEmail()).
-			Phone(user.GetPhone()))
+		ExpiresIn(accessExpiresIn).
+		Build(uatBuilder)
 
 	accessToken, err := s.tokenSvc.Issue(ctx, uat)
 	if err != nil {
@@ -368,21 +363,23 @@ func (s *Service) generateAccessToken(
 
 	return &TokenResponse{
 		AccessToken: accessToken,
-		TokenType:   "Bearer",
-		ExpiresIn:   int(accessTTL.Seconds()),
+		TokenType:   pkgtoken.TokenTypeBearer,
+		ExpiresIn:   int(accessExpiresIn.Seconds()),
 		Scope:       scope,
 	}, nil
 }
 
 func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, scope string) (*cache.RefreshToken, error) {
-	// 计算 TTL
-	refreshTTL := time.Duration(flow.Service.RefreshTokenExpiresIn) * time.Second //nolint:gosec // RefreshTokenExpiresIn 是配置的小整数，不会溢出
-	if refreshTTL == 0 {
-		refreshTTL = s.defaultRefreshTTL
+	if flow.Service.RefreshTokenExpiresIn == 0 {
+		return nil, autherrors.NewInvalidRequestf("refresh_token_expires_in not configured for service %s", flow.Service.ServiceID)
 	}
+	refreshExpiresIn := time.Duration(flow.Service.RefreshTokenExpiresIn) * time.Second //nolint:gosec // RefreshTokenExpiresIn 是配置的小整数，不会溢出
 
-	// 清理旧的 refresh token
-	s.cleanupOldRefreshTokens(ctx, flow.User.UID, flow.Application.AppID)
+	// 异步清理旧的 refresh token
+	openid, clientID := flow.User.OpenID, flow.Application.AppID
+	s.pool.GoWithContext(ctx, func(ctx context.Context) {
+		s.cleanupOldRefreshTokens(ctx, openid, clientID)
+	})
 
 	// 生成 refresh token 值
 	tokenValue, err := generateRefreshTokenValue()
@@ -394,12 +391,11 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 	now := time.Now()
 	rt := &cache.RefreshToken{
 		Token:     tokenValue,
-		UserID:    flow.User.UID,
-		Sub:       getSub(flow.Identities, flow.Application.DomainID),
+		OpenID:    flow.User.OpenID,
 		ClientID:  flow.Application.AppID,
 		Audience:  flow.Service.ServiceID,
 		Scope:     scope,
-		ExpiresAt: now.Add(refreshTTL),
+		ExpiresAt: now.Add(refreshExpiresIn),
 		CreatedAt: now,
 	}
 
@@ -410,13 +406,13 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 	return rt, nil
 }
 
-func (s *Service) cleanupOldRefreshTokens(ctx context.Context, userID, clientID string) {
+func (s *Service) cleanupOldRefreshTokens(ctx context.Context, openid, clientID string) {
 	maxTokens := config.Aegis().GetInt("aegis.max-refresh-token")
 	if maxTokens <= 0 {
 		maxTokens = 10
 	}
 
-	tokens, err := s.cache.ListUserRefreshTokens(ctx, userID, clientID)
+	tokens, err := s.cache.ListUserRefreshTokens(ctx, openid, clientID)
 	if err != nil {
 		return
 	}
@@ -436,7 +432,7 @@ func (s *Service) cleanupOldRefreshTokens(ctx context.Context, userID, clientID 
 // CheckRelation 检查用户是否具有指定的关系
 func (s *Service) CheckRelation(ctx context.Context, serviceID, subjectID, relation, objectType, objectID string) (bool, error) {
 	// 从 hermes 查询关系
-	relationships, err := s.cache.ListRelationships(ctx, serviceID, "user", subjectID)
+	relationships, err := s.cache.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
 	if err != nil {
 		return false, err
 	}
@@ -472,45 +468,8 @@ func (s *Service) RevokeToken(ctx context.Context, tokenValue string) error {
 }
 
 // RevokeAllTokens 撤销用户所有 Token
-func (s *Service) RevokeAllTokens(ctx context.Context, userID string) error {
-	return s.cache.RevokeUserRefreshTokens(ctx, userID)
-}
-
-// ==================== UserInfo ====================
-
-// GetUserInfo 获取用户信息（根据 scope 脱敏）
-// sub 是主身份的 t_openid（来自 token），用于对外返回
-// internalOpenID 是内部 OpenID，用于查询用户信息
-func (s *Service) GetUserInfo(ctx context.Context, sub, internalOpenID, scope string) (*UserInfoResponse, error) {
-	user, err := s.userSvc.GetUser(ctx, internalOpenID)
-	if err != nil {
-		return nil, err
-	}
-
-	resp := &UserInfoResponse{
-		Sub: sub,
-	}
-
-	scopes := parseScopeSet(scope)
-
-	if scopes[ScopeProfile] {
-		if user.Nickname != nil {
-			resp.Nickname = *user.Nickname
-		}
-		if user.Picture != nil {
-			resp.Picture = *user.Picture
-		}
-	}
-
-	if scopes[ScopeEmail] && user.Email != nil {
-		resp.Email = helperutil.MaskEmail(*user.Email)
-	}
-
-	if scopes[ScopePhone] && user.Phone != "" {
-		resp.Phone = helperutil.MaskPhone(user.Phone)
-	}
-
-	return resp, nil
+func (s *Service) RevokeAllTokens(ctx context.Context, openid string) error {
+	return s.cache.RevokeUserRefreshTokens(ctx, openid)
 }
 
 // ==================== Public Keys ====================
@@ -549,8 +508,8 @@ func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKey
 		return nil, fmt.Errorf("parse main public key from seed: %w", err)
 	}
 	main := PublicKeyInfo{
-		Version:   "v4",
-		Purpose:   "public",
+		Version:   pkgtoken.PasetoVersion,
+		Purpose:   pkgtoken.PasetoPurpose,
 		PublicKey: keys.ExportPublicKeyBase64(mainPublicKey),
 	}
 
@@ -563,8 +522,8 @@ func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKey
 		}
 
 		keyInfos = append(keyInfos, PublicKeyInfo{
-			Version:   "v4",
-			Purpose:   "public",
+			Version:   pkgtoken.PasetoVersion,
+			Purpose:   pkgtoken.PasetoPurpose,
 			PublicKey: keys.ExportPublicKeyBase64(publicKey),
 		})
 	}
@@ -618,23 +577,4 @@ func (s *Service) getAllowedScopes(_ *types.AuthFlow) []string {
 	// TODO: 可以从应用配置或服务配置中读取
 	// 目前默认允许所有标准 scope
 	return []string{ScopeOpenID, ScopeProfile, ScopeEmail, ScopePhone, ScopeOfflineAccess}
-}
-
-// DecryptPhone 解密手机号
-func DecryptPhone(cipher, openID string) (string, error) {
-	key, err := config.GetDBEncKeyRaw()
-	if err != nil {
-		return "", err
-	}
-	return cryptoutil.Decrypt(key, cipher, openID)
-}
-
-// getSub 从身份列表中获取指定域的对外用户标识
-func getSub(identities []*models.UserIdentity, domain string) string {
-	for _, id := range identities {
-		if id.Domain == domain && id.IDP == idp.TypeGlobal {
-			return id.TOpenID
-		}
-	}
-	return ""
 }

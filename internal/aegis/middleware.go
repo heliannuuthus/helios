@@ -27,7 +27,7 @@ func (m *Middleware) RequireClientAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr := m.extractToken(c)
 		if tokenStr == "" {
-			c.Header("WWW-Authenticate", "Bearer")
+			c.Header("WWW-Authenticate", pkgtoken.TokenTypeBearer)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":             "invalid_token",
 				"error_description": "missing client access token",
@@ -38,7 +38,7 @@ func (m *Middleware) RequireClientAuth() gin.HandlerFunc {
 		// 验证 CAT
 		claims, err := m.tokenSvc.VerifyCAT(c.Request.Context(), tokenStr)
 		if err != nil {
-			c.Header("WWW-Authenticate", "Bearer error=\"invalid_token\"")
+			c.Header("WWW-Authenticate", pkgtoken.TokenTypeBearer+` error="invalid_token"`)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":             "invalid_token",
 				"error_description": err.Error(),
@@ -53,8 +53,8 @@ func (m *Middleware) RequireClientAuth() gin.HandlerFunc {
 
 func (*Middleware) extractToken(c *gin.Context) string {
 	// 从 Authorization header
-	auth := c.GetHeader("Authorization")
-	if strings.HasPrefix(auth, "Bearer ") {
+	auth := c.GetHeader(HeaderAuthorization)
+	if strings.HasPrefix(auth, BearerPrefix) {
 		return auth[7:]
 	}
 	return ""

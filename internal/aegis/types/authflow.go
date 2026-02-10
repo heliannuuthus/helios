@@ -43,7 +43,8 @@ type AuthFlow struct {
 	Connection    string                       `json:"connection,omitempty"`     // 当前正在验证的 Connection
 
 	// 认证结果
-	Identities  []*models.UserIdentity       `json:"identities,omitempty"`    // 用户全部身份绑定
+	Sub         string                       `json:"sub,omitempty"`           // 当前域下的对外用户标识（global 身份的 TOpenID）
+	Identities  models.Identities            `json:"identities,omitempty"`    // 用户全部身份绑定
 	UserInfoMap map[string]*models.TUserInfo `json:"user_info_map,omitempty"` // IDP 返回的用户信息（connection -> TUserInfo）
 
 	// 授权结果
@@ -265,25 +266,19 @@ func splitScopes(scope string) []string {
 // ConnectionConfig Connection 配置（返回给前端的公开配置）
 // 统一结构，适用于 IDP、VChan 和 MFA
 type ConnectionConfig struct {
-	Connection string   `json:"connection"`          // 标识（github, google, wechat-mp, user, oper, email-otp, totp, captcha...）
+	Connection string   `json:"connection"`          // 标识（github, google, wechat-mp, user, oper, email_otp, totp, captcha...）
 	Identifier string   `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
 	Strategy   []string `json:"strategy,omitzero"`   // 认证方式（user/oper: password, webauthn; captcha: turnstile; 其余忽略）
-	Delegate   []string `json:"delegate,omitzero"`   // 委托验证/MFA（totp, email-otp）
+	Delegate   []string `json:"delegate,omitzero"`   // 委托验证/MFA（totp, email_otp）
 	Require    []string `json:"require,omitzero"`    // 前置验证（captcha）
 	Verified   bool     `json:"verified,omitempty"`  // 是否已通过验证
-}
-
-// VChanConfig 验证渠道配置（用于 Challenge 响应）
-type VChanConfig struct {
-	Connection string `json:"connection"` // 标识（captcha）
-	Identifier string `json:"identifier"` // 站点标识（site_key）
 }
 
 // ConnectionsMap Connections 响应（按类别分类）
 type ConnectionsMap struct {
 	IDP   []*ConnectionConfig `json:"idp,omitzero"`   // 身份提供商（github, google, user, oper, wechat-mp...）
 	VChan []*ConnectionConfig `json:"vchan,omitzero"` // 验证渠道/前置验证（captcha...）
-	MFA   []*ConnectionConfig `json:"mfa,omitzero"`   // MFA 方式（email-otp, totp, webauthn...）
+	MFA   []*ConnectionConfig `json:"mfa,omitzero"`   // MFA 方式（email_otp, totp, webauthn...）
 }
 
 // ==================== 辅助函数 ====================
@@ -361,14 +356,9 @@ func (f *AuthFlow) AddIdentity(identity *models.UserIdentity, userInfo *models.T
 	}
 }
 
-// FindIdentity 从已认证的身份中查找指定 connection 对应的身份
+// GetIdentity 从已认证的身份中查找指定 connection 对应的身份
 func (f *AuthFlow) GetIdentity(connection string) *models.UserIdentity {
-	for _, id := range f.Identities {
-		if id.IDP == connection {
-			return id
-		}
-	}
-	return nil
+	return f.Identities.FindByIDP(connection)
 }
 
 // GetUserInfo 获取指定 connection 的用户信息
@@ -380,9 +370,10 @@ func (f *AuthFlow) GetUserInfo(connection string) *models.TUserInfo {
 }
 
 // SetAuthenticated 设置为已认证状态
-func (f *AuthFlow) SetAuthenticated(user *models.UserWithDecrypted) {
+func (f *AuthFlow) SetAuthenticated(user *models.UserWithDecrypted, sub string) {
 	f.State = FlowStateAuthenticated
 	f.User = user
+	f.Sub = sub
 }
 
 // AllRequiredVerified 检查当前 Connection 的所有 Require 依赖是否已验证

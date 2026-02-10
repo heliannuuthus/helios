@@ -2,6 +2,7 @@ package aegis
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -19,23 +20,13 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/aegis/user"
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 const (
 	// AuthSessionCookie Auth 会话 Cookie 名称
 	AuthSessionCookie = "aegis-session"
-)
-
-// AuthStage 认证阶段
-type AuthStage string
-
-const (
-	StageLogin    AuthStage = "login"    // 登录阶段
-	StageConsent  AuthStage = "consent"  // 授权同意阶段
-	StageMFA      AuthStage = "mfa"      // MFA 验证阶段
-	StageCallback AuthStage = "callback" // IDP 回调阶段
-	StageComplete AuthStage = "complete" // 完成阶段（重定向回应用）
 )
 
 // Handler 认证处理器（编排层）
@@ -47,6 +38,7 @@ type Handler struct {
 	cache           *cache.Manager
 	tokenSvc        *token.Service
 	webauthnSvc     *webauthn.Service
+	pool            *async.Pool
 }
 
 // NewHandler 创建认证处理器
@@ -58,6 +50,7 @@ func NewHandler(
 	cache *cache.Manager,
 	tokenSvc *token.Service,
 	webauthnSvc *webauthn.Service,
+	pool *async.Pool,
 ) *Handler {
 	return &Handler{
 		authenticateSvc: authenticateSvc,
@@ -67,6 +60,7 @@ func NewHandler(
 		cache:           cache,
 		tokenSvc:        tokenSvc,
 		webauthnSvc:     webauthnSvc,
+		pool:            pool,
 	}
 }
 
@@ -245,7 +239,7 @@ func (h *Handler) ContinueChallenge(c *gin.Context) {
 	}
 
 	// 从 query 获取 challenge_id
-	challengeID := c.Query("challenge_id")
+	challengeID := c.Query(QueryChallengeID)
 	if challengeID == "" {
 		h.errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required"))
 		return
@@ -344,8 +338,8 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	// 6. 完成登录流程
-	authCode, err := h.completeLoginFlow(ctx, flow)
+	// 6. 授权并生成授权码
+	authCode, err := h.authorizeAndGenerateCode(ctx, flow)
 	if err != nil {
 		h.errorResponse(c, err)
 		return
@@ -355,15 +349,14 @@ func (h *Handler) Login(c *gin.Context) {
 	loginSuccess = true
 
 	// 7. 构建响应
-	redirectURI := flow.Request.RedirectURI + "?code=" + url.QueryEscape(authCode.Code)
+	location := flow.Request.RedirectURI + "?code=" + url.QueryEscape(authCode.Code)
 	if authCode.State != "" {
-		redirectURI += "&state=" + url.QueryEscape(authCode.State)
+		location += "&state=" + url.QueryEscape(authCode.State)
 	}
 
 	clearAuthSessionCookie(c)
 	c.JSON(http.StatusOK, LoginResponse{
-		Code:        authCode.Code,
-		RedirectURI: redirectURI,
+		Location: location,
 	})
 }
 
@@ -396,22 +389,35 @@ func (h *Handler) resolveUser(ctx context.Context, flow *types.AuthFlow) error {
 		}
 	}
 
-	// 2. 获取用户信息
-	u, err := h.userSvc.GetUser(ctx, allIdentities[0].UID)
+	// 2. 找到当前域下的 global 身份，获取用户信息
+	globalIdentity := allIdentities.FindByDomainAndIDP(domain, idp.TypeGlobal)
+	if globalIdentity == nil {
+		return autherrors.NewServerError("global identity not found for domain")
+	}
+
+	u, err := h.userSvc.GetUser(ctx, globalIdentity.OpenID)
 	if err != nil {
 		return autherrors.NewUnauthorized("user not found")
 	}
 
 	// 回写到 flow
 	flow.Identities = allIdentities
-	flow.SetAuthenticated(u)
+	flow.SetAuthenticated(u, u.OpenID)
+
+	// 异步更新最后登录时间
+	openid := u.OpenID
+	h.pool.GoWithContext(ctx, func(ctx context.Context) {
+		if err := h.userSvc.UpdateLastLogin(ctx, openid); err != nil {
+			logger.Warnf("[Handler] 异步更新登录时间失败: %v", err)
+		}
+	})
 
 	return nil
 }
 
-// completeLoginFlow 完成登录流程（准备授权、生成授权码）
+// authorizeAndGenerateCode 准备授权并生成授权码
 // 调用前需确保 flow 已通过 resolveUser 设置好 User 和 Identities
-func (h *Handler) completeLoginFlow(ctx context.Context, flow *types.AuthFlow) (*cache.AuthorizationCode, error) {
+func (h *Handler) authorizeAndGenerateCode(ctx context.Context, flow *types.AuthFlow) (*cache.AuthorizationCode, error) {
 	// 准备授权（检查身份要求）
 	if err := h.authorizeSvc.PrepareAuthorization(ctx, flow); err != nil {
 		logger.Errorf("[Handler] 准备授权失败: %v", err)
@@ -463,7 +469,7 @@ func (h *Handler) Token(c *gin.Context) {
 //   - 401: CAT 无效
 func (h *Handler) Check(c *gin.Context) {
 	// 1. 验证 CAT
-	cat := c.GetHeader("Authorization")
+	cat := c.GetHeader(HeaderAuthorization)
 	if cat == "" {
 		c.JSON(http.StatusUnauthorized, CheckResponse{
 			Permitted: false,
@@ -556,12 +562,12 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
-	if err := h.authorizeSvc.RevokeAllTokens(c.Request.Context(), getInternalUID(claims)); err != nil {
+	if err := h.authorizeSvc.RevokeAllTokens(c.Request.Context(), GetOpenIDFromToken(claims)); err != nil {
 		h.errorResponse(c, autherrors.NewServerError("failed to revoke tokens"))
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"success": true})
+	c.Status(http.StatusOK)
 }
 
 // ==================== 10. 公钥 ====================
@@ -569,7 +575,7 @@ func (h *Handler) Logout(c *gin.Context) {
 // PublicKeys GET /pubkeys
 // 获取 PASETO 公钥
 func (h *Handler) PublicKeys(c *gin.Context) {
-	clientID := c.Query("client_id")
+	clientID := c.Query(QueryClientID)
 	if clientID == "" {
 		h.errorResponse(c, autherrors.NewInvalidRequest("client_id is required"))
 		return
@@ -581,49 +587,14 @@ func (h *Handler) PublicKeys(c *gin.Context) {
 		return
 	}
 
-	// 公钥不经常变化，设置缓存控制（3 小时）
-	c.Header("Cache-Control", "public, max-age=10800")
+	maxAge := int(config.GetAegisPublicKeyCacheMaxAge().Seconds())
+	c.Header("Cache-Control", fmt.Sprintf("public, max-age=%d", maxAge))
 	c.JSON(http.StatusOK, publicKey)
-}
-
-// ==================== 公开辅助函数（包级别） ====================
-
-// ForwardToStage 跳转到指定阶段（用于强制跳转到特定页面）
-func ForwardToStage(c *gin.Context, stage AuthStage) {
-	var targetURL string
-	switch stage {
-	case StageLogin:
-		targetURL = config.GetAegisEndpointLogin()
-	case StageConsent:
-		targetURL = config.GetAegisEndpointConsent()
-	case StageMFA:
-		targetURL = config.GetAegisEndpointMFA()
-	case StageCallback:
-		targetURL = config.GetAegisEndpointCallback()
-	default:
-		targetURL = config.GetAegisEndpointLogin()
-	}
-	redirect(c, targetURL)
-}
-
-// ForwardToApp 重定向回应用（授权完成后）
-//
-// 使用 302 Found 重定向回 redirect_uri，携带授权码和 state
-func ForwardToApp(c *gin.Context, redirectURI, code, state string) {
-	targetURL := redirectURI + "?code=" + url.QueryEscape(code)
-	if state != "" {
-		targetURL += "&state=" + url.QueryEscape(state)
-	}
-
-	// 授权完成后始终使用 302，因为这是从 POST /login 完成后的跳转
-	// 但实际返回给前端的是 JSON，前端再执行跳转
-	// 如果是服务端直接重定向，使用 302
-	c.Redirect(http.StatusFound, targetURL)
 }
 
 // GetToken 从上下文获取验证后的 Token
 func GetToken(c *gin.Context) token.Token {
-	if t, exists := c.Get("user"); exists {
+	if t, exists := c.Get(ContextKeyUser); exists {
 		if tk, ok := t.(token.Token); ok {
 			return tk
 		}
@@ -754,12 +725,4 @@ func redirect(c *gin.Context, targetURL string) {
 		statusCode = http.StatusSeeOther // 303
 	}
 	c.Redirect(statusCode, targetURL)
-}
-
-// getInternalUID 从 Token 中获取内部用户 ID（t_user.openid，用于内部查询）
-func getInternalUID(t token.Token) string {
-	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
-		return uat.GetInternalUID()
-	}
-	return ""
 }

@@ -31,6 +31,11 @@ func (a *MFAAuthenticator) Prepare() *types.ConnectionConfig {
 	return a.provider.Prepare()
 }
 
+// Provider 返回底层 mfa.Provider
+func (a *MFAAuthenticator) Provider() mfa.Provider {
+	return a.provider
+}
+
 // Authenticate 执行 MFA 验证
 // params: [proof string, ...extraParams]
 // 内部调用 provider.Verify()，成功后设置 Verified = true

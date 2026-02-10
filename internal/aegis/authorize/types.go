@@ -19,15 +19,6 @@ type TokenResponse struct {
 	Scope        string `json:"scope"` // 实际授予的 scope
 }
 
-// UserInfoResponse 用户信息响应（脱敏）
-type UserInfoResponse struct {
-	Sub      string `json:"sub"`
-	Nickname string `json:"nickname,omitempty"`
-	Picture  string `json:"picture,omitempty"`
-	Email    string `json:"email,omitempty"` // 脱敏
-	Phone    string `json:"phone,omitempty"` // 脱敏
-}
-
 // GrantType 授权类型
 const (
 	GrantTypeAuthorizationCode = "authorization_code"

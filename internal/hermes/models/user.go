@@ -8,16 +8,17 @@ import (
 	"time"
 )
 
-// User 用户（内部模型，uid 为纯内部关联 ID，不对外暴露）
-// 域的概念由 t_user_identity 中的 domain 列承载，global 身份的 t_openid 为域级对外标识
+// User 用户模型
+// OpenID = 该域下 global 身份的 t_openid，即对外用户标识
+// 一个物理用户在不同域下有不同的 OpenID，对应不同的 t_user 记录
 type User struct {
 	// 主键
 	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
 	// 业务字段
-	UID           string  `json:"-" gorm:"column:uid;size:64;not null;uniqueIndex"` // 内部关联 ID，不对外暴露
-	Status        int8    `json:"status" gorm:"column:status;not null;default:0"`   // 0=active, 1=disabled
-	Username      *string `json:"-" gorm:"column:username;size:64;uniqueIndex"`     // 用户名（唯一）
-	PasswordHash  *string `json:"-" gorm:"column:password_hash;size:256"`           // 密码哈希（bcrypt）
+	OpenID        string  `json:"openid" gorm:"column:openid;size:64;not null;uniqueIndex"` // 用户标识（= global identity 的 t_openid）
+	Status        int8    `json:"status" gorm:"column:status;not null;default:0"`            // 0=active, 1=disabled
+	Username      *string `json:"-" gorm:"column:username;size:64;uniqueIndex"`              // 用户名（唯一）
+	PasswordHash  *string `json:"-" gorm:"column:password_hash;size:256"`                    // 密码哈希（bcrypt）
 	Nickname      *string `json:"nickname" gorm:"column:nickname;size:128"`
 	Picture       *string `json:"picture" gorm:"column:picture;size:512"`
 	Email         *string `json:"email" gorm:"column:email;size:256;uniqueIndex"`
@@ -45,7 +46,7 @@ type UserIdentity struct {
 	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
 	// 业务字段
 	Domain  string `gorm:"column:domain;size:16;not null;uniqueIndex:uk_domain_idp_t_openid,priority:1"`
-	UID     string `gorm:"column:uid;size:64;not null;index"`
+	OpenID  string `gorm:"column:openid;size:64;not null;index"`
 	IDP     string `gorm:"column:idp;size:64;not null;uniqueIndex:uk_domain_idp_t_openid,priority:2"`
 	TOpenID string `gorm:"column:t_openid;size:256;not null;uniqueIndex:uk_domain_idp_t_openid,priority:3"`
 	RawData string `gorm:"column:raw_data;type:text"`
@@ -58,6 +59,38 @@ func (UserIdentity) TableName() string {
 	return "t_user_identity"
 }
 
+// Identities 用户身份列表，提供按条件快速检索的便捷方法
+type Identities []*UserIdentity
+
+// FindByIDP 根据 IDP 类型查找身份（如按 connection 查找）
+func (ids Identities) FindByIDP(idp string) *UserIdentity {
+	for _, id := range ids {
+		if id.IDP == idp {
+			return id
+		}
+	}
+	return nil
+}
+
+// FindByDomainAndIDP 根据 domain 和 IDP 类型查找身份
+func (ids Identities) FindByDomainAndIDP(domain, idp string) *UserIdentity {
+	for _, id := range ids {
+		if id.Domain == domain && id.IDP == idp {
+			return id
+		}
+	}
+	return nil
+}
+
+// IDPTypes 提取所有 IDP 类型列表
+func (ids Identities) IDPTypes() []string {
+	types := make([]string, 0, len(ids))
+	for _, id := range ids {
+		types = append(types, id.IDP)
+	}
+	return types
+}
+
 // UserWithDecrypted 解密后的用户信息（业务层使用）
 type UserWithDecrypted struct {
 	User
@@ -66,9 +99,9 @@ type UserWithDecrypted struct {
 
 // ==================== 实现 token.UserInfo 接口 ====================
 
-// GetUID 返回用户内部 ID
-func (u *UserWithDecrypted) GetUID() string {
-	return u.UID
+// GetOpenID 返回用户标识
+func (u *UserWithDecrypted) GetOpenID() string {
+	return u.OpenID
 }
 
 // GetNickname 返回用户昵称
@@ -108,8 +141,8 @@ func (u *UserWithDecrypted) SafeString() string {
 	if u.Nickname != nil {
 		nickname = *u.Nickname
 	}
-	return fmt.Sprintf("User{UID:%s, Nickname:%s, Email:%s, Phone:%s}",
-		u.UID,
+	return fmt.Sprintf("User{OpenID:%s, Nickname:%s, Email:%s, Phone:%s}",
+		u.OpenID,
 		nickname,
 		maskEmail(u.Email),
 		maskPhone(u.Phone),
@@ -157,13 +190,9 @@ func generateRandomBase62(byteLen int) string {
 	return base62Encode(b)
 }
 
-// GenerateUID 生成用户内部 ID（128 位随机，base62 编码，~22 字符）
-func GenerateUID() string {
-	return generateRandomBase62(16)
-}
-
-// GenerateGID 生成全局对外标识（128 位随机，base62 编码，~22 字符）
-func GenerateGID() string {
+// GenerateOpenID 生成用户标识（128 位随机，base62 编码，~22 字符）
+// 同时作为 t_user.openid 和 global identity 的 t_openid
+func GenerateOpenID() string {
 	return generateRandomBase62(16)
 }
 

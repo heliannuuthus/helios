@@ -11,7 +11,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/middleware"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/pkg/oss"
+	"github.com/heliannuuthus/helios/pkg/r2"
 )
 
 // @title Helios API
@@ -38,32 +38,17 @@ func main() {
 	})
 	defer logger.Sync()
 
-	// 初始化 OSS（如果配置了）
-	if config.GetOSSEndpoint() != "" {
-		ossCfg := oss.Config{
-			Endpoint:        config.GetOSSEndpoint(),
-			AccessKeyID:     config.GetOSSAccessKeyID(),
-			AccessKeySecret: config.GetOSSAccessKeySecret(),
-			Bucket:          config.GetOSSBucket(),
-			Domain:          config.GetOSSDomain(),
-			Region:          config.GetOSSRegion(),
-			RoleARN:         config.GetOSSRoleARN(),
-			UseInternal:     config.GetEnv() == "prod",
+	// 初始化 R2（如果配置了）
+	if config.GetR2AccountID() != "" {
+		r2Cfg := r2.Config{
+			AccountID:       config.GetR2AccountID(),
+			AccessKeyID:     config.GetR2AccessKeyID(),
+			AccessKeySecret: config.GetR2AccessKeySecret(),
+			Bucket:          config.GetR2Bucket(),
+			Domain:          config.GetR2Domain(),
 		}
-		if err := oss.Init(ossCfg); err != nil {
-			logger.Warnf("OSS 初始化失败（将跳过图片上传功能）: %v", err)
-		} else {
-			// 初始化 STS（如果配置了）
-			if config.GetOSSRoleARN() != "" {
-				if err := oss.InitSTS(oss.STSConfig{
-					AccessKeyID:     config.GetOSSAccessKeyID(),
-					AccessKeySecret: config.GetOSSAccessKeySecret(),
-					Region:          config.GetOSSRegion(),
-					Endpoint:        config.GetOSSEndpoint(),
-				}); err != nil {
-					logger.Warnf("OSS STS 初始化失败（将使用主账号凭证）: %v", err)
-				}
-			}
+		if err := r2.Init(r2Cfg); err != nil {
+			logger.Warnf("R2 初始化失败（将跳过图片上传功能）: %v", err)
 		}
 	}
 

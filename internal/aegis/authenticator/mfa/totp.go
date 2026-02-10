@@ -8,7 +8,7 @@ import (
 
 // TOTPVerifier TOTP 验证接口
 type TOTPVerifier interface {
-	Verify(ctx context.Context, userID, code string) (bool, error)
+	Verify(ctx context.Context, openid, code string) (bool, error)
 }
 
 // TOTPProvider TOTP MFA Provider
@@ -30,7 +30,7 @@ func (*TOTPProvider) Type() string {
 
 // Verify 验证 TOTP 验证码
 // proof: TOTP 码
-// params[0]: userID (string)
+// params[0]: openid (string)
 func (p *TOTPProvider) Verify(ctx context.Context, proof string, params ...any) (bool, error) {
 	if proof == "" {
 		return false, nil
@@ -43,12 +43,12 @@ func (p *TOTPProvider) Verify(ctx context.Context, proof string, params ...any) 
 	if len(params) < 1 {
 		return false, nil
 	}
-	userID, ok := params[0].(string)
-	if !ok || userID == "" {
+	openid, ok := params[0].(string)
+	if !ok || openid == "" {
 		return false, nil
 	}
 
-	return p.verifier.Verify(ctx, userID, proof)
+	return p.verifier.Verify(ctx, openid, proof)
 }
 
 // Prepare 准备前端公开配置

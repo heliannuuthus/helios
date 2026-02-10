@@ -17,41 +17,31 @@ var ErrUnsupportedAudience = fmt.Errorf("unsupported audience")
 
 // footerUserInfo footer 中存储的用户信息结构（用于 JSON 反序列化）
 type footerUserInfo struct {
-	Subject     string `json:"sub,omitempty"`
-	InternalUID string `json:"uid,omitempty"`
-	Nickname    string `json:"nickname,omitempty"`
-	Picture     string `json:"picture,omitempty"`
-	Email       string `json:"email,omitempty"`
-	Phone       string `json:"phone,omitempty"`
+	Subject  string `json:"sub,omitempty"`
+	Nickname string `json:"nickname,omitempty"`
+	Picture  string `json:"picture,omitempty"`
+	Email    string `json:"email,omitempty"`
+	Phone    string `json:"phone,omitempty"`
 }
 
 // Interpreter Token 解释器
 // 负责验证和解释 token，提取身份信息
-// 内部缓存 Verifier 和 decryptor 实例，避免重复构造
+// 内部缓存 decryptor 实例，避免重复构造
 type Interpreter struct {
-	signKeyProvider    keys.PublicKeyProvider    // 签名公钥提供者（根据 clientID 获取）
+	verifier           *token.Verifier          // 通用验证器（自动从 token 中提取 clientID）
 	encryptKeyProvider keys.SymmetricKeyProvider // 加密密钥提供者（根据 audience 获取）
 
-	verifiers  map[string]*token.Verifier // 缓存：key = client_id
-	decryptors map[string]*decryptor      // 缓存：key = audience
+	decryptors map[string]*decryptor // 缓存：key = audience
 	mu         sync.RWMutex
 }
 
 // NewInterpreter 创建解释器
 func NewInterpreter(signKeyProvider keys.PublicKeyProvider, encryptKeyProvider keys.SymmetricKeyProvider) *Interpreter {
 	return &Interpreter{
-		signKeyProvider:    signKeyProvider,
+		verifier:           token.NewVerifier(signKeyProvider),
 		encryptKeyProvider: encryptKeyProvider,
-		verifiers:          make(map[string]*token.Verifier),
 		decryptors:         make(map[string]*decryptor),
 	}
-}
-
-// getVerifier 获取或创建绑定特定 client_id 的 Verifier
-func (i *Interpreter) getVerifier(clientID string) *token.Verifier {
-	return getOrCreate(&i.mu, i.verifiers, clientID, func() *token.Verifier {
-		return token.NewVerifier(i.signKeyProvider, clientID)
-	})
 }
 
 // Interpret 验证并解释 token，返回 Token 接口
@@ -67,16 +57,13 @@ func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (token.
 		return nil, fmt.Errorf("%w: missing audience", token.ErrMissingClaims)
 	}
 
-	// 2. 获取 Verifier（按 client_id 缓存）
-	verifier := i.getVerifier(info.ClientID)
-
-	// 3. 验证签名
-	t, err := verifier.Verify(ctx, tokenString, info)
+	// 2. 验证签名（Verifier 自动从 info 获取 clientID）
+	t, err := i.verifier.Verify(ctx, tokenString, info)
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. 解密 footer 中的用户信息（仅 UAT）
+	// 3. 解密 footer 中的用户信息（仅 UAT）
 	if uat, ok := token.AsUAT(t); ok {
 		footer := token.ExtractFooter(tokenString)
 		if footer != "" {
@@ -85,7 +72,7 @@ func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (token.
 				return nil, err
 			}
 			if userInfo != nil {
-				uat.SetUserInfo(userInfo.Subject, userInfo.InternalUID, userInfo.Nickname, userInfo.Picture, userInfo.Email, userInfo.Phone)
+				uat.SetUserInfo(userInfo.Subject, userInfo.Nickname, userInfo.Picture, userInfo.Email, userInfo.Phone)
 			}
 		}
 	}
@@ -104,7 +91,7 @@ func (i *Interpreter) Verify(ctx context.Context, tokenString string) (token.Tok
 		return nil, fmt.Errorf("%w: missing audience", token.ErrMissingClaims)
 	}
 
-	return i.getVerifier(info.ClientID).Verify(ctx, tokenString, info)
+	return i.verifier.Verify(ctx, tokenString, info)
 }
 
 // getDecryptor 获取或创建绑定特定 audience 的 decryptor

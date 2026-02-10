@@ -32,6 +32,7 @@ const (
 	DefaultAegisOTPExpiresIn          = 5 * time.Minute
 	DefaultAegisChallengeExpiresIn    = 5 * time.Minute
 	DefaultAegisRefreshTokenExpiresIn = 7 * 24 * time.Hour
+	DefaultAegisPublicKeyCacheMaxAge  = 3 * time.Hour
 )
 
 // ==================== 基础配置 ====================
@@ -240,6 +241,14 @@ func GetAegisRefreshTokenExpiresIn() time.Duration {
 		return val
 	}
 	return DefaultAegisRefreshTokenExpiresIn
+}
+
+// GetAegisPublicKeyCacheMaxAge 获取公钥缓存最大时间
+func GetAegisPublicKeyCacheMaxAge() time.Duration {
+	if val := Aegis().GetDuration("aegis.cache.public_key.max_age"); val > 0 {
+		return val
+	}
+	return DefaultAegisPublicKeyCacheMaxAge
 }
 
 // ==================== Mail 配置 ====================

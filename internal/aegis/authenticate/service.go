@@ -42,7 +42,7 @@ func (s *Service) CreateFlow(c *gin.Context, req *types.AuthRequest) (*types.Aut
 	// ==================== 前置检查（直接返回 error）====================
 
 	// 1. 验证 response_type
-	if req.ResponseType != "code" {
+	if req.ResponseType != types.ResponseTypeCode {
 		logger.Warnf("[Authenticate] 无效的 response_type: %s", req.ResponseType)
 		return nil, autherrors.NewInvalidRequest("response_type must be 'code'")
 	}
@@ -214,7 +214,7 @@ func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, params
 // 组装三部分数据：
 // 1. IDP - 身份提供商（github, google, user, oper, wechat-mp...）
 // 2. VChan - 验证渠道/前置验证（captcha...）
-// 3. MFA - 多因素认证（email-otp, totp, webauthn...），从 IDP 的 delegate 配置中派生
+// 3. MFA - 多因素认证（email_otp, totp, webauthn...），从 IDP 的 delegate 配置中派生
 func (s *Service) GetAvailableConnections(flow *types.AuthFlow) *types.ConnectionsMap {
 	if flow.ConnectionMap == nil {
 		return nil

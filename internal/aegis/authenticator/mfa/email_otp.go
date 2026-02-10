@@ -49,7 +49,7 @@ func (p *EmailOTPProvider) Verify(ctx context.Context, proof string, params ...a
 		return false, nil
 	}
 
-	otpKey := "email-otp:" + challengeID
+	otpKey := types.CacheKeyPrefixEmailOTP + challengeID
 	storedCode, err := p.cache.GetOTP(ctx, otpKey)
 	if err != nil {
 		return false, nil
@@ -60,7 +60,9 @@ func (p *EmailOTPProvider) Verify(ctx context.Context, proof string, params ...a
 	}
 
 	// 验证成功，删除 OTP
-	_ = p.cache.DeleteOTP(ctx, otpKey) //nolint:errcheck
+	if err := p.cache.DeleteOTP(ctx, otpKey); err != nil {
+		logger.Warnf("[EmailOTP] 删除 OTP 失败: %v", err)
+	}
 
 	return true, nil
 }
@@ -80,7 +82,7 @@ func (p *EmailOTPProvider) SendOTP(ctx context.Context, email, challengeID strin
 		return err
 	}
 
-	otpKey := "email-otp:" + challengeID
+	otpKey := types.CacheKeyPrefixEmailOTP + challengeID
 	if err := p.cache.SaveOTP(ctx, otpKey, code); err != nil {
 		return err
 	}
