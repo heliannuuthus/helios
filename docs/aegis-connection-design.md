@@ -82,10 +82,44 @@ hermes.Service / hermes.UserService (DB)
 
 - `Connection` (string): 唯一标识（如 github, captcha, email-otp）
 - `Identifier` (string): 公开标识（client_id / site_key / rp_id）
-- `Strategy` ([]string): 认证方式（user/oper: password, webauthn; captcha: turnstile; 其余忽略）
-- `Delegate` ([]string): 委托验证/MFA（totp, email-otp），登录后需完成其中一种
-- `Require` ([]string): 前置验证（captcha），登录前必须全部通过
+- `Strategy` ([]string): 认证方式（user/oper: password, passkey; captcha: turnstile; 其余忽略）
+- `Delegate` ([]string): 可替代主认证的独立验证方式（email_otp, totp），通过 Challenge 完成后以 ChallengeToken 作为 proof 登录
+- `Require` ([]string): 前置条件（captcha），登录前必须全部通过
 - `Verified` (bool): 在 AuthFlow 中动态标记是否已验证
+
+#### Strategy / Delegate / Require 语义模型
+
+三者共同定义了一个 IDP Connection 的完整登录条件，是**同级关系而非层级关系**：
+
+| 字段 | 逻辑关系 | 完成时机 | 语义 |
+|------|---------|---------|------|
+| `Strategy` | OR（选一种） | 主认证 | IDP 自身直接验证的方式，proof 提交给 IDP |
+| `Delegate` | OR（选一种） | 可替代主认证 | IDP 委托给 Challenge 流程的独立验证方式，proof 是 ChallengeToken |
+| `Require` | AND（全部通过） | 主认证**之前** | 前置条件，必须全部通过后才能提交主认证 |
+
+Strategy 和 Delegate 是**同级替代关系**：用户可以选择用密码登录（strategy），也可以选择用邮件验证码登录（delegate）。Delegate 不是"主认证之后的附加 MFA"，而是"可以替代主认证的独立路径"。
+
+示例配置：
+
+```json
+{
+  "connection": "user",
+  "strategy": ["password", "passkey"],
+  "delegate": ["email_otp", "totp"],
+  "require": ["captcha"]
+}
+```
+
+对应的登录路径：
+
+| 登录方式 | 流程 |
+|---------|------|
+| 密码登录 | captcha → `POST /login` { connection: "user", strategy: "password", proof: "pwd" } |
+| Passkey 登录 | captcha → `POST /login` { connection: "user", strategy: "passkey", proof: assertion } |
+| 邮件验证码 | `POST /challenge` → 完成 email_otp → `POST /login` { connection: "user", proof: challenge_token } |
+| TOTP | `POST /challenge` → 完成 totp → `POST /login` { connection: "user", proof: challenge_token } |
+
+> Delegate 的核心含义：IDP 把登录能力委托给了这些 connection，它们的 ChallengeToken 就是合法的登录凭证。
 
 ### 2.2 ConnectionsMap
 
@@ -114,14 +148,20 @@ initialized -> authenticated -> authorized -> completed
      +----------------- failed <------------------+
 ```
 
-### 2.4 LoginRequest
+### 2.4 LoginRequest / LoginResponse
 
-**文件：** `internal/aegis/types.go:32-45`
+**文件：** `internal/aegis/types.go`
 
+LoginRequest:
 - `Connection` (string, 必填): 身份标识
 - `Strategy` (string): 认证方式（user/oper: password/webauthn; captcha: turnstile; 其余忽略）
 - `Principal` (string): 身份主体（用户名/邮箱/手机号）
-- `Proof` (any): 凭证证明（password/OTP/OAuth code/WebAuthn assertion 等）
+- `Proof` (any): 凭证证明（password/OTP/OAuth code/ChallengeToken/WebAuthn assertion 等）
+
+LoginResponse:
+- `Location` (string): 重定向地址，格式为 `redirect_uri?code=xxx&state=xxx`
+
+> 注：登录成功后返回的不再是分开的 `code` + `redirect_uri`，而是已拼接好的 `location` 地址。前端直接 `window.location.href = location` 即可。
 
 ### 2.5 Authenticator 接口
 
@@ -195,7 +235,7 @@ types.go 中定义了全部常量，但并非每个都有 Provider 实现。下�
 | GET | /auth/context | GetContext | aegisCORS | 获取认证流程上下文 |
 | POST | /auth/login | Login | aegisCORS | 使用 Connection 登录 |
 | POST | /auth/challenge | InitiateChallenge | aegisCORS | 发起 Challenge |
-| PUT | /auth/challenge | ContinueChallenge | aegisCORS | 继续 Challenge |
+| PUT | /auth/challenge?challenge_id=xxx | ContinueChallenge | aegisCORS | 继续 Challenge（body: connection + proof） |
 | POST | /auth/token | Token | 无 | 换取 Token |
 | POST | /auth/revoke | Revoke | 无 | 撤销 Token |
 | POST | /auth/check | Check | 无 | 关系权限检查（CAT认证） |
@@ -240,7 +280,7 @@ types.go 中定义了全部常量，但并非每个都有 Provider 实现。下�
                               <===============================
                               认证 -> 查找/创建用户 -> 授权
                               生成授权码
-                              返回 { code, redirect_uri }
+                              返回 { location }  // location = redirect_uri?code=xxx&state=xxx
                               ===============================>
 
 5. POST /auth/token
@@ -410,76 +450,84 @@ Handler.Login(c)
   |
   |-- loginSuccess = true
   |-- clearAuthSessionCookie(c)
-  \-- c.JSON(200, LoginResponse{Code, RedirectURI})
+  \-- c.JSON(200, LoginResponse{Location})  // location = redirect_uri?code=xxx&state=xxx
 ```
 
 关键逻辑：
 1. Connection 验证分两层：GlobalRegistry().Has() 检查系统支持 + flow.ConnectionMap 检查应用配置
-2. 前置验证 (Require): 前端需先调用 /auth/login 传入 VChan connection
-3. 委托验证 (Delegate): IDP 登录后需 MFA，只需任一通过
+2. 前置验证 (Require): 前端需先调用 /auth/login 传入 VChan connection，全部通过才能继续
+3. 委托验证 (Delegate): IDP 把登录能力委托给的独立验证方式，前端通过 Challenge 流程完成后以 ChallengeToken 作为 proof 提交登录，任一通过即可
 
 ### 6.4 POST /auth/challenge - 发起 Challenge
 
-入口: `Handler.InitiateChallenge()` (internal/aegis/handler.go:215)
+入口: `Handler.InitiateChallenge()` (internal/aegis/handler.go)
+
+challenge.Service 依赖 `authenticator.Registry`，按需获取验证能力，不直接持有任何 Provider/Verifier。
 
 ```
 Handler.InitiateChallenge(c)
-  |-- c.ShouldBindJSON(&req)  // type: captcha/email-otp/totp
+  |-- c.ShouldBindJSON(&req)  // CreateRequest: type, email?, user_id?, phone?
   |-- c.ClientIP()
   \-- challengeSvc.Create(ctx, &req, remoteIP)
-      |-- [需 captcha 前置 & 无 token]
-      |   \-- createChallengeWithCaptchaRequired()
-      |       |-- 创建 pending Challenge (pending_captcha=true)
-      |       |-- cache.SaveChallenge()
-      |       \-- 返回 { challenge_id, required: {connection, identifier} }
+      |-- buildChallenge(req)                       // 按 type 构建 Challenge 对象（不持久化）
+      |   |-- [captcha] -> NewChallenge(5min TTL)
+      |   |-- [totp]    -> NewChallenge(5min TTL) + SetData("user_id")
+      |   \-- [email_otp] -> NewChallenge(5min TTL) + SetData("email", "masked_email")
       |
-      |-- [需 captcha 前置 & 有 token]
-      |   \-- captcha.Verify(ctx, token, remoteIP)
+      |-- [RequiresCaptcha && captchaVerifier 存在]
+      |   |-- challenge.SetData("pending_captcha", true)
+      |   |-- cache.SaveChallenge()
+      |   \-- 返回 { challenge_id, required: ConnectionConfig{captcha, turnstile, site_key} }
+      |       注意：不触发副作用（邮件不发送），等待 PUT 验证 captcha 后再触发
       |
-      |-- [type=captcha] -> createCaptchaChallenge()
-      |   |-- NewChallenge(5min TTL)
-      |   \-- 返回 { challenge_id, type, expires_in, data:{site_key} }
-      |
-      |-- [type=totp] -> createTOTPChallenge()
-      |   |-- NewChallenge(5min TTL) + SetData("user_id")
-      |   \-- 返回 { challenge_id, type, expires_in }
-      |
-      \-- [type=email-otp] -> createEmailOTPChallenge()
-          |-- NewChallenge(5min TTL) + SetData("email")
-          |-- sendOTP()
-          |   \-- EmailOTPProvider.SendOTP()
+      \-- [不需要 captcha]
+          |-- executeSideEffects(challenge)
+          |   \-- [email_otp] -> sendOTP() -> EmailOTPProvider.SendOTP()
           |       |-- GenerateOTP(6)
           |       |-- cache.SaveOTP("email-otp:"+challengeID, code)
           |       \-- emailSender.SendCode()  // SMTP
-          \-- 返回 { challenge_id, type, expires_in, data:{masked_email} }
+          |-- cache.SaveChallenge()
+          \-- 返回 { challenge_id, type, expires_in, data:{masked_email/site_key} }
 ```
 
-### 6.5 PUT /auth/challenge - 继续 Challenge
+### 6.5 PUT /auth/challenge?challenge_id=xxx - 继续 Challenge
 
-入口: `Handler.ContinueChallenge()` (internal/aegis/handler.go:241)
+入口: `Handler.ContinueChallenge()` (internal/aegis/handler.go)
+
+前端通过 `VerifyRequest.Connection` 显式声明本次验证类型，后端通过 switch 分发。
 
 ```
 Handler.ContinueChallenge(c)
   |-- c.Query("challenge_id")
-  |-- c.ShouldBindJSON(&req)  // proof
+  |-- c.ShouldBindJSON(&req)  // VerifyRequest: { connection, proof }
+  |-- c.ClientIP()
   \-- challengeSvc.Verify(ctx, challengeID, &req, remoteIP)
       |-- cache.GetChallenge()
       |-- challenge.IsExpired()
       |
-      |-- [pending_captcha=true]
-      |   |-- verifyCaptcha() -> captcha.Verify()
-      |   \-- continueAfterCaptcha()
-      |       |-- [email-otp] -> sendOTP() -> 发送邮件
-      |       \-- 返回 { challenge_id, data:{next:"email-otp"} }
+      |-- switch req.Connection:
       |
-      |-- [type=captcha]
-      |   \-- verifyCaptcha() -> TurnstileVerifier.Verify() -> Cloudflare API
+      |-- [connection = "captcha"]  → handleCaptchaVerify()
+      |   |-- [challenge.Type == captcha] → 直接走 handleChallengeVerify()
+      |   |-- [pending_captcha != true] → 报错：challenge 不需要 captcha
+      |   |-- captchaVerifier.Verify(ctx, proof, remoteIP)  → Cloudflare API
+      |   |-- 清除 pending_captcha 标记
+      |   |-- executeSideEffects(challenge)
+      |   |   \-- [email_otp] → sendOTP() → 发送邮件
+      |   |-- cache.SaveChallenge()
+      |   \-- 返回 { challenge_id, data:{next: challenge.Type} }
       |
-      \-- [type=totp/email-otp/webauthn]
-          \-- verifyWithProvider()
-              |-- [totp]      -> TOTPProvider.Verify(proof, userID)
-              |-- [email-otp] -> EmailOTPProvider.Verify(proof, challengeID)
-              \-- [webauthn]  -> WebAuthnProvider.Verify(proof, httpRequest)
+      |-- [connection = challenge.Type]  → handleChallengeVerify()
+      |   |-- [pending_captcha == true] → 报错：请先完成 captcha
+      |   |-- verifyWithProvider(challenge, proof)
+      |   |   |-- getMFAProvider(type) → registry.Get() → *MFAAuthenticator → .Provider()
+      |   |   |-- [totp]      → TOTPProvider.Verify(proof, userID)
+      |   |   |-- [email_otp] → EmailOTPProvider.Verify(proof, challengeID)
+      |   |   \-- [default]   → provider.Verify(proof)
+      |   |-- [verified] → cache.DeleteChallenge()
+      |   \-- 返回 { verified, challenge_token? }
+      |
+      \-- [其他] → 报错：connection 与 challenge 不匹配
 ```
 
 ### 6.6 POST /auth/token - 换取 Token
