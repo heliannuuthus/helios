@@ -204,6 +204,27 @@ num-counters = 50000         # 计数器数量
 buffer-items = 64            # 缓冲区大小
 ttl = "5m"                   # 缓存过期时间（支持热更新）
 
+# Challenge 配置
+[aegis.challenge]
+expires-in = "5m"              # Challenge 业务有效期
+
+# Challenge 限流配置
+[aegis.challenge.rate-limit]
+# channel 维度默认限流（当 service 未配置时的 fallback）
+[aegis.challenge.rate-limit.default-limits]
+"1m" = 1          # 每分钟 1 次
+"1h" = 10         # 每小时 10 次
+"24h" = 20        # 每天 20 次
+
+# IP 维度限流
+[aegis.challenge.rate-limit.ip-limits]
+"1m" = 5          # 每分钟 5 次
+"1h" = 50         # 每小时 50 次
+
+# 验证错误触发重新 captcha
+verify-fail-threshold = 5       # 验证错误 N 次后强制重新 captcha
+verify-fail-window = "30m"      # 验证错误统计窗口
+
 # Challenge 缓存配置（MFA 验证）
 [aegis.cache.challenge]
 key-prefix = "aegis:ch:"      # 缓存 key 前缀

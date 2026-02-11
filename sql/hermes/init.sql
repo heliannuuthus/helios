@@ -6,8 +6,8 @@ USE `hermes`;
 -- ==================== 服务 ====================
 -- domain_id = '-' 表示跨域内置服务，属于全部域
 INSERT INTO t_service (service_id, domain_id, name, description, encrypted_key, access_token_expires_in, refresh_token_expires_in) VALUES
-('hermes', '-', 'Hermes 管理服务', '身份与访问管理服务', 'hoLR+UoMh5EUMYvAgPVrkIbOjGI+GZ629N4rmL+3309SMXvQmaE1XT76jgkni9tF7CWOmhGVvYyoNlmP', 7200, 604800),
-('iris', '-', 'Iris 用户服务', '用户信息管理服务', 'kTxgHk7TxtVX2A5qo//wJX/PwIxO2+o7S4kXPrf8ZR3CNvRrNTl2xxfM5q9CHCVk9DpS6l3n/NRpLyK2', 7200, 604800)
+('hermes', '-', 'Hermes 管理服务', '身份与访问管理服务', '4fervVK6unv+NAyv1meJiTUOVhdULm+FlaG+l1Uni21OAQ1v6LkKvQQFDrSuKte3TAyBcU0wI87lgeE1', 7200, 604800),
+('iris', '-', 'Iris 用户服务', '用户信息管理服务', 'YpbH9KNOa5mH1i3bEJWwAp5IlvkduCQ1C7l2ahqo7S7qtrbXT1JeToakS/56tEj5PsUAJSVrBzFcNwG+', 7200, 604800)
 ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), encrypted_key = VALUES(encrypted_key), domain_id = VALUES(domain_id);
 
 -- ==================== 应用 ====================
@@ -28,14 +28,14 @@ INSERT INTO t_application_service_relation (app_id, service_id, relation) VALUES
 ON DUPLICATE KEY UPDATE relation = VALUES(relation);
 
 -- ==================== 用户 ====================
-INSERT INTO t_user (uid, status, email_verified, nickname, picture, email) VALUES
-('heliannuuthus', 0, 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
-ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified);
+INSERT INTO t_user (openid, status, username, email_verified, nickname, picture, email) VALUES
+('heliannuuthus', 0, 'heliannuuthus', 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
+ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified), username = VALUES(username);
 
 -- ==================== 用户身份 ====================
 -- global 身份为域级对外标识（token 中的 sub），其他为认证身份
-INSERT INTO t_user_identity (domain, uid, idp, t_openid) VALUES
-('piam', 'heliannuuthus', 'global', 'e52df52fdecab7cbc795ee69322f21bc'),
+INSERT INTO t_user_identity (domain, openid, idp, t_openid) VALUES
+('piam', 'heliannuuthus', 'global', 'f48f7ec5c7561f4b4f76f98d47476461'),
 ('piam', 'heliannuuthus', 'oper', 'heliannuuthus')
 ON DUPLICATE KEY UPDATE t_openid = VALUES(t_openid);
 

@@ -284,7 +284,6 @@ func (s *UserService) CreateUser(ctx context.Context, identity *models.UserIdent
 	return &models.UserWithDecrypted{User: *newUser}, nil
 }
 
-
 // generateRandomName 生成随机昵称
 func generateRandomName() string {
 	adjectives := []string{"快乐的", "聪明的", "勇敢的", "温柔的", "活泼的", "安静的", "优雅的", "幽默的"}

@@ -1,4 +1,16 @@
+// nolint:revive // This package name follows Go conventions for internal type packages.
 package types
+
+// ==================== Connection 类型 ====================
+
+// ConnectionType 连接类型（idp/vchan/factor）
+type ConnectionType string
+
+const (
+	ConnTypeIDP    ConnectionType = "idp"    // 身份提供商（github, google, user, oper, passkey...）
+	ConnTypeVChan  ConnectionType = "vchan"  // 验证通道（captcha）
+	ConnTypeFactor ConnectionType = "factor" // 认证因子（totp, email_otp, webauthn）
+)
 
 // ==================== Connection 标识 ====================
 
@@ -21,12 +33,18 @@ const (
 // Challenge.Data map 中使用的 key
 
 const (
-	ChallengeDataMaskedEmail    = "masked_email"    // 脱敏邮箱
-	ChallengeDataSiteKey        = "site_key"        // Captcha 站点密钥
-	ChallengeDataPendingCaptcha = "pending_captcha" // 是否需要 captcha 前置验证
-	ChallengeDataNext           = "next"            // 下一步操作类型
-	ChallengeDataSession        = "session"         // WebAuthn session 数据
-	ChallengeDataOperation      = "operation"       // WebAuthn 操作类型
+	ChallengeDataSiteKey   = "site_key"  // Captcha 站点密钥
+	ChallengeDataNext      = "next"      // 下一步操作类型
+	ChallengeDataSession   = "session"   // WebAuthn session 数据
+	ChallengeDataOperation = "operation" // WebAuthn 操作类型
+)
+
+// ==================== Rate Limit Key 前缀 ====================
+
+const (
+	RateLimitKeyPrefixCreate     = "rl:create:"    // Challenge 创建频率（channel 维度）
+	RateLimitKeyPrefixCreateIP   = "rl:create:ip:" // Challenge 创建频率（IP 维度）
+	RateLimitKeyPrefixVerifyFail = "rl:vfail:"     // 验证错误计数（channel 维度）
 )
 
 // ==================== Subject Type ====================

@@ -73,7 +73,7 @@ func (cm *Manager) ConsumeAuthCode(ctx context.Context, code string) (*Authoriza
 // RefreshToken 刷新令牌
 type RefreshToken struct {
 	Token     string    `json:"token"`
-	OpenID    string    `json:"openid"`    // 用户标识（t_user.openid = global identity 的 t_openid）
+	OpenID    string    `json:"openid"` // 用户标识（t_user.openid = global identity 的 t_openid）
 	ClientID  string    `json:"client_id"`
 	Audience  string    `json:"audience"`
 	Scope     string    `json:"scope"`

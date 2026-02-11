@@ -22,7 +22,7 @@ func NewVerifier(credentialSvc *hermes.CredentialService) *Verifier {
 }
 
 // Verify 验证 TOTP 码
-// 实现 mfa.TOTPVerifier 接口
+// 实现 factor.TOTPVerifier 接口
 func (v *Verifier) Verify(ctx context.Context, openid, code string) (bool, error) {
 	if openid == "" || code == "" {
 		return false, nil

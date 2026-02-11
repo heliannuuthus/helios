@@ -7,6 +7,7 @@ import (
 
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 	"github.com/heliannuuthus/helios/internal/config"
+	"github.com/heliannuuthus/helios/internal/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/json"
 )
 
@@ -49,6 +50,29 @@ func (cm *Manager) GetChallenge(ctx context.Context, challengeID string) (*types
 func (cm *Manager) DeleteChallenge(ctx context.Context, challengeID string) error {
 	prefix := config.GetAegisCacheKeyPrefix("challenge")
 	return cm.redis.Del(ctx, prefix+challengeID)
+}
+
+// ==================== Challenge Config ====================
+
+// GetChallengeConfig 校验服务是否配置了指定的 challenge type
+// 如果配置不存在，返回 error
+func (cm *Manager) GetChallengeConfig(ctx context.Context, serviceID, challengeType string) (*models.ServiceChallengeConfig, error) {
+	return cm.hermesSvc.GetServiceChallengeConfig(ctx, serviceID, challengeType)
+}
+
+// GetChallengeRateLimits 获取 Challenge 限流配置（service 级别 > 全局默认）
+// 返回 map[window]limit，如 {"1m": 1, "24h": 10}
+func (cm *Manager) GetChallengeRateLimits(ctx context.Context, serviceID, challengeType string) map[string]int {
+	// 尝试从数据库获取 service 级别配置
+	cfg, err := cm.hermesSvc.GetServiceChallengeConfig(ctx, serviceID, challengeType)
+	if err == nil && cfg != nil {
+		if limits := cfg.GetLimits(); len(limits) > 0 {
+			return limits
+		}
+	}
+
+	// fallback 到全局默认配置
+	return config.GetRateLimitDefaultLimits()
 }
 
 // ==================== OTP（Redis）====================

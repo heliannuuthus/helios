@@ -803,3 +803,16 @@ func (s *Service) GetApplicationIDPConfigs(ctx context.Context, appID string) ([
 	}
 	return configs, nil
 }
+
+// ==================== Service Challenge Config 相关 ====================
+
+// GetServiceChallengeConfig 获取服务 Challenge 配置（service_id + type 唯一）
+func (s *Service) GetServiceChallengeConfig(ctx context.Context, serviceID, challengeType string) (*models.ServiceChallengeConfig, error) {
+	var cfg models.ServiceChallengeConfig
+	if err := s.db.WithContext(ctx).
+		Where("service_id = ? AND `type` = ?", serviceID, challengeType).
+		First(&cfg).Error; err != nil {
+		return nil, fmt.Errorf("获取 Challenge 配置失败: %w", err)
+	}
+	return &cfg, nil
+}

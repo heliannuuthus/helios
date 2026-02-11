@@ -88,12 +88,12 @@ func main() {
 	{
 		// Aegis UI 调用的接口（需要 CORS）
 		aegisCORS := middleware.CORSWithConfig(config.Aegis(), app.AegisHandler.CacheManager())
-		authGroup.POST("/authorize", aegisCORS, app.AegisHandler.Authorize)         // 创建认证会话并重定向到登录页面
-		authGroup.GET("/connections", aegisCORS, app.AegisHandler.GetConnections)   // 获取可用的 Connection 配置
-		authGroup.GET("/context", aegisCORS, app.AegisHandler.GetContext)           // 获取当前流程的应用和服务信息
-		authGroup.POST("/login", aegisCORS, app.AegisHandler.Login)                 // IDP 登录
-		authGroup.POST("/challenge", aegisCORS, app.AegisHandler.InitiateChallenge) // 发起 Challenge
-		authGroup.PUT("/challenge", aegisCORS, app.AegisHandler.ContinueChallenge)  // 继续 Challenge
+		authGroup.POST("/authorize", aegisCORS, app.AegisHandler.Authorize)              // 创建认证会话并重定向到登录页面
+		authGroup.GET("/connections", aegisCORS, app.AegisHandler.GetConnections)        // 获取可用的 Connection 配置
+		authGroup.GET("/context", aegisCORS, app.AegisHandler.GetContext)                // 获取当前流程的应用和服务信息
+		authGroup.POST("/login", aegisCORS, app.AegisHandler.Login)                      // IDP 登录
+		authGroup.POST("/challenge", aegisCORS, app.AegisHandler.InitiateChallenge)      // 发起 Challenge
+		authGroup.POST("/challenge/:cid", aegisCORS, app.AegisHandler.ContinueChallenge) // 验证 Challenge
 
 		// 业务前端/后端调用的接口（不需要 Aegis UI 的 CORS）
 		authGroup.POST("/token", app.AegisHandler.Token)   // 获取/刷新 Token

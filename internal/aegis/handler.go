@@ -230,7 +230,7 @@ func (h *Handler) InitiateChallenge(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// ContinueChallenge PUT /auth/challenge
+// ContinueChallenge POST /auth/challenge/:cid
 // 继续 Challenge（提交验证），验证成功后由 handler 签发 ChallengeToken
 func (h *Handler) ContinueChallenge(c *gin.Context) {
 	if h.challengeSvc == nil {
@@ -238,7 +238,7 @@ func (h *Handler) ContinueChallenge(c *gin.Context) {
 		return
 	}
 
-	challengeID := c.Query(QueryChallengeID)
+	challengeID := c.Param("cid")
 	if challengeID == "" {
 		h.errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required"))
 		return
@@ -260,9 +260,9 @@ func (h *Handler) ContinueChallenge(c *gin.Context) {
 	}
 
 	resp := &challenge.VerifyResponse{
-		Verified:    result.Verified,
-		ChallengeID: result.ChallengeID,
-		Data:        result.Data,
+		Verified:   result.Verified,
+		Required:   result.Required,
+		RetryAfter: result.RetryAfter,
 	}
 
 	// 验证成功 -> 由 handler 签发 ChallengeToken
@@ -351,27 +351,18 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	// 4. 检查前置验证和委托验证是否都通过
-	// 如果当前 connection 有 require/delegate 依赖且未全部通过，返回 200 + pending
-	if !flow.AllRequiredVerified() || !flow.AnyDelegateVerified() {
-		// 保存 flow 后返回 pending 状态
-		if err := h.authenticateSvc.SaveFlow(ctx, flow); err != nil {
-			logger.Warnf("[Handler] 保存 flow 失败: %v", err)
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "pending",
-			"message": "additional verification required",
-		})
+	// 4-5. 辅助验证 / pending 检查
+	if done := h.handlePostAuth(c, ctx, flow); done {
 		return
 	}
 
-	// 5. 查找或创建用户，回写用户信息和全部身份到 flow
+	// 6. 查找或创建用户，回写用户信息和全部身份到 flow
 	if err := h.resolveUser(ctx, flow); err != nil {
 		h.errorResponse(c, err)
 		return
 	}
 
-	// 6. 授权并生成授权码
+	// 7. 授权并生成授权码
 	authCode, err := h.authorizeAndGenerateCode(ctx, flow)
 	if err != nil {
 		h.errorResponse(c, err)
@@ -381,7 +372,7 @@ func (h *Handler) Login(c *gin.Context) {
 	// 标记登录成功
 	loginSuccess = true
 
-	// 7. 构建响应
+	// 8. 构建响应
 	location := flow.Request.RedirectURI + "?code=" + url.QueryEscape(authCode.Code)
 	if authCode.State != "" {
 		location += "&state=" + url.QueryEscape(authCode.State)
@@ -391,6 +382,33 @@ func (h *Handler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, LoginResponse{
 		Location: location,
 	})
+}
+
+// handlePostAuth 处理认证成功后的辅助验证和 pending 检查
+// 返回 true 表示已处理响应（辅助验证完成 / pending 状态），Login 应 return
+func (h *Handler) handlePostAuth(c *gin.Context, ctx context.Context, flow *types.AuthFlow) bool {
+	// 辅助验证（vchan / factor）：只标记 Verified，不产生 identity
+	if connCfg := flow.GetCurrentConnConfig(); connCfg != nil && connCfg.Type != types.ConnTypeIDP {
+		if err := h.authenticateSvc.SaveFlow(ctx, flow); err != nil {
+			logger.Warnf("[Handler] 保存 flow 失败: %v", err)
+		}
+		c.Status(http.StatusOK)
+		return true
+	}
+
+	// 前置验证 / 委托验证未全部通过 → pending
+	if !flow.AllRequiredVerified() || !flow.AnyDelegateVerified() {
+		if err := h.authenticateSvc.SaveFlow(ctx, flow); err != nil {
+			logger.Warnf("[Handler] 保存 flow 失败: %v", err)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "pending",
+			"message": "additional verification required",
+		})
+		return true
+	}
+
+	return false
 }
 
 // resolveUser 解析用户信息并回写到 flow

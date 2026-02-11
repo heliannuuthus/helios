@@ -28,7 +28,7 @@ type footerUserInfo struct {
 // 负责验证和解释 token，提取身份信息
 // 内部缓存 decryptor 实例，避免重复构造
 type Interpreter struct {
-	verifier           *token.Verifier          // 通用验证器（自动从 token 中提取 clientID）
+	verifier           *token.Verifier           // 通用验证器（自动从 token 中提取 clientID）
 	encryptKeyProvider keys.SymmetricKeyProvider // 加密密钥提供者（根据 audience 获取）
 
 	decryptors map[string]*decryptor // 缓存：key = audience

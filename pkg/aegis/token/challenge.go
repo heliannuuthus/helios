@@ -141,7 +141,10 @@ func ParseChallengeToken(pasetoToken *paseto.Token) (*ChallengeToken, error) {
 	}
 
 	var bizType string
-	_ = pasetoToken.Get(ClaimBizType, &bizType)
+	if err := pasetoToken.Get(ClaimBizType, &bizType); err != nil {
+		// bizType 是可选字段（交换类 Challenge 不包含），忽略错误
+		bizType = ""
+	}
 
 	return &ChallengeToken{
 		Claims:      claims,

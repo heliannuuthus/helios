@@ -26,9 +26,18 @@ func (a *IDPAuthenticator) Type() string {
 	return a.provider.Type()
 }
 
-// Prepare 返回前端公开配置
+// ConnectionType 返回连接类型
+func (a *IDPAuthenticator) ConnectionType() types.ConnectionType {
+	return types.ConnTypeIDP
+}
+
+// Prepare 返回完整配置（含 Type）
 func (a *IDPAuthenticator) Prepare() *types.ConnectionConfig {
-	return a.provider.Prepare()
+	cfg := a.provider.Prepare()
+	if cfg != nil {
+		cfg.Type = types.ConnTypeIDP
+	}
+	return cfg
 }
 
 // Authenticate 执行 IDP 认证

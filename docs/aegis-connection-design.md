@@ -61,9 +61,9 @@ authenticate.Service | authorize.Service | challenge.Service
     |
 authenticator.Registry (全局注册表)
     |
-IDPAuthenticator | VChanAuthenticator | MFAAuthenticator (胶水层)
+IDPAuthenticator | VChanAuthenticator | FactorAuthenticator (胶水层)
     |
-idp.Provider | captcha.Verifier | mfa.Provider (底层实现)
+idp.Provider | captcha.Verifier | factor.Provider (底层实现)
     |
 cache.Manager (本地缓存 + Redis)
     |
@@ -414,7 +414,7 @@ Handler.Login(c)
   |       |   |   \-- [turnstile] -> POST Cloudflare siteverify API
   |       |   \-- connCfg.Verified = true
   |       |
-      |       \-- [Delegated] MFAAuthenticator.Authenticate()
+      |       \-- [Delegated] FactorAuthenticator.Authenticate()
   |           |-- provider.Verify(ctx, proof, extraParams...)
   |           |   |-- [email-otp] -> cache.GetOTP("email-otp:"+challengeID) 比对
   |           |   |-- [totp]      -> totp.Verifier.Verify(userID, code) (via credentialSvc)
@@ -520,7 +520,7 @@ Handler.ContinueChallenge(c)
       |-- [connection = challenge.Type]  → handleChallengeVerify()
       |   |-- [pending_captcha == true] → 报错：请先完成 captcha
       |   |-- verifyWithProvider(challenge, proof)
-      |   |   |-- getMFAProvider(type) → registry.Get() → *MFAAuthenticator → .Provider()
+      |   |   |-- getFactorProvider(type) → registry.Get() → *FactorAuthenticator → .Provider()
       |   |   |-- [totp]      → TOTPProvider.Verify(proof, userID)
       |   |   |-- [email_otp] → EmailOTPProvider.Verify(proof, challengeID)
       |   |   \-- [default]   → provider.Verify(proof)
@@ -666,9 +666,9 @@ initRegistry()
   |-- register(VChanAuthenticator(captchaVerifier))           -> "captcha" [需 captcha 配置启用, strategy: turnstile]
   |
   |-- === MFA Authenticators ===
-  |-- register(MFAAuthenticator(EmailOTPProvider))            -> "email-otp" [需 mfa.email-otp.enabled + emailSender]
-  |-- register(MFAAuthenticator(TOTPProvider))                -> "totp" [需 mfa.totp.enabled + totpVerifier]
-  \-- register(MFAAuthenticator(WebAuthnProvider))            -> "webauthn" [需 mfa.webauthn.enabled + webauthnSvc]
+  |-- register(FactorAuthenticator(EmailOTPProvider))            -> "email-otp" [需 mfa.email-otp.enabled + emailSender]
+  |-- register(FactorAuthenticator(TOTPProvider))                -> "totp" [需 mfa.totp.enabled + totpVerifier]
+  \-- register(FactorAuthenticator(WebAuthnProvider))            -> "webauthn" [需 mfa.webauthn.enabled + webauthnSvc]
 ```
 
 ### 8.2 三层认证器架构
@@ -679,7 +679,7 @@ Authenticator 接口 (统一)
   |
   |-- IDPAuthenticator (胶水层) -> idp.Provider 接口 -> Login() / Prepare()
   |-- VChanAuthenticator (胶水层) -> captcha.Verifier 接口 -> Verify() / GetIdentifier()
-  \-- MFAAuthenticator (胶水层) -> mfa.Provider 接口 -> Verify() / Prepare()
+  \-- FactorAuthenticator (胶水层) -> factor.Provider 接口 -> Verify() / Prepare()
 ```
 
 ### 8.3 分发流程

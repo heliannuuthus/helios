@@ -9,12 +9,15 @@ import (
 )
 
 // Authenticator 统一认证器接口
-// 所有认证方式（IDP、VChan、MFA）都实现此接口
+// 所有认证方式（IDP、VChan、Factor）都实现此接口
 type Authenticator interface {
 	// Type 返回认证器类型标识（github, google, captcha, email_otp, totp...）
 	Type() string
 
-	// Prepare 返回该认证器的公开配置（给前端渲染用）
+	// ConnectionType 返回连接类型（idp / vchan / factor）
+	ConnectionType() types.ConnectionType
+
+	// Prepare 返回该认证器的完整配置（含 Type，用于构建 ConnectionMap）
 	Prepare() *types.ConnectionConfig
 
 	// Authenticate 执行认证

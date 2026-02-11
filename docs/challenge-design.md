@@ -24,7 +24,7 @@ challenge.Service
     |
     |-- registry (*authenticator.Registry)    // 按需获取验证能力
     |   |-- Get("captcha") → *VChanAuthenticator → .Verifier() → captcha.Verifier
-    |   \-- Get("email_otp") → *MFAAuthenticator → .Provider() → mfa.Provider
+    |   \-- Get("email_otp") → *FactorAuthenticator → .Provider() → factor.Provider
     |
     \-- cache (*cache.Manager)                // Challenge 生命周期管理
 ```
@@ -223,7 +223,7 @@ case "captcha":
 
 case challenge.Type:
     → 如果 pending_captcha == true  → 报错：请先完成 captcha 前置验证
-    → 否则 → 委托给对应的 mfa.Provider 验证
+    → 否则 → 委托给对应的 factor.Provider 验证
 
 default:
     → 报错：connection 与 challenge 不匹配

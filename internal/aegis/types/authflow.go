@@ -263,26 +263,43 @@ func splitScopes(scope string) []string {
 	return result
 }
 
-// ConnectionConfig Connection 配置（返回给前端的公开配置）
-// 统一结构，适用于 IDP、Required（前置条件）和 Delegated（委托路径）
-type ConnectionConfig struct {
-	Connection string   `json:"connection"`          // 标识（github, google, wechat-mp, user, oper, email_otp, totp, captcha...）
-	Identifier string   `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
-	Strategy   []string `json:"strategy,omitzero"`   // 认证方式（user/oper: password, webauthn; captcha: turnstile; 其余忽略）
-	Delegate   []string `json:"delegate,omitzero"`   // 可替代主认证的独立验证方式（totp, email_otp）
-	Require    []string `json:"require,omitzero"`    // 前置条件（captcha）
-	Verified   bool     `json:"verified,omitempty"`  // 是否已通过验证
+// Connection 前端公开的连接信息（不含密钥和运行时状态）
+type Connection struct {
+	Type       ConnectionType `json:"type"`                // 连接类型（idp / vchan / factor）
+	Connection string         `json:"connection"`          // 标识（github, google, wechat-mp, user, oper, email_otp, totp, captcha...）
+	Identifier string         `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
+	Strategy   []string       `json:"strategy,omitzero"`   // 认证方式（user/oper: password, webauthn; captcha: turnstile; 其余忽略）
+	Delegate   []string       `json:"delegate,omitzero"`   // 可替代主认证的独立验证方式（totp, email_otp）
+	Require    []string       `json:"require,omitzero"`    // 前置条件（captcha）
 }
 
-// ConnectionsMap Connections 响应（按关系角色分类）
-// - IDP: 身份提供商，登录入口
-// - Required: 被 IDP 的 Require 引用的前置条件的配置
-// - Delegated: 被 IDP 的 Delegate 引用的替代路径的配置
-type ConnectionsMap struct {
-	IDP       []*ConnectionConfig `json:"idp,omitzero"`       // 身份提供商（github, google, user, oper, wechat-mp...）
-	Required  []*ConnectionConfig `json:"required,omitzero"`  // 前置条件配置（被 IDP.Require 引用：captcha...）
-	Delegated []*ConnectionConfig `json:"delegated,omitzero"` // 委托路径配置（被 IDP.Delegate 引用：email_otp, totp, webauthn...）
+// NewConnection 从 ConnectionConfig 构造前端公开的 Connection
+func NewConnection(cfg *ConnectionConfig) *Connection {
+	return &Connection{
+		Type:       cfg.Type,
+		Connection: cfg.Connection,
+		Identifier: cfg.Identifier,
+		Strategy:   cfg.Strategy,
+		Delegate:   cfg.Delegate,
+		Require:    cfg.Require,
+	}
 }
+
+// ConnectionConfig 后端内部完整配置（含私有密钥和运行时状态）
+type ConnectionConfig struct {
+	Type       ConnectionType `json:"type"`                // 连接类型（idp / vchan / factor）
+	Connection string         `json:"connection"`          // 标识
+	Secret     string         `json:"-"`                   // 私有密钥（不序列化到 Redis / API）
+	Identifier string         `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
+	Strategy   []string       `json:"strategy,omitzero"`   // 认证方式
+	Delegate   []string       `json:"delegate,omitzero"`   // 委托路径
+	Require    []string       `json:"require,omitzero"`    // 前置条件
+	Verified   bool           `json:"verified,omitempty"`  // 运行时：是否已通过验证
+}
+
+// ConnectionsMap API 响应：按 ConnectionType 分类
+// JSON 示例: {"idp": [...], "vchan": [...], "factor": [...]}
+type ConnectionsMap map[ConnectionType][]*Connection
 
 // ==================== 辅助函数 ====================
 

@@ -211,52 +211,18 @@ func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, params
 }
 
 // GetAvailableConnections 获取可用的 ConnectionsMap
-// 按关系角色组装三部分数据：
-// 1. IDP - 身份提供商，登录入口（github, google, user, oper, wechat-mp...）
-// 2. Required - 被 IDP 的 Require 引用的前置条件的配置（captcha...）
-// 3. Delegated - 被 IDP 的 Delegate 引用的替代路径的配置（email_otp, totp, webauthn...）
-func (s *Service) GetAvailableConnections(flow *types.AuthFlow) *types.ConnectionsMap {
+// 按 ConnectionType（idp/vchan/factor）分类，转换为前端公开的 Connection 结构
+func (s *Service) GetAvailableConnections(flow *types.AuthFlow) types.ConnectionsMap {
+	result := make(types.ConnectionsMap)
 	if flow.ConnectionMap == nil {
-		return nil
+		return result
 	}
 
-	result := &types.ConnectionsMap{
-		IDP:       make([]*types.ConnectionConfig, 0),
-		Required:  make([]*types.ConnectionConfig, 0),
-		Delegated: make([]*types.ConnectionConfig, 0),
-	}
-
-	// 收集被引用的 connection（去重）
-	requiredSet := make(map[string]bool)
-	delegatedSet := make(map[string]bool)
-
-	// 添加 IDP connections，同时收集 delegate 和 require 引用
 	for _, cfg := range flow.ConnectionMap {
-		result.IDP = append(result.IDP, cfg)
-
-		for _, d := range cfg.Delegate {
-			delegatedSet[d] = true
-		}
-		for _, r := range cfg.Require {
-			requiredSet[r] = true
-		}
+		result[cfg.Type] = append(result[cfg.Type], types.NewConnection(cfg))
 	}
-
-	result.Required = resolveConnectionConfigs(requiredSet)
-	result.Delegated = resolveConnectionConfigs(delegatedSet)
 
 	return result
-}
-
-// resolveConnectionConfigs 从注册表解析被引用的 connection 配置
-func resolveConnectionConfigs(connSet map[string]bool) []*types.ConnectionConfig {
-	var configs []*types.ConnectionConfig
-	for conn := range connSet {
-		if auth, ok := authenticator.GlobalRegistry().Get(conn); ok {
-			configs = append(configs, auth.Prepare())
-		}
-	}
-	return configs
 }
 
 // ==================== Flow 清理 ====================
@@ -277,35 +243,68 @@ func (s *Service) CleanupFlow(ctx context.Context, flowID string, flow *types.Au
 // ==================== 辅助方法 ====================
 
 // setConnections 根据应用 IDP 配置构建 ConnectionMap
+// 包含 IDP + 被引用的 Required/Delegated connections，确保 Login 时能追踪所有验证状态
 // 合并 Authenticator.Prepare() 基础配置与应用级配置（strategy, delegate, require）
 func (s *Service) setConnections(idpConfigs []*models.ApplicationIDPConfig) map[string]*types.ConnectionConfig {
 	result := make(map[string]*types.ConnectionConfig, len(idpConfigs))
+	referencedSet := make(map[string]bool)
 
 	for _, idpCfg := range idpConfigs {
-		// 获取已注册的 Authenticator 基础配置，未注册的跳过
-		auth, ok := authenticator.GlobalRegistry().Get(idpCfg.Type)
-		if !ok {
-			continue
-		}
-		cfg := auth.Prepare()
-
+		cfg := s.buildConnectionConfig(idpCfg)
 		if cfg == nil {
 			continue
 		}
-
-		// 应用级配置覆盖
-		if list := idpCfg.GetStrategyList(); len(list) > 0 {
-			cfg.Strategy = list
-		}
-		if list := idpCfg.GetDelegateList(); len(list) > 0 {
-			cfg.Delegate = list
-		}
-		if list := idpCfg.GetRequireList(); len(list) > 0 {
-			cfg.Require = list
-		}
-
 		result[idpCfg.Type] = cfg
+		collectReferences(cfg, referencedSet)
 	}
 
+	// 将被引用的 Required/Delegated connections 也加入 ConnectionMap
+	s.addReferencedConnections(result, referencedSet)
 	return result
+}
+
+// buildConnectionConfig 构建单个 IDP 的 ConnectionConfig（合并应用级配置）
+func (s *Service) buildConnectionConfig(idpCfg *models.ApplicationIDPConfig) *types.ConnectionConfig {
+	auth, ok := authenticator.GlobalRegistry().Get(idpCfg.Type)
+	if !ok {
+		return nil
+	}
+	cfg := auth.Prepare()
+	if cfg == nil {
+		return nil
+	}
+	if list := idpCfg.GetStrategyList(); len(list) > 0 {
+		cfg.Strategy = list
+	}
+	if list := idpCfg.GetDelegateList(); len(list) > 0 {
+		cfg.Delegate = list
+	}
+	if list := idpCfg.GetRequireList(); len(list) > 0 {
+		cfg.Require = list
+	}
+	return cfg
+}
+
+// collectReferences 收集 cfg 中被引用的 require/delegate connection 名称
+func collectReferences(cfg *types.ConnectionConfig, set map[string]bool) {
+	for _, r := range cfg.Require {
+		set[r] = true
+	}
+	for _, d := range cfg.Delegate {
+		set[d] = true
+	}
+}
+
+// addReferencedConnections 将被引用但尚未在 result 中的 connections 加入 ConnectionMap
+func (s *Service) addReferencedConnections(result map[string]*types.ConnectionConfig, referencedSet map[string]bool) {
+	for conn := range referencedSet {
+		if _, exists := result[conn]; exists {
+			continue
+		}
+		if auth, ok := authenticator.GlobalRegistry().Get(conn); ok {
+			if cfg := auth.Prepare(); cfg != nil {
+				result[conn] = cfg
+			}
+		}
+	}
 }

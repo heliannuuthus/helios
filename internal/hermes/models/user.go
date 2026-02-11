@@ -16,9 +16,9 @@ type User struct {
 	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
 	// 业务字段
 	OpenID        string  `json:"openid" gorm:"column:openid;size:64;not null;uniqueIndex"` // 用户标识（= global identity 的 t_openid）
-	Status        int8    `json:"status" gorm:"column:status;not null;default:0"`            // 0=active, 1=disabled
-	Username      *string `json:"-" gorm:"column:username;size:64;uniqueIndex"`              // 用户名（唯一）
-	PasswordHash  *string `json:"-" gorm:"column:password_hash;size:256"`                    // 密码哈希（bcrypt）
+	Status        int8    `json:"status" gorm:"column:status;not null;default:0"`           // 0=active, 1=disabled
+	Username      *string `json:"-" gorm:"column:username;size:64;uniqueIndex"`             // 用户名（唯一）
+	PasswordHash  *string `json:"-" gorm:"column:password_hash;size:256"`                   // 密码哈希（bcrypt）
 	Nickname      *string `json:"nickname" gorm:"column:nickname;size:128"`
 	Picture       *string `json:"picture" gorm:"column:picture;size:512"`
 	Email         *string `json:"email" gorm:"column:email;size:256;uniqueIndex"`
