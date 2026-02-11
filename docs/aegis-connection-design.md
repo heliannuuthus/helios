@@ -29,8 +29,8 @@ Helios 项目中的 "Connection" 是认证系统（Aegis 模块）的核心概�
 | 类别 | 缩写 | 含义 | 示例 |
 |------|------|------|------|
 | **IDP** | Identity Provider | 身份提供商 | github, google, wechat-mp, user, oper, passkey |
-| **VChan** | Verification Channel | 验证渠道/前置验证 | captcha |
-| **MFA** | Multi-Factor Auth | 多因素认证 | email-otp, totp, webauthn |
+| **Required** | Required | 前置条件配置 | captcha |
+| **Delegated** | Delegated | 委托路径配置 | email-otp, totp, webauthn |
 
 整个认证流程遵循 **OAuth 2.1 + PKCE** 标准，使用 **PASETO v4** 代替 JWT 进行 Token 签发。
 
@@ -40,13 +40,13 @@ Connection 体系由三个维度定义：
 
 - **connection** = 身份提供商/验证类型。不同的后端集成即不同的 connection。
   - IDP: `user`, `oper`, `github`, `google`, `wechat-mp`, `tt-mp`, `alipay-mp`, `passkey`, `wecom`...
-  - VChan: `captcha`
-  - MFA: `email-otp`, `totp`, `webauthn`
+  - Required: `captcha`
+  - Delegated: `email-otp`, `totp`, `webauthn`
 - **strategy** = 同一 connection 下的可选认证方式。
   - `user`/`oper`: `password` / `webauthn`
   - `captcha`: `turnstile`（可扩展 `recaptcha` / `hcaptcha`）
   - 其余 connection 验证方式唯一，不需要 strategy
-  - 注意：`email-otp` 不是 strategy，只能通过 `delegate` 关联作为 MFA
+  - 注意：`email-otp` 不是 strategy，只能通过 `delegate` 关联作为委托路径
 - **channel** = 接入渠道（mp/web/oa），编码在 connection 名字里而非作为独立字段
   - 例如 `wechat-mp` 中的 `mp` 即微信小程序渠道
 
@@ -78,7 +78,7 @@ hermes.Service / hermes.UserService (DB)
 
 **文件：** `internal/aegis/types/authflow.go:265-274`
 
-返回给前端的公开配置，统一结构适用于 IDP、VChan 和 MFA。
+返回给前端的公开配置，统一结构适用于 IDP、Required 和 Delegated。
 
 - `Connection` (string): 唯一标识（如 github, captcha, email-otp）
 - `Identifier` (string): 公开标识（client_id / site_key / rp_id）
@@ -97,7 +97,7 @@ hermes.Service / hermes.UserService (DB)
 | `Delegate` | OR（选一种） | 可替代主认证 | IDP 委托给 Challenge 流程的独立验证方式，proof 是 ChallengeToken |
 | `Require` | AND（全部通过） | 主认证**之前** | 前置条件，必须全部通过后才能提交主认证 |
 
-Strategy 和 Delegate 是**同级替代关系**：用户可以选择用密码登录（strategy），也可以选择用邮件验证码登录（delegate）。Delegate 不是"主认证之后的附加 MFA"，而是"可以替代主认证的独立路径"。
+Strategy 和 Delegate 是**同级替代关系**：用户可以选择用密码登录（strategy），也可以选择用邮件验证码登录（delegate）。Delegate 不是"主认证之后的附加委托验证"，而是"可以替代主认证的独立路径"。
 
 示例配置：
 
@@ -125,7 +125,7 @@ Strategy 和 Delegate 是**同级替代关系**：用户可以选择用密码登
 
 **文件：** `internal/aegis/types/authflow.go:282-287`
 
-按类别分类的响应：IDP 列表、VChan 列表、MFA 列表。
+按类别分类的响应：IDP 列表、Required 列表、Delegated 列表。
 
 ### 2.3 AuthFlow
 
@@ -202,7 +202,7 @@ types.go 中定义了全部常量，但并非每个都有 Provider 实现。下�
 
 域划分由配置 `identity.ciam-idps` / `identity.piam-idps` 决定。
 
-### 3.2 VChan Connection 类型
+### 3.2 Required Connection 类型
 
 | 标识 | 说明 | 实现状态 |
 |------|------|----------|
@@ -210,7 +210,7 @@ types.go 中定义了全部常量，但并非每个都有 Provider 实现。下�
 
 > captcha 是 connection，具体 provider（turnstile/recaptcha/hcaptcha）作为 strategy 配置。
 
-### 3.3 MFA Connection 类型
+### 3.3 Delegated Connection 类型
 
 **文件：** `internal/aegis/authenticator/mfa/provider.go`
 
@@ -262,7 +262,7 @@ types.go 中定义了全部常量，但并非每个都有 Provider 实现。下�
 
                               2. GET /auth/connections
                               <===============================
-                              返回 ConnectionsMap (idp/vchan/mfa)
+                              返回 ConnectionsMap (idp/required/delegated)
                               ===============================>
 
                               3. GET /auth/context
@@ -347,12 +347,12 @@ Handler.GetConnections(c)
   |-- authenticateSvc.GetAvailableConnections(flow)  // [关键] 构建 ConnectionsMap
   |   |-- 遍历 flow.ConnectionMap
   |   |   |-- 收集所有 IDP ConnectionConfig
-  |   |   |-- 收集所有 Delegate -> mfaSet (去重)
-  |   |   \-- 收集所有 Require -> vchanSet (去重)
-  |   |-- resolveVChanConfigs(vchanSet)
+  |   |   |-- 收集所有 Delegate -> delegatedSet (去重)
+  |   |   \-- 收集所有 Require -> requiredSet (去重)
+  |   |-- resolveRequiredConfigs(requiredSet)
   |   |   |-- GlobalRegistry().Get(conn) -> auth.Prepare()
   |   |   \-- 兼容 "captcha" 前缀匹配
-  |   \-- resolveMFAConfigs(mfaSet)
+  |   \-- resolveDelegatedConfigs(delegatedSet)
   |       \-- GlobalRegistry().Get(conn) -> auth.Prepare()
   \-- c.JSON(200, connectionsMap)
 ```
@@ -365,10 +365,10 @@ Handler.GetConnections(c)
     {"connection":"github","identifier":"Iv1.abc123..."},
     {"connection":"wechat-mp","identifier":"wx1234567890"}
   ],
-  "vchan": [
+  "required": [
     {"connection":"captcha","identifier":"0x4AAAAAAA...","strategy":["turnstile"]}
   ],
-  "mfa": [
+  "delegated": [
     {"connection":"email-otp"},
     {"connection":"totp"}
   ]
@@ -409,12 +409,12 @@ Handler.Login(c)
   |       |   |-- flow.AddIdentity(identity, userInfo)
   |       |   \-- connCfg.Verified = true
   |       |
-  |       |-- [VChan] VChanAuthenticator.Authenticate()
+  |       |-- [Required] VChanAuthenticator.Authenticate()
   |       |   |-- verifier.Verify(ctx, proof, remoteIP)
   |       |   |   \-- [turnstile] -> POST Cloudflare siteverify API
   |       |   \-- connCfg.Verified = true
   |       |
-  |       \-- [MFA] MFAAuthenticator.Authenticate()
+      |       \-- [Delegated] MFAAuthenticator.Authenticate()
   |           |-- provider.Verify(ctx, proof, extraParams...)
   |           |   |-- [email-otp] -> cache.GetOTP("email-otp:"+challengeID) 比对
   |           |   |-- [totp]      -> totp.Verifier.Verify(userID, code) (via credentialSvc)
@@ -455,7 +455,7 @@ Handler.Login(c)
 
 关键逻辑：
 1. Connection 验证分两层：GlobalRegistry().Has() 检查系统支持 + flow.ConnectionMap 检查应用配置
-2. 前置验证 (Require): 前端需先调用 /auth/login 传入 VChan connection，全部通过才能继续
+2. 前置验证 (Require): 前端需先调用 /auth/login 传入 Required connection，全部通过才能继续
 3. 委托验证 (Delegate): IDP 把登录能力委托给的独立验证方式，前端通过 Challenge 流程完成后以 ChallengeToken 作为 proof 提交登录，任一通过即可
 
 ### 6.4 POST /auth/challenge - 发起 Challenge
@@ -470,9 +470,9 @@ Handler.InitiateChallenge(c)
   |-- c.ClientIP()
   \-- challengeSvc.Create(ctx, &req, remoteIP)
       |-- buildChallenge(req)                       // 按 type 构建 Challenge 对象（不持久化）
-      |   |-- [captcha] -> NewChallenge(5min TTL)
-      |   |-- [totp]    -> NewChallenge(5min TTL) + SetData("user_id")
-      |   \-- [email_otp] -> NewChallenge(5min TTL) + SetData("email", "masked_email")
+      |   |-- [captcha] -> NewChallenge(clientID, audience, "", captcha, "", 5min)
+      |   |-- [totp]    -> NewChallenge(clientID, audience, type, totp, channel, 5min)
+      |   \-- [email_otp] -> NewChallenge(clientID, audience, type, email_otp, channel, 5min) + SetData("masked_email")
       |
       |-- [RequiresCaptcha && captchaVerifier 存在]
       |   |-- challenge.SetData("pending_captcha", true)
@@ -694,8 +694,8 @@ authenticateSvc.Authenticate(ctx, flow, params...)  // service 透传
   |-- GlobalRegistry().Get(connection)
   \-- auth.Authenticate(ctx, flow, params...)       // 各 authenticator 按需取值
       |-- IDP:   provider.Login(ctx, proof, extraParams...)  -> flow.AddIdentity() + Verified=true
-      |-- VChan: verifier.Verify(ctx, proof, remoteIP)       -> Verified=true
-      \-- MFA:   provider.Verify(ctx, proof, extraParams...)  -> Verified=true
+      |-- Required: verifier.Verify(ctx, proof, remoteIP)       -> Verified=true
+      \-- Delegated: provider.Verify(ctx, proof, extraParams...)  -> Verified=true
 ```
 
 ---
@@ -794,7 +794,7 @@ GetAndValidateFlow -> GetFlow (Redis GET) -> 检查过期 -> RenewFlow -> SaveFl
 
 - 系统账号(user/oper)错误不泄露具体原因(统一返回 "authentication failed")
 - Captcha 前置验证: 高风险操作需先通过人机验证
-- MFA 委托验证: IDP 登录后可配置二次验证
+- 委托验证: IDP 登录后可配置二次验证
 - 域隔离: CIAM/PIAM 分域, IDP 不可跨域
 
 ### 11.5 密码学
@@ -828,8 +828,8 @@ map[string]*ConnectionConfig
   V
 ConnectionsMap
   |-- IDP:   直接来自 ConnectionMap
-  |-- VChan: 从所有 IDP 的 Require 收集 -> Registry 解析
-  \-- MFA:   从所有 IDP 的 Delegate 收集 -> Registry 解析
+  |-- Required: 从所有 IDP 的 Require 收集 -> Registry 解析
+  \-- Delegated: 从所有 IDP 的 Delegate 收集 -> Registry 解析
 ```
 
 ### 附录 B: Wire 初始化链
@@ -859,8 +859,8 @@ main.go -> InitializeApp() (wire_gen.go)
                         |
          +--------------+--------------+
          |              |              |
-    [VChan Login]  [IDP Login]   [MFA Login]
-    captcha验证     身份登录      MFA验证
+    [Required Login]  [IDP Login]   [Delegated Login]
+    captcha验证     身份登录      委托验证
          |              |              |
          Verified       Verified       Verified
          =true          =true          =true
@@ -892,3 +892,4 @@ main.go -> InitializeApp() (wire_gen.go)
 ---
 
 > **文档结束** - 覆盖了 Helios 中所有 Connection 相关的请求路径、数据结构、代码调用栈、认证分发机制、缓存策略及安全设计。
+

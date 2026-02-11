@@ -7,36 +7,50 @@ import (
 	"aidanwoods.dev/go-paseto"
 )
 
-// ChallengeType Challenge 类型
+// ChannelType 验证方式（系统定义）
 // 命名规范：{delivery}_{method}（如 email_otp, sms_otp），与数据库及前端保持一致
-type ChallengeType string
+type ChannelType string
 
 const (
-	// VChan 类型（验证渠道，非 MFA）
-	ChallengeTypeCaptcha ChallengeType = "captcha" // 人机验证（Turnstile）
+	// 非认证因子（前置条件）
+	ChannelTypeCaptcha ChannelType = "captcha" // 人机验证（Turnstile）
 
-	// MFA 类型（多因素认证）
-	ChallengeTypeEmailOTP ChallengeType = "email_otp" // 邮箱 OTP
-	ChallengeTypeTOTP     ChallengeType = "totp"      // TOTP 动态口令（Authenticator App）
-	ChallengeTypeSmsOTP   ChallengeType = "sms_otp"   // 短信 OTP（预留）
-	ChallengeTypeTgOTP    ChallengeType = "tg_otp"    // Telegram OTP（预留）
-	ChallengeTypeWebAuthn ChallengeType = "webauthn"  // WebAuthn/Passkey
+	// 验证类（支持 Type 业务场景配置）
+	ChannelTypeEmailOTP ChannelType = "email_otp" // 邮箱 OTP
+	ChannelTypeTOTP     ChannelType = "totp"      // TOTP 动态口令（Authenticator App）
+	ChannelTypeSmsOTP   ChannelType = "sms_otp"   // 短信 OTP
+	ChannelTypeTgOTP    ChannelType = "tg_otp"    // Telegram OTP
+	ChannelTypeWebAuthn ChannelType = "webauthn"  // WebAuthn/Passkey
+
+	// 交换类（平台固定能力，不需要 Type）
+	ChannelTypeWechatMP ChannelType = "wechat-mp" // 微信小程序换手机号
+	ChannelTypeAlipayMP ChannelType = "alipay-mp" // 支付宝小程序换手机号
 )
 
-// RequiresCaptcha 检查该 Challenge 类型是否需要 Captcha 前置验证
-func (t ChallengeType) RequiresCaptcha() bool {
+// RequiresCaptcha 检查该 ChannelType 是否需要 Captcha 前置验证
+func (t ChannelType) RequiresCaptcha() bool {
 	switch t {
-	case ChallengeTypeEmailOTP, ChallengeTypeSmsOTP:
-		return true // 发送类 OTP 需要 captcha 前置防刷
+	case ChannelTypeEmailOTP, ChannelTypeSmsOTP:
+		return true
 	default:
 		return false
 	}
 }
 
-// IsMFA 检查是否是 MFA 类型
-func (t ChallengeType) IsMFA() bool {
+// IsVerification 检查是否是验证类 ChannelType（排除 captcha 和交换类）
+func (t ChannelType) IsVerification() bool {
 	switch t {
-	case ChallengeTypeEmailOTP, ChallengeTypeTOTP, ChallengeTypeSmsOTP, ChallengeTypeTgOTP, ChallengeTypeWebAuthn:
+	case ChannelTypeEmailOTP, ChannelTypeTOTP, ChannelTypeSmsOTP, ChannelTypeTgOTP, ChannelTypeWebAuthn:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsExchange 检查是否是交换类 ChannelType
+func (t ChannelType) IsExchange() bool {
+	switch t {
+	case ChannelTypeWechatMP, ChannelTypeAlipayMP:
 		return true
 	default:
 		return false
@@ -44,31 +58,34 @@ func (t ChallengeType) IsMFA() bool {
 }
 
 // ChallengeToken Challenge 验证令牌
-// 用于证明某个 principal 已完成特定的身份验证挑战（如 MFA、邮箱验证等）
-// 该令牌短期有效，用于后续流程的验证
+// 用于证明某个 principal 已完成特定的身份验证挑战
 //
 // 设计说明：
-// - sub: 完成挑战的 principal（凭证标识）
+// - sub: 完成验证的 principal
 //   - email_otp → 邮箱地址
 //   - sms_otp → 手机号
-//   - totp → 用户 OpenID（TOTP 绑定在用户上）
+//   - totp → 用户 OpenID
 //   - webauthn → credential ID
+//   - wechat-mp → 手机号（交换得到）
 //
-// - typ: Challenge 类型（如 email_otp、totp、webauthn）
+// - typ: ChannelType（验证方式）
+// - biz: 业务场景（login / forget_password，交换类为空）
 // - aud: 目标服务 ID
-// - cli: 发起挑战的应用 ID
+// - cli: 发起验证的应用 ID
 type ChallengeToken struct {
-	Claims                      // 内嵌基础 Claims
-	subject       string        // sub - 完成挑战的 principal（如 email、phone、credential_id）
-	challengeType ChallengeType // typ - Challenge 类型
+	Claims                  // 内嵌基础 Claims
+	subject     string      // sub - 完成验证的 principal
+	channelType ChannelType // typ - 验证方式
+	bizType     string      // biz - 业务场景
 }
 
 // ==================== Challenge TokenTypeBuilder ====================
 
 // Challenge Challenge 类型构建器，实现 TokenTypeBuilder 接口
 type Challenge struct {
-	subject       string
-	challengeType ChallengeType
+	subject     string
+	channelType ChannelType
+	bizType     string
 }
 
 // NewChallengeTokenBuilder 创建 Challenge 类型构建器
@@ -76,30 +93,37 @@ func NewChallengeTokenBuilder() *Challenge {
 	return &Challenge{}
 }
 
-// Subject 设置完成挑战的 principal
+// Subject 设置完成验证的 principal
 func (c *Challenge) Subject(subject string) *Challenge {
 	c.subject = subject
 	return c
 }
 
-// Type 设置挑战类型
-func (c *Challenge) Type(challengeType ChallengeType) *Challenge {
-	c.challengeType = challengeType
+// Type 设置验证方式（ChannelType）
+func (c *Challenge) Type(channelType ChannelType) *Challenge {
+	c.channelType = channelType
+	return c
+}
+
+// BizType 设置业务场景
+func (c *Challenge) BizType(bizType string) *Challenge {
+	c.bizType = bizType
 	return c
 }
 
 // build 实现 TokenTypeBuilder 接口
 func (c *Challenge) build(claims Claims) Token {
 	return &ChallengeToken{
-		Claims:        claims,
-		subject:       c.subject,
-		challengeType: c.challengeType,
+		Claims:      claims,
+		subject:     c.subject,
+		channelType: c.channelType,
+		bizType:     c.bizType,
 	}
 }
 
 // ==================== 解析函数 ====================
 
-// ParseChallengeToken 从 PASETO Token 解析 ChallengeToken（用于验证后）
+// ParseChallengeToken 从 PASETO Token 解析 ChallengeToken
 func ParseChallengeToken(pasetoToken *paseto.Token) (*ChallengeToken, error) {
 	claims, err := ParseClaims(pasetoToken)
 	if err != nil {
@@ -111,15 +135,19 @@ func ParseChallengeToken(pasetoToken *paseto.Token) (*ChallengeToken, error) {
 		return nil, fmt.Errorf("get subject: %w", err)
 	}
 
-	var challengeType string
-	if err := pasetoToken.Get(ClaimType, &challengeType); err != nil {
+	var channelType string
+	if err := pasetoToken.Get(ClaimType, &channelType); err != nil {
 		return nil, fmt.Errorf("get typ: %w", err)
 	}
 
+	var bizType string
+	_ = pasetoToken.Get(ClaimBizType, &bizType)
+
 	return &ChallengeToken{
-		Claims:        claims,
-		subject:       subject,
-		challengeType: ChallengeType(challengeType),
+		Claims:      claims,
+		subject:     subject,
+		channelType: ChannelType(channelType),
+		bizType:     bizType,
 	}, nil
 }
 
@@ -130,7 +158,7 @@ func (c *ChallengeToken) Type() TokenType {
 	return TokenTypeChallenge
 }
 
-// build 实现 tokenBuilder 接口（小写，内部使用）
+// build 实现 tokenBuilder 接口
 func (c *ChallengeToken) build() (*paseto.Token, error) {
 	return c.BuildPaseto()
 }
@@ -141,24 +169,34 @@ func (c *ChallengeToken) BuildPaseto() (*paseto.Token, error) {
 	if err := c.SetStandardClaims(&t); err != nil {
 		return nil, fmt.Errorf("set standard claims: %w", err)
 	}
-	t.SetSubject(c.subject) // sub = principal（email、phone、credential_id 等）
-	if err := t.Set(ClaimType, c.challengeType); err != nil {
+	t.SetSubject(c.subject)
+	if err := t.Set(ClaimType, c.channelType); err != nil {
 		return nil, fmt.Errorf("set typ: %w", err)
+	}
+	if c.bizType != "" {
+		if err := t.Set(ClaimBizType, c.bizType); err != nil {
+			return nil, fmt.Errorf("set biz: %w", err)
+		}
 	}
 	return &t, nil
 }
 
-// ExpiresIn 实现 AccessToken 接口
+// ExpiresIn 返回过期时间
 func (c *ChallengeToken) ExpiresIn() time.Duration {
 	return c.GetExpiresIn()
 }
 
-// GetSubject 返回 principal（如 email、phone、credential_id）
+// GetSubject 返回 principal
 func (c *ChallengeToken) GetSubject() string {
 	return c.subject
 }
 
-// GetChallengeType 返回 Challenge 类型
-func (c *ChallengeToken) GetChallengeType() ChallengeType {
-	return c.challengeType
+// GetChannelType 返回验证方式
+func (c *ChallengeToken) GetChannelType() ChannelType {
+	return c.channelType
+}
+
+// GetBizType 返回业务场景
+func (c *ChallengeToken) GetBizType() string {
+	return c.bizType
 }

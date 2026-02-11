@@ -264,21 +264,24 @@ func splitScopes(scope string) []string {
 }
 
 // ConnectionConfig Connection 配置（返回给前端的公开配置）
-// 统一结构，适用于 IDP、VChan 和 MFA
+// 统一结构，适用于 IDP、Required（前置条件）和 Delegated（委托路径）
 type ConnectionConfig struct {
 	Connection string   `json:"connection"`          // 标识（github, google, wechat-mp, user, oper, email_otp, totp, captcha...）
 	Identifier string   `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
 	Strategy   []string `json:"strategy,omitzero"`   // 认证方式（user/oper: password, webauthn; captcha: turnstile; 其余忽略）
-	Delegate   []string `json:"delegate,omitzero"`   // 委托验证/MFA（totp, email_otp）
-	Require    []string `json:"require,omitzero"`    // 前置验证（captcha）
+	Delegate   []string `json:"delegate,omitzero"`   // 可替代主认证的独立验证方式（totp, email_otp）
+	Require    []string `json:"require,omitzero"`    // 前置条件（captcha）
 	Verified   bool     `json:"verified,omitempty"`  // 是否已通过验证
 }
 
-// ConnectionsMap Connections 响应（按类别分类）
+// ConnectionsMap Connections 响应（按关系角色分类）
+// - IDP: 身份提供商，登录入口
+// - Required: 被 IDP 的 Require 引用的前置条件的配置
+// - Delegated: 被 IDP 的 Delegate 引用的替代路径的配置
 type ConnectionsMap struct {
-	IDP   []*ConnectionConfig `json:"idp,omitzero"`   // 身份提供商（github, google, user, oper, wechat-mp...）
-	VChan []*ConnectionConfig `json:"vchan,omitzero"` // 验证渠道/前置验证（captcha...）
-	MFA   []*ConnectionConfig `json:"mfa,omitzero"`   // MFA 方式（email_otp, totp, webauthn...）
+	IDP       []*ConnectionConfig `json:"idp,omitzero"`       // 身份提供商（github, google, user, oper, wechat-mp...）
+	Required  []*ConnectionConfig `json:"required,omitzero"`  // 前置条件配置（被 IDP.Require 引用：captcha...）
+	Delegated []*ConnectionConfig `json:"delegated,omitzero"` // 委托路径配置（被 IDP.Delegate 引用：email_otp, totp, webauthn...）
 }
 
 // ==================== 辅助函数 ====================

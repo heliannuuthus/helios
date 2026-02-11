@@ -17,9 +17,11 @@ import (
 
 // 默认过期时间
 const (
-	DefaultCaptchaTTL = 5 * time.Minute
-	DefaultTOTPTTL    = 5 * time.Minute
-	DefaultEmailTTL   = 5 * time.Minute
+	DefaultCaptchaTTL        = 5 * time.Minute
+	DefaultTOTPTTL           = 5 * time.Minute
+	DefaultEmailTTL          = 5 * time.Minute
+	DefaultWebAuthnTTL       = 5 * time.Minute
+	DefaultChallengeTokenTTL = 5 * time.Minute // ChallengeToken 有效期
 )
 
 // otpSender 能够发送 OTP 的接口
@@ -78,20 +80,52 @@ func (s *Service) getMFAProvider(connection string) mfa.Provider {
 	return mfaAuth.Provider()
 }
 
+// ==================== 校验 ====================
+
+// validateClientAndAudience 校验 client_id 对应的应用存在，audience 服务存在且应用有权访问
+func (s *Service) validateClientAndAudience(ctx context.Context, clientID, audience string) error {
+	// 1. 校验应用存在
+	_, err := s.cache.GetApplication(ctx, clientID)
+	if err != nil {
+		return autherrors.NewInvalidRequestf("invalid client_id: %s", clientID)
+	}
+
+	// 2. 校验服务存在
+	_, err = s.cache.GetService(ctx, audience)
+	if err != nil {
+		return autherrors.NewInvalidRequestf("invalid audience: %s", audience)
+	}
+
+	// 3. 校验应用与服务的关联关系
+	allowed, err := s.cache.CheckAppServiceRelation(ctx, clientID, audience)
+	if err != nil {
+		return autherrors.NewServerErrorf("check application-service relation: %v", err)
+	}
+	if !allowed {
+		return autherrors.NewInvalidRequestf("application %s is not authorized to access service %s", clientID, audience)
+	}
+	return nil
+}
+
 // ==================== Create ====================
 
 // Create 创建 Challenge
 // 始终创建 challenge 并返回 challenge_id。
-// 如果该类型需要 captcha 前置 → 标记 pending_captcha，附带 required 配置，不触发副作用。
+// 如果该 channel_type 需要 captcha 前置 → 标记 pending_captcha，附带 required 配置，不触发副作用。
 // 不需要 captcha → 直接触发副作用（如发送邮件）。
 func (s *Service) Create(ctx context.Context, req *CreateRequest, remoteIP string) (*CreateResponse, error) {
+	// 校验 client_id 和 audience 合法性
+	if err := s.validateClientAndAudience(ctx, req.ClientID, req.Audience); err != nil {
+		return nil, err
+	}
+
 	challenge, err := s.buildChallenge(req)
 	if err != nil {
 		return nil, err
 	}
 
 	// 需要 captcha 前置
-	if req.Type.RequiresCaptcha() && s.getCaptchaVerifier() != nil {
+	if req.ChannelType.RequiresCaptcha() && s.getCaptchaVerifier() != nil {
 		challenge.SetData(types.ChallengeDataPendingCaptcha, true)
 
 		if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
@@ -118,32 +152,34 @@ func (s *Service) Create(ctx context.Context, req *CreateRequest, remoteIP strin
 
 // buildChallenge 根据请求构建 Challenge 对象（不持久化）
 func (s *Service) buildChallenge(req *CreateRequest) (*types.Challenge, error) {
-	switch req.Type {
-	case types.ChallengeTypeCaptcha:
-		if s.getCaptchaVerifier() == nil {
-			return nil, autherrors.NewServerError("captcha verifier not configured")
+	switch req.ChannelType {
+	case types.ChannelTypeTOTP:
+		if req.Channel == "" {
+			return nil, autherrors.NewInvalidRequest("channel is required for totp (user_id)")
 		}
-		return types.NewChallenge(types.ChallengeTypeCaptcha, DefaultCaptchaTTL), nil
+		return types.NewChallenge(req.ClientID, req.Audience, req.Type, types.ChannelTypeTOTP, req.Channel, DefaultTOTPTTL), nil
 
-	case types.ChallengeTypeTOTP:
-		if req.UserID == "" {
-			return nil, autherrors.NewInvalidRequest("user_id is required for totp challenge")
+	case types.ChannelTypeEmailOTP:
+		if req.Channel == "" {
+			return nil, autherrors.NewInvalidRequest("channel is required for email_otp (email address)")
 		}
-		c := types.NewChallenge(types.ChallengeTypeTOTP, DefaultTOTPTTL)
-		c.SetData(types.ChallengeDataUserID, req.UserID)
+		c := types.NewChallenge(req.ClientID, req.Audience, req.Type, types.ChannelTypeEmailOTP, req.Channel, DefaultEmailTTL)
+		c.SetData(types.ChallengeDataMaskedEmail, helperutil.MaskEmail(req.Channel))
 		return c, nil
 
-	case types.ChallengeTypeEmailOTP:
-		if req.Email == "" {
-			return nil, autherrors.NewInvalidRequest("email is required for email_otp challenge")
+	case types.ChannelTypeWebAuthn:
+		// WebAuthn channel 可空（discoverable login 不需要指定用户）
+		return types.NewChallenge(req.ClientID, req.Audience, req.Type, types.ChannelTypeWebAuthn, req.Channel, DefaultWebAuthnTTL), nil
+
+	case types.ChannelTypeWechatMP, types.ChannelTypeAlipayMP:
+		// 交换类：channel 必填（平台 code）
+		if req.Channel == "" {
+			return nil, autherrors.NewInvalidRequestf("channel is required for %s (platform code)", req.ChannelType)
 		}
-		c := types.NewChallenge(types.ChallengeTypeEmailOTP, DefaultEmailTTL)
-		c.SetData(types.ChallengeDataEmail, req.Email)
-		c.SetData(types.ChallengeDataMaskedEmail, helperutil.MaskEmail(req.Email))
-		return c, nil
+		return types.NewChallenge(req.ClientID, req.Audience, "", req.ChannelType, req.Channel, DefaultCaptchaTTL), nil
 
 	default:
-		return nil, autherrors.NewInvalidRequestf("unsupported challenge type: %s", req.Type)
+		return nil, autherrors.NewInvalidRequestf("unsupported channel type: %s", req.ChannelType)
 	}
 }
 
@@ -151,18 +187,12 @@ func (s *Service) buildChallenge(req *CreateRequest) (*types.Challenge, error) {
 func (s *Service) buildCreateResponse(challenge *types.Challenge) *CreateResponse {
 	resp := &CreateResponse{
 		ChallengeID: challenge.ID,
-		Type:        string(challenge.Type),
+		ChannelType: string(challenge.ChannelType),
 		ExpiresIn:   int(time.Until(challenge.ExpiresAt).Seconds()),
 	}
 
-	switch challenge.Type {
-	case types.ChallengeTypeCaptcha:
-		if verifier := s.getCaptchaVerifier(); verifier != nil {
-			resp.Data = map[string]any{
-				types.ChallengeDataSiteKey: verifier.GetIdentifier(),
-			}
-		}
-	case types.ChallengeTypeEmailOTP:
+	switch challenge.ChannelType {
+	case types.ChannelTypeEmailOTP:
 		maskedEmail := challenge.GetStringData(types.ChallengeDataMaskedEmail)
 		if maskedEmail != "" {
 			resp.Data = map[string]any{
@@ -176,7 +206,7 @@ func (s *Service) buildCreateResponse(challenge *types.Challenge) *CreateRespons
 
 // executeSideEffects 执行 challenge 创建后的副作用（如发送邮件）
 func (s *Service) executeSideEffects(ctx context.Context, challenge *types.Challenge) error {
-	if challenge.Type == types.ChallengeTypeEmailOTP {
+	if challenge.ChannelType == types.ChannelTypeEmailOTP {
 		return s.sendOTP(ctx, challenge)
 	}
 	return nil
@@ -185,10 +215,12 @@ func (s *Service) executeSideEffects(ctx context.Context, challenge *types.Chall
 // ==================== Verify ====================
 
 // Verify 验证 Challenge
-// 前端通过 connection 显式指定本次提交的验证类型：
-//   - connection = "captcha" 且 challenge 处于 pending_captcha → 验证 captcha，通过后触发副作用
-//   - connection = challenge.Type → 验证实际 proof
-func (s *Service) Verify(ctx context.Context, challengeID string, req *VerifyRequest, remoteIP string) (*VerifyResponse, error) {
+// 前端通过 channel_type 显式指定本次提交的验证类型：
+//   - channel_type = "captcha" 且 challenge 处于 pending_captcha → 验证 captcha，通过后触发副作用
+//   - channel_type = challenge.ChannelType → 验证实际 proof
+//
+// 返回 VerifyResult（不含 Token），Token 由 handler 层负责签发
+func (s *Service) Verify(ctx context.Context, challengeID string, req *VerifyRequest, remoteIP string) (*VerifyResult, error) {
 	challenge, err := s.cache.GetChallenge(ctx, challengeID)
 	if err != nil {
 		return nil, autherrors.NewNotFound("challenge not found")
@@ -198,24 +230,19 @@ func (s *Service) Verify(ctx context.Context, challengeID string, req *VerifyReq
 		return nil, autherrors.NewInvalidRequest("challenge expired")
 	}
 
-	switch req.Connection {
+	switch req.ChannelType {
 	case types.ConnCaptcha:
 		return s.handleCaptchaVerify(ctx, challenge, req, remoteIP)
-	case string(challenge.Type):
+	case string(challenge.ChannelType):
 		return s.handleChallengeVerify(ctx, challenge, req)
 	default:
-		return nil, autherrors.NewInvalidRequestf("connection %q does not match challenge type %q", req.Connection, challenge.Type)
+		return nil, autherrors.NewInvalidRequestf("channel_type %q does not match challenge channel_type %q", req.ChannelType, challenge.ChannelType)
 	}
 }
 
 // handleCaptchaVerify 处理 captcha 验证（前置条件验证）
-func (s *Service) handleCaptchaVerify(ctx context.Context, challenge *types.Challenge, req *VerifyRequest, remoteIP string) (*VerifyResponse, error) {
-	// 如果 challenge 本身就是 captcha 类型，直接验证
-	if challenge.Type == types.ChallengeTypeCaptcha {
-		return s.handleChallengeVerify(ctx, challenge, req)
-	}
-
-	// 否则必须处于 pending_captcha 状态
+func (s *Service) handleCaptchaVerify(ctx context.Context, challenge *types.Challenge, req *VerifyRequest, remoteIP string) (*VerifyResult, error) {
+	// 必须处于 pending_captcha 状态
 	pending, _ := challenge.GetData(types.ChallengeDataPendingCaptcha)
 	if pending != true {
 		return nil, autherrors.NewInvalidRequest("challenge does not require captcha verification")
@@ -249,16 +276,16 @@ func (s *Service) handleCaptchaVerify(ctx context.Context, challenge *types.Chal
 		return nil, autherrors.NewServerErrorf("save challenge: %v", err)
 	}
 
-	return &VerifyResponse{
+	return &VerifyResult{
 		ChallengeID: challenge.ID,
 		Data: map[string]any{
-			types.ChallengeDataNext: string(challenge.Type),
+			types.ChallengeDataNext: string(challenge.ChannelType),
 		},
 	}, nil
 }
 
 // handleChallengeVerify 处理实际的 challenge 验证
-func (s *Service) handleChallengeVerify(ctx context.Context, challenge *types.Challenge, req *VerifyRequest) (*VerifyResponse, error) {
+func (s *Service) handleChallengeVerify(ctx context.Context, challenge *types.Challenge, req *VerifyRequest) (*VerifyResult, error) {
 	// 如果还有 pending 前置条件未完成，不允许直接验证
 	if pending, _ := challenge.GetData(types.ChallengeDataPendingCaptcha); pending == true {
 		return nil, autherrors.NewInvalidRequest("captcha verification required before challenge verification")
@@ -269,20 +296,7 @@ func (s *Service) handleChallengeVerify(ctx context.Context, challenge *types.Ch
 		return nil, err
 	}
 
-	var verified bool
-	switch challenge.Type {
-	case types.ChallengeTypeCaptcha:
-		verifier := s.getCaptchaVerifier()
-		if verifier == nil {
-			return nil, autherrors.NewServerError("captcha verifier not configured")
-		}
-		// captcha 类型没有 remoteIP（已在 handler 层传入）—— 这里走 provider 验证
-		// 注意：纯 captcha challenge 的 remoteIP 通过 handleCaptchaVerify 处理
-		verified, err = verifier.Verify(ctx, proof, "")
-	default:
-		verified, err = s.verifyWithProvider(ctx, challenge, proof)
-	}
-
+	verified, err := s.verifyWithProvider(ctx, challenge, proof)
 	if err != nil {
 		return nil, err
 	}
@@ -293,24 +307,27 @@ func (s *Service) handleChallengeVerify(ctx context.Context, challenge *types.Ch
 		}
 	}
 
-	return &VerifyResponse{Verified: verified}, nil
+	return &VerifyResult{
+		Verified:  verified,
+		Challenge: challenge,
+	}, nil
 }
 
 // verifyWithProvider 委托给注册的 mfa.Provider 执行验证
 func (s *Service) verifyWithProvider(ctx context.Context, challenge *types.Challenge, proof string) (bool, error) {
-	p := s.getMFAProvider(string(challenge.Type))
+	p := s.getMFAProvider(string(challenge.ChannelType))
 	if p == nil {
-		return false, autherrors.NewInvalidRequestf("unsupported challenge type: %s", challenge.Type)
+		return false, autherrors.NewInvalidRequestf("unsupported channel type: %s", challenge.ChannelType)
 	}
 
-	switch challenge.Type {
-	case types.ChallengeTypeTOTP:
-		userID := challenge.GetStringData(types.ChallengeDataUserID)
+	switch challenge.ChannelType {
+	case types.ChannelTypeTOTP:
+		userID := challenge.Channel
 		if userID == "" {
-			return false, autherrors.NewInvalidRequest("user_id not found in challenge")
+			return false, autherrors.NewInvalidRequest("channel (user_id) not found in challenge")
 		}
 		return p.Verify(ctx, proof, userID)
-	case types.ChallengeTypeEmailOTP:
+	case types.ChannelTypeEmailOTP:
 		return p.Verify(ctx, proof, challenge.ID)
 	default:
 		return p.Verify(ctx, proof)
@@ -319,9 +336,9 @@ func (s *Service) verifyWithProvider(ctx context.Context, challenge *types.Chall
 
 // sendOTP 委托 Provider 发送验证码
 func (s *Service) sendOTP(ctx context.Context, challenge *types.Challenge) error {
-	p := s.getMFAProvider(string(challenge.Type))
+	p := s.getMFAProvider(string(challenge.ChannelType))
 	if p == nil {
-		return autherrors.NewInvalidRequestf("no provider for challenge type: %s", challenge.Type)
+		return autherrors.NewInvalidRequestf("no provider for channel type: %s", challenge.ChannelType)
 	}
 
 	sender, ok := p.(otpSender)
@@ -329,9 +346,9 @@ func (s *Service) sendOTP(ctx context.Context, challenge *types.Challenge) error
 		return nil // 该类型不需要发送操作
 	}
 
-	email := challenge.GetStringData(types.ChallengeDataEmail)
+	email := challenge.Channel
 	if email == "" {
-		return autherrors.NewInvalidRequest("email not found in challenge")
+		return autherrors.NewInvalidRequest("channel (email) not found in challenge")
 	}
 
 	return sender.SendOTP(ctx, email, challenge.ID)

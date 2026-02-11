@@ -236,7 +236,7 @@ default:
 |---------------|------------------------|----------------------------|----------------|
 | pending_captcha | 验证 captcha → 触发副作用 | 拒绝（前置未完成） | 拒绝 |
 | 正常 (captcha type) | 验证 captcha challenge | N/A (相同) | 拒绝 |
-| 正常 (MFA type) | 拒绝（无需 captcha） | 验证 MFA proof | 拒绝 |
+| 正常 (Delegated type) | 拒绝（无需 captcha） | 验证 MFA proof | 拒绝 |
 
 ---
 
@@ -264,8 +264,8 @@ Challenge 验证通过后签发 ChallengeToken（PASETO v4），可作为 Login 
 | 系统概念 | 认证因子角色 | 说明 |
 |---------|------------|------|
 | IDP（github/google/user） | 第一因子 | 证明"你是谁" |
-| captcha（VChan） | **不是认证因子** | 人机验证，防自动化攻击 |
-| email_otp / totp / webauthn（MFA） | 可作为第二因子或独立因子 | 取决于配置方式 |
+| captcha（Required） | **不是认证因子** | 人机验证，防自动化攻击 |
+| email_otp / totp / webauthn（Delegated） | 可作为第二因子或独立因子 | 取决于配置方式 |
 
 ### 7.3 Delegate 语义
 

@@ -211,58 +211,47 @@ func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, params
 }
 
 // GetAvailableConnections 获取可用的 ConnectionsMap
-// 组装三部分数据：
-// 1. IDP - 身份提供商（github, google, user, oper, wechat-mp...）
-// 2. VChan - 验证渠道/前置验证（captcha...）
-// 3. MFA - 多因素认证（email_otp, totp, webauthn...），从 IDP 的 delegate 配置中派生
+// 按关系角色组装三部分数据：
+// 1. IDP - 身份提供商，登录入口（github, google, user, oper, wechat-mp...）
+// 2. Required - 被 IDP 的 Require 引用的前置条件的配置（captcha...）
+// 3. Delegated - 被 IDP 的 Delegate 引用的替代路径的配置（email_otp, totp, webauthn...）
 func (s *Service) GetAvailableConnections(flow *types.AuthFlow) *types.ConnectionsMap {
 	if flow.ConnectionMap == nil {
 		return nil
 	}
 
 	result := &types.ConnectionsMap{
-		IDP:   make([]*types.ConnectionConfig, 0),
-		VChan: make([]*types.ConnectionConfig, 0),
-		MFA:   make([]*types.ConnectionConfig, 0),
+		IDP:       make([]*types.ConnectionConfig, 0),
+		Required:  make([]*types.ConnectionConfig, 0),
+		Delegated: make([]*types.ConnectionConfig, 0),
 	}
 
-	// 收集引用的 MFA 和 VChan（去重）
-	mfaSet := make(map[string]bool)
-	vchanSet := make(map[string]bool)
+	// 收集被引用的 connection（去重）
+	requiredSet := make(map[string]bool)
+	delegatedSet := make(map[string]bool)
 
-	// 添加 IDP connections，同时收集 delegate 和 require
+	// 添加 IDP connections，同时收集 delegate 和 require 引用
 	for _, cfg := range flow.ConnectionMap {
 		result.IDP = append(result.IDP, cfg)
 
-		for _, m := range cfg.Delegate {
-			mfaSet[m] = true
+		for _, d := range cfg.Delegate {
+			delegatedSet[d] = true
 		}
-		for _, req := range cfg.Require {
-			vchanSet[req] = true
+		for _, r := range cfg.Require {
+			requiredSet[r] = true
 		}
 	}
 
-	result.VChan = resolveVChanConfigs(vchanSet)
-	result.MFA = resolveMFAConfigs(mfaSet)
+	result.Required = resolveConnectionConfigs(requiredSet)
+	result.Delegated = resolveConnectionConfigs(delegatedSet)
 
 	return result
 }
 
-// resolveVChanConfigs 从注册表解析 VChan 认证器配置
-func resolveVChanConfigs(vchanSet map[string]bool) []*types.ConnectionConfig {
+// resolveConnectionConfigs 从注册表解析被引用的 connection 配置
+func resolveConnectionConfigs(connSet map[string]bool) []*types.ConnectionConfig {
 	var configs []*types.ConnectionConfig
-	for conn := range vchanSet {
-		if auth, ok := authenticator.GlobalRegistry().Get(conn); ok {
-			configs = append(configs, auth.Prepare())
-		}
-	}
-	return configs
-}
-
-// resolveMFAConfigs 从注册表解析 MFA 认证器配置
-func resolveMFAConfigs(mfaSet map[string]bool) []*types.ConnectionConfig {
-	var configs []*types.ConnectionConfig
-	for conn := range mfaSet {
+	for conn := range connSet {
 		if auth, ok := authenticator.GlobalRegistry().Get(conn); ok {
 			configs = append(configs, auth.Prepare())
 		}

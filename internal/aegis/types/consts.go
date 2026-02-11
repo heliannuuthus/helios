@@ -21,9 +21,7 @@ const (
 // Challenge.Data map 中使用的 key
 
 const (
-	ChallengeDataEmail          = "email"           // 邮箱地址
 	ChallengeDataMaskedEmail    = "masked_email"    // 脱敏邮箱
-	ChallengeDataUserID         = "user_id"         // 用户 ID（TOTP）
 	ChallengeDataSiteKey        = "site_key"        // Captcha 站点密钥
 	ChallengeDataPendingCaptcha = "pending_captcha" // 是否需要 captcha 前置验证
 	ChallengeDataNext           = "next"            // 下一步操作类型

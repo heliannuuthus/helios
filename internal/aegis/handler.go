@@ -175,7 +175,7 @@ func (h *Handler) GetContext(c *gin.Context) {
 }
 
 // GetConnections GET /auth/connections
-// 获取可用的 Connection 配置（按类别分类：idp, vchan, mfa）
+// 获取可用的 Connection 配置（按关系角色分类：idp, required, delegated）
 func (h *Handler) GetConnections(c *gin.Context) {
 	// 从 Cookie 获取 flowID
 	flowID, err := getAuthSessionCookie(c)
@@ -231,14 +231,13 @@ func (h *Handler) InitiateChallenge(c *gin.Context) {
 }
 
 // ContinueChallenge PUT /auth/challenge
-// 继续 Challenge（提交验证）
+// 继续 Challenge（提交验证），验证成功后由 handler 签发 ChallengeToken
 func (h *Handler) ContinueChallenge(c *gin.Context) {
 	if h.challengeSvc == nil {
 		h.errorResponse(c, autherrors.NewServerError("challenge service not configured"))
 		return
 	}
 
-	// 从 query 获取 challenge_id
 	challengeID := c.Query(QueryChallengeID)
 	if challengeID == "" {
 		h.errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required"))
@@ -251,16 +250,50 @@ func (h *Handler) ContinueChallenge(c *gin.Context) {
 		return
 	}
 
-	// 获取客户端 IP
+	ctx := c.Request.Context()
 	remoteIP := c.ClientIP()
 
-	resp, err := h.challengeSvc.Verify(c.Request.Context(), challengeID, &req, remoteIP)
+	result, err := h.challengeSvc.Verify(ctx, challengeID, &req, remoteIP)
 	if err != nil {
-		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		h.errorResponse(c, err)
 		return
 	}
 
+	resp := &challenge.VerifyResponse{
+		Verified:    result.Verified,
+		ChallengeID: result.ChallengeID,
+		Data:        result.Data,
+	}
+
+	// 验证成功 -> 由 handler 签发 ChallengeToken
+	if result.Verified && result.Challenge != nil {
+		tokenStr, err := h.issueChallengeToken(ctx, result.Challenge)
+		if err != nil {
+			logger.Errorf("[Handler] issue ChallengeToken failed: %v", err)
+			h.errorResponse(c, autherrors.NewServerErrorf("issue challenge token: %v", err))
+			return
+		}
+		resp.ChallengeToken = tokenStr
+	}
+
 	c.JSON(http.StatusOK, resp)
+}
+
+// issueChallengeToken 根据验证完成的 Challenge 构建并签发 ChallengeToken
+func (h *Handler) issueChallengeToken(ctx context.Context, ch *types.Challenge) (string, error) {
+	ctBuilder := token.NewChallengeTokenBuilder().
+		Subject(ch.Channel).
+		Type(ch.ChannelType).
+		BizType(ch.Type)
+
+	t := token.NewClaimsBuilder().
+		Issuer(h.tokenSvc.GetIssuerName()).
+		ClientID(ch.ClientID).
+		Audience(ch.Audience).
+		ExpiresIn(challenge.DefaultChallengeTokenTTL).
+		Build(ctBuilder)
+
+	return h.tokenSvc.Issue(ctx, t)
 }
 
 // ==================== 4. 登录 ====================

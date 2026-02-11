@@ -138,8 +138,8 @@ func (s *Service) BeginRegistration(ctx context.Context, user *models.UserWithDe
 		return nil, fmt.Errorf("begin registration failed: %w", err)
 	}
 
-	// 创建 Challenge 并保存会话数据
-	challenge := types.NewChallenge(types.ChallengeTypeWebAuthn, DefaultWebAuthnSessionTTL)
+	// 创建 Challenge 并保存会话数据（WebAuthn 内部会话，不携带 client/audience）
+	challenge := types.NewChallenge("", "", "", types.ChannelTypeWebAuthn, "", DefaultWebAuthnSessionTTL)
 
 	// 保存会话数据到 Challenge
 	// session.Challenge 已经是 Base64URL 编码的字符串
@@ -271,8 +271,8 @@ func (s *Service) BeginLogin(ctx context.Context, user *models.UserWithDecrypted
 		return nil, fmt.Errorf("begin login failed: %w", err)
 	}
 
-	// 创建 Challenge 并保存会话数据
-	challenge := types.NewChallenge(types.ChallengeTypeWebAuthn, DefaultWebAuthnSessionTTL)
+	// 创建 Challenge 并保存会话数据（WebAuthn 内部会话，不携带 client/audience）
+	challenge := types.NewChallenge("", "", "", types.ChannelTypeWebAuthn, "", DefaultWebAuthnSessionTTL)
 
 	// 保存会话数据
 	sessionData := &SessionData{
@@ -311,8 +311,8 @@ func (s *Service) BeginDiscoverableLogin(ctx context.Context) (*LoginBeginRespon
 		return nil, fmt.Errorf("begin discoverable login failed: %w", err)
 	}
 
-	// 创建 Challenge
-	challenge := types.NewChallenge(types.ChallengeTypeWebAuthn, DefaultWebAuthnSessionTTL)
+	// 创建 Challenge（WebAuthn 内部会话，不携带 client/audience）
+	challenge := types.NewChallenge("", "", "", types.ChannelTypeWebAuthn, "", DefaultWebAuthnSessionTTL)
 
 	// 保存会话数据
 	sessionData := &SessionData{
