@@ -19,7 +19,7 @@ type VChanAuthenticator struct {
 func NewVChanAuthenticator(verifier captcha.Verifier) *VChanAuthenticator {
 	return &VChanAuthenticator{
 		verifier:   verifier,
-		connection: "captcha",
+		connection: types.ConnCaptcha,
 	}
 }
 
@@ -28,13 +28,24 @@ func (a *VChanAuthenticator) Type() string {
 	return a.connection
 }
 
-// Prepare 返回前端公开配置
+// ConnectionType 返回连接类型
+func (a *VChanAuthenticator) ConnectionType() types.ConnectionType {
+	return types.ConnTypeVChan
+}
+
+// Prepare 返回完整配置（含 Type）
 func (a *VChanAuthenticator) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
+		Type:       types.ConnTypeVChan,
 		Connection: a.connection,
 		Identifier: a.verifier.GetIdentifier(),
 		Strategy:   []string{a.verifier.GetProvider()}, // e.g. ["turnstile"]
 	}
+}
+
+// Verifier 返回底层 captcha.Verifier
+func (a *VChanAuthenticator) Verifier() captcha.Verifier {
+	return a.verifier
 }
 
 // Authenticate 执行人机验证

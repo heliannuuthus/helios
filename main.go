@@ -11,7 +11,7 @@ import (
 	"github.com/heliannuuthus/helios/internal/config"
 	"github.com/heliannuuthus/helios/internal/middleware"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/pkg/oss"
+	"github.com/heliannuuthus/helios/pkg/r2"
 )
 
 // @title Helios API
@@ -38,32 +38,17 @@ func main() {
 	})
 	defer logger.Sync()
 
-	// 初始化 OSS（如果配置了）
-	if config.GetOSSEndpoint() != "" {
-		ossCfg := oss.Config{
-			Endpoint:        config.GetOSSEndpoint(),
-			AccessKeyID:     config.GetOSSAccessKeyID(),
-			AccessKeySecret: config.GetOSSAccessKeySecret(),
-			Bucket:          config.GetOSSBucket(),
-			Domain:          config.GetOSSDomain(),
-			Region:          config.GetOSSRegion(),
-			RoleARN:         config.GetOSSRoleARN(),
-			UseInternal:     config.GetEnv() == "prod",
+	// 初始化 R2（如果配置了）
+	if config.GetR2AccountID() != "" {
+		r2Cfg := r2.Config{
+			AccountID:       config.GetR2AccountID(),
+			AccessKeyID:     config.GetR2AccessKeyID(),
+			AccessKeySecret: config.GetR2AccessKeySecret(),
+			Bucket:          config.GetR2Bucket(),
+			Domain:          config.GetR2Domain(),
 		}
-		if err := oss.Init(ossCfg); err != nil {
-			logger.Warnf("OSS 初始化失败（将跳过图片上传功能）: %v", err)
-		} else {
-			// 初始化 STS（如果配置了）
-			if config.GetOSSRoleARN() != "" {
-				if err := oss.InitSTS(oss.STSConfig{
-					AccessKeyID:     config.GetOSSAccessKeyID(),
-					AccessKeySecret: config.GetOSSAccessKeySecret(),
-					Region:          config.GetOSSRegion(),
-					Endpoint:        config.GetOSSEndpoint(),
-				}); err != nil {
-					logger.Warnf("OSS STS 初始化失败（将使用主账号凭证）: %v", err)
-				}
-			}
+		if err := r2.Init(r2Cfg); err != nil {
+			logger.Warnf("R2 初始化失败（将跳过图片上传功能）: %v", err)
 		}
 	}
 
@@ -103,12 +88,12 @@ func main() {
 	{
 		// Aegis UI 调用的接口（需要 CORS）
 		aegisCORS := middleware.CORSWithConfig(config.Aegis(), app.AegisHandler.CacheManager())
-		authGroup.POST("/authorize", aegisCORS, app.AegisHandler.Authorize)         // 创建认证会话并重定向到登录页面
-		authGroup.GET("/connections", aegisCORS, app.AegisHandler.GetConnections)   // 获取可用的 Connection 配置
-		authGroup.GET("/context", aegisCORS, app.AegisHandler.GetContext)           // 获取当前流程的应用和服务信息
-		authGroup.POST("/login", aegisCORS, app.AegisHandler.Login)                 // IDP 登录
-		authGroup.POST("/challenge", aegisCORS, app.AegisHandler.InitiateChallenge) // 发起 Challenge
-		authGroup.PUT("/challenge", aegisCORS, app.AegisHandler.ContinueChallenge)  // 继续 Challenge
+		authGroup.POST("/authorize", aegisCORS, app.AegisHandler.Authorize)              // 创建认证会话并重定向到登录页面
+		authGroup.GET("/connections", aegisCORS, app.AegisHandler.GetConnections)        // 获取可用的 Connection 配置
+		authGroup.GET("/context", aegisCORS, app.AegisHandler.GetContext)                // 获取当前流程的应用和服务信息
+		authGroup.POST("/login", aegisCORS, app.AegisHandler.Login)                      // IDP 登录
+		authGroup.POST("/challenge", aegisCORS, app.AegisHandler.InitiateChallenge)      // 发起 Challenge
+		authGroup.POST("/challenge/:cid", aegisCORS, app.AegisHandler.ContinueChallenge) // 验证 Challenge
 
 		// 业务前端/后端调用的接口（不需要 Aegis UI 的 CORS）
 		authGroup.POST("/token", app.AegisHandler.Token)   // 获取/刷新 Token

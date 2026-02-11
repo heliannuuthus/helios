@@ -251,7 +251,7 @@ func (*Provider) FetchAdditionalInfo(ctx context.Context, infoType string, param
 // Prepare 准备前端所需的公开配置
 func (p *Provider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		Connection: "github",
+		Connection: idp.TypeGithub,
 		Identifier: p.clientID,
 	}
 }

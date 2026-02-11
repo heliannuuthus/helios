@@ -12,15 +12,15 @@ import (
 // CacheUser 将用户写入本地缓存
 func (cm *Manager) CacheUser(user *models.UserWithDecrypted) {
 	if cm.userCache != nil && user != nil {
-		cacheKey := config.GetAegisCacheKeyPrefix("user") + user.UID
+		cacheKey := config.GetAegisCacheKeyPrefix("user") + user.OpenID
 		ttl := config.GetAegisCacheTTL("user")
 		cm.userCache.SetWithTTL(cacheKey, user, 1, ttl)
 	}
 }
 
 // GetUser 获取用户（带缓存）
-func (cm *Manager) GetUser(ctx context.Context, uid string) (*models.UserWithDecrypted, error) {
-	cacheKey := config.GetAegisCacheKeyPrefix("user") + uid
+func (cm *Manager) GetUser(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
+	cacheKey := config.GetAegisCacheKeyPrefix("user") + openid
 
 	// 尝试从缓存获取
 	if cm.userCache != nil {
@@ -30,7 +30,7 @@ func (cm *Manager) GetUser(ctx context.Context, uid string) (*models.UserWithDec
 	}
 
 	// 从 UserService 获取
-	result, err := cm.userSvc.GetUserWithDecrypted(ctx, uid)
+	result, err := cm.userSvc.GetUserWithDecrypted(ctx, openid)
 	if err != nil {
 		return nil, err
 	}
@@ -51,9 +51,9 @@ func (cm *Manager) GetUserByIdentity(ctx context.Context, identity *models.UserI
 }
 
 // InvalidateUser 清除用户缓存
-func (cm *Manager) InvalidateUser(ctx context.Context, uid string) {
+func (cm *Manager) InvalidateUser(ctx context.Context, openid string) {
 	if cm.userCache != nil {
-		cacheKey := config.GetAegisCacheKeyPrefix("user") + uid
+		cacheKey := config.GetAegisCacheKeyPrefix("user") + openid
 		cm.userCache.Del(cacheKey)
 	}
 }
@@ -61,9 +61,9 @@ func (cm *Manager) InvalidateUser(ctx context.Context, uid string) {
 // ==================== WebAuthn 凭证管理 ====================
 
 // GetUserWebAuthnCredentials 获取用户的 WebAuthn 凭证列表
-func (cm *Manager) GetUserWebAuthnCredentials(ctx context.Context, uid string) ([]*StoredWebAuthnCredential, error) {
+func (cm *Manager) GetUserWebAuthnCredentials(ctx context.Context, openid string) ([]*StoredWebAuthnCredential, error) {
 	// 从数据库获取用户的 WebAuthn 类型凭证
-	credentials, err := cm.userSvc.GetEnabledUserCredentialsByType(ctx, uid, string(models.CredentialTypeWebAuthn))
+	credentials, err := cm.userSvc.GetEnabledUserCredentialsByType(ctx, openid, string(models.CredentialTypeWebAuthn))
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +82,7 @@ func (cm *Manager) GetUserWebAuthnCredentials(ctx context.Context, uid string) (
 }
 
 // SaveUserWebAuthnCredential 保存用户的 WebAuthn 凭证
-func (cm *Manager) SaveUserWebAuthnCredential(ctx context.Context, uid string, cred *StoredWebAuthnCredential) error {
+func (cm *Manager) SaveUserWebAuthnCredential(ctx context.Context, openid string, cred *StoredWebAuthnCredential) error {
 	// 序列化凭证数据
 	secretJSON, err := SerializeWebAuthnCredential(cred)
 	if err != nil {
@@ -92,7 +92,7 @@ func (cm *Manager) SaveUserWebAuthnCredential(ctx context.Context, uid string, c
 	// 创建数据库凭证记录
 	credentialID := EncodeCredentialID(cred.ID)
 	dbCred := &models.UserCredential{
-		UID:          uid,
+		OpenID:       openid,
 		CredentialID: &credentialID,
 		Type:         string(models.CredentialTypeWebAuthn),
 		Secret:       secretJSON,
@@ -108,11 +108,11 @@ func (cm *Manager) UpdateWebAuthnCredentialSignCount(ctx context.Context, creden
 }
 
 // DeleteUserWebAuthnCredential 删除用户的 WebAuthn 凭证
-func (cm *Manager) DeleteUserWebAuthnCredential(ctx context.Context, uid, credentialID string) error {
-	return cm.userSvc.DeleteCredential(ctx, uid, credentialID)
+func (cm *Manager) DeleteUserWebAuthnCredential(ctx context.Context, openid, credentialID string) error {
+	return cm.userSvc.DeleteCredential(ctx, openid, credentialID)
 }
 
-// GetUserIDByCredentialID 根据凭证 ID 获取用户 UID
-func (cm *Manager) GetUserIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
-	return cm.userSvc.GetUserIDByCredentialID(ctx, credentialID)
+// GetOpenIDByCredentialID 根据凭证 ID 获取用户 OpenID
+func (cm *Manager) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
+	return cm.userSvc.GetOpenIDByCredentialID(ctx, credentialID)
 }

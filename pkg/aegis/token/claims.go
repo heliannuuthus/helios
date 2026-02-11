@@ -116,7 +116,7 @@ func ParseClaims(pasetoToken *paseto.Token) (Claims, error) {
 
 	// clientID 是自定义字段，可能不存在，忽略错误
 	var clientID string
-	if err := pasetoToken.Get("cli", &clientID); err != nil {
+	if err := pasetoToken.Get(ClaimCli, &clientID); err != nil {
 		clientID = "" // 显式设置为空字符串
 	}
 
@@ -148,7 +148,7 @@ func (c *Claims) SetStandardClaims(token *paseto.Token) error {
 	token.SetJti(c.JTI)
 
 	if c.ClientID != "" {
-		if err := token.Set("cli", c.ClientID); err != nil {
+		if err := token.Set(ClaimCli, c.ClientID); err != nil {
 			return fmt.Errorf("set cli: %w", err)
 		}
 	}

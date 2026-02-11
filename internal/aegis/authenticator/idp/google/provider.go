@@ -189,7 +189,7 @@ func (*Provider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...an
 // Prepare 准备前端所需的公开配置
 func (p *Provider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		Connection: "google",
+		Connection: idp.TypeGoogle,
 		Identifier: p.clientID,
 	}
 }

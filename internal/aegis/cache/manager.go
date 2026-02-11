@@ -19,7 +19,6 @@ var (
 	ErrAuthFlowExpired      = errors.New("auth flow expired")
 	ErrAuthCodeNotFound     = errors.New("authorization code not found")
 	ErrAuthCodeExpired      = errors.New("authorization code expired")
-	ErrAuthCodeUsed         = errors.New("authorization code already used")
 	ErrRefreshTokenNotFound = errors.New("refresh token not found")
 	ErrRefreshTokenExpired  = errors.New("refresh token expired")
 	ErrRefreshTokenRevoked  = errors.New("refresh token revoked")

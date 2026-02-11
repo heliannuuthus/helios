@@ -12,18 +12,10 @@ type Token = token.Token
 // AsUAT 类型断言助手函数（类型别名）
 var AsUAT = token.AsUAT
 
-// GetOpenIDFromToken 从 Token 获取用户对外标识（主身份 t_openid）
+// GetOpenIDFromToken 从 Token 获取用户标识（t_user.openid）
 func GetOpenIDFromToken(t Token) string {
 	if uat, ok := AsUAT(t); ok && uat.HasUser() {
 		return uat.GetOpenID()
-	}
-	return ""
-}
-
-// GetInternalUIDFromToken 从 Token 获取用户内部 ID（t_user.openid，用于内部查询）
-func GetInternalUIDFromToken(t Token) string {
-	if uat, ok := AsUAT(t); ok && uat.HasUser() {
-		return uat.GetInternalUID()
 	}
 	return ""
 }
@@ -46,8 +38,7 @@ type LoginRequest struct {
 
 // LoginResponse 登录响应
 type LoginResponse struct {
-	Code        string `json:"code,omitempty"`         // 授权码
-	RedirectURI string `json:"redirect_uri,omitempty"` // 重定向 URI
+	Location string `json:"location"` // 重定向地址（携带 code 和 state）
 }
 
 // RevokeRequest 撤销请求

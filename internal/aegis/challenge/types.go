@@ -5,33 +5,51 @@ import (
 	"github.com/heliannuuthus/helios/internal/aegis/types"
 )
 
-// CreateRequest 创建 Challenge 请求
+// CaptchaConfig 是 types.CaptchaConfig 的别名
+type CaptchaConfig = types.CaptchaConfig
+
+// ChallengeRequired 是 types.CaptchaRequired 的别名
+// Verified 是内部状态（序列化到 Redis），不暴露给客户端（通过 ForClient 隐藏）
+type ChallengeRequired = types.CaptchaRequired
+
+// ==================== Create ====================
+
+// CreateRequest 创建 Challenge 请求（三层模型：type / channel_type / channel）
 type CreateRequest struct {
-	Type         types.ChallengeType `json:"type" binding:"required,oneof=captcha email-otp totp sms-otp tg-otp"`
-	UserID       string              `json:"user_id,omitempty"`       // TOTP 类型时必填（用于查找 TOTP secret）
-	Email        string              `json:"email,omitempty"`         // email-otp 类型时必填
-	Phone        string              `json:"phone,omitempty"`         // sms-otp 类型时必填
-	CaptchaToken string              `json:"captcha_token,omitempty"` // captcha 前置验证 token（正常用户静默获取）
+	ClientID    string `json:"client_id" binding:"required"`                                                      // 应用 ID
+	Audience    string `json:"audience" binding:"required"`                                                       // 目标服务 ID
+	Type        string `json:"type,omitempty"`                                                                    // 业务场景（验证类必填，交换类忽略）
+	ChannelType string `json:"channel_type" binding:"required,oneof=email_otp totp webauthn wechat-mp alipay-mp"` // 验证方式
+	Channel     string `json:"channel" binding:"required"`                                                        // 验证目标（邮箱 / 手机号 / user_id / wx_code ...）
 }
 
 // CreateResponse 创建 Challenge 响应
 type CreateResponse struct {
 	ChallengeID string             `json:"challenge_id"`
-	Type        string             `json:"type,omitempty"`       // 有 required 时不返回
-	ExpiresIn   int                `json:"expires_in,omitempty"` // 有 required 时不返回
-	Data        map[string]any     `json:"data,omitempty"`
-	Required    *types.VChanConfig `json:"required,omitempty"` // 需要先完成的前置验证（复用 VChanConfig）
+	Required    *ChallengeRequired `json:"required,omitempty"`    // 前置条件
+	RetryAfter  int                `json:"retry_after,omitempty"` // 限流，下次可发起的秒数
 }
 
-// VerifyRequest 验证 Challenge 请求（challenge_id 从 query 获取）
+// ==================== Verify ====================
+
+// VerifyRequest 验证 Challenge 请求（challenge_id 从 path 获取）
 type VerifyRequest struct {
-	Proof any `json:"proof" binding:"required"` // 验证证明（string: captcha token / OTP code, object: WebAuthn assertion）
+	Type  string `json:"type,omitempty"`           // captcha provider 类型（如 "turnstile"），仅 captcha 验证时传
+	Proof any    `json:"proof" binding:"required"` // 验证证明
 }
 
-// VerifyResponse 验证 Challenge 响应
+// VerifyResult service 层返回的验证结果（不含 Token，Token 由 handler 签发）
+type VerifyResult struct {
+	Verified   bool               // 是否验证成功
+	Challenge  *types.Challenge   // 验证成功时返回 Challenge 信息（供 handler 签发 Token）
+	Required   *ChallengeRequired // 前置未完成时返回（引导前端渲染）
+	RetryAfter int                // 限流，下次可发起的秒数
+}
+
+// VerifyResponse handler 层返回给前端的 HTTP 响应
 type VerifyResponse struct {
-	Verified       bool           `json:"verified"`
-	ChallengeID    string         `json:"challenge_id,omitempty"`    // 后续 challenge ID（captcha 验证后创建的 email challenge）
-	ChallengeToken string         `json:"challenge_token,omitempty"` // 验证成功后的凭证（用于 Login 的 proof）
-	Data           map[string]any `json:"data,omitempty"`            // 附加数据
+	Verified       bool               `json:"verified"`
+	ChallengeToken string             `json:"challenge_token,omitempty"` // 验证成功后的凭证（handler 签发）
+	Required       *ChallengeRequired `json:"required,omitempty"`        // 前置未完成时引导渲染
+	RetryAfter     int                `json:"retry_after,omitempty"`     // 限流
 }

@@ -34,7 +34,7 @@ func NewCredentialService(db *gorm.DB) *CredentialService {
 
 // TOTPSetupRequest TOTP 设置请求
 type TOTPSetupRequest struct {
-	UID     string // 用户 ID
+	OpenID  string // 用户标识
 	AppName string // 应用名称（显示在 Authenticator App 中）
 }
 
@@ -50,7 +50,7 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *TOTPSetupRequest
 	// 检查用户是否已有启用的 TOTP
 	var existing models.UserCredential
 	err := s.db.WithContext(ctx).
-		Where("uid = ? AND type = ? AND enabled = ?", req.UID, models.CredentialTypeTOTP, true).
+		Where("openid = ? AND type = ? AND enabled = ?", req.OpenID, models.CredentialTypeTOTP, true).
 		First(&existing).Error
 	if err == nil {
 		return nil, errors.New("用户已绑定 TOTP")
@@ -71,7 +71,7 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *TOTPSetupRequest
 	if issuer == "" {
 		issuer = "Helios"
 	}
-	account := req.UID
+	account := req.OpenID
 
 	otpauthURI := fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30",
 		url.PathEscape(issuer),
@@ -92,14 +92,14 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *TOTPSetupRequest
 		return nil, fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	encryptedSecret, err := cryptoutil.Encrypt(encKey, string(secretJSON), req.UID)
+	encryptedSecret, err := cryptoutil.Encrypt(encKey, string(secretJSON), req.OpenID)
 	if err != nil {
 		return nil, fmt.Errorf("加密密钥失败: %w", err)
 	}
 
 	// 保存凭证（enabled = false，等待验证确认）
 	credential := &models.UserCredential{
-		UID:     req.UID,
+		OpenID:  req.OpenID,
 		Type:    string(models.CredentialTypeTOTP),
 		Enabled: false,
 		Secret:  encryptedSecret,
@@ -118,7 +118,7 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *TOTPSetupRequest
 
 // ConfirmTOTPRequest TOTP 确认请求
 type ConfirmTOTPRequest struct {
-	UID          string // 用户 ID
+	OpenID       string // 用户标识
 	CredentialID uint   // 凭证 ID
 	Code         string // 验证码
 }
@@ -128,7 +128,7 @@ func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *ConfirmTOTPReq
 	// 获取凭证
 	var credential models.UserCredential
 	err := s.db.WithContext(ctx).
-		Where("_id = ? AND uid = ? AND type = ? AND enabled = ?", req.CredentialID, req.UID, models.CredentialTypeTOTP, false).
+		Where("_id = ? AND openid = ? AND type = ? AND enabled = ?", req.CredentialID, req.OpenID, models.CredentialTypeTOTP, false).
 		First(&credential).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -143,7 +143,7 @@ func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *ConfirmTOTPReq
 		return fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	secretJSON, err := cryptoutil.Decrypt(encKey, credential.Secret, req.UID)
+	secretJSON, err := cryptoutil.Decrypt(encKey, credential.Secret, req.OpenID)
 	if err != nil {
 		return fmt.Errorf("解密密钥失败: %w", err)
 	}
@@ -167,14 +167,14 @@ func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *ConfirmTOTPReq
 		return fmt.Errorf("启用凭证失败: %w", err)
 	}
 
-	logger.Infof("[Credential] TOTP 绑定成功 - UID: %s", req.UID)
+	logger.Infof("[Credential] TOTP 绑定成功 - OpenID: %s", req.OpenID)
 	return nil
 }
 
 // VerifyTOTPRequest TOTP 验证请求
 type VerifyTOTPRequest struct {
-	UID  string // 用户 ID
-	Code string // 验证码
+	OpenID string // 用户标识
+	Code   string // 验证码
 }
 
 // VerifyTOTP 验证 TOTP
@@ -182,7 +182,7 @@ func (s *CredentialService) VerifyTOTP(ctx context.Context, req *VerifyTOTPReque
 	// 获取启用的 TOTP 凭证
 	var credential models.UserCredential
 	err := s.db.WithContext(ctx).
-		Where("uid = ? AND type = ? AND enabled = ?", req.UID, models.CredentialTypeTOTP, true).
+		Where("openid = ? AND type = ? AND enabled = ?", req.OpenID, models.CredentialTypeTOTP, true).
 		First(&credential).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -197,7 +197,7 @@ func (s *CredentialService) VerifyTOTP(ctx context.Context, req *VerifyTOTPReque
 		return fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	secretJSON, err := cryptoutil.Decrypt(encKey, credential.Secret, req.UID)
+	secretJSON, err := cryptoutil.Decrypt(encKey, credential.Secret, req.OpenID)
 	if err != nil {
 		return fmt.Errorf("解密密钥失败: %w", err)
 	}
@@ -222,9 +222,9 @@ func (s *CredentialService) VerifyTOTP(ctx context.Context, req *VerifyTOTPReque
 }
 
 // DisableTOTP 禁用 TOTP
-func (s *CredentialService) DisableTOTP(ctx context.Context, uid string) error {
+func (s *CredentialService) DisableTOTP(ctx context.Context, openid string) error {
 	result := s.db.WithContext(ctx).
-		Where("uid = ? AND type = ?", uid, models.CredentialTypeTOTP).
+		Where("openid = ? AND type = ?", openid, models.CredentialTypeTOTP).
 		Delete(&models.UserCredential{})
 	if result.Error != nil {
 		return fmt.Errorf("删除凭证失败: %w", result.Error)
@@ -232,15 +232,15 @@ func (s *CredentialService) DisableTOTP(ctx context.Context, uid string) error {
 	if result.RowsAffected == 0 {
 		return errors.New("用户未绑定 TOTP")
 	}
-	logger.Infof("[Credential] TOTP 已禁用 - UID: %s", uid)
+	logger.Infof("[Credential] TOTP 已禁用 - OpenID: %s", openid)
 	return nil
 }
 
 // HasTOTP 检查用户是否已绑定 TOTP
-func (s *CredentialService) HasTOTP(ctx context.Context, uid string) (bool, error) {
+func (s *CredentialService) HasTOTP(ctx context.Context, openid string) (bool, error) {
 	var count int64
 	err := s.db.WithContext(ctx).Model(&models.UserCredential{}).
-		Where("uid = ? AND type = ? AND enabled = ?", uid, models.CredentialTypeTOTP, true).
+		Where("openid = ? AND type = ? AND enabled = ?", openid, models.CredentialTypeTOTP, true).
 		Count(&count).Error
 	if err != nil {
 		return false, err
@@ -249,9 +249,9 @@ func (s *CredentialService) HasTOTP(ctx context.Context, uid string) (bool, erro
 }
 
 // SetTOTPEnabled 设置 TOTP 启用状态
-func (s *CredentialService) SetTOTPEnabled(ctx context.Context, uid string, enabled bool) error {
+func (s *CredentialService) SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error {
 	result := s.db.WithContext(ctx).Model(&models.UserCredential{}).
-		Where("uid = ? AND type = ?", uid, models.CredentialTypeTOTP).
+		Where("openid = ? AND type = ?", openid, models.CredentialTypeTOTP).
 		Update("enabled", enabled)
 	if result.Error != nil {
 		return fmt.Errorf("更新凭证失败: %w", result.Error)
@@ -259,7 +259,7 @@ func (s *CredentialService) SetTOTPEnabled(ctx context.Context, uid string, enab
 	if result.RowsAffected == 0 {
 		return errors.New("用户未绑定 TOTP")
 	}
-	logger.Infof("[Credential] TOTP 启用状态已更新 - UID: %s, Enabled: %v", uid, enabled)
+	logger.Infof("[Credential] TOTP 启用状态已更新 - OpenID: %s, Enabled: %v", openid, enabled)
 	return nil
 }
 
@@ -267,7 +267,7 @@ func (s *CredentialService) SetTOTPEnabled(ctx context.Context, uid string, enab
 
 // RegisterWebAuthnRequest WebAuthn 注册请求
 type RegisterWebAuthnRequest struct {
-	UID             string   // 用户 ID
+	OpenID          string   // 用户标识
 	CredentialID    string   // Base64 编码的凭证 ID
 	PublicKey       string   // Base64 编码的公钥
 	AAGUID          string   // 认证器 GUID
@@ -306,14 +306,14 @@ func (s *CredentialService) RegisterWebAuthn(ctx context.Context, req *RegisterW
 		return nil, fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	encryptedSecret, err := cryptoutil.Encrypt(encKey, string(secretJSON), req.UID)
+	encryptedSecret, err := cryptoutil.Encrypt(encKey, string(secretJSON), req.OpenID)
 	if err != nil {
 		return nil, fmt.Errorf("加密密钥失败: %w", err)
 	}
 
 	// 保存凭证
 	credential := &models.UserCredential{
-		UID:          req.UID,
+		OpenID:       req.OpenID,
 		CredentialID: &req.CredentialID,
 		Type:         string(models.CredentialTypeWebAuthn),
 		Enabled:      true, // WebAuthn 注册后即启用
@@ -324,7 +324,7 @@ func (s *CredentialService) RegisterWebAuthn(ctx context.Context, req *RegisterW
 		return nil, fmt.Errorf("保存凭证失败: %w", err)
 	}
 
-	logger.Infof("[Credential] WebAuthn 注册成功 - UID: %s, CredentialID: %s...", req.UID, req.CredentialID[:16])
+	logger.Infof("[Credential] WebAuthn 注册成功 - OpenID: %s, CredentialID: %s...", req.OpenID, req.CredentialID[:16])
 	return credential, nil
 }
 
@@ -347,7 +347,7 @@ func (s *CredentialService) GetWebAuthnByCredentialID(ctx context.Context, crede
 		return nil, nil, fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	secretJSON, err := cryptoutil.Decrypt(encKey, credential.Secret, credential.UID)
+	secretJSON, err := cryptoutil.Decrypt(encKey, credential.Secret, credential.OpenID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("解密密钥失败: %w", err)
 	}
@@ -384,7 +384,7 @@ func (s *CredentialService) UpdateWebAuthnSignCount(ctx context.Context, credent
 		return fmt.Errorf("获取加密密钥失败: %w", err)
 	}
 
-	encryptedSecret, err := cryptoutil.Encrypt(encKey, string(secretJSON), credential.UID)
+	encryptedSecret, err := cryptoutil.Encrypt(encKey, string(secretJSON), credential.OpenID)
 	if err != nil {
 		return fmt.Errorf("加密密钥失败: %w", err)
 	}
@@ -401,10 +401,10 @@ func (s *CredentialService) UpdateWebAuthnSignCount(ctx context.Context, credent
 }
 
 // ListUserWebAuthn 获取用户所有 WebAuthn 凭证
-func (s *CredentialService) ListUserWebAuthn(ctx context.Context, uid string) ([]models.UserCredential, error) {
+func (s *CredentialService) ListUserWebAuthn(ctx context.Context, openid string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
 	err := s.db.WithContext(ctx).
-		Where("uid = ? AND type IN (?, ?) AND enabled = ?", uid, models.CredentialTypeWebAuthn, models.CredentialTypePasskey, true).
+		Where("openid = ? AND type IN (?, ?) AND enabled = ?", openid, models.CredentialTypeWebAuthn, models.CredentialTypePasskey, true).
 		Find(&credentials).Error
 	if err != nil {
 		return nil, fmt.Errorf("查询凭证失败: %w", err)
@@ -413,9 +413,9 @@ func (s *CredentialService) ListUserWebAuthn(ctx context.Context, uid string) ([
 }
 
 // DeleteWebAuthn 删除 WebAuthn 凭证
-func (s *CredentialService) DeleteWebAuthn(ctx context.Context, uid string, credentialID string) error {
+func (s *CredentialService) DeleteWebAuthn(ctx context.Context, openid string, credentialID string) error {
 	result := s.db.WithContext(ctx).
-		Where("uid = ? AND credential_id = ?", uid, credentialID).
+		Where("openid = ? AND credential_id = ?", openid, credentialID).
 		Delete(&models.UserCredential{})
 	if result.Error != nil {
 		return fmt.Errorf("删除凭证失败: %w", result.Error)
@@ -423,14 +423,14 @@ func (s *CredentialService) DeleteWebAuthn(ctx context.Context, uid string, cred
 	if result.RowsAffected == 0 {
 		return errors.New("凭证不存在")
 	}
-	logger.Infof("[Credential] WebAuthn 已删除 - UID: %s", uid)
+	logger.Infof("[Credential] WebAuthn 已删除 - OpenID: %s", openid)
 	return nil
 }
 
 // SetWebAuthnEnabled 设置 WebAuthn 启用状态
-func (s *CredentialService) SetWebAuthnEnabled(ctx context.Context, uid string, credentialID string, enabled bool) error {
+func (s *CredentialService) SetWebAuthnEnabled(ctx context.Context, openid string, credentialID string, enabled bool) error {
 	result := s.db.WithContext(ctx).Model(&models.UserCredential{}).
-		Where("uid = ? AND credential_id = ?", uid, credentialID).
+		Where("openid = ? AND credential_id = ?", openid, credentialID).
 		Update("enabled", enabled)
 	if result.Error != nil {
 		return fmt.Errorf("更新凭证失败: %w", result.Error)
@@ -438,17 +438,17 @@ func (s *CredentialService) SetWebAuthnEnabled(ctx context.Context, uid string, 
 	if result.RowsAffected == 0 {
 		return errors.New("凭证不存在")
 	}
-	logger.Infof("[Credential] WebAuthn 启用状态已更新 - UID: %s, CredentialID: %s, Enabled: %v", uid, credentialID, enabled)
+	logger.Infof("[Credential] WebAuthn 启用状态已更新 - OpenID: %s, CredentialID: %s, Enabled: %v", openid, credentialID, enabled)
 	return nil
 }
 
 // ==================== 通用接口 ====================
 
 // ListUserCredentials 获取用户所有凭证
-func (s *CredentialService) ListUserCredentials(ctx context.Context, uid string) ([]models.UserCredential, error) {
+func (s *CredentialService) ListUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
 	err := s.db.WithContext(ctx).
-		Where("uid = ? AND enabled = ?", uid, true).
+		Where("openid = ? AND enabled = ?", openid, true).
 		Find(&credentials).Error
 	if err != nil {
 		return nil, fmt.Errorf("查询凭证失败: %w", err)
@@ -457,8 +457,8 @@ func (s *CredentialService) ListUserCredentials(ctx context.Context, uid string)
 }
 
 // GetUserCredentialSummaries 获取用户凭证摘要列表
-func (s *CredentialService) GetUserCredentialSummaries(ctx context.Context, uid string) ([]models.CredentialSummary, error) {
-	credentials, err := s.ListUserCredentials(ctx, uid)
+func (s *CredentialService) GetUserCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error) {
+	credentials, err := s.ListUserCredentials(ctx, openid)
 	if err != nil {
 		return nil, err
 	}
@@ -488,8 +488,8 @@ func (s *CredentialService) GetUserCredentialSummaries(ctx context.Context, uid 
 }
 
 // GetUserMFAStatus 获取用户 MFA 状态
-func (s *CredentialService) GetUserMFAStatus(ctx context.Context, uid string) (*models.MFAStatus, error) {
-	credentials, err := s.ListUserCredentials(ctx, uid)
+func (s *CredentialService) GetUserMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error) {
+	credentials, err := s.ListUserCredentials(ctx, openid)
 	if err != nil {
 		return nil, err
 	}

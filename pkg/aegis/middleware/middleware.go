@@ -267,7 +267,7 @@ func GetToken(ctx context.Context) token.Token {
 	return t
 }
 
-// GetOpenID 从 context 中获取用户对外标识（主身份 t_openid）
+// GetOpenID 从 context 中获取用户标识（t_user.openid）
 func GetOpenID(ctx context.Context) string {
 	t := GetToken(ctx)
 	if t == nil {
@@ -275,18 +275,6 @@ func GetOpenID(ctx context.Context) string {
 	}
 	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
 		return uat.GetOpenID()
-	}
-	return ""
-}
-
-// GetInternalUID 从 context 中获取用户内部 ID（t_user.openid，用于内部查询）
-func GetInternalUID(ctx context.Context) string {
-	t := GetToken(ctx)
-	if t == nil {
-		return ""
-	}
-	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
-		return uat.GetInternalUID()
 	}
 	return ""
 }

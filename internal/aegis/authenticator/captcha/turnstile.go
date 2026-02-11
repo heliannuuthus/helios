@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/heliannuuthus/helios/pkg/json"
@@ -63,13 +64,12 @@ func (v *TurnstileVerifier) Verify(ctx context.Context, proof, remoteIP string) 
 		data.Set("remoteip", remoteIP)
 	}
 
-	// 发送请求
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, TurnstileVerifyURL, nil)
+	// 发送请求（参数通过 POST body 传递，Turnstile API 不支持 query string）
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, TurnstileVerifyURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return false, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.URL.RawQuery = data.Encode()
 
 	resp, err := v.client.Do(req)
 	if err != nil {

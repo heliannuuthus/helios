@@ -7,7 +7,7 @@ import (
 
 // RegistrationBeginRequest 注册开始请求
 type RegistrationBeginRequest struct {
-	UserID string `json:"user_id" binding:"required"` // 用户 OpenID
+	OpenID string `json:"openid" binding:"required"` // 用户标识
 }
 
 // RegistrationBeginResponse 注册开始响应
@@ -32,7 +32,7 @@ type RegistrationFinishResponse struct {
 
 // LoginBeginRequest 登录开始请求
 type LoginBeginRequest struct {
-	UserID string `json:"user_id,omitempty"` // 用户 OpenID（可选，discoverable credential 时不需要）
+	OpenID string `json:"openid,omitempty"` // 用户标识（可选，discoverable credential 时不需要）
 }
 
 // LoginBeginResponse 登录开始响应
@@ -50,7 +50,7 @@ type LoginFinishRequest struct {
 // LoginFinishResponse 登录完成响应
 type LoginFinishResponse struct {
 	Success bool   `json:"success"`
-	UserID  string `json:"user_id,omitempty"` // 认证成功的用户 OpenID
+	OpenID  string `json:"openid,omitempty"` // 认证成功的用户标识
 	Message string `json:"message,omitempty"`
 }
 
@@ -74,7 +74,7 @@ type StoredAuthenticator struct {
 
 // SessionData WebAuthn 会话数据（存储在 Redis 中）
 type SessionData struct {
-	UserID      string                `json:"user_id"`
+	OpenID      string                `json:"openid"`
 	Challenge   string                `json:"challenge"`
 	SessionData *webauthn.SessionData `json:"session_data"`
 }

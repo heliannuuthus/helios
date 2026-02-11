@@ -32,6 +32,7 @@ const (
 	DefaultAegisOTPExpiresIn          = 5 * time.Minute
 	DefaultAegisChallengeExpiresIn    = 5 * time.Minute
 	DefaultAegisRefreshTokenExpiresIn = 7 * 24 * time.Hour
+	DefaultAegisPublicKeyCacheMaxAge  = 3 * time.Hour
 )
 
 // ==================== 基础配置 ====================
@@ -242,6 +243,14 @@ func GetAegisRefreshTokenExpiresIn() time.Duration {
 	return DefaultAegisRefreshTokenExpiresIn
 }
 
+// GetAegisPublicKeyCacheMaxAge 获取公钥缓存最大时间
+func GetAegisPublicKeyCacheMaxAge() time.Duration {
+	if val := Aegis().GetDuration("aegis.cache.public_key.max_age"); val > 0 {
+		return val
+	}
+	return DefaultAegisPublicKeyCacheMaxAge
+}
+
 // ==================== Mail 配置 ====================
 
 // MailConfig 邮件配置
@@ -321,6 +330,78 @@ func GetMailConfig() *MailConfig {
 		Username: cfg.GetString("mail.username"),
 		Password: cfg.GetString("mail.password"),
 	}
+}
+
+// ==================== Challenge 配置 ====================
+
+// DefaultChallengeExpiresIn Challenge 业务有效期默认值
+const DefaultChallengeExpiresIn = 5 * time.Minute
+
+// GetChallengeExpiresIn 获取 Challenge 业务有效期
+func GetChallengeExpiresIn() time.Duration {
+	if val := Aegis().GetDuration("aegis.challenge.expires-in"); val > 0 {
+		return val
+	}
+	return DefaultChallengeExpiresIn
+}
+
+// ==================== Challenge 限流配置 ====================
+
+// 限流默认值
+const (
+	DefaultRateLimitVerifyFailThreshold = 5
+	DefaultRateLimitVerifyFailWindow    = 30 * time.Minute
+)
+
+// GetRateLimitDefaultLimits 获取 channel 维度的默认限流配置
+// 格式：map[window]limit，如 {"1m": 1, "24h": 10}
+func GetRateLimitDefaultLimits() map[string]int {
+	raw := Aegis().GetStringMap("aegis.challenge.rate-limit.default-limits")
+	if len(raw) == 0 {
+		return map[string]int{"1m": 1, "1h": 10, "24h": 20}
+	}
+	result := make(map[string]int, len(raw))
+	for k, v := range raw {
+		if n, ok := v.(int64); ok {
+			result[k] = int(n)
+		} else if n, ok := v.(float64); ok {
+			result[k] = int(n)
+		}
+	}
+	return result
+}
+
+// GetRateLimitIPLimits 获取 IP 维度的默认限流配置
+func GetRateLimitIPLimits() map[string]int {
+	raw := Aegis().GetStringMap("aegis.challenge.rate-limit.ip-limits")
+	if len(raw) == 0 {
+		return map[string]int{"1m": 5, "1h": 50}
+	}
+	result := make(map[string]int, len(raw))
+	for k, v := range raw {
+		if n, ok := v.(int64); ok {
+			result[k] = int(n)
+		} else if n, ok := v.(float64); ok {
+			result[k] = int(n)
+		}
+	}
+	return result
+}
+
+// GetRateLimitVerifyFailThreshold 获取验证错误触发 captcha 的阈值
+func GetRateLimitVerifyFailThreshold() int {
+	if v := Aegis().GetInt("aegis.challenge.rate-limit.verify-fail-threshold"); v > 0 {
+		return v
+	}
+	return DefaultRateLimitVerifyFailThreshold
+}
+
+// GetRateLimitVerifyFailWindow 获取验证错误统计窗口
+func GetRateLimitVerifyFailWindow() time.Duration {
+	if v := Aegis().GetDuration("aegis.challenge.rate-limit.verify-fail-window"); v > 0 {
+		return v
+	}
+	return DefaultRateLimitVerifyFailWindow
 }
 
 // ==================== Secret 配置 ====================

@@ -1,0 +1,67 @@
+{
+  "version": "1.0.0",
+  "lockfileVersion": 1,
+  "packages": {
+    "@hamzafer/security-review#cursor": {
+      "version": "1.0.0",
+      "resolved": "https://registry.prpm.dev/api/v1/packages/%40hamzafer%2Fsecurity-review/1.0.0.tar.gz",
+      "integrity": "sha256-a55b9eae85f0d7ddb8a5e083921a7d2907dcb2f3e01f932d594fd8647bb3e5d5",
+      "format": "cursor",
+      "subtype": "slash-command",
+      "sourceFormat": "cursor",
+      "sourceSubtype": "slash-command",
+      "installedPath": ".cursor/commands/security-review.md"
+    },
+    "@sanjeed5/go#cursor": {
+      "version": "1.0.0",
+      "resolved": "https://registry.prpm.dev/api/v1/packages/%40sanjeed5%2Fgo/1.0.0.tar.gz",
+      "integrity": "sha256-f0fa128d8f0c329523bdb8cc6966eeaaae2e7fa706c646eae6b837c9bb5ba748",
+      "format": "cursor",
+      "subtype": "rule",
+      "sourceFormat": "cursor",
+      "sourceSubtype": "rule",
+      "installedPath": "/root/.cursor/rules/.cursor/rules/go.mdc"
+    },
+    "@sanjeed5/rust#cursor": {
+      "version": "1.0.0",
+      "resolved": "https://registry.prpm.dev/api/v1/packages/%40sanjeed5%2Frust/1.0.0.tar.gz",
+      "integrity": "sha256-637e0ac56bd9701f188d3dec79f998d6ed1c78df0dd1d663a92d8e0fa2e88e11",
+      "format": "cursor",
+      "subtype": "rule",
+      "sourceFormat": "cursor",
+      "sourceSubtype": "rule",
+      "installedPath": "/root/.cursor/rules/.cursor/rules/rust.mdc"
+    },
+    "@sanjeed5/react#cursor": {
+      "version": "1.0.0",
+      "resolved": "https://registry.prpm.dev/api/v1/packages/%40sanjeed5%2Freact/1.0.0.tar.gz",
+      "integrity": "sha256-e7ad227f1b03782b83cf44d572c0c769aabecba664d24a190f57190c7a3ccdd0",
+      "format": "cursor",
+      "subtype": "rule",
+      "sourceFormat": "cursor",
+      "sourceSubtype": "rule",
+      "installedPath": "/root/.cursor/rules/.cursor/rules/react.mdc"
+    },
+    "@sanjeed5/typescript#cursor": {
+      "version": "1.0.0",
+      "resolved": "https://registry.prpm.dev/api/v1/packages/%40sanjeed5%2Ftypescript/1.0.0.tar.gz",
+      "integrity": "sha256-e7d1622311c85accf966bb6608e072e0c3cf5545f8f4f1bc55743cf9ac125f7d",
+      "format": "cursor",
+      "subtype": "rule",
+      "sourceFormat": "cursor",
+      "sourceSubtype": "rule",
+      "installedPath": "/root/.cursor/rules/.cursor/rules/typescript.mdc"
+    },
+    "@sanjeed5/kubernetes#cursor": {
+      "version": "1.0.0",
+      "resolved": "https://registry.prpm.dev/api/v1/packages/%40sanjeed5%2Fkubernetes/1.0.0.tar.gz",
+      "integrity": "sha256-182342e19df68a3650d45d39233e6550e4183ed2645a425a94952b7b74f40f0b",
+      "format": "cursor",
+      "subtype": "rule",
+      "sourceFormat": "cursor",
+      "sourceSubtype": "rule",
+      "installedPath": "/root/.cursor/rules/.cursor/rules/kubernetes.mdc"
+    }
+  },
+  "generated": "2026-02-11T04:12:54.777Z"
+}

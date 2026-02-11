@@ -11,8 +11,16 @@ import (
 	"time"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/keys"
-	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/token"
 	"github.com/heliannuuthus/helios/pkg/json"
+	"github.com/heliannuuthus/helios/pkg/logger"
+)
+
+// 内部常量
+const (
+	subjectTypeUser     = "user"
+	subjectTypeApp      = "app"
+	headerAuthorization = "Authorization"
 )
 
 // checkRequest 检查请求（内部使用）
@@ -34,7 +42,7 @@ type checkResponse struct {
 // Checker 关系检查器
 // 负责调用 Aegis /auth/check 接口检查关系
 type Checker struct {
-	issuer     *token.Issuer
+	issuer     *pkgtoken.Issuer
 	endpoint   string
 	httpClient *http.Client
 }
@@ -44,7 +52,7 @@ type Checker struct {
 // keyProvider: 提供签名私钥（用于签发 CAT）
 func NewChecker(endpoint string, keyProvider keys.SecretKeyProvider) *Checker {
 	return &Checker{
-		issuer:   token.NewIssuer(keyProvider),
+		issuer:   pkgtoken.NewIssuer(keyProvider),
 		endpoint: strings.TrimSuffix(endpoint, "/"),
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
@@ -61,14 +69,14 @@ func NewChecker(endpoint string, keyProvider keys.SecretKeyProvider) *Checker {
 // 内部根据 Token 判断主体类型：
 //   - UAT 且有用户信息，则为 user，subjectID = User.Subject
 //   - 其他情况，则为 app（M2M），subjectID = ClientID
-func (c *Checker) Check(ctx context.Context, t token.Token, relation, objectType, objectID string) (bool, error) {
+func (c *Checker) Check(ctx context.Context, t pkgtoken.Token, relation, objectType, objectID string) (bool, error) {
 	// 判断主体类型
-	subjectType := "app"
+	subjectType := subjectTypeApp
 	subjectID := t.GetClientID()
 
 	// 如果是 UAT 且有用户信息，使用用户身份
-	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
-		subjectType = "user"
+	if uat, ok := pkgtoken.AsUAT(t); ok && uat.HasUser() {
+		subjectType = subjectTypeUser
 		subjectID = uat.GetOpenID()
 	}
 
@@ -100,14 +108,18 @@ func (c *Checker) Check(ctx context.Context, t token.Token, relation, objectType
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+cat)
+	httpReq.Header.Set(headerAuthorization, pkgtoken.TokenTypeBearer+" "+cat)
 
 	// 发送请求
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return false, fmt.Errorf("send request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Warnf("[Checker] 关闭响应体失败: %v", err)
+		}
+	}()
 
 	// 读取响应
 	body, err := io.ReadAll(resp.Body)

@@ -50,7 +50,7 @@ func ParseServiceAccessToken(pasetoToken *paseto.Token) (*ServiceAccessToken, er
 	}
 
 	var scope string
-	if err := pasetoToken.Get("scope", &scope); err != nil {
+	if err := pasetoToken.Get(ClaimScope, &scope); err != nil {
 		// scope 是可选字段
 		scope = ""
 	}
@@ -80,7 +80,7 @@ func (s *ServiceAccessToken) BuildPaseto() (*paseto.Token, error) {
 	if err := s.SetStandardClaims(&t); err != nil {
 		return nil, fmt.Errorf("set standard claims: %w", err)
 	}
-	if err := t.Set("scope", s.scope); err != nil {
+	if err := t.Set(ClaimScope, s.scope); err != nil {
 		return nil, fmt.Errorf("set scope: %w", err)
 	}
 	return &t, nil

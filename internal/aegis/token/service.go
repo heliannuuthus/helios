@@ -161,18 +161,17 @@ func (s *Service) InterpretUAT(ctx context.Context, tokenString string) (*token.
 
 	// 解析 footer 中的用户信息
 	var footerData struct {
-		Subject     string `json:"sub,omitempty"`
-		InternalUID string `json:"uid,omitempty"`
-		Nickname    string `json:"nickname,omitempty"`
-		Picture     string `json:"picture,omitempty"`
-		Email       string `json:"email,omitempty"`
-		Phone       string `json:"phone,omitempty"`
+		Subject  string `json:"sub,omitempty"`
+		Nickname string `json:"nickname,omitempty"`
+		Picture  string `json:"picture,omitempty"`
+		Email    string `json:"email,omitempty"`
+		Phone    string `json:"phone,omitempty"`
 	}
 	if err := json.Unmarshal(decrypted, &footerData); err != nil {
 		return nil, fmt.Errorf("unmarshal user info: %w", err)
 	}
 
-	uat.SetUserInfo(footerData.Subject, footerData.InternalUID, footerData.Nickname, footerData.Picture, footerData.Email, footerData.Phone)
+	uat.SetUserInfo(footerData.Subject, footerData.Nickname, footerData.Picture, footerData.Email, footerData.Phone)
 	return uat, nil
 }
 

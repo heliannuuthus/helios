@@ -348,43 +348,6 @@ func GetRedisURL() string {
 	return Config().GetString("redis.url")
 }
 
-// ==================== OSS 配置访问函数 ====================
-
-// GetOSSEndpoint 获取 OSS 端点
-func GetOSSEndpoint() string {
-	return Config().GetString("oss.endpoint")
-}
-
-// GetOSSAccessKeyID 获取 OSS AccessKey ID
-func GetOSSAccessKeyID() string {
-	return Config().GetString("oss.access-key-id")
-}
-
-// GetOSSAccessKeySecret 获取 OSS AccessKey Secret
-func GetOSSAccessKeySecret() string {
-	return Config().GetString("oss.access-key-secret")
-}
-
-// GetOSSBucket 获取 OSS Bucket
-func GetOSSBucket() string {
-	return Config().GetString("oss.bucket")
-}
-
-// GetOSSDomain 获取 OSS 自定义域名
-func GetOSSDomain() string {
-	return Config().GetString("oss.domain")
-}
-
-// GetOSSRegion 获取 OSS 区域
-func GetOSSRegion() string {
-	return Config().GetString("oss.region")
-}
-
-// GetOSSRoleARN 获取 OSS STS Role ARN
-func GetOSSRoleARN() string {
-	return Config().GetString("oss.role-arn")
-}
-
 // ==================== R2 (Cloudflare) 配置访问函数 ====================
 
 // GetR2AccountID 获取 Cloudflare Account ID
