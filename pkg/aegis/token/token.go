@@ -2,21 +2,64 @@
 package token
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"aidanwoods.dev/go-paseto"
-
-	"github.com/heliannuuthus/helios/pkg/aegis/pasetokit"
 )
 
 // 错误定义
 var (
 	ErrMissingClaims    = errors.New("missing required claims")
 	ErrUnsupportedToken = errors.New("unsupported token type")
+	ErrInvalidSignature = errors.New("invalid signature")
 )
+
+// ==================== Footer 加密解密 ====================
+
+// Encrypt 使用对称密钥加密纯文本（用于 footer）
+func Encrypt(key paseto.V4SymmetricKey, plaintext string) string {
+	t := paseto.NewToken()
+	t.Set("d", plaintext)
+	return t.V4Encrypt(key, nil)
+}
+
+// Decrypt 使用对称密钥解密 PASETO local token
+func Decrypt(key paseto.V4SymmetricKey, encrypted string) (string, error) {
+	parser := paseto.NewParser()
+	t, err := parser.ParseV4Local(key, encrypted, nil)
+	if err != nil {
+		return "", fmt.Errorf("decrypt: %w", err)
+	}
+
+	plaintext, err := t.GetString("d")
+	if err != nil {
+		return "", fmt.Errorf("decrypt: %w", err)
+	}
+
+	return plaintext, nil
+}
+
+// ==================== Token 签名 ====================
+
+// SignToken 签名 Token
+func SignToken(t *paseto.Token, secretKey paseto.V4AsymmetricSecretKey, footer []byte) string {
+	var footerPtr []byte
+	if len(footer) > 0 {
+		footerPtr = footer
+	}
+	return t.V4Sign(secretKey, footerPtr)
+}
+
+// ==================== Base64 工具函数 ====================
+
+// base64URLDecode Base64URL 解码（无填充）
+func base64URLDecode(s string) ([]byte, error) {
+	return base64.RawURLEncoding.DecodeString(s)
+}
 
 // ==================== Token 接口 ====================
 
@@ -66,60 +109,42 @@ const (
 	TokenTypeChallenge TokenType = "challenge" // Challenge Token - 验证挑战令牌
 )
 
-// ==================== TokenInfo ====================
-
-// TokenInfo 从 token 中提取的基本信息（不验证签名）
-type TokenInfo struct {
-	ClientID  string    // 客户端 ID
-	Audience  string    // 目标受众
-	TokenType TokenType // Token 类型
-}
-
-// Extract 从 token 字符串中提取基本信息（不验证签名）
-// 用于在验证前获取 client_id 和 audience
-func Extract(tokenString string) (*TokenInfo, error) {
-	clientID, tokenType, err := extractClientIDAndType(tokenString)
-	if err != nil {
-		return nil, err
+// DetectType 根据 claims 推断 token 类型
+// 规则：有 ctp 字段 -> Challenge，有 cli 字段 -> UAT，否则 -> CAT
+func DetectType(t *paseto.Token) TokenType {
+	var ctp string
+	if t.Get(ClaimChannelType, &ctp) == nil && ctp != "" {
+		return TokenTypeChallenge
 	}
 
-	audience, err := extractAudience(tokenString)
-	if err != nil {
-		return nil, err
+	var cli string
+	if t.Get(ClaimCli, &cli) == nil && cli != "" {
+		return TokenTypeUAT
 	}
 
-	return &TokenInfo{
-		ClientID:  clientID,
-		Audience:  audience,
-		TokenType: tokenType,
-	}, nil
+	return TokenTypeCAT
 }
 
-// ==================== 类型断言辅助函数 ====================
+// GetClientID 从 paseto.Token 中提取 clientID
+// UAT/Challenge 使用 cli 字段，CAT 使用 sub 字段
+func GetClientID(t *paseto.Token) (string, error) {
+	var cli string
+	if t.Get(ClaimCli, &cli) == nil && cli != "" {
+		return cli, nil
+	}
 
-// AsCAT 将 Token 断言为 ClientAccessToken
-func AsCAT(t Token) (*ClientAccessToken, bool) {
-	cat, ok := t.(*ClientAccessToken)
-	return cat, ok
+	sub, err := t.GetSubject()
+	if err != nil || sub == "" {
+		return "", errors.New("missing cli and sub (client_id)")
+	}
+	return sub, nil
 }
 
-// AsUAT 将 Token 断言为 UserAccessToken
-func AsUAT(t Token) (*UserAccessToken, bool) {
-	uat, ok := t.(*UserAccessToken)
-	return uat, ok
+// GetAudience 从 paseto.Token 中提取 audience
+func GetAudience(t *paseto.Token) (string, error) {
+	return t.GetAudience()
 }
 
-// AsSAT 将 Token 断言为 ServiceAccessToken
-func AsSAT(t Token) (*ServiceAccessToken, bool) {
-	sat, ok := t.(*ServiceAccessToken)
-	return sat, ok
-}
-
-// AsChallenge 将 Token 断言为 ChallengeToken
-func AsChallenge(t Token) (*ChallengeToken, bool) {
-	ct, ok := t.(*ChallengeToken)
-	return ct, ok
-}
 
 // ==================== Token 解析 ====================
 
@@ -141,50 +166,9 @@ func ParseToken(pasetoToken *paseto.Token, tokenType TokenType) (Token, error) {
 
 // ==================== 解析辅助函数 ====================
 
-// extractClientIDAndType 从 token 中提取 clientID 并识别类型
-func extractClientIDAndType(tokenString string) (clientID string, tokenType TokenType, err error) {
-	token, err := UnsafeParseToken(tokenString)
-	if err != nil {
-		return "", "", err
-	}
-
-	// 检查是否有 typ 字段（ChallengeToken）
-	var typ string
-	if token.Get(ClaimType, &typ) == nil && typ != "" {
-		var cli string
-		if token.Get(ClaimCli, &cli) != nil || cli == "" {
-			return "", "", errors.New("missing cli (client_id)")
-		}
-		return cli, TokenTypeChallenge, nil
-	}
-
-	// 检查是否有 cli 字段
-	var cli string
-	if token.Get(ClaimCli, &cli) == nil && cli != "" {
-		return cli, TokenTypeUAT, nil
-	}
-
-	// 无 cli 字段 -> CAT，使用 sub 作为 clientID
-	sub, err := token.GetSubject()
-	if err != nil || sub == "" {
-		return "", "", errors.New("missing cli and sub (client_id)")
-	}
-	return sub, TokenTypeCAT, nil
-}
-
-// extractAudience 从 token 中提取 audience
-func extractAudience(tokenString string) (string, error) {
-	token, err := UnsafeParseToken(tokenString)
-	if err != nil {
-		return "", err
-	}
-
-	audience, err := token.GetAudience()
-	if err != nil {
-		return "", fmt.Errorf("get audience: %w", err)
-	}
-	return audience, nil
-}
+// UnsafeParse 从 token 字符串中解析 claims（不验证签名）
+// 安全警告：返回的数据不可信，仅用于在验证前提取 clientID/audience 以查找对应密钥
+var UnsafeParse = UnsafeParseToken
 
 // UnsafeParseToken 不验证签名解析 token（仅用于提取 claims）
 // 安全警告：此方法跳过签名验证，返回的数据不可信，仅用于在验证前提取 clientID/audience 以查找对应密钥
@@ -192,34 +176,34 @@ func extractAudience(tokenString string) (string, error) {
 func UnsafeParseToken(tokenString string) (*paseto.Token, error) {
 	parts := strings.Split(tokenString, ".")
 	if len(parts) < 3 || parts[0] != PasetoVersion || parts[1] != PasetoPurpose {
-		return nil, fmt.Errorf("%w: invalid PASETO token format", pasetokit.ErrInvalidSignature)
+		return nil, fmt.Errorf("%w: invalid PASETO token format", ErrInvalidSignature)
 	}
 
-	payloadBytes, err := pasetokit.Base64URLDecode(parts[2])
+	payloadBytes, err := base64URLDecode(parts[2])
 	if err != nil {
-		return nil, fmt.Errorf("%w: decode payload: %w", pasetokit.ErrInvalidSignature, err)
+		return nil, fmt.Errorf("%w: decode payload: %w", ErrInvalidSignature, err)
 	}
 
 	if len(payloadBytes) < 64 {
-		return nil, fmt.Errorf("%w: payload too short", pasetokit.ErrInvalidSignature)
+		return nil, fmt.Errorf("%w: payload too short", ErrInvalidSignature)
 	}
 
 	claimsJSON := payloadBytes[:len(payloadBytes)-64]
 
 	var footer []byte
 	if len(parts) >= 4 && parts[3] != "" {
-		footer, err = pasetokit.Base64URLDecode(parts[3])
+		footer, err = base64URLDecode(parts[3])
 		if err != nil {
-			return nil, fmt.Errorf("%w: decode footer: %w", pasetokit.ErrInvalidSignature, err)
+			return nil, fmt.Errorf("%w: decode footer: %w", ErrInvalidSignature, err)
 		}
 	}
 
-	token, err := paseto.NewTokenFromClaimsJSON(claimsJSON, footer)
+	t, err := paseto.NewTokenFromClaimsJSON(claimsJSON, footer)
 	if err != nil {
-		return nil, fmt.Errorf("%w: parse claims: %w", pasetokit.ErrInvalidSignature, err)
+		return nil, fmt.Errorf("%w: parse claims: %w", ErrInvalidSignature, err)
 	}
 
-	return token, nil
+	return t, nil
 }
 
 // ExtractFooter 从 token 字符串中提取 footer

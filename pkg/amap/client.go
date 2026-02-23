@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/heliannuuthus/helios/pkg/json"
+	"github.com/go-json-experiment/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -86,7 +86,7 @@ func (c *Client) GetLocation(lat, lng float64) (*Location, error) {
 		} `json:"regeocode"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
 		return nil, fmt.Errorf("解析高德响应失败: %w", err)
 	}
 
@@ -146,7 +146,7 @@ func (c *Client) GetWeatherByAdcode(adcode string) (*Weather, error) {
 		} `json:"lives"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
 		return nil, err
 	}
 

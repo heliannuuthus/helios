@@ -24,7 +24,7 @@ USE `hermes`;
 CREATE TABLE IF NOT EXISTS t_application (
     _id                INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
-    domain_id          VARCHAR(32)   NOT NULL COMMENT '所属域：ciam/piam',
+    domain_id          VARCHAR(32)   NOT NULL COMMENT '所属域：consumer/platform',
     app_id             VARCHAR(64)   NOT NULL COMMENT '应用唯一标识',
     name               VARCHAR(128)  NOT NULL COMMENT '应用名称',
     logo_url           VARCHAR(512)  DEFAULT NULL COMMENT '应用 Logo URL',
@@ -46,9 +46,9 @@ CREATE TABLE IF NOT EXISTS t_application_idp_config (
     _id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
     app_id       VARCHAR(64)  NOT NULL COMMENT '应用 ID',
-    `type`       VARCHAR(32)  NOT NULL COMMENT 'IDP 类型：github/google/wechat-mp/user/oper',
+    `type`       VARCHAR(32)  NOT NULL COMMENT 'IDP 类型：github/google/wechat-mp/user/staff',
     priority     INT          NOT NULL DEFAULT 0 COMMENT '排序优先级（值越大越靠前）',
-    strategy     VARCHAR(256) DEFAULT NULL COMMENT '认证方式（仅 user/oper）：password,webauthn',
+    strategy     VARCHAR(256) DEFAULT NULL COMMENT '认证方式（仅 user/staff）：password,webauthn',
     delegate     VARCHAR(256) DEFAULT NULL COMMENT '委托 MFA：email_otp,totp,webauthn',
     `require`    VARCHAR(256) DEFAULT NULL COMMENT '前置验证：captcha',
     -- 时间戳
@@ -66,7 +66,7 @@ UNIQUE KEY uk_app_type (app_id, `type`),
 CREATE TABLE IF NOT EXISTS t_service (
     _id                       INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
-    domain_id                 VARCHAR(32)   NOT NULL COMMENT '所属域：ciam/piam，- 表示跨域',
+    domain_id                 VARCHAR(32)   NOT NULL COMMENT '所属域：consumer/platform，- 表示跨域',
     service_id                VARCHAR(32)   NOT NULL COMMENT '服务标识：hermes/zwei/order',
     name                      VARCHAR(128)  NOT NULL COMMENT '服务名称',
     description               VARCHAR(512)  DEFAULT NULL COMMENT '服务描述',
@@ -152,15 +152,15 @@ UNIQUE KEY uk_openid (openid),
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户';
 
 -- ==================== 用户身份表 ====================
--- 用户与 IDP 的绑定关系，每个身份归属一个域（ciam/piam）
+-- 用户与 IDP 的绑定关系，每个身份归属一个域（consumer/platform）
 -- idp=global 的身份为该域下的对外标识（token 中的 sub）
 
 CREATE TABLE IF NOT EXISTS t_user_identity (
     _id          INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
-    domain       VARCHAR(16)   NOT NULL COMMENT '身份所属域：ciam/piam',
+    domain       VARCHAR(16)   NOT NULL COMMENT '身份所属域：consumer/platform',
     openid       VARCHAR(64)   NOT NULL COMMENT '用户标识（关联 t_user.openid）',
-    idp          VARCHAR(64)   NOT NULL COMMENT 'IDP 标识：global/user/oper/github/wechat-mp/google 等',
+    idp          VARCHAR(64)   NOT NULL COMMENT 'IDP 标识：global/user/staff/github/wechat-mp/google 等',
     t_openid     VARCHAR(256)  NOT NULL COMMENT 'IDP 侧用户标识（global 为域级对外标识，第三方为 IDP 返回的 openid）',
     raw_data     TEXT          DEFAULT NULL COMMENT 'IDP 返回的原始数据（JSON）',
     -- 时间戳

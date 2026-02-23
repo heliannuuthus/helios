@@ -7,9 +7,12 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
+	aegisconfig "github.com/heliannuuthus/helios/aegis/config"
+	"github.com/heliannuuthus/helios/aegis/middleware"
 	_ "github.com/heliannuuthus/helios/docs" // swagger docs
-	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/internal/middleware"
+	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
+	irisconfig "github.com/heliannuuthus/helios/iris/config"
+	"github.com/heliannuuthus/helios/pkg/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/pkg/r2"
 )
@@ -83,30 +86,36 @@ func main() {
 	// Swagger 文档
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
+	// Aegis CORS 中间件（支持应用配置的 allowed_origins，SPA 跨域调用需要）
+	aegisCORS := middleware.CORSWithConfig(aegisconfig.Cfg(), app.AegisHandler.CacheManager())
+
 	// Aegis 认证路由（OAuth2.1/OIDC 风格）
 	authGroup := r.Group("/auth")
 	{
 		// Aegis UI 调用的接口（需要 CORS）
-		aegisCORS := middleware.CORSWithConfig(config.Aegis(), app.AegisHandler.CacheManager())
 		authGroup.POST("/authorize", aegisCORS, app.AegisHandler.Authorize)              // 创建认证会话并重定向到登录页面
 		authGroup.GET("/connections", aegisCORS, app.AegisHandler.GetConnections)        // 获取可用的 Connection 配置
 		authGroup.GET("/context", aegisCORS, app.AegisHandler.GetContext)                // 获取当前流程的应用和服务信息
 		authGroup.POST("/login", aegisCORS, app.AegisHandler.Login)                      // IDP 登录
+		authGroup.GET("/binding", aegisCORS, app.AegisHandler.GetIdentifyContext)         // 获取识别到的已有用户信息
+		authGroup.POST("/binding", aegisCORS, app.AegisHandler.ConfirmIdentify)           // 确认/取消账户关联
 		authGroup.POST("/challenge", aegisCORS, app.AegisHandler.InitiateChallenge)      // 发起 Challenge
 		authGroup.POST("/challenge/:cid", aegisCORS, app.AegisHandler.ContinueChallenge) // 验证 Challenge
 
-		// 业务前端/后端调用的接口（不需要 Aegis UI 的 CORS）
-		authGroup.POST("/token", app.AegisHandler.Token)   // 获取/刷新 Token
-		authGroup.POST("/revoke", app.AegisHandler.Revoke) // 撤销 Token
-		authGroup.POST("/check", app.AegisHandler.Check)   // 关系检查（使用 CAT 认证）
+		// 业务前端调用的接口（SPA 跨域调用，需要 CORS 支持应用配置的 allowed_origins）
+		authGroup.POST("/token", aegisCORS, app.AegisHandler.Token)   // 获取/刷新 Token
+		authGroup.POST("/revoke", aegisCORS, app.AegisHandler.Revoke) // 撤销 Token
+		// 服务端调用的接口（不需要 CORS）
+		authGroup.POST("/check", app.AegisHandler.Check) // 关系检查（使用 CAT 认证）
 		authGroup.POST("/logout", middleware.RequireToken(app.Interpreter), app.AegisHandler.Logout)
 		authGroup.GET("/pubkeys", app.AegisHandler.PublicKeys) // 获取 PASETO 公钥
 	}
 
 	// Iris 用户信息路由（需要 Iris 服务认证）
-	irisMw := app.MiddlewareFactory.WithAudience(config.GetIrisAegisAudience())
+	// CORS: iris.heliannuuthus.com 前端使用 Bearer Token 跨域调用
+	irisMw := app.MiddlewareFactory.WithAudience(irisconfig.GetAegisAudience())
 	userGroup := r.Group("/user")
-	userGroup.Use(irisMw.RequireAuth())
+	userGroup.Use(aegisCORS, irisMw.RequireAuth())
 	{
 		// /user/profile - 用户基本信息
 		userGroup.GET("/profile", app.IrisHandler.GetProfile)
@@ -235,7 +244,7 @@ func main() {
 
 	// Hermes 身份与访问管理路由
 	// 使用 aegis 中间件进行认证
-	hermesMw := app.MiddlewareFactory.WithAudience(config.GetHermesAegisAudience())
+	hermesMw := app.MiddlewareFactory.WithAudience(hermesconfig.GetAegisAudience())
 	hermes := r.Group("/hermes")
 	hermes.Use(hermesMw.RequireAuth())
 	{
@@ -292,6 +301,9 @@ func main() {
 			groups.POST("/:group_id/members", app.HermesHandler.SetGroupMembers)
 		}
 	}
+
+	// Chaos 业务聚合服务路由
+	app.ChaosHandler.RegisterRoutes(r)
 
 	// 启动服务器
 	addr := fmt.Sprintf("%s:%d", config.GetServerHost(), config.GetServerPort())

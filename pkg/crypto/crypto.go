@@ -1,4 +1,4 @@
-package cryptoutil
+package crypto
 
 import (
 	"crypto/aes"
@@ -101,20 +101,6 @@ func Decrypt(key []byte, encrypted string, aad string) (string, error) {
 	}
 
 	return string(plaintext), nil
-}
-
-// Mask 脱敏处理
-// 保留前 prefixLen 位和后 suffixLen 位，中间用 mask 替换
-func Mask(data string, prefixLen, suffixLen int, mask string) string {
-	if len(data) <= prefixLen+suffixLen {
-		return data
-	}
-	return data[:prefixLen] + mask + data[len(data)-suffixLen:]
-}
-
-// MaskPhone 手机号脱敏 13800138000 -> 138****8000
-func MaskPhone(phone string) string {
-	return Mask(phone, 3, 4, "****")
 }
 
 // EncryptAESGCM 使用 AES-256-GCM 加密（字节数组版本）

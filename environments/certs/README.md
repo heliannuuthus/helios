@@ -17,10 +17,10 @@ cd environments/certs
 mkcert -install
 
 # 生成 RSA 证书（默认）
-mkcert aegis.heliannuuthus.com hermes.heliannuuthus.com zwei.heliannuuthus.com atlas.heliannuuthus.com
+mkcert aegis.heliannuuthus.com hermes.heliannuuthus.com zwei.heliannuuthus.com atlas.heliannuuthus.com iris.heliannuuthus.com chaos.heliannuuthus.com
 
 # 或者生成 ECC 证书（推荐，更小更快）
-mkcert -ecdsa aegis.heliannuuthus.com hermes.heliannuuthus.com zwei.heliannuuthus.com atlas.heliannuuthus.com
+mkcert -ecdsa aegis.heliannuuthus.com hermes.heliannuuthus.com zwei.heliannuuthus.com atlas.heliannuuthus.com iris.heliannuuthus.com chaos.heliannuuthus.com
 
 # 重命名文件以匹配 nginx 配置
 mv aegis.heliannuuthus.com+3.pem fullchain.pem

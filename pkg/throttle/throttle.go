@@ -12,8 +12,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/heliannuuthus/helios/pkg/helperutil"
-	"github.com/heliannuuthus/helios/pkg/store"
+	"github.com/heliannuuthus/helios/pkg/helpers"
+	"github.com/heliannuuthus/helios/pkg/redis"
 )
 
 // peekScript 多窗口只读检查（不写入）
@@ -103,6 +103,15 @@ redis.call('EXPIRE', key, ttl)
 return {1, -1, 0}
 `
 
+// countScript 只读统计指定窗口内的记录数（不写入）
+const countScript = `
+local key = KEYS[1]
+local window_start = tonumber(ARGV[1])
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', window_start)
+return redis.call('ZCARD', key)
+`
+
 // recordScript 仅记录一次事件并返回指定窗口内计数
 const recordScript = `
 local key = KEYS[1]
@@ -119,11 +128,11 @@ return redis.call('ZCARD', key)
 
 // Throttler 基于 Redis Sorted Set 的滑动窗口节流器
 type Throttler struct {
-	redis store.RedisClient
+	redis redis.Client
 }
 
 // NewThrottler 创建节流器
-func NewThrottler(redis store.RedisClient) *Throttler {
+func NewThrottler(redis redis.Client) *Throttler {
 	return &Throttler{redis: redis}
 }
 
@@ -213,7 +222,7 @@ func (t *Throttler) Allow(ctx context.Context, key string, limits map[string]int
 
 	now := time.Now()
 	nowMs := now.UnixMilli()
-	member := fmt.Sprintf("%d:%s", nowMs, helperutil.GenerateID(8))
+	member := fmt.Sprintf("%d:%s", nowMs, helpers.GenerateID(8))
 
 	// 构建 Lua ARGV
 	n := len(windows)
@@ -263,12 +272,27 @@ func (t *Throttler) Allow(ctx context.Context, key string, limits map[string]int
 	return r, nil
 }
 
+// Count 只读统计指定窗口内的记录数（不写入）
+func (t *Throttler) Count(ctx context.Context, key string, window time.Duration) (int64, error) {
+	windowStartMs := time.Now().Add(-window).UnixMilli()
+
+	result, err := t.redis.Eval(ctx, countScript,
+		[]string{key},
+		windowStartMs,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("throttle count failed: %w", err)
+	}
+
+	return toInt64(result), nil
+}
+
 // Record 记录一次事件，返回指定窗口内的总次数
 func (t *Throttler) Record(ctx context.Context, key string, window time.Duration) (int64, error) {
 	now := time.Now()
 	nowMs := now.UnixMilli()
 	windowStartMs := now.Add(-window).UnixMilli()
-	member := fmt.Sprintf("%d:%s", nowMs, helperutil.GenerateID(8))
+	member := fmt.Sprintf("%d:%s", nowMs, helpers.GenerateID(8))
 	ttlSec := int64(window.Seconds()) + 1
 
 	result, err := t.redis.Eval(ctx, recordScript,

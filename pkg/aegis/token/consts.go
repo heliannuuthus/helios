@@ -3,10 +3,10 @@ package token
 // Token Claim Key 常量
 // PASETO Token 中自定义 claim 的 key
 const (
-	ClaimType    = "typ"   // Token 类型（channel_type）
-	ClaimCli     = "cli"   // 应用 ID（Client ID）
-	ClaimScope   = "scope" // 权限范围
-	ClaimBizType = "biz"   // 业务场景（login / forget_password / bind_phone ...）
+	ClaimType        = "typ" // 业务类型（login / forget_password / bind_phone ...）
+	ClaimChannelType = "ctp" // 渠道类型（email_otp / sms_otp / totp ...）
+	ClaimCli         = "cli" // 应用 ID（Client ID）
+	ClaimScope       = "scope"
 
 	// UAT Scope 值
 	ScopeProfile = "profile" // 用户基本信息

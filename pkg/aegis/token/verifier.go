@@ -1,77 +1,140 @@
-// Package token 定义 PASETO Token 类型和接口
 package token
 
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"aidanwoods.dev/go-paseto"
-
-	"github.com/heliannuuthus/helios/pkg/aegis/keys"
-	"github.com/heliannuuthus/helios/pkg/aegis/pasetokit"
+	"github.com/heliannuuthus/helios/pkg/aegis/key"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// Verifier 负责验证 PASETO 签名
-// 通用实现，自动从 token 中提取 clientID 获取对应公钥
+// Verifier 绑定特定 ID 的 Token 验证器
 type Verifier struct {
-	keyProvider keys.PublicKeyProvider
+	provider key.Provider
+	id       string
+
+	mu         sync.RWMutex
+	publicKeys []paseto.V4AsymmetricPublicKey
 }
 
-// NewVerifier 创建 Verifier
-func NewVerifier(keyProvider keys.PublicKeyProvider) *Verifier {
-	return &Verifier{
-		keyProvider: keyProvider,
+// NewVerifier 创建绑定 ID 的 Verifier（懒加载模式）
+func NewVerifier(provider key.Provider, id string) *Verifier {
+	v := &Verifier{
+		provider: provider,
+		id:       id,
 	}
+
+	// 如果 provider 支持订阅，订阅密钥变更
+	if sub, ok := provider.(key.Subscribable); ok {
+		sub.Subscribe(id, func(newKeys [][]byte) {
+			if err := v.updateKeys(newKeys); err != nil {
+				logger.Warnf("[Verifier] update keys failed for %s: %v", id, err)
+			}
+		})
+	}
+
+	return v
 }
 
-// VerifySignature 验证 PASETO 签名（不解析为具体 Token 类型）
-// 返回原始的 paseto.Token，供调用方进一步处理
-func VerifySignature(publicKey paseto.V4AsymmetricPublicKey, tokenString string) (*paseto.Token, error) {
+// updateKeys 更新公钥（从原始 seed 派生）
+func (v *Verifier) updateKeys(keys [][]byte) error {
+	publicKeys := make([]paseto.V4AsymmetricPublicKey, 0, len(keys))
+	for _, raw := range keys {
+		seed, err := key.ParseSeed(raw)
+		if err != nil {
+			return fmt.Errorf("parse seed: %w", err)
+		}
+		pk, err := seed.DerivePublicKey()
+		if err != nil {
+			return fmt.Errorf("derive public key: %w", err)
+		}
+		publicKeys = append(publicKeys, pk)
+	}
+
+	v.mu.Lock()
+	v.publicKeys = publicKeys
+	v.mu.Unlock()
+
+	return nil
+}
+
+// ensure 确保密钥已加载
+func (v *Verifier) ensure(ctx context.Context) error {
+	v.mu.RLock()
+	hasKeys := len(v.publicKeys) > 0
+	v.mu.RUnlock()
+
+	if hasKeys {
+		return nil
+	}
+
+	keys, err := v.provider.AllOfKey(ctx, v.id)
+	if err != nil {
+		return err
+	}
+
+	return v.updateKeys(keys)
+}
+
+// Verify 验证 token 签名，尝试所有公钥
+func (v *Verifier) Verify(ctx context.Context, tokenString string, tokenType TokenType) (Token, error) {
+	if err := v.ensure(ctx); err != nil {
+		return nil, fmt.Errorf("load keys: %w", err)
+	}
+
+	v.mu.RLock()
+	keys := v.publicKeys
+	v.mu.RUnlock()
+
+	if len(keys) == 0 {
+		return nil, key.ErrNotFound
+	}
+
 	parser := paseto.NewParser()
 	parser.AddRule(paseto.NotExpired())
 	parser.AddRule(paseto.ValidAt(time.Now()))
 
-	pasetoToken, err := parser.ParseV4Public(publicKey, tokenString, nil)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", pasetokit.ErrInvalidSignature, err)
+	var lastErr error
+	for _, pk := range keys {
+		pasetoToken, err := parser.ParseV4Public(pk, tokenString, nil)
+		if err == nil {
+			return ParseToken(pasetoToken, tokenType)
+		}
+		lastErr = err
 	}
 
-	return pasetoToken, nil
+	return nil, fmt.Errorf("signature verification failed: %w", lastErr)
 }
 
-// Verify 验证 token 签名，返回具体的 Token 类型
-// 自动从 token 中提取 clientID 和 audience，获取对应公钥进行验签
-func (v *Verifier) Verify(ctx context.Context, tokenString string, info *TokenInfo) (Token, error) {
-	if info == nil {
-		var err error
-		info, err = Extract(tokenString)
-		if err != nil {
-			return nil, err
+// VerifyRaw 验证 token 签名，返回原始 paseto.Token
+func (v *Verifier) VerifyRaw(ctx context.Context, tokenString string) (*paseto.Token, error) {
+	if err := v.ensure(ctx); err != nil {
+		return nil, fmt.Errorf("load keys: %w", err)
+	}
+
+	v.mu.RLock()
+	keys := v.publicKeys
+	v.mu.RUnlock()
+
+	if len(keys) == 0 {
+		return nil, key.ErrNotFound
+	}
+
+	parser := paseto.NewParser()
+	parser.AddRule(paseto.NotExpired())
+	parser.AddRule(paseto.ValidAt(time.Now()))
+
+	var lastErr error
+	for _, pk := range keys {
+		pasetoToken, err := parser.ParseV4Public(pk, tokenString, nil)
+		if err == nil {
+			return pasetoToken, nil
 		}
+		lastErr = err
 	}
 
-	// 1. 获取公钥（使用 token 中提取的 clientID）
-	publicKey, err := v.keyProvider.Get(ctx, info.ClientID)
-	if err != nil {
-		return nil, fmt.Errorf("get public key for client %s: %w", info.ClientID, err)
-	}
-
-	// 2. 验证签名
-	pasetoToken, err := VerifySignature(publicKey, tokenString)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. 验证 audience
-	audience, err := pasetoToken.GetAudience()
-	if err != nil {
-		return nil, fmt.Errorf("get audience: %w", err)
-	}
-	if audience != info.Audience {
-		return nil, fmt.Errorf("%w: audience mismatch", pasetokit.ErrInvalidSignature)
-	}
-
-	// 4. 根据类型解析为具体 Token
-	return ParseToken(pasetoToken, info.TokenType)
+	return nil, fmt.Errorf("signature verification failed: %w", lastErr)
 }

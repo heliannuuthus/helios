@@ -1,6 +1,6 @@
 # MFA 编排设计文档
 
-> 更新日期：2026-02-11
+> 更新日期：2026-02-16
 
 ---
 
@@ -12,12 +12,12 @@ MFA（Multi-Factor Authentication，多因素认证）是在主认证成功之�
 
 - **MFA 不是预展示的**——不在 `ConnectionsMap` 中提前暴露 MFA 配置
 - **MFA 是运行时决策**——由风险评估引擎在主认证成功后动态判断
-- **MFA 是 SFA 的编排**——MFA 的第二因子复用 SFA 能力，不是独立的验证通道
+- **MFA 是 Challenge 的编排**——MFA 的第二因子复用 Challenge 能力，不是独立的验证通道
 - **MFA 发生在授权后、Token 签发前**——是 AuthFlow 的一个阶段
 
 ### 关键区分
 
-| | SFA | MFA |
+| | Challenge（SFA） | MFA |
 |---|---|---|
 | 发起方 | 用户主动 | 系统触发 |
 | 触发时机 | 登录前（delegate）/ 独立 | 主认证后 |
@@ -172,33 +172,36 @@ Content-Type: application/json
 
 ### 5.1 前端完成 MFA
 
-MFA 复用 SFA 能力。前端根据 `allowed_channels` 选择一种 channel_type 发起 SFA：
+MFA 复用 Challenge 能力。前端根据 `allowed_channels` 选择一种 channel_type 发起 Challenge：
 
 ```
 前端                                          后端
  │                                             │
- │  POST /auth/sfa                             │
- │  { channel_type: "totp",                    │
+ │  POST /auth/challenge                       │
+ │  { client_id: "app_abc",                    │
+ │    audience: "svc_xyz",                     │
+ │    type: "login",                           │
+ │    channel_type: "totp",                    │
  │    channel: "user_123" }                    │
  │ ──────────────────────────────────────────> │
  │                                             │
- │  { sfa_id: "yyy", ... }                     │
+ │  { challenge_id: "yyy" }                    │
  │ <────────────────────────────────────────── │
  │                                             │
- │  PUT /auth/sfa?sfa_id=yyy                   │
- │  { channel_type: "totp",                    │
+ │  POST /auth/challenge/yyy                   │
+ │  { type: "totp",                            │
  │    proof: "123456" }                        │
  │ ──────────────────────────────────────────> │
  │                                             │
  │  { verified: true,                          │
- │    token: "v4.public.xxx" }                 │
+ │    challenge_token: "v4.public.xxx" }       │
  │ <────────────────────────────────────────── │
  │                                             │
  │  POST /auth/mfa/complete                    │
  │  { flow_id: "abc123",                       │
- │    sfa_token: "v4.public.xxx" }             │
+ │    challenge_token: "v4.public.xxx" }       │
  │ ──────────────────────────────────────────> │
- │                                             │  验证 SFA Token：
+ │                                             │  验证 ChallengeToken：
  │                                             │    channel_type ∈ allowed_channels ✓
  │                                             │    因子类别 ≠ 主认证因子类别 ✓
  │                                             │  MFA 完成 → 签发 Token
@@ -213,17 +216,17 @@ MFA 复用 SFA 能力。前端根据 `allowed_channels` 选择一种 channel_typ
 ```go
 // POST /auth/mfa/complete
 type MFACompleteRequest struct {
-    FlowID   string `json:"flow_id"`    // AuthFlow ID
-    SFAToken string `json:"sfa_token"`  // SFA 完成后的 Token
+    FlowID         string `json:"flow_id"`          // AuthFlow ID
+    ChallengeToken string `json:"challenge_token"`  // Challenge 完成后签发的 ChallengeToken
 }
 ```
 
 后端验证逻辑：
 
 1. **FlowID 有效**——AuthFlow 存在且处于 `mfa` 阶段
-2. **SFA Token 有效**——PASETO v4 签名、未过期
-3. **Channel Type 在允许列表中**——`sfa_token.channel_type ∈ flow.allowed_channels`
-4. **因子类别不同**——SFA 使用的因子类别与主认证因子类别不同（这才是真正的 MFA）
+2. **ChallengeToken 有效**——PASETO v4 签名、未过期
+3. **Channel Type 在允许列表中**——`challenge_token.channel_type ∈ flow.allowed_channels`
+4. **因子类别不同**——Challenge 使用的因子类别与主认证因子类别不同（这才是真正的 MFA）
 5. 验证通过 → 进入 `token` 阶段 → 签发 access_token
 
 ### 5.3 因子类别校验
@@ -329,10 +332,10 @@ ConnectionsMap 是"登录前看到什么"，MFA 是"登录后需要什么"。提
 - password + password hint 之类的伪 MFA
 - 确保真正的多因素覆盖
 
-### 9.4 为什么 MFA 复用 SFA 能力
+### 9.4 为什么 MFA 复用 Challenge 能力
 
-不重复实现验证逻辑。SFA 是统一的验证能力层，MFA 只负责编排：
+不重复实现验证逻辑。Challenge 是统一的验证能力层，MFA 只负责编排：
 - **决定是否需要验证**（风险评估）
 - **决定允许什么方式**（channel_type 过滤）
 - **校验因子是否满足 MFA 标准**（类别校验）
-- 真正的验证动作全部委托给 SFA
+- 真正的验证动作全部委托给 Challenge（POST /auth/challenge + POST /auth/challenge/:cid）

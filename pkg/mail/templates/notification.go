@@ -1,48 +1,30 @@
 package templates
 
 // NotificationContent 通知内容模板
-// 配色方案：使用语义化颜色（蓝色信息、黄色警告、红色错误、绿色成功）
-const NotificationContent = `<h2 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 12px 0; letter-spacing: -0.3px;">{{.Title}}</h2>
+// 极简风格：统一字色、简洁表格、无彩色装饰
+const NotificationContent = `<p style="font-size: 20px; font-weight: 600; color: #202124; margin: 0 0 24px 0;">{{.Title}}</p>
 
-{{if .Greeting}}
-<p style="font-size: 16px; color: #374151; margin: 0 0 24px 0;">{{.Greeting}}</p>
-{{end}}
+{{if .Greeting}}<p style="font-size: 15px; color: #202124; margin: 0 0 16px 0;">{{.Greeting}}</p>{{end}}
 
-<div style="font-size: 16px; color: #4b5563; line-height: 1.7;">
-    {{.Content}}
-</div>
+<div style="font-size: 15px; color: #202124; line-height: 1.7; margin-bottom: 24px;">{{.Content}}</div>
 
-{{if .InfoBox}}
-<div style="background-color: {{if eq .InfoBox.Type "warning"}}#fef3c7{{else if eq .InfoBox.Type "error"}}#fee2e2{{else if eq .InfoBox.Type "success"}}#d1fae5{{else}}#dbeafe{{end}}; border-left: 4px solid {{if eq .InfoBox.Type "warning"}}#f59e0b{{else if eq .InfoBox.Type "error"}}#ef4444{{else if eq .InfoBox.Type "success"}}#10b981{{else}}#2563eb{{end}}; border-radius: 0 12px 12px 0; padding: 20px 24px; margin: 28px 0;">
-    {{if .InfoBox.Title}}
-    <p style="font-size: 15px; font-weight: 600; color: {{if eq .InfoBox.Type "warning"}}#92400e{{else if eq .InfoBox.Type "error"}}#991b1b{{else if eq .InfoBox.Type "success"}}#065f46{{else}}#1e40af{{end}}; margin: 0 0 8px 0;">{{.InfoBox.Title}}</p>
-    {{end}}
-    <p style="font-size: 14px; color: {{if eq .InfoBox.Type "warning"}}#a16207{{else if eq .InfoBox.Type "error"}}#b91c1c{{else if eq .InfoBox.Type "success"}}#047857{{else}}#1d4ed8{{end}}; margin: 0; line-height: 1.6;">{{.InfoBox.Text}}</p>
-</div>
-{{end}}
+{{if .InfoBox}}<p style="font-size: 13px; color: #5f6368; margin: 0 0 24px 0;">{{if .InfoBox.Title}}<strong>{{.InfoBox.Title}}</strong> {{end}}{{.InfoBox.Text}}</p>{{end}}
 
 {{if .Details}}
-<div style="background-color: #f9fafb; border-radius: 12px; padding: 24px; margin: 28px 0; border: 1px solid #e5e7eb;">
-    {{if .DetailsTitle}}
-    <p style="font-size: 15px; font-weight: 600; color: #111827; margin: 0 0 16px 0;">{{.DetailsTitle}}</p>
+<table style="width: 100%; border-collapse: collapse; margin: 0 0 24px 0;">
+    {{range .Details}}
+    <tr>
+        <td style="padding: 6px 0; font-size: 13px; color: #5f6368; width: 80px; vertical-align: top;">{{.Label}}</td>
+        <td style="padding: 6px 0; font-size: 13px; color: #202124; vertical-align: top;">{{.Value}}</td>
+    </tr>
     {{end}}
-    <table style="width: 100%; border-collapse: collapse;">
-        {{range .Details}}
-        <tr>
-            <td style="padding: 12px 0; font-size: 14px; color: #6b7280; width: 120px; vertical-align: top; border-bottom: 1px solid #e5e7eb;">{{.Label}}</td>
-            <td style="padding: 12px 0; font-size: 14px; color: #111827; vertical-align: top; border-bottom: 1px solid #e5e7eb; font-weight: 500;">{{.Value}}</td>
-        </tr>
-        {{end}}
-    </table>
-</div>
+</table>
 {{end}}
 
 {{if .ActionURL}}
-<div style="margin-top: 36px; text-align: center;">
-    <a href="{{.ActionURL}}" target="_blank" style="display: inline-block; background-color: #111827; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 600; padding: 14px 36px; border-radius: 10px; box-shadow: 0 4px 14px -3px rgba(0, 0, 0, 0.3);">
-        {{.ActionText}}
-    </a>
-</div>
+<p style="margin: 0;">
+    <a href="{{.ActionURL}}" target="_blank" style="display: inline-block; background-color: #1a73e8; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 500; padding: 12px 24px; border-radius: 4px;">{{.ActionText}}</a>
+</p>
 {{end}}`
 
 // InfoBox 信息框

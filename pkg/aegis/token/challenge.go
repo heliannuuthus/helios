@@ -27,16 +27,6 @@ const (
 	ChannelTypeAlipayMP ChannelType = "alipay-mp" // 支付宝小程序换手机号
 )
 
-// RequiresCaptcha 检查该 ChannelType 是否需要 Captcha 前置验证
-func (t ChannelType) RequiresCaptcha() bool {
-	switch t {
-	case ChannelTypeEmailOTP, ChannelTypeSmsOTP:
-		return true
-	default:
-		return false
-	}
-}
-
 // IsVerification 检查是否是验证类 ChannelType（排除 captcha 和交换类）
 func (t ChannelType) IsVerification() bool {
 	switch t {
@@ -68,15 +58,15 @@ func (t ChannelType) IsExchange() bool {
 //   - webauthn → credential ID
 //   - wechat-mp → 手机号（交换得到）
 //
-// - typ: ChannelType（验证方式）
-// - biz: 业务场景（login / forget_password，交换类为空）
+// - typ: 业务类型（login / forget_password，交换类为空）
+// - ctp: ChannelType（验证方式）
 // - aud: 目标服务 ID
 // - cli: 发起验证的应用 ID
 type ChallengeToken struct {
 	Claims                  // 内嵌基础 Claims
 	subject     string      // sub - 完成验证的 principal
-	channelType ChannelType // typ - 验证方式
-	bizType     string      // biz - 业务场景
+	typ         string      // typ - 业务类型
+	channelType ChannelType // ctp - 渠道类型
 }
 
 // ==================== Challenge TokenTypeBuilder ====================
@@ -84,8 +74,8 @@ type ChallengeToken struct {
 // Challenge Challenge 类型构建器，实现 TokenTypeBuilder 接口
 type Challenge struct {
 	subject     string
+	typ         string
 	channelType ChannelType
-	bizType     string
 }
 
 // NewChallengeTokenBuilder 创建 Challenge 类型构建器
@@ -99,15 +89,15 @@ func (c *Challenge) Subject(subject string) *Challenge {
 	return c
 }
 
-// Type 设置验证方式（ChannelType）
-func (c *Challenge) Type(channelType ChannelType) *Challenge {
-	c.channelType = channelType
+// Type 设置业务类型
+func (c *Challenge) Type(typ string) *Challenge {
+	c.typ = typ
 	return c
 }
 
-// BizType 设置业务场景
-func (c *Challenge) BizType(bizType string) *Challenge {
-	c.bizType = bizType
+// ChannelType 设置渠道类型
+func (c *Challenge) ChannelType(channelType ChannelType) *Challenge {
+	c.channelType = channelType
 	return c
 }
 
@@ -116,8 +106,8 @@ func (c *Challenge) build(claims Claims) Token {
 	return &ChallengeToken{
 		Claims:      claims,
 		subject:     c.subject,
+		typ:         c.typ,
 		channelType: c.channelType,
-		bizType:     c.bizType,
 	}
 }
 
@@ -135,22 +125,22 @@ func ParseChallengeToken(pasetoToken *paseto.Token) (*ChallengeToken, error) {
 		return nil, fmt.Errorf("get subject: %w", err)
 	}
 
-	var channelType string
-	if err := pasetoToken.Get(ClaimType, &channelType); err != nil {
-		return nil, fmt.Errorf("get typ: %w", err)
+	var typ string
+	if err := pasetoToken.Get(ClaimType, &typ); err != nil {
+		// typ 是可选字段（交换类 Challenge 不包含），忽略错误
+		typ = ""
 	}
 
-	var bizType string
-	if err := pasetoToken.Get(ClaimBizType, &bizType); err != nil {
-		// bizType 是可选字段（交换类 Challenge 不包含），忽略错误
-		bizType = ""
+	var channelType string
+	if err := pasetoToken.Get(ClaimChannelType, &channelType); err != nil {
+		return nil, fmt.Errorf("get ctp: %w", err)
 	}
 
 	return &ChallengeToken{
 		Claims:      claims,
 		subject:     subject,
+		typ:         typ,
 		channelType: ChannelType(channelType),
-		bizType:     bizType,
 	}, nil
 }
 
@@ -173,12 +163,12 @@ func (c *ChallengeToken) BuildPaseto() (*paseto.Token, error) {
 		return nil, fmt.Errorf("set standard claims: %w", err)
 	}
 	t.SetSubject(c.subject)
-	if err := t.Set(ClaimType, c.channelType); err != nil {
-		return nil, fmt.Errorf("set typ: %w", err)
+	if err := t.Set(ClaimChannelType, c.channelType); err != nil {
+		return nil, fmt.Errorf("set ctp: %w", err)
 	}
-	if c.bizType != "" {
-		if err := t.Set(ClaimBizType, c.bizType); err != nil {
-			return nil, fmt.Errorf("set biz: %w", err)
+	if c.typ != "" {
+		if err := t.Set(ClaimType, c.typ); err != nil {
+			return nil, fmt.Errorf("set typ: %w", err)
 		}
 	}
 	return &t, nil
@@ -199,7 +189,7 @@ func (c *ChallengeToken) GetChannelType() ChannelType {
 	return c.channelType
 }
 
-// GetBizType 返回业务场景
-func (c *ChallengeToken) GetBizType() string {
-	return c.bizType
+// GetType 返回业务类型
+func (c *ChallengeToken) GetType() string {
+	return c.typ
 }

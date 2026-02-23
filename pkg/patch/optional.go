@@ -7,7 +7,7 @@
 package patch
 
 import (
-	"github.com/heliannuuthus/helios/pkg/json"
+	"github.com/go-json-experiment/json"
 )
 
 // Optional 表示一个可选的 JSON 字段，支持三态语义。

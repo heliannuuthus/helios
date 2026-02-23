@@ -13,24 +13,22 @@
 
 ---
 
-## SFA 三层模型重构
+## ~~SFA 三层模型重构~~ ✅ 已完成
 
 **设计文档**: [`docs/sfa-design.md`](docs/sfa-design.md)
 
-Challenge 重命名为 SFA（Single-Factor Authentication），引入三层请求模型：
+引入三层请求模型（Type / Channel Type / Channel），区分验证类和交换类处理逻辑。
 
-- **Type**：业务场景（login / forget_password / bind_phone），由业务 Service 定义，用于限流和模板选择
-- **Channel Type**：验证方式（email_otp / sms_otp / totp / webauthn / captcha / wechat-mp），由系统定义
-- **Channel**：验证目标（邮箱 / 手机号 / code），由前端提供
+**已完成**:
+- [x] CreateRequest 增加 type / channel_type / channel 三层字段
+- [x] 区分验证类和交换类的处理逻辑（`IsVerification()` / `IsExchange()` 已实现）
+- [x] 验证类支持 Type 关联的限流策略（按 `audience:type:channel` 维度限流，读取 `ServiceChallengeConfig`）
+- [x] Challenge Token claims 增加 channel_type（typ）和 type（biz）字段
+- [x] 前端适配新 API 结构（aegis-ui 已使用三层模型调用 API）
 
-**待办**:
-- [ ] 重命名 Challenge → SFA（types、service、handler）
-- [ ] CreateRequest 增加 type / channel_type / channel 三层字段
-- [ ] 区分验证类和交换类的处理逻辑
-- [ ] 交换类（wechat-mp、alipay-mp）Create 直接签发 SFA Token
-- [ ] 验证类支持 Type 关联的限流和模板策略
-- [ ] SFA Token claims 增加 channel_type 和 type 字段
-- [ ] 前端适配新 API 结构
+**遗留**:
+- [ ] 交换类（wechat-mp、alipay-mp）Create 直接签发 Challenge Token（当前 `Create` 未对 `IsExchange()` 分支处理）
+- [ ] 验证类支持 Type 关联的消息模板（`pkg/mail` 已有 `SendCodeWithScene`，但 `EmailSender` 接口未传 Type）
 
 ---
 
@@ -46,7 +44,7 @@ MFA 作为运行时编排层，在主认证 + 授权后、Token 签发前动态�
 - MFA 复用 SFA 能力，通过 `/auth/mfa/complete` 提交 SFA Token 完成
 
 **待办**:
-- [ ] AuthFlow 增加 MFA 阶段（mfa_required / mfa_allowed_channels / mfa_completed_at）
+- [ ] AuthFlow 增加安全认证阶段（`security_verification`），风险评估触发后进入该阶段，需完成 MFA 才可继续签发 Token
 - [ ] 实现风险评估引擎（RiskContext → RiskAssessment）
 - [ ] 实现 `/auth/mfa/complete` 接口
 - [ ] MFA 因子类别校验（主认证因子 ≠ MFA 因子）

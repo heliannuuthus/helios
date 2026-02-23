@@ -6,69 +6,70 @@ package main
 import (
 	"github.com/google/wire"
 
-	"github.com/heliannuuthus/helios/internal/aegis"
-	"github.com/heliannuuthus/helios/internal/config"
-	"github.com/heliannuuthus/helios/internal/database"
-	"github.com/heliannuuthus/helios/internal/hermes"
-	"github.com/heliannuuthus/helios/internal/hermes/upload"
-	"github.com/heliannuuthus/helios/internal/iris"
-	intMw "github.com/heliannuuthus/helios/internal/middleware"
-	"github.com/heliannuuthus/helios/internal/zwei/favorite"
-	"github.com/heliannuuthus/helios/internal/zwei/history"
-	"github.com/heliannuuthus/helios/internal/zwei/home"
-	"github.com/heliannuuthus/helios/internal/zwei/preference"
-	"github.com/heliannuuthus/helios/internal/zwei/recipe"
-	"github.com/heliannuuthus/helios/internal/zwei/recommend"
-	"github.com/heliannuuthus/helios/internal/zwei/tag"
-	"github.com/heliannuuthus/helios/pkg/aegis/interpreter"
-	"github.com/heliannuuthus/helios/pkg/aegis/keys"
+	"github.com/heliannuuthus/helios/aegis"
+	aegisconfig "github.com/heliannuuthus/helios/aegis/config"
+	intMw "github.com/heliannuuthus/helios/aegis/middleware"
+	"github.com/heliannuuthus/helios/chaos"
+	"github.com/heliannuuthus/helios/hermes"
+	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
+	"github.com/heliannuuthus/helios/hermes/upload"
+	"github.com/heliannuuthus/helios/iris"
 	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
+	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	zweiconfig "github.com/heliannuuthus/helios/zwei/config"
+	"github.com/heliannuuthus/helios/zwei/favorite"
+	"github.com/heliannuuthus/helios/zwei/history"
+	"github.com/heliannuuthus/helios/zwei/home"
+	"github.com/heliannuuthus/helios/zwei/preference"
+	"github.com/heliannuuthus/helios/zwei/recipe"
+	"github.com/heliannuuthus/helios/zwei/recommend"
+	"github.com/heliannuuthus/helios/zwei/tag"
 )
 
 // 业务模块 Handler（使用 Zwei 数据库）
 func provideRecipeHandler() *recipe.Handler {
-	return recipe.NewHandler(database.GetZwei())
+	return recipe.NewHandler(zweiconfig.InitDB())
 }
 
 func provideFavoriteHandler() *favorite.Handler {
-	return favorite.NewHandler(database.GetZwei())
+	return favorite.NewHandler(zweiconfig.InitDB())
 }
 
 func provideHistoryHandler() *history.Handler {
-	return history.NewHandler(database.GetZwei())
+	return history.NewHandler(zweiconfig.InitDB())
 }
 
 func providePreferenceHandler() *preference.Handler {
-	return preference.NewHandler(database.GetZwei())
+	return preference.NewHandler(zweiconfig.InitDB())
 }
 
 func provideTagHandler() *tag.Handler {
-	return tag.NewHandler(database.GetZwei())
+	return tag.NewHandler(zweiconfig.InitDB())
 }
 
 func provideRecommendHandler() *recommend.Handler {
-	return recommend.NewHandler(database.GetZwei())
+	return recommend.NewHandler(zweiconfig.InitDB())
 }
 
 func provideHomeHandler() *home.Handler {
-	return home.NewHandler(database.GetZwei())
+	return home.NewHandler(zweiconfig.InitDB())
 }
 
 // Hermes Service（供 aegis 模块复用）
 func provideHermesService() *hermes.Service {
-	return hermes.NewService(database.GetHermes())
+	return hermes.NewService(hermesconfig.InitDB())
 }
 
 // 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
 func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
-	db := database.GetHermes()
+	db := hermesconfig.InitDB()
 	userSvc := hermes.NewUserService(db)
 	credentialSvc := hermes.NewCredentialService(db)
 	return aegis.Initialize(hermesService, userSvc, credentialSvc)
 }
 
 func provideUploadHandler() *upload.Handler {
-	return upload.NewHandler(database.GetHermes())
+	return upload.NewHandler(hermesconfig.InitDB())
 }
 
 func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
@@ -77,40 +78,46 @@ func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
 
 // Iris 用户信息模块 Handler
 func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
-	db := database.GetHermes()
+	db := hermesconfig.InitDB()
 	userSvc := hermes.NewUserService(db)
 	credentialSvc := hermes.NewCredentialService(db)
-	return iris.NewHandler(userSvc, credentialSvc, aegisHandler.WebAuthnSvc())
+	return iris.NewHandler(userSvc, credentialSvc, aegisHandler.MFASvc())
+}
+
+// Chaos 业务聚合模块
+func provideChaosHandler() (*chaos.Handler, error) {
+	db := hermesconfig.InitDB()
+	chaosModule, err := chaos.New(db)
+	if err != nil {
+		return nil, err
+	}
+	return chaosModule.Handler(), nil
 }
 
 // provideInterpreter 创建 Token 解释器（用于 API 路由认证中间件）
-func provideInterpreter() (*interpreter.Interpreter, error) {
-	keyProvider, err := intMw.NewHermesKeyProvider()
+func provideInterpreter() (*token.Interpreter, error) {
+	keyStore, err := intMw.NewHermesKeyStore()
 	if err != nil {
 		return nil, err
 	}
 
-	return interpreter.NewInterpreter(
-		keys.NewPublicKeyProvider(keyProvider),
-		keys.NewSymmetricKeyProvider(keyProvider),
-	), nil
+	return token.NewInterpreter(keyStore, keyStore), nil
 }
 
 // provideGinMiddlewareFactory 创建 Gin 中间件工厂
 func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
-	endpoint := config.GetAegisIssuer()
+	endpoint := aegisconfig.GetIssuer()
 
-	// 创建密钥提供者
-	keyProvider, err := intMw.NewHermesKeyProvider()
+	keyStore, err := intMw.NewHermesKeyStore()
 	if err != nil {
 		return nil, err
 	}
 
 	return middleware.NewGinFactory(
 		endpoint,
-		keys.NewPublicKeyProvider(keyProvider),    // 公钥（用于验证签名）
-		keys.NewSymmetricKeyProvider(keyProvider), // 对称密钥（用于解密 footer）
-		keys.NewSecretKeyProvider(keyProvider),    // 私钥（用于签发 CAT）
+		keyStore, // 签名验证
+		keyStore, // footer 解密
+		keyStore, // CAT 签发
 	), nil
 }
 
@@ -138,6 +145,8 @@ var ProviderSet = wire.NewSet(
 	provideUploadHandler,
 	// Iris 用户信息模块
 	provideIrisHandler,
+	// Chaos 业务聚合模块
+	provideChaosHandler,
 	// 中间件
 	provideInterpreter,
 	provideGinMiddlewareFactory,
@@ -156,8 +165,9 @@ type App struct {
 	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
 	HermesHandler     *hermes.Handler
+	ChaosHandler      *chaos.Handler
 	MiddlewareFactory *middleware.GinFactory
-	Interpreter       *interpreter.Interpreter
+	Interpreter       *token.Interpreter
 }
 
 // InitializeApp 初始化应用（由 wire 生成）

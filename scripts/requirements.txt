@@ -1,1 +1,3 @@
-cryptography>=46.0.0
+cryptography
+bcrypt
+tomlkit

@@ -1,7 +1,7 @@
 package telegram
 
 import (
-	"encoding/json"
+	"github.com/go-json-experiment/json/jsontext"
 	"io"
 )
 
@@ -37,7 +37,7 @@ const (
 // Response Telegram API 通用响应
 type Response struct {
 	OK          bool            `json:"ok"`
-	Result      json.RawMessage `json:"result,omitempty"`
+	Result      jsontext.Value `json:"result,omitempty"`
 	Description string          `json:"description,omitempty"`
 	ErrorCode   int             `json:"error_code,omitempty"`
 }
