@@ -12,39 +12,38 @@ import (
 type Sender struct {
 	client         *Client
 	templateEngine *templates.Engine
-	from           string // 发件人地址
+	from           string
 }
 
 // SenderConfig 发送器配置
 type SenderConfig struct {
-	// SMTP 配置
 	Host     string
 	Port     int
 	Username string
 	Password string
-	UseSSL   bool // true: SSL(465), false: STARTTLS(587)
+	UseSSL   bool
 
-	// 品牌配置
-	BrandName   string                 // 品牌名称
-	LogoURL     string                 // Logo URL（可选）
-	FooterLinks []templates.FooterLink // 页脚链接（可选）
+	MaxConns    int
+	IdleTimeout int // 秒
+
+	BrandName   string
+	LogoURL     string
+	FooterLinks []templates.FooterLink
 }
 
 // NewSender 创建邮件发送器
-func NewSender(cfg *SenderConfig) *Sender {
-	var opts []Option
-	if cfg.Port > 0 {
-		opts = append(opts, WithPort(cfg.Port))
-	}
-	if cfg.UseSSL {
-		opts = append(opts, WithSSL())
-	} else {
-		opts = append(opts, WithSTARTTLS())
+func NewSender(cfg *SenderConfig) (*Sender, error) {
+	client, err := NewClient(&ClientConfig{
+		Host:     cfg.Host,
+		Port:     cfg.Port,
+		Username: cfg.Username,
+		Password: cfg.Password,
+		UseSSL:   cfg.UseSSL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create mail client: %w", err)
 	}
 
-	client := NewClient(cfg.Host, cfg.Username, cfg.Password, opts...)
-
-	// 创建模板引擎
 	brandName := cfg.BrandName
 	if brandName == "" {
 		brandName = "Aegis"
@@ -64,18 +63,7 @@ func NewSender(cfg *SenderConfig) *Sender {
 		client:         client,
 		templateEngine: engine,
 		from:           cfg.Username,
-	}
-}
-
-// NewQQExmailSender 创建腾讯企业邮箱发送器（便捷方法）
-func NewQQExmailSender(username, password string) *Sender {
-	return NewSender(&SenderConfig{
-		Host:     "smtp.exmail.qq.com",
-		Port:     465,
-		Username: username,
-		Password: password,
-		UseSSL:   true,
-	})
+	}, nil
 }
 
 // ==================== 基础发送方法 ====================
@@ -99,8 +87,7 @@ func (s *Sender) Send(ctx context.Context, to, subject, body string) error {
 
 // ==================== 实现 challenge.EmailSender 接口 ====================
 
-// SendCode 发送验证码邮件（实现 challenge.EmailSender 接口）
-// 默认使用登录验证码场景
+// SendCode 发送验证码邮件
 func (s *Sender) SendCode(ctx context.Context, email, code string) error {
 	return s.SendCodeWithScene(ctx, email, code, templates.SceneOTPLogin, "")
 }
@@ -108,7 +95,6 @@ func (s *Sender) SendCode(ctx context.Context, email, code string) error {
 // SendCodeWithScene 根据场景发送验证码邮件
 func (s *Sender) SendCodeWithScene(ctx context.Context, email, code string, scene templates.Scene, greeting string) error {
 	if s.templateEngine == nil {
-		// 降级：使用简单文本
 		subject := "您的验证码"
 		body := fmt.Sprintf("您的验证码是：%s，5 分钟内有效。", code)
 		return s.Send(ctx, email, subject, body)
@@ -199,19 +185,14 @@ func (s *Sender) SendResetPasswordLink(ctx context.Context, email, resetURL stri
 
 // ==================== 扩展方法 ====================
 
-// SendCustom 发送自定义邮件
-func (s *Sender) SendCustom(ctx context.Context, to, subject, htmlBody string) error {
-	return s.Send(ctx, to, subject, htmlBody)
-}
-
 // Verify 验证 SMTP 连接
 func (s *Sender) Verify(ctx context.Context) error {
 	return s.client.Verify(ctx)
 }
 
-// GetClient 获取底层邮件客户端
-func (s *Sender) GetClient() *Client {
-	return s.client
+// Close 关闭连接池
+func (s *Sender) Close() {
+	s.client.Close()
 }
 
 // GetTemplateEngine 获取模板引擎

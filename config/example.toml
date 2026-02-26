@@ -40,16 +40,9 @@ password = ""           # 如果未指定，使用 database.password
 name = "auth"           # 数据库名称
 
 # Redis 配置（用于存储 session、authorization_code、refresh_token）
+# URL 格式: redis://:password@host:port/db
 [redis]
-host = "127.0.0.1"
-port = 6379
-password = "helios"
-db = 0
-# 前缀配置（可选）
-# session-prefix = "auth:session:"
-# code-prefix = "auth:code:"
-# refresh-token-prefix = "auth:rt:"
-# user-token-prefix = "auth:user:rt:"
+url = "redis://:helios@127.0.0.1:6379/0"
 
 [cors]
 origins = ["*"]
@@ -87,12 +80,14 @@ appid = ""  # 支付宝小程序 AppID
 secret = ""  # 应用私钥（PKCS8 DER Base64，用于签名请求）
 verify-key = ""  # 支付宝公钥（PKCS8 DER Base64，上传应用公钥后支付宝返回，用于验证响应签名）
 
-# Captcha 人机验证配置（Cloudflare Turnstile）
+# VChan 人机验证配置（Cloudflare Turnstile）
 # 获取密钥: https://dash.cloudflare.com/turnstile
-[captcha]
-provider = "turnstile"  # 验证提供商：turnstile
-site-key = ""           # 站点密钥（前端使用）
-secret-key = ""         # 密钥（后端验证使用）
+[vchan.captcha]
+enabled = true             # 是否启用人机验证
+
+[vchan.captcha.turnstile]
+app_id = ""               # 站点密钥 / site key（前端使用）
+secret = ""               # 密钥 / secret key（后端验证使用）
 
 # Aegis 认证配置
 [aegis]
@@ -101,6 +96,13 @@ expires-in = 7200           # access_token 过期时间(秒)，2小时
 refresh-expires-in = 365    # refresh_token 过期时间(天)，1年
 max-refresh-token = 10      # 每用户最大 refresh_token 数
 service-url = "http://localhost:18000"  # Aegis 服务地址（内部调用）
+
+# SSO 配置（跨应用单点登录）
+# 密钥使用 python3 scripts/initialize-hermes.py 生成
+[sso]
+# master-key = ""          # SSO master key（32 字节，Base64URL 编码，通过 KDF 派生签名和加密密钥）
+# ttl = "168h"             # SSO Token 有效期（默认 7 天）
+# cookie-name = "aegis-sso"  # SSO Cookie 名称
 
 # Cookie 配置（Aegis 模块登录会话）
 [aegis.cookie]
@@ -126,8 +128,8 @@ callback = "/callback"      # IDP 回调路径
 
 # 域配置（注意：实际配置在 hermes.toml 中，这里仅作参考）
 # 密钥使用 python3 scripts/initialize-hermes.py 生成
-# [aegis.domains.ciam]
-# name = "Customer Identity"           # 域名称
+# [aegis.domains.consumer]
+# name = "Consumer Identity"           # 域名称
 # description = "C端用户身份域"         # 域描述
 # 签名密钥（32 字节 Ed25519 seed，Base64URL 编码）
 # 支持密钥轮换：逗号分隔多个密钥，第一把是主密钥用于签发，其余是旧密钥用于验证
@@ -204,20 +206,31 @@ num-counters = 50000         # 计数器数量
 buffer-items = 64            # 缓冲区大小
 ttl = "5m"                   # 缓存过期时间（支持热更新）
 
+# Challenge 配置
+[aegis.challenge]
+expires-in = "5m"              # Challenge 业务有效期
+
+# Challenge 限流配置
+[aegis.challenge.rate-limit]
+# channel 维度默认限流（当 service 未配置时的 fallback）
+[aegis.challenge.rate-limit.default-limits]
+"1m" = 1          # 每分钟 1 次
+"1h" = 10         # 每小时 10 次
+"24h" = 20        # 每天 20 次
+
+# IP 维度限流
+[aegis.challenge.rate-limit.ip-limits]
+"1m" = 5          # 每分钟 5 次
+"1h" = 50         # 每小时 50 次
+
+# 验证错误触发重新 captcha
+verify-fail-threshold = 5       # 验证错误 N 次后强制重新 captcha
+verify-fail-window = "30m"      # 验证错误统计窗口
+
 # Challenge 缓存配置（MFA 验证）
 [aegis.cache.challenge]
 key-prefix = "aegis:ch:"      # 缓存 key 前缀
 expires_in = "5m"            # Challenge 过期时间（支持热更新）
-
-# 阿里云 OSS 配置（用于图片上传）[已废弃，迁移至 R2]
-# [oss]
-# endpoint = ""           # OSS 地域节点，如 oss-cn-hangzhou.aliyuncs.com
-# access-key-id = ""      # AccessKey ID
-# access-key-secret = ""  # AccessKey Secret
-# bucket = ""             # Bucket 名称
-# domain = ""             # 自定义域名（可选），如 https://cdn.example.com
-# region = ""             # STS 区域（可选，默认从 endpoint 提取）
-# role-arn = ""           # RAM 角色 ARN
 
 # Cloudflare R2 配置（用于图片上传，S3 兼容）
 [r2]

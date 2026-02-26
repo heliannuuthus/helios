@@ -4,39 +4,54 @@
 USE `hermes`;
 
 -- ==================== 服务 ====================
--- domain_id = '-' 表示跨域内置服务，属于全部域
 INSERT INTO t_service (service_id, domain_id, name, description, encrypted_key, access_token_expires_in, refresh_token_expires_in) VALUES
-('hermes', '-', 'Hermes 管理服务', '身份与访问管理服务', 'hoLR+UoMh5EUMYvAgPVrkIbOjGI+GZ629N4rmL+3309SMXvQmaE1XT76jgkni9tF7CWOmhGVvYyoNlmP', 7200, 604800),
-('iris', '-', 'Iris 用户服务', '用户信息管理服务', 'kTxgHk7TxtVX2A5qo//wJX/PwIxO2+o7S4kXPrf8ZR3CNvRrNTl2xxfM5q9CHCVk9DpS6l3n/NRpLyK2', 7200, 604800)
+('hermes', '-', 'Hermes 管理服务', '身份与访问管理服务', 'XcBiSpqynGguX4XJye2wqGJX6B/o1pXUeNeRTGxdzSmmqNxqB1erFuqEkkxpd3eS5/iCf8W21PH6U1vL', 7200, 604800),
+('iris', '-', 'Iris 用户服务', '用户信息管理服务', 'MoBZtHJY+ngmCYJeoIjuq/KL3Gux4u/FYwOr2pp5pb65twoq5lBLWXDr+WfDJ+KQ41+wyb/S7S3sbEXX', 7200, 604800)
 ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), encrypted_key = VALUES(encrypted_key), domain_id = VALUES(domain_id);
 
 -- ==================== 应用 ====================
 INSERT INTO t_application (app_id, domain_id, name, logo_url, redirect_uris, allowed_origins) VALUES
-('atlas', 'piam', 'Atlas 管理控制台', 'https://aegis.heliannuuthus.com/logos/atlas.svg', '["https://atlas.heliannuuthus.com/auth/callback"]', '["https://atlas.heliannuuthus.com"]')
+('atlas', 'platform', 'Atlas 管理控制台', 'https://aegis.heliannuuthus.com/logos/atlas.svg', '["https://atlas.heliannuuthus.com/auth/callback"]', '["https://atlas.heliannuuthus.com"]'),
+('piris', 'platform', '平台个人中心', NULL, '["https://iris.heliannuuthus.com/auth/callback"]', '["https://iris.heliannuuthus.com"]'),
+('ciris', 'consumer', '用户个人中心', NULL, '["https://iris.heliannuuthus.com/auth/callback"]', '["https://iris.heliannuuthus.com"]')
 ON DUPLICATE KEY UPDATE name = VALUES(name), logo_url = VALUES(logo_url), redirect_uris = VALUES(redirect_uris), allowed_origins = VALUES(allowed_origins);
 
 -- ==================== 应用 IDP 配置 ====================
 INSERT INTO t_application_idp_config (app_id, `type`, priority, strategy, delegate, `require`) VALUES
-('atlas', 'oper', 10, 'password', 'email_otp,webauthn', 'captcha'),
+('atlas', 'staff', 10, 'password', 'email_otp,webauthn', 'captcha'),
 ('atlas', 'google', 5, NULL, NULL, NULL),
-('atlas', 'github', 5, NULL, NULL, NULL)
+('atlas', 'github', 5, NULL, NULL, NULL),
+('piris', 'staff', 10, 'password', 'email_otp,webauthn', 'captcha'),
+('piris', 'google', 5, NULL, NULL, NULL),
+('piris', 'github', 5, NULL, NULL, NULL),
+('ciris', 'user', 10, 'password', 'sms_otp', NULL),
+('ciris', 'wechat-mp', 5, NULL, NULL, NULL),
+('ciris', 'wechat-web', 5, NULL, NULL, NULL)
 ON DUPLICATE KEY UPDATE priority = VALUES(priority), strategy = VALUES(strategy), delegate = VALUES(delegate), `require` = VALUES(`require`);
 
 -- ==================== 应用服务关系 ====================
 INSERT INTO t_application_service_relation (app_id, service_id, relation) VALUES
-('atlas', 'hermes', '*')
+('atlas', 'hermes', '*'),
+('piris', 'iris', '*'),
+('ciris', 'iris', '*')
 ON DUPLICATE KEY UPDATE relation = VALUES(relation);
 
+-- ==================== 服务 Challenge 配置 ====================
+INSERT INTO t_service_challenge_setting (service_id, `type`, expires_in, limits) VALUES
+('iris', 'staff:verify', 300, '{"1m": 1, "24h": 10}'),
+('iris', 'user:verify', 300, '{"1m": 1, "24h": 10}'),
+('iris', 'passkey:verify', 300, '{"1m": 1, "24h": 10}')
+ON DUPLICATE KEY UPDATE expires_in = VALUES(expires_in), limits = VALUES(limits);
+
 -- ==================== 用户 ====================
-INSERT INTO t_user (uid, status, email_verified, nickname, picture, email) VALUES
-('heliannuuthus', 0, 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
-ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified);
+INSERT INTO t_user (openid, status, username, password_hash, email_verified, nickname, picture, email) VALUES
+('heliannuuthus', 0, 'heliannuuthus', '$2b$10$5UdD3/HH15obvSJtaZ0.OuoV9uwMitBL7StnsCceE9bZyiTTOB8Xm', 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
+ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified), username = VALUES(username), password_hash = VALUES(password_hash);
 
 -- ==================== 用户身份 ====================
--- global 身份为域级对外标识（token 中的 sub），其他为认证身份
-INSERT INTO t_user_identity (domain, uid, idp, t_openid) VALUES
-('piam', 'heliannuuthus', 'global', 'e52df52fdecab7cbc795ee69322f21bc'),
-('piam', 'heliannuuthus', 'oper', 'heliannuuthus')
+INSERT INTO t_user_identity (domain, openid, idp, t_openid) VALUES
+('platform', 'heliannuuthus', 'global', '5629876e814fec8ac73ea28002b73d66'),
+('platform', 'heliannuuthus', 'staff', 'heliannuuthus')
 ON DUPLICATE KEY UPDATE t_openid = VALUES(t_openid);
 
 -- ==================== 服务关系（权限） ====================

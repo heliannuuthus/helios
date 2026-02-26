@@ -6,8 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/keys"
-	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	"github.com/heliannuuthus/helios/pkg/aegis/key"
+	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
 // GinFactory Gin 框架中间件工厂
@@ -16,17 +16,13 @@ type GinFactory struct {
 }
 
 // NewGinFactory 创建 Gin 中间件工厂
-// endpoint: Aegis 服务端点（如 http://auth.example.com）
-// publicKeyProvider: 公钥提供者（用于验证 UAT 签名）
-// symmetricKeyProvider: 对称密钥提供者（用于解密 footer）
-// secretKeyProvider: 私钥提供者（用于签发 CAT）
 func NewGinFactory(
 	endpoint string,
-	publicKeyProvider keys.PublicKeyProvider,
-	symmetricKeyProvider keys.SymmetricKeyProvider,
-	secretKeyProvider keys.SecretKeyProvider,
+	signKeyStore *key.Store,
+	encryptKeyStore *key.Store,
+	catKeyStore *key.Store,
 ) *GinFactory {
-	factory := NewFactory(endpoint, publicKeyProvider, symmetricKeyProvider, secretKeyProvider)
+	factory := NewFactory(endpoint, signKeyStore, encryptKeyStore, catKeyStore)
 	return &GinFactory{
 		Factory: factory,
 	}
@@ -69,7 +65,6 @@ func (m *GinMiddleware) RequireRelation(relation string) gin.HandlerFunc {
 // RequireRelationOn 返回要求指定关系的 Gin 中间件（指定资源）
 func (m *GinMiddleware) RequireRelationOn(relation, objectType, objectID string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. 认证
 		claims, err := m.authenticate(c.Request)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
@@ -79,7 +74,6 @@ func (m *GinMiddleware) RequireRelationOn(relation, objectType, objectID string)
 			return
 		}
 
-		// 2. 鉴权
 		if err := m.authorize(c.Request.Context(), claims, relation, objectType, objectID); err != nil {
 			if errors.Is(err, errForbidden) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
@@ -108,7 +102,6 @@ func (m *GinMiddleware) RequireAnyRelation(relations ...string) gin.HandlerFunc 
 // RequireAnyRelationOn 返回要求任意一个指定关系的 Gin 中间件（指定资源）
 func (m *GinMiddleware) RequireAnyRelationOn(relations []string, objectType, objectID string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. 认证
 		claims, err := m.authenticate(c.Request)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
@@ -118,7 +111,6 @@ func (m *GinMiddleware) RequireAnyRelationOn(relations []string, objectType, obj
 			return
 		}
 
-		// 2. 鉴权
 		if err := m.authorizeAny(c.Request.Context(), claims, relations, objectType, objectID); err != nil {
 			if errors.Is(err, errForbidden) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
@@ -140,38 +132,26 @@ func (m *GinMiddleware) RequireAnyRelationOn(relations []string, objectType, obj
 }
 
 // GetTokenFromGin 从 Gin context 中获取验证后的 Token
-func GetTokenFromGin(c *gin.Context) token.Token {
+func GetTokenFromGin(c *gin.Context) tokendef.Token {
 	t, exists := c.Get(string(ClaimsKey))
 	if !exists {
 		return nil
 	}
-	result, ok := t.(token.Token)
+	result, ok := t.(tokendef.Token)
 	if !ok {
 		return nil
 	}
 	return result
 }
 
-// GetOpenIDFromGin 从 Gin context 中获取用户对外标识（主身份 t_openid）
+// GetOpenIDFromGin 从 Gin context 中获取用户标识
 func GetOpenIDFromGin(c *gin.Context) string {
 	t := GetTokenFromGin(c)
 	if t == nil {
 		return ""
 	}
-	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
+	if uat, ok := t.(*tokendef.UserAccessToken); ok && uat.HasUser() {
 		return uat.GetOpenID()
-	}
-	return ""
-}
-
-// GetInternalUIDFromGin 从 Gin context 中获取用户内部 ID（t_user.openid，用于内部查询）
-func GetInternalUIDFromGin(c *gin.Context) string {
-	t := GetTokenFromGin(c)
-	if t == nil {
-		return ""
-	}
-	if uat, ok := token.AsUAT(t); ok && uat.HasUser() {
-		return uat.GetInternalUID()
 	}
 	return ""
 }

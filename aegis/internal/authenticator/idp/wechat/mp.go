@@ -1,0 +1,249 @@
+package wechat
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/go-json-experiment/json"
+
+	"github.com/heliannuuthus/helios/aegis/config"
+	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
+	"github.com/heliannuuthus/helios/aegis/internal/types"
+	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/logger"
+)
+
+// MPProvider 微信小程序 Provider
+type MPProvider struct {
+	appID     string
+	appSecret string
+}
+
+// NewMPProvider 创建微信小程序 Provider
+func NewMPProvider() *MPProvider {
+	cfg := config.Cfg()
+	return &MPProvider{
+		appID:     cfg.GetString("idps.wxmp.appid"),
+		appSecret: cfg.GetString("idps.wxmp.secret"),
+	}
+}
+
+// Type 返回 IDP 类型
+func (p *MPProvider) Type() string {
+	return idp.TypeWechatMP
+}
+
+// Exchange 用授权码换取用户信息
+// proof: 小程序 login code
+func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*models.TUserInfo, error) {
+	if proof == "" {
+		return nil, errors.New("code is required")
+	}
+	if p.appID == "" || p.appSecret == "" {
+		return nil, errors.New("微信小程序 IdP 未配置")
+	}
+
+	code := proof
+	logger.Infof("[Wechat] 登录请求 - Code: %s...", code[:min(len(code), 10)])
+
+	reqParams := url.Values{}
+	reqParams.Set("appid", p.appID)
+	reqParams.Set("secret", p.appSecret)
+	reqParams.Set("js_code", code)
+	reqParams.Set("grant_type", "authorization_code")
+
+	reqURL := "https://api.weixin.qq.com/sns/jscode2session?" + reqParams.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		logger.Errorf("[Wechat] 请求接口失败: %v", err)
+		return nil, fmt.Errorf("请求接口失败: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Warnf("[WeChat] close response body failed: %v", err)
+		}
+	}()
+
+	var result code2SessionResponse
+	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
+		logger.Errorf("[Wechat] 解析响应失败: %v", err)
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if result.ErrCode != 0 {
+		logger.Errorf("[Wechat] 登录失败 - ErrCode: %d, ErrMsg: %s", result.ErrCode, result.ErrMsg)
+		return nil, fmt.Errorf("登录失败: %s", result.ErrMsg)
+	}
+
+	logger.Infof("[Wechat] 登录成功 - OpenID: %s", result.OpenID)
+
+	return &models.TUserInfo{
+		TOpenID: result.OpenID,
+		RawData: fmt.Sprintf(`{"openid":"%s"}`, result.OpenID),
+	}, nil
+}
+
+// FetchAdditionalInfo 补充获取用户信息
+func (p *MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, params ...any) (*idp.AdditionalInfo, error) {
+	switch infoType {
+	case "phone":
+		if len(params) < 1 {
+			return nil, errors.New("phone code is required")
+		}
+		code, ok := params[0].(string)
+		if !ok {
+			return nil, errors.New("phone code must be a string")
+		}
+		phone, err := p.getPhoneNumber(ctx, code)
+		if err != nil {
+			return nil, err
+		}
+		return &idp.AdditionalInfo{
+			Type:  "phone",
+			Value: phone,
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported info type: %s", infoType)
+	}
+}
+
+// Prepare 准备前端所需的公开配置
+func (p *MPProvider) Prepare() *types.ConnectionConfig {
+	return &types.ConnectionConfig{
+		Connection: "wechat-mp",
+		Identifier: p.appID,
+	}
+}
+
+// Exchange 用外部凭证换取结果（小程序手机号授权 code → 手机号）
+// proof: 手机号授权 code
+func (p *MPProvider) Exchange(ctx context.Context, proof string, _ ...any) (*idp.ExchangeResult, error) {
+	if proof == "" {
+		return nil, errors.New("phone code is required")
+	}
+	phone, err := p.getPhoneNumber(ctx, proof)
+	if err != nil {
+		return nil, err
+	}
+	return &idp.ExchangeResult{
+		Value: phone,
+	}, nil
+}
+
+// getPhoneNumber 获取微信手机号（内部方法）
+func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, error) {
+	accessToken, err := p.getAccessToken(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	reqURL := fmt.Sprintf("https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=%s", accessToken)
+
+	body := fmt.Sprintf(`{"code":"%s"}`, code)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("创建请求失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		logger.Errorf("[Wechat] 请求获取手机号接口失败: %v", err)
+		return "", fmt.Errorf("请求微信接口失败: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Warnf("[WeChat] close response body failed: %v", err)
+		}
+	}()
+
+	var result phoneNumberResponse
+	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
+		logger.Errorf("[Wechat] 解析手机号响应失败: %v", err)
+		return "", fmt.Errorf("解析微信响应失败: %w", err)
+	}
+
+	if result.ErrCode != 0 {
+		logger.Errorf("[Wechat] 获取手机号失败 - ErrCode: %d, ErrMsg: %s", result.ErrCode, result.ErrMsg)
+		return "", fmt.Errorf("微信获取手机号失败: %s", result.ErrMsg)
+	}
+
+	phone := result.PhoneInfo.PurePhoneNumber
+	if phone == "" {
+		phone = result.PhoneInfo.PhoneNumber
+	}
+
+	logger.Infof("[Wechat] 获取手机号成功 - Phone: %s***%s", phone[:3], phone[len(phone)-4:])
+	return phone, nil
+}
+
+// getAccessToken 获取微信 access_token
+func (p *MPProvider) getAccessToken(ctx context.Context) (string, error) {
+	if p.appID == "" || p.appSecret == "" {
+		return "", errors.New("微信小程序配置缺失")
+	}
+
+	reqURL := fmt.Sprintf("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s", p.appID, p.appSecret)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("请求微信 access_token 失败: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Warnf("[WeChat] close response body failed: %v", err)
+		}
+	}()
+
+	var result accessTokenResponse
+	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
+		return "", fmt.Errorf("解析微信 access_token 响应失败: %w", err)
+	}
+
+	if result.ErrCode != 0 {
+		return "", fmt.Errorf("获取微信 access_token 失败: %s", result.ErrMsg)
+	}
+
+	return result.AccessToken, nil
+}
+
+// 内部响应结构
+type code2SessionResponse struct {
+	OpenID     string `json:"openid"`
+	SessionKey string `json:"session_key"`
+	UnionID    string `json:"unionid,omitempty"`
+	ErrCode    int    `json:"errcode,omitempty"`
+	ErrMsg     string `json:"errmsg,omitempty"`
+}
+
+type phoneNumberResponse struct {
+	ErrCode   int    `json:"errcode"`
+	ErrMsg    string `json:"errmsg"`
+	PhoneInfo struct {
+		PhoneNumber     string `json:"phoneNumber"`
+		PurePhoneNumber string `json:"purePhoneNumber"`
+		CountryCode     string `json:"countryCode"`
+	} `json:"phone_info"`
+}
+
+type accessTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+	ErrCode     int    `json:"errcode"`
+	ErrMsg      string `json:"errmsg"`
+}

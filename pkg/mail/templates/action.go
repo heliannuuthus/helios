@@ -1,40 +1,22 @@
 package templates
 
 // ActionContent 操作按钮内容模板
-// 配色方案：主色 #2563eb (蓝色)
-const ActionContent = `<h2 style="font-size: 24px; font-weight: 700; color: #111827; margin: 0 0 12px 0; letter-spacing: -0.3px;">{{.Title}}</h2>
+// 极简风格：单一主色按钮、统一字色
+const ActionContent = `<p style="font-size: 20px; font-weight: 600; color: #202124; margin: 0 0 24px 0;">{{.Title}}</p>
 
-{{if .Greeting}}
-<p style="font-size: 16px; color: #374151; margin: 0 0 24px 0;">{{.Greeting}}</p>
-{{end}}
+{{if .Greeting}}<p style="font-size: 15px; color: #202124; margin: 0 0 16px 0;">{{.Greeting}}</p>{{end}}
 
-<p style="font-size: 16px; color: #4b5563; margin: 0 0 32px 0; line-height: 1.7;">{{.Description}}</p>
+<p style="font-size: 15px; color: #202124; margin: 0 0 24px 0;">{{.Description}}</p>
 
-<div style="text-align: center; margin: 40px 0;">
-    <a href="{{.ActionURL}}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; padding: 16px 48px; border-radius: 10px; box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.4); letter-spacing: 0.3px;">
-        {{.ActionText}}
-    </a>
-</div>
+<p style="margin: 0 0 24px 0;">
+    <a href="{{.ActionURL}}" target="_blank" style="display: inline-block; background-color: #1a73e8; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 500; padding: 12px 24px; border-radius: 4px;">{{.ActionText}}</a>
+</p>
 
-{{if gt .ExpiresInMinutes 0}}
-<div style="text-align: center; margin: 24px 0 32px 0;">
-    <span style="font-size: 14px; color: #6b7280;">
-        此链接将在 {{.ExpiresInMinutes}} 分钟后失效
-    </span>
-</div>
-{{end}}
+{{if gt .ExpiresInMinutes 0}}<p style="font-size: 13px; color: #5f6368; margin: 0 0 16px 0;">此链接将在 {{.ExpiresInMinutes}} 分钟后失效。</p>{{end}}
 
-<div style="background-color: #f3f4f6; border-radius: 12px; padding: 20px 24px; margin-top: 40px;">
-    <p style="font-size: 14px; font-weight: 600; color: #374151; margin: 0 0 12px 0;">按钮无法点击？</p>
-    <p style="font-size: 14px; color: #6b7280; margin: 0 0 12px 0; line-height: 1.6;">请复制以下链接到浏览器地址栏打开：</p>
-    <p style="font-size: 13px; color: #2563eb; word-break: break-all; line-height: 1.6; margin: 0; font-family: 'SF Mono', Monaco, Consolas, monospace;">{{.ActionURL}}</p>
-</div>
+<p style="font-size: 13px; color: #5f6368; margin: 0 0 16px 0;">如果按钮无法点击，请复制以下链接到浏览器：<br><span style="word-break: break-all;">{{.ActionURL}}</span></p>
 
-{{if .Warning}}
-<div style="margin-top: 24px; padding: 16px 20px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 0 8px 8px 0;">
-    <p style="font-size: 14px; color: #92400e; margin: 0; line-height: 1.6;">{{.Warning}}</p>
-</div>
-{{end}}`
+{{if .Warning}}<p style="font-size: 13px; color: #5f6368; margin: 0;">{{.Warning}}</p>{{end}}`
 
 // ActionData 操作按钮模板数据
 type ActionData struct {

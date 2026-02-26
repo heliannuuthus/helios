@@ -1,77 +1,150 @@
-// Package token 定义 PASETO Token 类型和接口
 package token
 
 import (
 	"context"
+	"crypto/subtle"
+	"encoding/base64"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"aidanwoods.dev/go-paseto"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/keys"
-	"github.com/heliannuuthus/helios/pkg/aegis/pasetokit"
+	"github.com/heliannuuthus/helios/pkg/aegis/key"
+	pasetokit "github.com/heliannuuthus/helios/pkg/aegis/utils/paseto"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// Verifier 负责验证 PASETO 签名
+// keyEntry holds a derived public key alongside its precomputed PASERK pid.
+type keyEntry struct {
+	pid       string
+	publicKey paseto.V4AsymmetricPublicKey
+}
+
+// Verifier verifies PASETO v4.public tokens using kid-based key matching.
+// It extracts the kid (k4.pid) from the token footer and matches it against
+// precomputed pids derived from all available seeds.
 type Verifier struct {
-	keyProvider keys.PublicKeyProvider
-	clientID    string
+	provider key.Provider
+	id       string
+
+	mu   sync.RWMutex
+	keys []keyEntry
 }
 
-// NewVerifier 创建 Verifier
-func NewVerifier(keyProvider keys.PublicKeyProvider, clientID string) *Verifier {
-	return &Verifier{
-		keyProvider: keyProvider,
-		clientID:    clientID,
+func NewVerifier(provider key.Provider, id string) *Verifier {
+	v := &Verifier{
+		provider: provider,
+		id:       id,
 	}
+
+	if sub, ok := provider.(key.Subscribable); ok {
+		sub.Subscribe(id, func(newKeys [][]byte) {
+			if err := v.updateKeys(newKeys); err != nil {
+				logger.Warnf("[Verifier] update keys failed for %s: %v", id, err)
+			}
+		})
+	}
+
+	return v
 }
 
-// Verify 验证 token 签名，返回具体的 Token 类型
-func (v *Verifier) Verify(ctx context.Context, tokenString string, info *TokenInfo) (Token, error) {
-	if info == nil {
-		var err error
-		info, err = Extract(tokenString)
+func (v *Verifier) updateKeys(rawKeys [][]byte) error {
+	entries := make([]keyEntry, 0, len(rawKeys))
+	for _, raw := range rawKeys {
+		seed, err := pasetokit.ParseSeed(raw)
 		if err != nil {
-			return nil, err
+			return fmt.Errorf("parse seed: %w", err)
+		}
+		pk, err := seed.DerivePublicKey()
+		if err != nil {
+			return fmt.Errorf("derive public key: %w", err)
+		}
+		pid, err := pasetokit.ComputePID(pk)
+		if err != nil {
+			return fmt.Errorf("compute pid: %w", err)
+		}
+		entries = append(entries, keyEntry{pid: pid, publicKey: pk})
+	}
+
+	v.mu.Lock()
+	v.keys = entries
+	v.mu.Unlock()
+
+	return nil
+}
+
+func (v *Verifier) ensure(ctx context.Context) error {
+	v.mu.RLock()
+	hasKeys := len(v.keys) > 0
+	v.mu.RUnlock()
+
+	if hasKeys {
+		return nil
+	}
+
+	keys, err := v.provider.AllOfKey(ctx, v.id)
+	if err != nil {
+		return err
+	}
+
+	return v.updateKeys(keys)
+}
+
+// findKeyByKID finds the public key matching the given kid.
+// Returns the key and nil error if found, or ErrKIDNotFound if no match.
+func (v *Verifier) findKeyByKID(kid string) (paseto.V4AsymmetricPublicKey, error) {
+	v.mu.RLock()
+	entries := v.keys
+	v.mu.RUnlock()
+
+	for _, e := range entries {
+		if subtle.ConstantTimeCompare([]byte(e.pid), []byte(kid)) == 1 {
+			return e.publicKey, nil
 		}
 	}
-
-	// 1. 获取公钥
-	publicKey, err := v.keyProvider.Get(ctx, v.clientID)
-	if err != nil {
-		return nil, fmt.Errorf("get public key for client %s: %w", v.clientID, err)
-	}
-
-	// 2. 验证签名
-	pasetoToken, err := VerifySignature(publicKey, tokenString)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. 验证 audience
-	audience, err := pasetoToken.GetAudience()
-	if err != nil {
-		return nil, fmt.Errorf("get audience: %w", err)
-	}
-	if audience != info.Audience {
-		return nil, fmt.Errorf("%w: audience mismatch", pasetokit.ErrInvalidSignature)
-	}
-
-	// 4. 根据类型解析为具体 Token
-	return ParseToken(pasetoToken, info.TokenType)
+	return paseto.V4AsymmetricPublicKey{}, fmt.Errorf("%w: %s", pasetokit.ErrKIDNotFound, kid)
 }
 
-// VerifySignature 验证 PASETO 签名（不解析为具体 Token 类型）
-// 返回原始的 paseto.Token，供调用方进一步处理
-func VerifySignature(publicKey paseto.V4AsymmetricPublicKey, tokenString string) (*paseto.Token, error) {
+// Verify verifies the token signature and returns the raw paseto.Token.
+// It extracts the kid from the footer, matches it against known keys,
+// and uses the matched key for signature verification.
+func (v *Verifier) Verify(ctx context.Context, tokenString string) (*paseto.Token, error) {
+	if err := v.ensure(ctx); err != nil {
+		return nil, fmt.Errorf("load keys: %w", err)
+	}
+
+	kid, err := pasetokit.ExtractKID(tokenString)
+	if err != nil {
+		return nil, fmt.Errorf("extract kid: %w", err)
+	}
+
+	pk, err := v.findKeyByKID(kid)
+	if err != nil {
+		return nil, fmt.Errorf("find key: %w", err)
+	}
+
+	footerBytes, err := extractFooterBytes(tokenString)
+	if err != nil {
+		logger.Warnf("failed to extract footer bytes: %v", err)
+	}
+
 	parser := paseto.NewParser()
-	parser.AddRule(paseto.NotExpired())
 	parser.AddRule(paseto.ValidAt(time.Now()))
 
-	pasetoToken, err := parser.ParseV4Public(publicKey, tokenString, nil)
+	pasetoToken, err := parser.ParseV4Public(pk, tokenString, footerBytes)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", pasetokit.ErrInvalidSignature, err)
+		return nil, fmt.Errorf("signature verification failed: %w", err)
 	}
 
 	return pasetoToken, nil
+}
+
+func extractFooterBytes(tokenString string) ([]byte, error) {
+	parts := strings.Split(tokenString, ".")
+	if len(parts) < 4 || parts[3] == "" {
+		return nil, nil
+	}
+	return base64.RawURLEncoding.DecodeString(parts[3])
 }

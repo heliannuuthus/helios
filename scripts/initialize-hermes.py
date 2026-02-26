@@ -3,22 +3,29 @@
 Hermes 初始化脚本
 
 功能：
-1. 生成数据库加密密钥并输出配置片段
-2. 生成域签名密钥（32 字节 Ed25519 seed）并输出配置片段
-3. 生成服务密钥（32 字节）并输出配置片段
-4. 生成加密后的服务密钥并直接写入 sql/hermes/init.sql
+1. 生成数据库加密密钥，直接写入 hermes.toml
+2. 生成域签名密钥（32 字节 Ed25519 seed），直接写入 hermes.toml
+3. 生成 SSO master key（32 字节），直接写入 aegis.toml
+4. 生成服务密钥（32 字节），直接写入 hermes.toml / iris.toml
+5. 生成加密后的服务密钥，直接写入 sql/hermes/init.sql
+6. 生成初始用户密码（随机），写入 init.sql
 
 密钥说明：
 ==========
 
 所有密钥统一使用 32 字节原始格式，Base64URL 编码（无填充）
 
-aegis.config.toml:
+aegis.toml:
+  - [sso] master-key: Base64URL 编码的 32 字节密钥
+    通过 KDF 派生 Ed25519 签名密钥和 AES-256 加密密钥
+
+hermes.toml:
+  - [db] enc-key: Base64 编码的 32 字节 AES-256 密钥，用于加密敏感数据
   - [aegis.domains.{domain}] sign-keys: Base64URL 编码的 32 字节 Ed25519 seed
     支持密钥轮换，逗号分隔多个密钥，第一把是主密钥
+  - [aegis] secret-key: Base64URL 编码的 32 字节密钥，服务的对称加密密钥
 
-hermes.config.toml:
-  - [db] enc-key: Base64 编码的 32 字节 AES-256 密钥，用于加密敏感数据
+iris.toml:
   - [aegis] secret-key: Base64URL 编码的 32 字节密钥，服务的对称加密密钥
 
 sql/hermes/init.sql:
@@ -33,6 +40,7 @@ sql/hermes/init.sql:
 import secrets
 import base64
 import json
+import string
 from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field
@@ -43,19 +51,35 @@ except ImportError:
     print("请安装 cryptography 库: pip install cryptography")
     exit(1)
 
+try:
+    import bcrypt as _bcrypt
+except ImportError:
+    print("请安装 bcrypt 库: pip install bcrypt")
+    exit(1)
+
+try:
+    import tomlkit
+except ImportError:
+    print("请安装 tomlkit 库: pip install tomlkit")
+    exit(1)
+
 
 # ==================== 路径配置 ====================
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
+CONFIG_DIR = PROJECT_ROOT / "config"
 INIT_SQL_PATH = PROJECT_ROOT / "sql" / "hermes" / "init.sql"
+
+HERMES_TOML = CONFIG_DIR / "hermes.toml"
+AEGIS_TOML = CONFIG_DIR / "aegis.toml"
+IRIS_TOML = CONFIG_DIR / "iris.toml"
 
 
 # ==================== 预制数据定义 ====================
 
 @dataclass
 class Domain:
-    """域定义"""
     domain_id: str
     name: str
     description: str
@@ -63,7 +87,6 @@ class Domain:
 
 @dataclass
 class Service:
-    """服务定义"""
     service_id: str
     domain_id: str
     name: str
@@ -74,7 +97,6 @@ class Service:
 
 @dataclass
 class Application:
-    """应用定义"""
     app_id: str
     domain_id: str
     name: str
@@ -85,18 +107,16 @@ class Application:
 
 @dataclass
 class AppIdpConfig:
-    """应用 IDP 配置"""
     app_id: str
-    idp_type: str  # IDP 类型：email/google/github/wechat-mp 等
-    priority: int = 0  # 排序优先级（值越大越靠前）
-    strategy: Optional[str] = None  # 认证方式（仅 user/oper）：password,webauthn
-    delegate: Optional[str] = None  # 委托 MFA：email_otp,totp,webauthn
-    require: Optional[str] = None  # 前置验证：captcha
+    idp_type: str
+    priority: int = 0
+    strategy: Optional[str] = None
+    delegate: Optional[str] = None
+    require: Optional[str] = None
 
 
 @dataclass
 class AppServiceRelation:
-    """应用服务关系"""
     app_id: str
     service_id: str
     relation: str = "*"
@@ -104,9 +124,10 @@ class AppServiceRelation:
 
 @dataclass
 class User:
-    """用户定义"""
-    uid: str
+    openid: str
     email: str
+    username: Optional[str] = None
+    password: Optional[str] = None
     email_verified: bool = True
     nickname: Optional[str] = None
     status: int = 0
@@ -114,16 +135,22 @@ class User:
 
 @dataclass
 class UserIdentity:
-    """用户身份定义"""
-    domain: str       # 身份所属域：ciam/piam
-    uid: str          # 内部 uid（关联 t_user.uid）
-    idp: str          # IDP 类型：global/user/oper
-    t_openid: str     # 对外标识（global 为域级 sub，其他为 IDP 返回的 openid）
+    domain: str
+    openid: str
+    idp: str
+    t_openid: str
+
+
+@dataclass
+class ServiceChallengeSetting:
+    service_id: str
+    type: str
+    expires_in: int = 300
+    limits: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
 class Relationship:
-    """权限关系"""
     service_id: str
     subject_type: str
     subject_id: str
@@ -132,15 +159,69 @@ class Relationship:
     object_id: str
 
 
+# ==================== 工具函数 ====================
+
+def b64_encode(data: bytes) -> str:
+    return base64.b64encode(data).decode("utf-8")
+
+
+def b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
+
+
+def generate_32byte_key() -> bytes:
+    return secrets.token_bytes(32)
+
+
+def generate_password(length: int = 16) -> str:
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+    while True:
+        password = ''.join(secrets.choice(alphabet) for _ in range(length))
+        if (any(c.islower() for c in password)
+                and any(c.isupper() for c in password)
+                and any(c.isdigit() for c in password)
+                and any(c in "!@#$%^&*" for c in password)):
+            return password
+
+
+def hash_password(password: str) -> str:
+    return _bcrypt.hashpw(password.encode("utf-8"), _bcrypt.gensalt(rounds=10)).decode("utf-8")
+
+
+def encrypt_aes_gcm(key: bytes, plaintext: bytes, aad: str) -> bytes:
+    aesgcm = AESGCM(key)
+    iv = secrets.token_bytes(12)
+    ciphertext = aesgcm.encrypt(iv, plaintext, aad.encode("utf-8") if aad else None)
+    return iv + ciphertext
+
+
+def load_toml(path: Path) -> tomlkit.TOMLDocument:
+    if path.exists():
+        return tomlkit.parse(path.read_text(encoding="utf-8"))
+    return tomlkit.document()
+
+
+def save_toml(path: Path, doc: tomlkit.TOMLDocument):
+    path.write_text(tomlkit.dumps(doc), encoding="utf-8")
+
+
+def ensure_table(doc, *keys: str):
+    current = doc
+    for key in keys:
+        if key not in current:
+            current[key] = tomlkit.table()
+        current = current[key]
+    return current
+
+
 # ==================== 预制数据 ====================
 
 DOMAINS = [
-    Domain("ciam", "Customer Identity", "C端用户身份域"),
-    Domain("piam", "Partner Identity", "B端用户身份域"),
+    Domain("consumer", "Consumer Identity", "C端用户身份域"),
+    Domain("platform", "Platform Identity", "B端平台身份域"),
 ]
 
 SERVICES = [
-    # domain_id = "-" 表示跨域内置服务，属于全部域
     Service("hermes", "-", "Hermes 管理服务", "身份与访问管理服务"),
     Service("iris", "-", "Iris 用户服务", "用户信息管理服务"),
 ]
@@ -148,38 +229,66 @@ SERVICES = [
 APPLICATIONS = [
     Application(
         app_id="atlas",
-        domain_id="piam",
+        domain_id="platform",
         name="Atlas 管理控制台",
         logo_url="https://aegis.heliannuuthus.com/logos/atlas.svg",
         redirect_uris=["https://atlas.heliannuuthus.com/auth/callback"],
         allowed_origins=["https://atlas.heliannuuthus.com"],
     ),
+    Application(
+        app_id="piris",
+        domain_id="platform",
+        name="平台个人中心",
+        redirect_uris=["https://iris.heliannuuthus.com/auth/callback"],
+        allowed_origins=["https://iris.heliannuuthus.com"],
+    ),
+    Application(
+        app_id="ciris",
+        domain_id="consumer",
+        name="用户个人中心",
+        redirect_uris=["https://iris.heliannuuthus.com/auth/callback"],
+        allowed_origins=["https://iris.heliannuuthus.com"],
+    ),
 ]
 
 APP_IDP_CONFIGS = [
-    # Atlas 应用的 IDP 配置
-    AppIdpConfig("atlas", "oper", priority=10, strategy="password",delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("atlas", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
     AppIdpConfig("atlas", "google", priority=5),
     AppIdpConfig("atlas", "github", priority=5),
+    AppIdpConfig("piris", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("piris", "google", priority=5),
+    AppIdpConfig("piris", "github", priority=5),
+    AppIdpConfig("ciris", "user", priority=10, strategy="password", delegate="sms_otp"),
+    AppIdpConfig("ciris", "wechat-mp", priority=5),
+    AppIdpConfig("ciris", "wechat-web", priority=5),
 ]
 
 APP_SERVICE_RELATIONS = [
     AppServiceRelation("atlas", "hermes", "*"),
+    AppServiceRelation("piris", "iris", "*"),
+    AppServiceRelation("ciris", "iris", "*"),
+]
+
+SERVICE_CHALLENGE_SETTINGS = [
+    ServiceChallengeSetting("iris", "staff:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
+    ServiceChallengeSetting("iris", "user:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
+    ServiceChallengeSetting("iris", "passkey:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
 ]
 
 USERS = [
     User(
-        uid="heliannuuthus",
+        openid="heliannuuthus",
         email="heliannuuthus@gmail.com",
+        username="heliannuuthus",
+        password=generate_password(),
         email_verified=True,
         nickname="Heliannuuthus",
     ),
 ]
 
-# 用户身份（global 身份为域级对外标识，user/oper 为认证身份）
 USER_IDENTITIES = [
-    UserIdentity(domain="piam", uid="heliannuuthus", idp="global", t_openid=secrets.token_hex(16)),
-    UserIdentity(domain="piam", uid="heliannuuthus", idp="oper", t_openid="heliannuuthus"),
+    UserIdentity(domain="platform", openid="heliannuuthus", idp="global", t_openid=secrets.token_hex(16)),
+    UserIdentity(domain="platform", openid="heliannuuthus", idp="staff", t_openid="heliannuuthus"),
 ]
 
 RELATIONSHIPS = [
@@ -187,130 +296,81 @@ RELATIONSHIPS = [
 ]
 
 
-# ==================== 密钥工具函数 ====================
-
-def b64_encode(data: bytes) -> str:
-    """标准 Base64 编码"""
-    return base64.b64encode(data).decode("utf-8")
-
-
-def b64url_encode(data: bytes) -> str:
-    """Base64URL 编码（无填充）"""
-    return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
-
-
-def generate_32byte_key() -> bytes:
-    """生成 32 字节随机密钥"""
-    return secrets.token_bytes(32)
-
-
-def encrypt_aes_gcm(key: bytes, plaintext: bytes, aad: str) -> bytes:
-    """AES-256-GCM 加密，返回 IV || Ciphertext || Tag"""
-    aesgcm = AESGCM(key)
-    iv = secrets.token_bytes(12)
-    ciphertext = aesgcm.encrypt(iv, plaintext, aad.encode("utf-8") if aad else None)
-    return iv + ciphertext
-
-
 # ==================== 生成器 ====================
 
 @dataclass
 class ServiceData:
-    """服务数据"""
     service: Service
-    secret_key: bytes      # 32 字节原始密钥
-    encrypted_key: str     # Base64 密文
+    secret_key: bytes
+    encrypted_key: str
 
 
 class Initializer:
     def __init__(self):
-        self.db_enc_key: bytes = b""  # 数据库加密密钥（32 字节）
-        self.domain_sign_keys: dict[str, bytes] = {}  # 域签名密钥（32 字节 Ed25519 seed）
+        self.db_enc_key: bytes = b""
+        self.domain_sign_keys: dict[str, bytes] = {}
+        self.sso_master_key: bytes = b""
         self.services_data: list[ServiceData] = []
 
     def generate_all(self):
-        """生成所有密钥"""
-        # 1. 生成数据库加密密钥（32 字节）
         self.db_enc_key = generate_32byte_key()
 
-        # 2. 生成域签名密钥（32 字节 Ed25519 seed）
         for domain in DOMAINS:
             self.domain_sign_keys[domain.domain_id] = generate_32byte_key()
 
-        # 3. 生成服务密钥并加密
+        self.sso_master_key = generate_32byte_key()
+
         for service in SERVICES:
-            # 生成服务密钥（32 字节）
             secret_key = generate_32byte_key()
-            
-            # 用数据库加密密钥加密服务密钥
             encrypted = encrypt_aes_gcm(self.db_enc_key, secret_key, service.service_id)
-            
             self.services_data.append(ServiceData(
                 service=service,
                 secret_key=secret_key,
                 encrypted_key=b64_encode(encrypted),
             ))
 
-    def output_hermes_config(self) -> str:
-        """生成 hermes.toml 配置片段（含域签名密钥和 hermes 服务密钥）"""
-        lines = []
-        
-        # 数据库加密密钥
-        lines.append("[db]")
-        lines.append("# 数据库加密密钥（32 字节 AES-256，Base64 编码）")
-        lines.append("enc-key = '''")
-        lines.append(b64_encode(self.db_enc_key))
-        lines.append("'''")
-        lines.append("")
-        
-        # 域签名密钥（放在 hermes.toml）
+    def update_hermes_toml(self):
+        doc = load_toml(HERMES_TOML)
+
+        ensure_table(doc, "db")["enc-key"] = b64_encode(self.db_enc_key)
+
         for domain in DOMAINS:
             sign_key = self.domain_sign_keys.get(domain.domain_id)
             if not sign_key:
                 continue
-            lines.append(f"[aegis.domains.{domain.domain_id}]")
-            lines.append(f'name = "{domain.name}"')
-            lines.append(f'description = "{domain.description}"')
-            lines.append("# 签名密钥（32 字节 Ed25519 seed，Base64URL 编码）")
-            lines.append("# 支持密钥轮换：逗号分隔多个密钥，第一把是主密钥")
-            lines.append("sign-keys = '''")
-            lines.append(b64url_encode(sign_key))
-            lines.append("'''")
-            lines.append("")
-        
-        # Hermes 服务密钥
+            dt = ensure_table(doc, "aegis", "domains", domain.domain_id)
+            dt["name"] = domain.name
+            dt["description"] = domain.description
+            dt["sign-keys"] = b64url_encode(sign_key)
+
         hermes_data = next((sd for sd in self.services_data if sd.service.service_id == "hermes"), None)
         if hermes_data:
-            lines.append("[aegis]")
-            lines.append("# Hermes 服务密钥（32 字节，Base64URL 编码）")
-            lines.append("secret-key = '''")
-            lines.append(b64url_encode(hermes_data.secret_key))
-            lines.append("'''")
-            lines.append("")
-        
-        return "\n".join(lines)
+            ensure_table(doc, "aegis")["secret-key"] = b64url_encode(hermes_data.secret_key)
 
-    def output_iris_config(self) -> str:
-        """生成 iris.toml 配置片段"""
-        lines = []
-        
-        # Iris 服务密钥
+        save_toml(HERMES_TOML, doc)
+
+    def update_aegis_toml(self):
+        doc = load_toml(AEGIS_TOML)
+
+        if "sso" not in doc:
+            doc.add(tomlkit.nl())
+            doc.add("sso", tomlkit.table())
+        doc["sso"]["master-key"] = b64url_encode(self.sso_master_key)
+
+        save_toml(AEGIS_TOML, doc)
+
+    def update_iris_toml(self):
+        doc = load_toml(IRIS_TOML)
+
         iris_data = next((sd for sd in self.services_data if sd.service.service_id == "iris"), None)
         if iris_data:
-            lines.append("[aegis]")
-            lines.append("# Iris 服务的 audience（用于 token 验证）")
-            lines.append('audience = "iris"')
-            lines.append("")
-            lines.append("# Iris 服务密钥（32 字节，Base64URL 编码）")
-            lines.append("secret-key = '''")
-            lines.append(b64url_encode(iris_data.secret_key))
-            lines.append("'''")
-            lines.append("")
-        
-        return "\n".join(lines)
+            aegis = ensure_table(doc, "aegis")
+            aegis["audience"] = "iris"
+            aegis["secret-key"] = b64url_encode(iris_data.secret_key)
+
+        save_toml(IRIS_TOML, doc)
 
     def generate_init_sql(self) -> str:
-        """生成 init.sql 内容"""
         lines = []
         lines.append("-- Hermes 初始化数据")
         lines.append("-- 由 scripts/initialize-hermes.py 生成")
@@ -318,9 +378,7 @@ class Initializer:
         lines.append("USE `hermes`;")
         lines.append("")
 
-        # Services
         lines.append("-- ==================== 服务 ====================")
-        lines.append("-- domain_id = '-' 表示跨域内置服务，属于全部域")
         lines.append("INSERT INTO t_service (service_id, domain_id, name, description, encrypted_key, access_token_expires_in, refresh_token_expires_in) VALUES")
         service_values = []
         for sd in self.services_data:
@@ -331,7 +389,6 @@ class Initializer:
         lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), encrypted_key = VALUES(encrypted_key), domain_id = VALUES(domain_id);")
         lines.append("")
 
-        # Applications
         if APPLICATIONS:
             lines.append("-- ==================== 应用 ====================")
             lines.append("INSERT INTO t_application (app_id, domain_id, name, logo_url, redirect_uris, allowed_origins) VALUES")
@@ -345,7 +402,6 @@ class Initializer:
             lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), logo_url = VALUES(logo_url), redirect_uris = VALUES(redirect_uris), allowed_origins = VALUES(allowed_origins);")
             lines.append("")
 
-        # Application IDP Configs
         if APP_IDP_CONFIGS:
             lines.append("-- ==================== 应用 IDP 配置 ====================")
             lines.append("INSERT INTO t_application_idp_config (app_id, `type`, priority, strategy, delegate, `require`) VALUES")
@@ -359,7 +415,6 @@ class Initializer:
             lines.append("ON DUPLICATE KEY UPDATE priority = VALUES(priority), strategy = VALUES(strategy), delegate = VALUES(delegate), `require` = VALUES(`require`);")
             lines.append("")
 
-        # App Service Relations
         if APP_SERVICE_RELATIONS:
             lines.append("-- ==================== 应用服务关系 ====================")
             lines.append("INSERT INTO t_application_service_relation (app_id, service_id, relation) VALUES")
@@ -370,32 +425,41 @@ class Initializer:
             lines.append("ON DUPLICATE KEY UPDATE relation = VALUES(relation);")
             lines.append("")
 
-        # Users
+        if SERVICE_CHALLENGE_SETTINGS:
+            lines.append("-- ==================== 服务 Challenge 配置 ====================")
+            lines.append("INSERT INTO t_service_challenge_setting (service_id, `type`, expires_in, limits) VALUES")
+            setting_values = []
+            for s in SERVICE_CHALLENGE_SETTINGS:
+                limits_json = json.dumps(s.limits)
+                setting_values.append(f"('{s.service_id}', '{s.type}', {s.expires_in}, '{limits_json}')")
+            lines.append(",\n".join(setting_values))
+            lines.append("ON DUPLICATE KEY UPDATE expires_in = VALUES(expires_in), limits = VALUES(limits);")
+            lines.append("")
+
         if USERS:
             lines.append("-- ==================== 用户 ====================")
-            lines.append("INSERT INTO t_user (uid, status, email_verified, nickname, picture, email) VALUES")
+            lines.append("INSERT INTO t_user (openid, status, username, password_hash, email_verified, nickname, picture, email) VALUES")
             user_values = []
             for user in USERS:
                 nickname = f"'{user.nickname}'" if user.nickname else "NULL"
+                username = f"'{user.username}'" if user.username else "NULL"
+                password_hash = f"'{hash_password(user.password)}'" if user.password else "NULL"
                 email_verified = 1 if user.email_verified else 0
-                user_values.append(f"('{user.uid}', {user.status}, {email_verified}, {nickname}, NULL, '{user.email}')")
+                user_values.append(f"('{user.openid}', {user.status}, {username}, {password_hash}, {email_verified}, {nickname}, NULL, '{user.email}')")
             lines.append(",\n".join(user_values))
-            lines.append("ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified);")
+            lines.append("ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified), username = VALUES(username), password_hash = VALUES(password_hash);")
             lines.append("")
 
-        # User Identities
         if USER_IDENTITIES:
             lines.append("-- ==================== 用户身份 ====================")
-            lines.append("-- global 身份为域级对外标识（token 中的 sub），其他为认证身份")
-            lines.append("INSERT INTO t_user_identity (domain, uid, idp, t_openid) VALUES")
+            lines.append("INSERT INTO t_user_identity (domain, openid, idp, t_openid) VALUES")
             identity_values = []
             for identity in USER_IDENTITIES:
-                identity_values.append(f"('{identity.domain}', '{identity.uid}', '{identity.idp}', '{identity.t_openid}')")
+                identity_values.append(f"('{identity.domain}', '{identity.openid}', '{identity.idp}', '{identity.t_openid}')")
             lines.append(",\n".join(identity_values))
             lines.append("ON DUPLICATE KEY UPDATE t_openid = VALUES(t_openid);")
             lines.append("")
 
-        # Relationships
         if RELATIONSHIPS:
             lines.append("-- ==================== 服务关系（权限） ====================")
             lines.append("INSERT INTO t_relationship (service_id, subject_type, subject_id, relation, object_type, object_id) VALUES")
@@ -404,43 +468,53 @@ class Initializer:
                 rel_values.append(f"('{rel.service_id}', '{rel.subject_type}', '{rel.subject_id}', '{rel.relation}', '{rel.object_type}', '{rel.object_id}')")
             lines.append(",\n".join(rel_values))
             lines.append("ON DUPLICATE KEY UPDATE relation = VALUES(relation);")
-        
+
         return "\n".join(lines)
 
     def run(self):
-        """运行初始化"""
         print("=" * 60)
         print("Hermes 初始化脚本")
         print("=" * 60)
         print()
 
-        # 生成密钥
         print("正在生成密钥...")
         self.generate_all()
         print("  ✅ 数据库加密密钥已生成")
         print("  ✅ 域签名密钥已生成")
+        print("  ✅ SSO master key 已生成")
         print("  ✅ 服务密钥已生成并加密")
         print()
 
-        # 输出 hermes.toml 配置
-        print("=" * 60)
-        print("hermes.toml - 复制以下内容到配置文件")
-        print("=" * 60)
-        print()
-        print(self.output_hermes_config())
+        print("正在写入配置文件...")
 
-        # 输出 iris.toml 配置
-        print("=" * 60)
-        print("iris.toml - 复制以下内容到配置文件")
-        print("=" * 60)
-        print()
-        print(self.output_iris_config())
+        self.update_hermes_toml()
+        print(f"  ✅ 已写入: {HERMES_TOML}")
 
-        # 写入 init.sql
+        self.update_aegis_toml()
+        print(f"  ✅ 已写入: {AEGIS_TOML}")
+
+        self.update_iris_toml()
+        print(f"  ✅ 已写入: {IRIS_TOML}")
+
         init_sql = self.generate_init_sql()
         INIT_SQL_PATH.write_text(init_sql, encoding="utf-8")
+        print(f"  ✅ 已写入: {INIT_SQL_PATH}")
+        print()
+
+        if USERS:
+            print("=" * 60)
+            print("初始用户凭证（请妥善保管，仅显示一次）")
+            print("=" * 60)
+            for user in USERS:
+                print(f"  用户名: {user.username or user.email}")
+                if user.password:
+                    print(f"  密码:   {user.password}")
+                else:
+                    print("  密码:   （未设置）")
+            print()
+
         print("=" * 60)
-        print(f"✅ 已写入: {INIT_SQL_PATH}")
+        print("✅ 初始化完成")
         print("=" * 60)
 
 
