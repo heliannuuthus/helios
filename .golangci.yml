@@ -72,7 +72,7 @@ linters:
       excludes:
         - G104  # 与 errcheck 重复
         - G117  # struct 字段名匹配 secret 模式（OAuth2/API DTO 规范字段名）
-        - G704  # SSRF 误报（硬编码常量 URL）
+        - G704  # SSRF false positive（项目中 URL 均为硬编码常量域名，非用户可控）
 
     misspell:
       locale: US
