@@ -2,6 +2,7 @@
 package challenge
 
 import (
+	"math"
 	"time"
 
 	"github.com/heliannuuthus/helios/aegis/internal/types"
@@ -24,7 +25,12 @@ type InitiateRequest struct {
 
 // NewChallenge 根据 ServiceChallengeSetting 创建 Challenge 对象
 func (r *InitiateRequest) NewChallenge(setting *models.ServiceChallengeSetting, ip string) *types.Challenge {
-	expiresIn := time.Duration(setting.ExpiresIn) * time.Second
+	var expiresIn time.Duration
+	if setting.ExpiresIn > math.MaxInt64/uint(time.Second) {
+		expiresIn = time.Duration(math.MaxInt64)
+	} else {
+		expiresIn = time.Duration(setting.ExpiresIn) * time.Second
+	}
 	return types.NewChallenge(
 		r.ClientID, r.Audience, r.Type,
 		types.ChannelType(r.ChannelType), r.Channel,

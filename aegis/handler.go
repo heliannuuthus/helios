@@ -23,6 +23,7 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/aegis/internal/user"
 	"github.com/heliannuuthus/helios/hermes/models"
+	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -147,7 +148,7 @@ func (h *Handler) Authorize(c *gin.Context) {
 	}
 
 	// 4. SSO 快速路径：检查是否有有效的 SSO 会话
-	if !req.HasPrompt(types.PromptLogin) {
+	if !req.Prompt.Contains(types.PromptLogin) {
 		if handled := h.trySSO(c, ctx, &req, app, svc); handled {
 			return
 		}
@@ -155,7 +156,7 @@ func (h *Handler) Authorize(c *gin.Context) {
 	}
 
 	// prompt=none 要求静默认证，但 SSO 不可用 → 返回错误
-	if req.HasPrompt(types.PromptNone) {
+	if req.Prompt.Contains(types.PromptNone) {
 		h.authorizeErrorResponse(c, autherrors.NewLoginRequired("no active SSO session"))
 		return
 	}
@@ -200,10 +201,16 @@ func (h *Handler) trySSO(c *gin.Context, ctx context.Context, req *types.AuthReq
 		return false
 	}
 
-	// 2. 验签 + 解密 footer
-	ssoToken, err := h.tokenSvc.VerifySSO(ctx, ssoTokenString)
+	// 2. 验签 + 解密
+	t, err := h.tokenSvc.Verify(ctx, ssoTokenString)
 	if err != nil {
 		logger.Debugf("[Handler] SSO token 验证失败: %v", err)
+		clearSSOCookie(c)
+		return false
+	}
+	ssoToken, ok := t.(*token.SSOToken)
+	if !ok {
+		logger.Debugf("[Handler] SSO token 类型不匹配: %T", t)
 		clearSSOCookie(c)
 		return false
 	}
@@ -269,22 +276,21 @@ func (h *Handler) trySSO(c *gin.Context, ctx context.Context, req *types.AuthReq
 	h.renewSSOCookie(c, ctx, ssoToken)
 
 	// 10. 构建重定向
-	location := flow.Request.RedirectURI + "?code=" + url.QueryEscape(authCode.Code)
-	if authCode.State != "" {
-		location += "&state=" + url.QueryEscape(authCode.State)
-	}
-	actionRedirect(c, location)
+	actionRedirect(c, buildAuthCodeRedirectURL(flow.Request.RedirectURI, authCode))
 	return true
 }
 
 // renewSSOCookie 续期 SSO Token（重新签发新 token 并更新 cookie，保留全部域身份）
 func (h *Handler) renewSSOCookie(c *gin.Context, ctx context.Context, oldSSO *token.SSOToken) {
-	sso := token.NewSSOTokenBuilder().
+	sso := pkgtoken.NewClaimsBuilder().
+		Issuer(token.SSOIssuer).
+		ClientID(token.SSOIssuer).
+		Audience(token.SSOAudience).
 		ExpiresIn(config.GetSSOTTL()).
-		Identities(oldSSO.GetIdentities()).
-		Build()
+		Build(token.NewSSOTokenBuilder().
+			Identities(oldSSO.GetIdentities()))
 
-	tokenString, err := h.tokenSvc.IssueSSO(ctx, sso)
+	tokenString, err := h.tokenSvc.Issue(ctx, sso)
 	if err != nil {
 		logger.Warnf("[Handler] SSO token 续期失败: %v", err)
 		return
@@ -377,6 +383,7 @@ func (h *Handler) InitiateChallenge(c *gin.Context) {
 		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
+	logger.Infof("[发起 Challenge] 请求: %+v", req)
 
 	ctx := helpers.WithRemoteIP(c.Request.Context(), c.ClientIP())
 
@@ -442,79 +449,89 @@ func (h *Handler) ContinueChallenge(c *gin.Context) {
 
 	// 2. prerequisite not fully met → verify prerequisite
 	if ch.IsUnmet() {
-		// 检查 req.Type 是否是待验证的前置条件
-		if !ch.Required.Contains(req.Type) {
-			// 前端尝试做主验证，但前置条件未完成 → 返回 412 + Required
-			c.JSON(http.StatusPreconditionFailed, &challenge.VerifyResponse{
-				Required: ch.Required,
-			})
-			return
-		}
+		h.handlePrerequisiteVerification(c, ctx, ch, &req)
+		return
+	}
 
-		// 验证前置条件
-		verified, err := h.challengeSvc.Verify(ctx, ch, &req)
-		if err != nil {
-			h.errorResponse(c, err)
-			return
-		}
-		if !verified {
-			h.errorResponse(c, autherrors.NewInvalidRequest("prerequisite verification failed"))
-			return
-		}
+	// 3. main verification + token issuance
+	h.handleMainVerification(c, ctx, ch, &req)
+}
 
-		// still unmet → save and return remaining
-		if ch.IsUnmet() {
-			if err := h.challengeSvc.Save(ctx, ch); err != nil {
-				h.errorResponse(c, err)
-				return
-			}
-			c.JSON(http.StatusOK, &challenge.VerifyResponse{
-				Required: ch.Required,
-			})
-			return
-		}
-
-		// all prerequisites met → initiate → save
-		retryAfter, err := h.initiateChallenge(ctx, ch)
-		if err != nil {
-			h.errorResponse(c, err)
-			return
-		}
-		c.JSON(http.StatusOK, &challenge.VerifyResponse{
-			RetryAfter: retryAfter,
+func (h *Handler) handlePrerequisiteVerification(c *gin.Context, ctx context.Context, ch *types.Challenge, req *challenge.VerifyRequest) {
+	if !ch.Required.Contains(req.Type) {
+		c.JSON(http.StatusPreconditionFailed, &challenge.VerifyResponse{
+			Required: ch.Required,
 		})
 		return
 	}
 
-	// 3. main verification
-	verified, err := h.challengeSvc.Verify(ctx, ch, &req)
+	verified, err := h.challengeSvc.Verify(ctx, ch, req)
+	if err != nil {
+		h.errorResponse(c, err)
+		return
+	}
+	if !verified {
+		h.errorResponse(c, autherrors.NewInvalidRequest("prerequisite verification failed"))
+		return
+	}
+
+	if ch.IsUnmet() {
+		if err := h.challengeSvc.Save(ctx, ch); err != nil {
+			h.errorResponse(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, &challenge.VerifyResponse{
+			Required: ch.Required,
+		})
+		return
+	}
+
+	retryAfter, err := h.initiateChallenge(ctx, ch)
+	if err != nil {
+		h.errorResponse(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, &challenge.VerifyResponse{
+		RetryAfter: retryAfter,
+	})
+}
+
+func (h *Handler) handleMainVerification(c *gin.Context, ctx context.Context, ch *types.Challenge, req *challenge.VerifyRequest) {
+	verified, err := h.challengeSvc.Verify(ctx, ch, req)
 	if err != nil {
 		h.errorResponse(c, err)
 		return
 	}
 
-	// 4. verified → cleanup + issue token
-	if verified {
-
-		if err = h.challengeSvc.Delete(ctx, ch.ID); err != nil {
-			logger.Warnf("[验证 Challenge] 删除 Challenge 失败: %v", err)
-		}
-		tokenStr, err := h.tokenSvc.Issue(ctx, ch)
-		if err != nil {
-			logger.Errorf("[验证 Challenge] 签发 ChallengeToken 失败: %v", err)
-			h.errorResponse(c, autherrors.NewServerErrorf("issue challenge token: %v", err))
-			return
-		}
-		c.JSON(http.StatusOK, &challenge.VerifyResponse{
-			Verified:       true,
-			ChallengeToken: tokenStr,
-			ExpiresIn:      int(ch.ExpiresIn().Seconds()),
-		})
+	if !verified {
+		h.errorResponse(c, autherrors.NewInvalidRequest("verification failed"))
 		return
 	}
 
-	// 5. verification failed
-	h.errorResponse(c, autherrors.NewInvalidRequest("verification failed"))
+	if err = h.challengeSvc.Delete(ctx, ch.ID); err != nil {
+		logger.Warnf("[验证 Challenge] 删除 Challenge 失败: %v", err)
+	}
+
+	ct := pkgtoken.NewClaimsBuilder().
+		Issuer(h.tokenSvc.GetIssuer()).
+		ClientID(ch.ClientID).
+		Audience(ch.Audience).
+		ExpiresIn(ch.ExpiresIn()).
+		Build(pkgtoken.NewChallengeTokenBuilder().
+			Subject(ch.Channel).
+			Type(ch.Type))
+
+	tokenStr, err := h.tokenSvc.Issue(ctx, ct)
+	if err != nil {
+		logger.Errorf("[验证 Challenge] 签发 ChallengeToken 失败: %v", err)
+		h.errorResponse(c, autherrors.NewServerErrorf("issue challenge token: %v", err))
+		return
+	}
+	c.JSON(http.StatusOK, &challenge.VerifyResponse{
+		Verified:       true,
+		ChallengeToken: tokenStr,
+		ExpiresIn:      int(ch.ExpiresIn().Seconds()),
+	})
 }
 
 // initiateChallenge performs: initiate → save (shared between InitiateChallenge and ContinueChallenge)
@@ -571,7 +588,7 @@ func (h *Handler) Login(c *gin.Context) {
 
 	// 3. 前置检查：Require 中未 Verified 的 connection
 	if actions := unmetRequirements(flow); len(actions) > 0 {
-		actionRedirect(c, buildActionURL(actions, nil))
+		actionRedirect(c, buildActionURL(actions))
 		return
 	}
 
@@ -585,47 +602,42 @@ func (h *Handler) Login(c *gin.Context) {
 	if !success {
 		// Strike 可能触发了 vchan 验证撤销，再次检查 unmet requirements
 		if actions := unmetRequirements(flow); len(actions) > 0 {
-			actionRedirect(c, buildActionURL(actions, nil))
+			actionRedirect(c, buildActionURL(actions))
 			return
 		}
 		h.errorResponse(c, autherrors.NewInvalidCredentials("authentication failed"))
 		return
 	}
 
-	// 5. 辅助验证（vchan/factor）及前置条件检查
-	if done := h.handlePostAuth(c, ctx, flow); done {
+	// 6. 辅助验证（vchan/factor）及前置条件检查
+	if done := h.handlePostAuth(c, flow); done {
 		return
 	}
 
-	// 6. 查找或创建用户，回写用户信息和全部身份到 flow
+	// 7. 查找或创建用户，回写用户信息和全部身份到 flow
 	if err := h.resolveUser(ctx, flow); err != nil {
 		if errors.Is(err, errIdentifiedUser) {
 			// 识别到已有用户，通过 actions 机制通知前端展示关联确认页
-			actionRedirect(c, buildActionURL([]string{"identify"}, nil))
+			actionRedirect(c, buildActionURL([]string{"identify"}))
 			return
 		}
 		h.errorResponse(c, err)
 		return
 	}
 
-	// 7. 授权并生成授权码
+	// 8. 授权并生成授权码
 	authCode, err := h.authorizeAndGenerateCode(ctx, flow)
 	if err != nil {
 		h.errorResponse(c, err)
 		return
 	}
 
-	// 8. 签发 SSO Token
+	// 9. 签发 SSO Token
 	h.issueSSOCookie(c, ctx, flow)
 
-	// 9. 构建最终重定向
-	location := flow.Request.RedirectURI + "?code=" + url.QueryEscape(authCode.Code)
-	if authCode.State != "" {
-		location += "&state=" + url.QueryEscape(authCode.State)
-	}
-
+	// 10. 构建最终重定向
 	clearAuthSessionCookie(c)
-	actionRedirect(c, location)
+	actionRedirect(c, buildAuthCodeRedirectURL(flow.Request.RedirectURI, authCode))
 }
 
 // issueSSOCookie 签发 SSO Token 并设置 cookie
@@ -640,20 +652,25 @@ func (h *Handler) issueSSOCookie(c *gin.Context, ctx context.Context, flow *type
 	// 尝试读取已有 SSO Token 中的身份
 	identities := make(map[string]string)
 	if existingToken, err := getSSOCookie(c); err == nil && existingToken != "" {
-		if oldSSO, err := h.tokenSvc.VerifySSO(ctx, existingToken); err == nil {
-			identities = oldSSO.GetIdentities()
+		if t, err := h.tokenSvc.Verify(ctx, existingToken); err == nil {
+			if oldSSO, ok := t.(*token.SSOToken); ok {
+				identities = oldSSO.GetIdentities()
+			}
 		}
 	}
 
 	// 追加/覆盖当前域的身份
 	identities[domainID] = flow.User.OpenID
 
-	sso := token.NewSSOTokenBuilder().
+	sso := pkgtoken.NewClaimsBuilder().
+		Issuer(token.SSOIssuer).
+		ClientID(token.SSOIssuer).
+		Audience(token.SSOAudience).
 		ExpiresIn(config.GetSSOTTL()).
-		Identities(identities).
-		Build()
+		Build(token.NewSSOTokenBuilder().
+			Identities(identities))
 
-	tokenString, err := h.tokenSvc.IssueSSO(ctx, sso)
+	tokenString, err := h.tokenSvc.Issue(ctx, sso)
 	if err != nil {
 		logger.Warnf("[Handler] SSO token 签发失败: %v", err)
 		return
@@ -664,7 +681,7 @@ func (h *Handler) issueSSOCookie(c *gin.Context, ctx context.Context, flow *type
 // handlePostAuth 处理认证成功后的辅助验证和前置条件检查
 // 返回 true 表示已处理响应（辅助验证完成 / 前置条件未满足），Login 应 return
 // flow 的持久化由 Login 的 defer 统一处理
-func (h *Handler) handlePostAuth(c *gin.Context, ctx context.Context, flow *types.AuthFlow) bool {
+func (h *Handler) handlePostAuth(c *gin.Context, flow *types.AuthFlow) bool {
 	connCfg := flow.GetCurrentConnConfig()
 	if connCfg == nil {
 		return false
@@ -679,7 +696,7 @@ func (h *Handler) handlePostAuth(c *gin.Context, ctx context.Context, flow *type
 
 	// 前置验证未全部通过 → 300 action redirect
 	if actions := unmetRequirements(flow); len(actions) > 0 {
-		actionRedirect(c, buildActionURL(actions, nil))
+		actionRedirect(c, buildActionURL(actions))
 		return true
 	}
 
@@ -858,7 +875,7 @@ func (h *Handler) ConfirmIdentify(c *gin.Context) {
 	if !req.Confirm {
 		// 用户取消关联 → 清除中间态，回到登录页重新选择
 		flow.User = nil
-		actionRedirect(c, buildActionURL(nil, nil))
+		actionRedirect(c, buildActionURL(nil))
 		return
 	}
 
@@ -918,13 +935,8 @@ func (h *Handler) ConfirmIdentify(c *gin.Context) {
 	})
 
 	// 构建最终重定向
-	location := flow.Request.RedirectURI + "?code=" + url.QueryEscape(authCode.Code)
-	if authCode.State != "" {
-		location += "&state=" + url.QueryEscape(authCode.State)
-	}
-
 	clearAuthSessionCookie(c)
-	actionRedirect(c, location)
+	actionRedirect(c, buildAuthCodeRedirectURL(flow.Request.RedirectURI, authCode))
 }
 
 // authorizeAndGenerateCode 准备授权并生成授权码
@@ -952,6 +964,14 @@ func (h *Handler) authorizeAndGenerateCode(ctx context.Context, flow *types.Auth
 	}
 
 	return authCode, nil
+}
+
+func buildAuthCodeRedirectURL(redirectURI string, authCode *cache.AuthorizationCode) string {
+	location := redirectURI + "?code=" + url.QueryEscape(authCode.Code)
+	if authCode.State != "" {
+		location += "&state=" + url.QueryEscape(authCode.State)
+	}
+	return location
 }
 
 // ==================== 6. Token 换取 ====================
@@ -1328,9 +1348,9 @@ func unmetRequirements(flow *types.AuthFlow) []string {
 }
 
 // buildActionURL 基于配置的前端登录端点构建 action URL
-// actions 以逗号分隔写入 ?action= 参数，extra 中的键值对作为额外参数
+// actions 以逗号分隔写入 ?action= 参数
 // 使用配置端点而非 Referer/Origin，防止 open redirect
-func buildActionURL(actions []string, extra map[string]string) string {
+func buildActionURL(actions []string) string {
 	base := config.GetEndpointLogin()
 	u, err := url.Parse(base)
 	if err != nil {
@@ -1339,9 +1359,6 @@ func buildActionURL(actions []string, extra map[string]string) string {
 	q := u.Query()
 	if len(actions) > 0 {
 		q.Set("actions", strings.Join(actions, ","))
-	}
-	for k, v := range extra {
-		q.Set(k, v)
 	}
 	u.RawQuery = q.Encode()
 	return u.String()

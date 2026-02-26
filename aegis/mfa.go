@@ -8,6 +8,7 @@ import (
 
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/webauthn"
 	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // MFAService 对外暴露的 MFA 服务门面
@@ -119,7 +120,9 @@ func (s *MFAService) FinishWebAuthnVerification(ctx context.Context, challengeID
 	}
 
 	if credential != nil {
-		_ = s.webauthnSvc.UpdateCredentialSignCount(ctx, base64.RawURLEncoding.EncodeToString(credential.ID), credential.Authenticator.SignCount)
+		if err := s.webauthnSvc.UpdateCredentialSignCount(ctx, base64.RawURLEncoding.EncodeToString(credential.ID), credential.Authenticator.SignCount); err != nil {
+			logger.Warnf("failed to update webauthn credential sign count: %v", err)
+		}
 	}
 
 	return openid, &WebAuthnCredentialInfo{

@@ -142,6 +142,14 @@ class UserIdentity:
 
 
 @dataclass
+class ServiceChallengeSetting:
+    service_id: str
+    type: str
+    expires_in: int = 300
+    limits: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
 class Relationship:
     service_id: str
     subject_type: str
@@ -259,6 +267,12 @@ APP_SERVICE_RELATIONS = [
     AppServiceRelation("atlas", "hermes", "*"),
     AppServiceRelation("piris", "iris", "*"),
     AppServiceRelation("ciris", "iris", "*"),
+]
+
+SERVICE_CHALLENGE_SETTINGS = [
+    ServiceChallengeSetting("iris", "staff:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
+    ServiceChallengeSetting("iris", "user:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
+    ServiceChallengeSetting("iris", "passkey:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
 ]
 
 USERS = [
@@ -409,6 +423,17 @@ class Initializer:
                 rel_values.append(f"('{rel.app_id}', '{rel.service_id}', '{rel.relation}')")
             lines.append(",\n".join(rel_values))
             lines.append("ON DUPLICATE KEY UPDATE relation = VALUES(relation);")
+            lines.append("")
+
+        if SERVICE_CHALLENGE_SETTINGS:
+            lines.append("-- ==================== 服务 Challenge 配置 ====================")
+            lines.append("INSERT INTO t_service_challenge_setting (service_id, `type`, expires_in, limits) VALUES")
+            setting_values = []
+            for s in SERVICE_CHALLENGE_SETTINGS:
+                limits_json = json.dumps(s.limits)
+                setting_values.append(f"('{s.service_id}', '{s.type}', {s.expires_in}, '{limits_json}')")
+            lines.append(",\n".join(setting_values))
+            lines.append("ON DUPLICATE KEY UPDATE expires_in = VALUES(expires_in), limits = VALUES(limits);")
             lines.append("")
 
         if USERS:

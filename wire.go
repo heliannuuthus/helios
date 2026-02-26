@@ -1,5 +1,4 @@
 //go:build wireinject
-// +build wireinject
 
 package main
 
@@ -12,7 +11,6 @@ import (
 	"github.com/heliannuuthus/helios/chaos"
 	"github.com/heliannuuthus/helios/hermes"
 	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
-	"github.com/heliannuuthus/helios/hermes/upload"
 	"github.com/heliannuuthus/helios/iris"
 	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
@@ -66,10 +64,6 @@ func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) 
 	userSvc := hermes.NewUserService(db)
 	credentialSvc := hermes.NewCredentialService(db)
 	return aegis.Initialize(hermesService, userSvc, credentialSvc)
-}
-
-func provideUploadHandler() *upload.Handler {
-	return upload.NewHandler(hermesconfig.InitDB())
 }
 
 func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
@@ -142,7 +136,6 @@ var ProviderSet = wire.NewSet(
 	provideHermesHandler,
 	// 认证模块（使用 Hermes 数据库，依赖 hermes.Service）
 	provideAegisHandler,
-	provideUploadHandler,
 	// Iris 用户信息模块
 	provideIrisHandler,
 	// Chaos 业务聚合模块
@@ -162,7 +155,6 @@ type App struct {
 	HomeHandler       *home.Handler
 	TagHandler        *tag.Handler
 	RecommendHandler  *recommend.Handler
-	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
 	HermesHandler     *hermes.Handler
 	ChaosHandler      *chaos.Handler

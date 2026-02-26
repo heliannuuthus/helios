@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-json-experiment/json"
+
 	"github.com/heliannuuthus/helios/aegis/config"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
@@ -17,11 +19,10 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/aegis/internal/user"
 	"github.com/heliannuuthus/helios/hermes/models"
-	"github.com/heliannuuthus/helios/pkg/aegis/key"
-	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/token"
+	pasetokit "github.com/heliannuuthus/helios/pkg/aegis/utils/paseto"
+	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helpers"
-	"github.com/go-json-experiment/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -109,7 +110,7 @@ func (s *Service) ComputeGrantedScopes(flow *types.AuthFlow) ([]string, error) {
 		return nil, fmt.Errorf("connection %s not found in flow", flow.Connection)
 	}
 
-	requestedScopes := flow.Request.ParseScopes()
+	requestedScopes := []string(flow.Request.Scope)
 	hasOpenID := false
 	for _, scope := range requestedScopes {
 		if scope == ScopeOpenID {
@@ -339,7 +340,7 @@ func (s *Service) generateAccessToken(
 
 	return &TokenResponse{
 		AccessToken: accessToken,
-		TokenType:   pkgtoken.TokenTypeBearer,
+		TokenType:   tokendef.TokenTypeBearer,
 		ExpiresIn:   int(accessExpiresIn.Seconds()),
 		Scope:       scope,
 	}, nil
@@ -685,7 +686,7 @@ func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKey
 	}
 
 	// 3. 从域主密钥（48 字节 seed）派生公钥
-	mainSeed, err := key.ParseSeed(domain.Main)
+	mainSeed, err := pasetokit.ParseSeed(domain.Main)
 	if err != nil {
 		return nil, fmt.Errorf("parse main seed: %w", err)
 	}
@@ -694,15 +695,15 @@ func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKey
 		return nil, fmt.Errorf("derive main public key: %w", err)
 	}
 	main := PublicKeyInfo{
-		Version:   pkgtoken.PasetoVersion,
-		Purpose:   pkgtoken.PasetoPurpose,
-		PublicKey: key.ExportPublicKeyBase64(mainPublicKey),
+		Version:   tokendef.PasetoVersion,
+		Purpose:   tokendef.PasetoPurpose,
+		PublicKey: pasetokit.ExportPublicKeyBase64(mainPublicKey),
 	}
 
 	// 4. 从所有域密钥（48 字节 seed）派生公钥
 	keyInfos := make([]PublicKeyInfo, 0, len(domain.Keys))
 	for _, signKey := range domain.Keys {
-		seed, err := key.ParseSeed(signKey)
+		seed, err := pasetokit.ParseSeed(signKey)
 		if err != nil {
 			return nil, fmt.Errorf("parse seed: %w", err)
 		}
@@ -712,9 +713,9 @@ func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKey
 		}
 
 		keyInfos = append(keyInfos, PublicKeyInfo{
-			Version:   pkgtoken.PasetoVersion,
-			Purpose:   pkgtoken.PasetoPurpose,
-			PublicKey: key.ExportPublicKeyBase64(publicKey),
+			Version:   tokendef.PasetoVersion,
+			Purpose:   tokendef.PasetoPurpose,
+			PublicKey: pasetokit.ExportPublicKeyBase64(publicKey),
 		})
 	}
 

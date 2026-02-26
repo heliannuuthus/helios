@@ -3,10 +3,11 @@
 package types
 
 import (
-	"github.com/go-json-experiment/json"
 	"time"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	"github.com/go-json-experiment/json"
+
+	"github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 )
 
@@ -169,18 +170,18 @@ func (c *Challenge) GetStringData(key string) string {
 
 // challengeStorage Redis 序列化用的内部结构（含 Required.Verified）
 type challengeStorage struct {
-	ID          string                              `json:"id"`
-	ClientID    string                              `json:"client_id"`
-	Audience    string                              `json:"audience"`
-	Type        string                              `json:"type,omitempty"`
-	ChannelType ChannelType                         `json:"channel_type"`
-	Channel     string                              `json:"channel,omitempty"`
+	ID          string                                  `json:"id"`
+	ClientID    string                                  `json:"client_id"`
+	Audience    string                                  `json:"audience"`
+	Type        string                                  `json:"type,omitempty"`
+	ChannelType ChannelType                             `json:"channel_type"`
+	Channel     string                                  `json:"channel,omitempty"`
 	Required    map[string]*challengeRequiredConfigFull `json:"required,omitempty"`
-	Limits      map[string]int                      `json:"limits,omitempty"`
-	IP          string                              `json:"ip,omitempty"`
-	CreatedAt   time.Time                           `json:"created_at"`
-	ExpiresAt   time.Time                           `json:"expires_at"`
-	Data        map[string]any                      `json:"data,omitempty"`
+	Limits      map[string]int                          `json:"limits,omitempty"`
+	IP          string                                  `json:"ip,omitempty"`
+	CreatedAt   time.Time                               `json:"created_at"`
+	ExpiresAt   time.Time                               `json:"expires_at"`
+	Data        map[string]any                          `json:"data,omitempty"`
 }
 
 // MarshalForStorage Redis 序列化（含 Required.Verified）

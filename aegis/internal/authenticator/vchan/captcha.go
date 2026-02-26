@@ -15,7 +15,7 @@ const TypeCaptcha = "captcha"
 // CaptchaProvider captcha 验证渠道 Provider
 // 内部持有多个 strategy verifiers，根据请求中的 strategy 路由到对应 verifier
 type CaptchaProvider struct {
-	verifiers      map[string]captcha.Verifier // strategy -> verifier
+	verifiers       map[string]captcha.Verifier // strategy -> verifier
 	defaultStrategy string                      // 默认 strategy（第一个注册的）
 }
 
@@ -42,10 +42,7 @@ func (*CaptchaProvider) Type() string {
 
 // Initiate captcha 无副作用，直接构建 Challenge
 func (p *CaptchaProvider) Initiate(_ context.Context, channel string, params ...any) (*InitiateResult, error) {
-	ip, err := parseInitiateParams(params...)
-	if err != nil {
-		return nil, err
-	}
+	ip := parseInitiateParams(params...)
 
 	challenge := types.NewChallenge(
 		ip.clientID, ip.audience, ip.bizType,
@@ -131,7 +128,7 @@ type initiateParams struct {
 }
 
 // parseInitiateParams 解析 Initiate 参数
-func parseInitiateParams(params ...any) (*initiateParams, error) {
+func parseInitiateParams(params ...any) *initiateParams {
 	var p initiateParams
 	if len(params) >= 1 {
 		if v, ok := params[0].(string); ok {
@@ -148,5 +145,5 @@ func parseInitiateParams(params ...any) (*initiateParams, error) {
 			p.bizType = v
 		}
 	}
-	return &p, nil
+	return &p
 }

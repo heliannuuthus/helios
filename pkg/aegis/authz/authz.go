@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/go-json-experiment/json"
+
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -55,11 +57,11 @@ func NewClient(endpoint string, keyStore *key.Store) *Client {
 }
 
 // Check 检查关系
-func (c *Client) Check(ctx context.Context, t token.Token, relation, objectType, objectID string) (bool, error) {
+func (c *Client) Check(ctx context.Context, t tokendef.Token, relation, objectType, objectID string) (bool, error) {
 	subjectType := subjectTypeApp
 	subjectID := t.GetClientID()
 
-	if uat, ok := t.(*token.UserAccessToken); ok && uat.HasUser() {
+	if uat, ok := t.(*tokendef.UserAccessToken); ok && uat.HasUser() {
 		subjectType = subjectTypeUser
 		subjectID = uat.GetOpenID()
 	}
@@ -92,7 +94,7 @@ func (c *Client) Check(ctx context.Context, t token.Token, relation, objectType,
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set(headerAuthorization, token.TokenTypeBearer+" "+cat)
+	httpReq.Header.Set(headerAuthorization, tokendef.TokenTypeBearer+" "+cat)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {

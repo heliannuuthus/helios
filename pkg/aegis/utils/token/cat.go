@@ -27,7 +27,7 @@ func NewClientAccessTokenBuilder() *CAT {
 }
 
 // build 实现 TokenTypeBuilder 接口
-func (c *CAT) build(claims Claims) Token {
+func (c *CAT) Build(claims Claims) Token {
 	return &ClientAccessToken{
 		Claims: claims,
 	}

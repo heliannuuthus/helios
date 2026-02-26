@@ -706,81 +706,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/upload/image": {
-            "post": {
-                "security": [
-                    {
-                        "Bearer": []
-                    }
-                ],
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "upload"
-                ],
-                "summary": "上传图片到 OSS",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "完整的 OSS 对象键，如 avatars/user123.jpg（优先级高于 prefix）",
-                        "name": "object-key",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "string",
-                        "description": "文件路径前缀，如 avatars, images（当 object-key 为空时使用）",
-                        "name": "prefix",
-                        "in": "formData"
-                    },
-                    {
-                        "type": "file",
-                        "description": "图片文件",
-                        "name": "file",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/upload.UploadImageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/api/user/favorites": {
             "get": {
                 "produces": [
@@ -2004,15 +1929,6 @@ const docTemplate = `{
             ],
             "properties": {
                 "label": {
-                    "type": "string"
-                }
-            }
-        },
-        "upload.UploadImageResponse": {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "description": "上传后的图片 URL",
                     "type": "string"
                 }
             }

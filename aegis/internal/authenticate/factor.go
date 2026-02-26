@@ -2,6 +2,7 @@ package authenticate
 
 import (
 	"context"
+	"strings"
 
 	"github.com/heliannuuthus/helios/aegis/config"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
@@ -9,7 +10,14 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/factor"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/pkg/accessctl"
+	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
+
+// ChallengeTokenVerifier challenge-token 验证能力接口
+type ChallengeTokenVerifier interface {
+	Verify(ctx context.Context, tokenString string) (tokendef.Token, error)
+}
 
 var (
 	_ authenticator.Authenticator     = (*FactorAuthenticator)(nil)
@@ -18,16 +26,21 @@ var (
 
 // FactorAuthenticator 认证因子认证器包装器
 // 持有 factor.Provider，同时实现 Authenticator + ChallengeVerifier
+//
+// Login 阶段（Authenticate）：统一验证 challenge-token，不走 provider.Verify。
+// Challenge 阶段（Initiate / Verify）：委托 provider 处理。
 type FactorAuthenticator struct {
-	provider factor.Provider
-	ac       *accessctl.Manager
+	provider      factor.Provider
+	ac            *accessctl.Manager
+	tokenVerifier ChallengeTokenVerifier
 }
 
 // NewFactorAuthenticator 创建认证因子认证器
-func NewFactorAuthenticator(provider factor.Provider, ac *accessctl.Manager) *FactorAuthenticator {
+func NewFactorAuthenticator(provider factor.Provider, ac *accessctl.Manager, tokenVerifier ChallengeTokenVerifier) *FactorAuthenticator {
 	return &FactorAuthenticator{
-		provider: provider,
-		ac:       ac,
+		provider:      provider,
+		ac:            ac,
+		tokenVerifier: tokenVerifier,
 	}
 }
 
@@ -50,32 +63,62 @@ func (a *FactorAuthenticator) Prepare() *types.ConnectionConfig {
 	return cfg
 }
 
-// Authenticate 执行认证因子验证（Login 流程）
-// params: [proof string, ...extraParams]
+// Authenticate 验证 challenge-token（Login 流程）
+// Login 阶段提交 factor connection 时，proof 只能是 challenge-token。
+// 校验规则：
+//  1. token 签名和有效期有效
+//  2. token 类型为 ChallengeToken
+//  3. token.typ 以 "{delegatingIDP}:" 为前缀（如 staff:verify），确保 challenge 与主身份绑定
 func (a *FactorAuthenticator) Authenticate(ctx context.Context, flow *types.AuthFlow, params ...any) (bool, error) {
 	if len(params) < 1 {
-		return false, autherrors.NewInvalidRequest("factor proof is required")
+		return false, autherrors.NewInvalidRequest("challenge token is required")
 	}
 	proof, ok := params[0].(string)
-	if !ok {
-		return false, autherrors.NewInvalidRequest("factor proof must be a string")
+	if !ok || proof == "" {
+		return false, autherrors.NewInvalidRequest("challenge token must be a non-empty string")
 	}
 
-	extraParams := params[1:]
-
-	success, err := a.provider.Verify(ctx, proof, extraParams...)
+	t, err := a.tokenVerifier.Verify(ctx, proof)
 	if err != nil {
-		return false, autherrors.NewServerErrorf("factor verification failed: %v", err)
+		return false, autherrors.NewInvalidCredentials("invalid challenge token")
 	}
-	if !success {
-		return false, autherrors.NewInvalidCredentials("factor verification failed")
+
+	ct, ok := t.(*tokendef.ChallengeToken)
+	if !ok {
+		return false, autherrors.NewInvalidCredentials("proof is not a challenge token")
+	}
+
+	delegatingIDP := findDelegatingIDP(flow, a.Type())
+	if delegatingIDP == "" {
+		return false, autherrors.NewInvalidRequest("factor is not a delegate of any IDP")
+	}
+
+	expectedPrefix := delegatingIDP + ":"
+	if !strings.HasPrefix(ct.GetType(), expectedPrefix) {
+		return false, autherrors.NewInvalidRequestf("challenge token type %q is not valid for IDP %q", ct.GetType(), delegatingIDP)
 	}
 
 	if connCfg := flow.GetCurrentConnConfig(); connCfg != nil {
 		connCfg.Verified = true
 	}
 
+	logger.Infof("[Factor] challenge-token 验证通过 - Factor: %s, IDP: %s, Type: %s", a.Type(), delegatingIDP, ct.GetType())
 	return true, nil
+}
+
+// findDelegatingIDP 查找 ConnectionMap 中哪个 IDP 的 Delegate 列表包含指定 connection
+func findDelegatingIDP(flow *types.AuthFlow, connection string) string {
+	for name, cfg := range flow.ConnectionMap {
+		if cfg.Type != types.ConnTypeIDP {
+			continue
+		}
+		for _, d := range cfg.Delegate {
+			if d == connection {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 // ==================== ChallengeVerifier 实现 ====================

@@ -244,7 +244,8 @@ SSO 使用全局配置的主密钥，不关联具体域。
 |------|------|--------------|
 | Verifier | 签名验证 | []PublicKey |
 | Signer | Token 签名 | SecretKey |
-| Cryptor | 加解密 | SymmetricKey |
+| Encryptor | sub 字段加密 | SymmetricKey |
+| Decryptor | sub 字段解密 | SymmetricKey |
 
 ### 6.4 派生时机
 
@@ -257,12 +258,13 @@ SSO 使用全局配置的主密钥，不关联具体域。
 
 ### 6.5 ID 语义
 
-| Store | id 含义 | 返回值 |
-|-------|---------|--------|
-| domainKeyStore | client_id | domain.main |
-| serviceKeyStore | audience | service.key |
-| appKeyStore | client_id | app.key |
-| ssoKeyStore | — (忽略) | sso.master_key |
+| Store | id 含义 | 返回值 | 备注 |
+|-------|---------|--------|------|
+| domainKeyStore | client_id | domain.main | id="aegis" 时返回 sso.master_key |
+| serviceKeyStore | audience | service.key | id="aegis" 时返回 sso.master_key |
+| appKeyStore | client_id | app.key | 仅用于 CAT 验签 |
+
+> SSO 不再使用独立的 KeyStore，通过 domainKeyStore / serviceKeyStore 的 id="aegis" 路由到 SSO master key。
 
 ### 6.6 密钥轮换支持
 
@@ -300,9 +302,67 @@ Verifier 内部持有多个 PublicKey，依次尝试验证。
 
 ---
 
-## 8. 公钥暴露
+## 8. PASERK 密钥标识（kid）
 
-### 8.1 公钥端点
+### 8.1 概述
+
+使用 PASERK（Platform Agnostic SERialized Keys）规范为每个密钥生成确定性标识符（kid），
+用于在密钥轮换场景下精确匹配密钥，避免暴力遍历所有候选密钥。
+
+### 8.2 kid 类型
+
+| 类型 | PASERK 前缀 | 用途 | 哈希输入 |
+|------|------------|------|----------|
+| Public Key ID | `k4.pid.` | 标识签名验证公钥 | Ed25519 公钥 |
+| Local Key ID | `k4.lid.` | 标识对称加密密钥 | V4 对称密钥 |
+
+### 8.3 计算方式（PASERK v4）
+
+```
+1. 将密钥序列化为 PASERK 字符串
+   - 公钥: paserk = "k4.public." + base64url(public_key_bytes)
+   - 对称: paserk = "k4.local." + base64url(symmetric_key_bytes)
+
+2. 设置 header
+   - 公钥: h = "k4.pid."
+   - 对称: h = "k4.lid."
+
+3. 计算 BLAKE2b 哈希
+   d = BLAKE2b(message: h || paserk, output_size: 33)  // 264 bits
+
+4. 拼接结果
+   kid = h + base64url(d)  // 总长 51 字符
+```
+
+### 8.4 kid 在 Token 中的放置
+
+所有 Token 的 footer 统一使用 JSON 格式存放 kid：
+
+```json
+{"kid":"k4.pid.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+```
+
+UAT/SSO 的 sub 字段是嵌套的 v4.local token，其 footer 也使用 JSON 格式：
+
+```json
+{"kid":"k4.lid.yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"}
+```
+
+### 8.5 kid 使用矩阵
+
+| Token | 外层 Footer kid 来源 | 内层 Footer kid 来源 |
+|-------|---------------------|---------------------|
+| CAT | `app.key` → k4.pid | — |
+| UAT | `domain.main` → k4.pid | `service.key` → k4.lid |
+| SAT | `domain.main` → k4.pid | — |
+| XAT | `domain.main` → k4.pid | — |
+| SSO | `sso.master_key` → k4.pid | `sso.master_key` → k4.lid |
+
+---
+
+## 9. 公钥暴露
+
+### 9.1 公钥端点
 
 Aegis 提供公钥查询接口，供外部服务获取验签公钥。
 
@@ -314,7 +374,7 @@ Aegis 提供公钥查询接口，供外部服务获取验签公钥。
 {
   "keys": [
     {
-      "kid": "key-1",
+      "kid": "k4.pid.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
       "kty": "OKP",
       "crv": "Ed25519",
       "x": "<base64url-encoded-public-key>"
@@ -323,7 +383,7 @@ Aegis 提供公钥查询接口，供外部服务获取验签公钥。
 }
 ```
 
-### 8.2 缓存策略
+### 9.2 缓存策略
 
 | 配置项 | 建议值 | 说明 |
 |--------|--------|------|
@@ -333,9 +393,9 @@ Aegis 提供公钥查询接口，供外部服务获取验签公钥。
 
 ---
 
-## 9. 安全考量
+## 10. 安全考量
 
-### 9.1 Seed 保护
+### 10.1 Seed 保护
 
 | 措施 | 说明 |
 |------|------|
@@ -344,7 +404,7 @@ Aegis 提供公钥查询接口，供外部服务获取验签公钥。
 | 内存保护 | 使用后清零敏感内存 |
 | 访问控制 | 最小权限原则 |
 
-### 9.2 KDF 参数选择
+### 10.2 KDF 参数选择
 
 | 参数 | 安全考量 |
 |------|----------|
@@ -352,7 +412,7 @@ Aegis 提供公钥查询接口，供外部服务获取验签公钥。
 | Memory=64MB | 抵抗 GPU 暴力破解 |
 | Parallelism=4 | 利用多核，平衡性能 |
 
-### 9.3 Purpose 分离
+### 10.3 Purpose 分离
 
 签名和加密使用不同 Purpose 派生，即使 Seed 相同：
 
@@ -361,9 +421,9 @@ Aegis 提供公钥查询接口，供外部服务获取验签公钥。
 
 ---
 
-## 10. 附录
+## 11. 附录
 
-### 10.1 Seed 生成示例
+### 11.1 Seed 生成示例
 
 ```
 # 使用 OpenSSL 生成 48 字节随机数
@@ -373,7 +433,7 @@ openssl rand -base64 48
 Abc123Def456Ghi789Jkl012Mno345Pqr678Stu901Vwx234Yza567Bcd890Efg==
 ```
 
-### 10.2 密钥关系图
+### 11.2 密钥关系图
 
 ```
                     ┌─────────────┐
@@ -394,12 +454,12 @@ Abc123Def456Ghi789Jkl012Mno345Pqr678Stu901Vwx234Yza567Bcd890Efg==
               │                                       ▼
               ▼                               ┌─────────────────────┐
        ┌─────────────────────┐                │  加密密钥派生        │
-       │  签名密钥派生        │                │  (UAT Footer)       │
+       │  签名密钥派生        │                │  (UAT sub 内层)     │
        │  (CAT)              │                └─────────────────────┘
        └─────────────────────┘
 ```
 
-### 10.3 术语表
+### 11.3 术语表
 
 | 术语 | 说明 |
 |------|------|
@@ -409,3 +469,8 @@ Abc123Def456Ghi789Jkl012Mno345Pqr678Stu901Vwx234Yza567Bcd890Efg==
 | KDF | Key Derivation Function，密钥派生函数 |
 | Purpose | 派生用途标识，区分签名/加密 |
 | KeyProvider | 密钥提供者抽象，按 ID 获取 Seed |
+| PASERK | Platform Agnostic SERialized Keys，PASETO 密钥序列化规范 |
+| kid | Key ID，密钥标识符，用于密钥轮换时精确匹配 |
+| k4.pid | PASERK v4 Public Key ID，Ed25519 公钥标识 |
+| k4.lid | PASERK v4 Local Key ID，对称密钥标识 |
+| BLAKE2b-264 | 33 字节输出的 BLAKE2b 哈希，用于 kid 计算 |

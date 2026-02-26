@@ -2,7 +2,7 @@ package challenge
 
 import (
 	"context"
-	"time"
+	"slices"
 
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
@@ -10,9 +10,6 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
-
-// DefaultChallengeTokenTTL ChallengeToken expiration duration
-const DefaultChallengeTokenTTL = 5 * time.Minute
 
 // Service provides atomic challenge operations.
 // Handler is responsible for orchestrating these operations.
@@ -99,33 +96,14 @@ func (s *Service) Initiate(ctx context.Context, challenge *types.Challenge) (ret
 // For prerequisite: pass req.Type (e.g., "captcha") and req.Strategy
 // For main proof: pass challenge.ChannelType as verifier key
 func (s *Service) Verify(ctx context.Context, challenge *types.Challenge, req *VerifyRequest) (bool, error) {
-	// 确定使用哪个 verifier
 	verifierKey := req.Type
 	isPrerequisite := challenge.Required.Contains(req.Type)
 
-	// 前置条件验证：校验 strategy 是否匹配
 	if isPrerequisite {
-		if reqCfg, ok := challenge.Required[req.Type]; ok && len(reqCfg.Strategy) > 0 {
-			if req.Strategy == "" {
-				return false, autherrors.NewInvalidRequest("strategy is required for prerequisite verification")
-			}
-			strategyValid := false
-			for _, st := range reqCfg.Strategy {
-				if st == req.Strategy {
-					strategyValid = true
-					break
-				}
-			}
-			if !strategyValid {
-				return false, autherrors.NewInvalidRequestf("unsupported strategy: %s", req.Strategy)
-			}
-		}
-		// 将 strategy 存入 challenge.Data，供 verifier 读取
-		if req.Strategy != "" {
-			challenge.SetData("strategy", req.Strategy)
+		if err := s.validatePrerequisiteStrategy(challenge, req); err != nil {
+			return false, err
 		}
 	} else {
-		// 主验证：使用 challenge.ChannelType 作为 verifier key
 		verifierKey = string(challenge.ChannelType)
 	}
 
@@ -145,12 +123,26 @@ func (s *Service) Verify(ctx context.Context, challenge *types.Challenge, req *V
 		return false, err
 	}
 
-	// 前置条件验证通过，标记为已验证
 	if ok && isPrerequisite {
 		challenge.Required[req.Type].Verified = true
 	}
 
 	return ok, nil
+}
+
+func (s *Service) validatePrerequisiteStrategy(challenge *types.Challenge, req *VerifyRequest) error {
+	if reqCfg, ok := challenge.Required[req.Type]; ok && len(reqCfg.Strategy) > 0 {
+		if req.Strategy == "" {
+			return autherrors.NewInvalidRequest("strategy is required for prerequisite verification")
+		}
+		if !slices.Contains(reqCfg.Strategy, req.Strategy) {
+			return autherrors.NewInvalidRequestf("unsupported strategy: %s", req.Strategy)
+		}
+	}
+	if req.Strategy != "" {
+		challenge.SetData("strategy", req.Strategy)
+	}
+	return nil
 }
 
 // Exchange executes the exchange flow (one-step: code → principal)

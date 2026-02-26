@@ -3,17 +3,17 @@ package iris
 import (
 	"bytes"
 	"encoding/base64"
-	"github.com/go-json-experiment/json/jsontext"
 	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-json-experiment/json/jsontext"
 
 	"github.com/heliannuuthus/helios/aegis"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
-	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	"github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
@@ -457,7 +457,7 @@ type VerifyMFARequest struct {
 	Confirm      bool   `json:"confirm,omitempty"` // 首次绑定确认
 
 	// WebAuthn finish 阶段专用
-	ChallengeID string          `json:"challenge_id,omitempty"`
+	ChallengeID string         `json:"challenge_id,omitempty"`
 	Credential  jsontext.Value `json:"credential,omitempty"` // assertion response JSON
 }
 

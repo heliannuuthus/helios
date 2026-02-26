@@ -10,7 +10,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/pkg/aegis/key"
+	pasetokit "github.com/heliannuuthus/helios/pkg/aegis/utils/paseto"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -94,7 +94,7 @@ func (cm *Manager) fetchPublicKey(ctx context.Context, clientID, cacheKey string
 		}
 
 		// 3. 从域密钥（48 字节 seed）派生公钥
-		seed, err := key.ParseSeed(domain.Main)
+		seed, err := pasetokit.ParseSeed(domain.Main)
 		if err != nil {
 			return nil, fmt.Errorf("parse seed: %w", err)
 		}
@@ -165,7 +165,7 @@ func (cm *Manager) GetAllPublicKeys(ctx context.Context, clientID string) ([]pas
 	// 3. 从所有域密钥（48 字节 seed）派生公钥
 	publicKeys := make([]paseto.V4AsymmetricPublicKey, 0, len(domain.Keys))
 	for _, signKey := range domain.Keys {
-		seed, err := key.ParseSeed(signKey)
+		seed, err := pasetokit.ParseSeed(signKey)
 		if err != nil {
 			logger.Warnf("[Manager] 解析 seed 失败: %v", err)
 			continue

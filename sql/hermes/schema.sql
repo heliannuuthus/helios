@@ -85,11 +85,12 @@ UNIQUE KEY uk_service_id (service_id)
 -- ==================== 服务 Challenge 配置表 ====================
 -- 服务级别的 Challenge 配置（限流等），覆盖全局默认
 
-CREATE TABLE IF NOT EXISTS t_service_challenge_config (
+CREATE TABLE IF NOT EXISTS t_service_challenge_setting (
     _id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
     service_id   VARCHAR(32)  NOT NULL COMMENT '服务 ID',
     `type`       VARCHAR(64)  NOT NULL COMMENT 'Challenge 类型[:场景]，如 email_otp / email_otp:login',
+    expires_in   INT UNSIGNED NOT NULL DEFAULT 300 COMMENT 'Challenge 有效期（秒）',
     limits       JSON         NOT NULL COMMENT '限流配置，如 {"1m": 1, "24h": 10}',
     -- 时间戳
     created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

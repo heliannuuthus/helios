@@ -14,10 +14,9 @@ import (
 	"github.com/heliannuuthus/helios/chaos"
 	"github.com/heliannuuthus/helios/hermes"
 	config2 "github.com/heliannuuthus/helios/hermes/config"
-	"github.com/heliannuuthus/helios/hermes/upload"
 	"github.com/heliannuuthus/helios/iris"
-	"github.com/heliannuuthus/helios/pkg/aegis/token"
 	middleware2 "github.com/heliannuuthus/helios/pkg/aegis/middleware"
+	"github.com/heliannuuthus/helios/pkg/aegis/token"
 	"github.com/heliannuuthus/helios/zwei/config"
 	"github.com/heliannuuthus/helios/zwei/favorite"
 	"github.com/heliannuuthus/helios/zwei/history"
@@ -48,18 +47,17 @@ func InitializeApp() (*App, error) {
 	homeHandler := provideHomeHandler()
 	tagHandler := provideTagHandler()
 	recommendHandler := provideRecommendHandler()
-	uploadHandler := provideUploadHandler()
 	preferenceHandler := providePreferenceHandler()
 	hermesHandler := provideHermesHandler(service)
+	chaosHandler, err := provideChaosHandler()
+	if err != nil {
+		return nil, err
+	}
 	ginFactory, err := provideGinMiddlewareFactory()
 	if err != nil {
 		return nil, err
 	}
 	interpreter, err := provideInterpreter()
-	if err != nil {
-		return nil, err
-	}
-	chaosHandler, err := provideChaosHandler()
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +70,6 @@ func InitializeApp() (*App, error) {
 		HomeHandler:       homeHandler,
 		TagHandler:        tagHandler,
 		RecommendHandler:  recommendHandler,
-		UploadHandler:     uploadHandler,
 		PreferenceHandler: preferenceHandler,
 		HermesHandler:     hermesHandler,
 		ChaosHandler:      chaosHandler,
@@ -124,10 +121,6 @@ func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) 
 	userSvc := hermes.NewUserService(db)
 	credentialSvc := hermes.NewCredentialService(db)
 	return aegis.Initialize(hermesService, userSvc, credentialSvc)
-}
-
-func provideUploadHandler() *upload.Handler {
-	return upload.NewHandler(config2.InitDB())
 }
 
 func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
@@ -192,9 +185,10 @@ var ProviderSet = wire.NewSet(recipe.NewService, favorite.NewService, history.Ne
 	provideHermesHandler,
 
 	provideAegisHandler,
-	provideUploadHandler,
 
 	provideIrisHandler,
+
+	provideChaosHandler,
 
 	provideInterpreter,
 	provideGinMiddlewareFactory,
@@ -210,7 +204,6 @@ type App struct {
 	HomeHandler       *home.Handler
 	TagHandler        *tag.Handler
 	RecommendHandler  *recommend.Handler
-	UploadHandler     *upload.Handler
 	PreferenceHandler *preference.Handler
 	HermesHandler     *hermes.Handler
 	ChaosHandler      *chaos.Handler

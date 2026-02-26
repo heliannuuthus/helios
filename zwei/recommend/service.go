@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-json-experiment/json"
+	"github.com/go-json-experiment/json/jsontext"
 	"github.com/invopop/jsonschema"
 	"github.com/sashabaranov/go-openai"
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/pkg/amap"
 	"github.com/heliannuuthus/helios/pkg/helpers"
-	"github.com/go-json-experiment/json"
-	"github.com/go-json-experiment/json/jsontext"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/zwei/config"
 	"github.com/heliannuuthus/helios/zwei/internal/models"

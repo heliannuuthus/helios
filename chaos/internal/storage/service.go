@@ -30,7 +30,7 @@ type Service struct {
 func NewService() (*Service, error) {
 	endpoint := chaosconfig.GetCloudflareR2Endpoint()
 	if endpoint == "" {
-		return nil, fmt.Errorf("Cloudflare R2 endpoint 未配置")
+		return nil, fmt.Errorf("cloudflare R2 endpoint 未配置")
 	}
 
 	cfg, err := config.LoadDefaultConfig(context.Background(),
@@ -63,7 +63,11 @@ func (s *Service) Upload(ctx context.Context, file *multipart.FileHeader, path s
 	if err != nil {
 		return nil, fmt.Errorf("打开文件失败: %w", err)
 	}
-	defer src.Close()
+	defer func() {
+		if err := src.Close(); err != nil {
+			logger.Warnf("failed to close uploaded file: %v", err)
+		}
+	}()
 
 	// 如果指定了路径则使用，否则自动生成
 	var storageKey string

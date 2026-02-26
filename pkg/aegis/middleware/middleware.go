@@ -27,6 +27,7 @@ import (
 	"github.com/heliannuuthus/helios/pkg/aegis/authz"
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
 // ContextKey 上下文 key 类型
@@ -163,10 +164,10 @@ type forbiddenError struct{}
 func (e *forbiddenError) Error() string { return "forbidden" }
 
 // authenticate 认证：验证用户 token
-func (m *Middleware) authenticate(r *http.Request) (token.Token, error) {
+func (m *Middleware) authenticate(r *http.Request) (tokendef.Token, error) {
 	tokenStr := extractToken(r)
 	if tokenStr == "" {
-		return nil, token.ErrMissingClaims
+		return nil, tokendef.ErrMissingClaims
 	}
 
 	t, err := m.interpreter.Interpret(r.Context(), tokenStr)
@@ -182,7 +183,7 @@ func (m *Middleware) authenticate(r *http.Request) (token.Token, error) {
 }
 
 // authorize 鉴权：检查单个关系
-func (m *Middleware) authorize(ctx context.Context, t token.Token, relation, objectType, objectID string) error {
+func (m *Middleware) authorize(ctx context.Context, t tokendef.Token, relation, objectType, objectID string) error {
 	if m.authzClient == nil {
 		return errForbidden
 	}
@@ -198,7 +199,7 @@ func (m *Middleware) authorize(ctx context.Context, t token.Token, relation, obj
 }
 
 // authorizeAny 鉴权：检查任意一个关系
-func (m *Middleware) authorizeAny(ctx context.Context, t token.Token, relations []string, objectType, objectID string) error {
+func (m *Middleware) authorizeAny(ctx context.Context, t tokendef.Token, relations []string, objectType, objectID string) error {
 	if m.authzClient == nil {
 		return errForbidden
 	}
@@ -241,8 +242,8 @@ func extractToken(r *http.Request) string {
 }
 
 // GetToken 从 context 中获取验证后的 Token
-func GetToken(ctx context.Context) token.Token {
-	t, ok := ctx.Value(ClaimsKey).(token.Token)
+func GetToken(ctx context.Context) tokendef.Token {
+	t, ok := ctx.Value(ClaimsKey).(tokendef.Token)
 	if !ok {
 		return nil
 	}
@@ -255,7 +256,7 @@ func GetOpenID(ctx context.Context) string {
 	if t == nil {
 		return ""
 	}
-	if uat, ok := t.(*token.UserAccessToken); ok && uat.HasUser() {
+	if uat, ok := t.(*tokendef.UserAccessToken); ok && uat.HasUser() {
 		return uat.GetOpenID()
 	}
 	return ""

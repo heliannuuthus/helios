@@ -47,41 +47,31 @@ func GetSMTPFromName() string {
 	return name
 }
 
-// GetCloudflareAccountID 获取 Cloudflare Account ID（复用主配置）
-func GetCloudflareAccountID() string {
-	return baseconfig.GetR2AccountID()
-}
-
-// GetCloudflareAPIToken 获取 Cloudflare API Token（即 R2 Access Key ID）
-func GetCloudflareAPIToken() string {
-	return baseconfig.GetR2AccessKeySecret()
-}
-
 // GetCloudflareR2AccessKeyID 获取 R2 Access Key ID
 func GetCloudflareR2AccessKeyID() string {
-	return baseconfig.GetR2AccessKeyID()
+	return Cfg().GetString("r2.access-key-id")
 }
 
 // GetCloudflareR2AccessKeySecret 获取 R2 Access Key Secret
 func GetCloudflareR2AccessKeySecret() string {
-	return baseconfig.GetR2AccessKeySecret()
+	return Cfg().GetString("r2.access-key-secret")
 }
 
-// GetCloudflareR2Bucket 获取 R2 Bucket 名称（复用主配置）
+// GetCloudflareR2Bucket 获取 R2 Bucket 名称
 func GetCloudflareR2Bucket() string {
-	return baseconfig.GetR2Bucket()
+	return Cfg().GetString("r2.bucket")
 }
 
 // GetCloudflareR2Endpoint 获取 R2 Endpoint（根据 Account ID 构建）
 func GetCloudflareR2Endpoint() string {
-	accountID := baseconfig.GetR2AccountID()
+	accountID := Cfg().GetString("r2.account-id")
 	if accountID == "" {
 		return ""
 	}
 	return "https://" + accountID + ".r2.cloudflarestorage.com"
 }
 
-// GetCloudflareR2PublicURL 获取 R2 公开访问 URL（复用主配置的 domain）
+// GetCloudflareR2PublicURL 获取 R2 公开访问 URL
 func GetCloudflareR2PublicURL() string {
-	return baseconfig.GetR2Domain()
+	return Cfg().GetString("r2.domain")
 }

@@ -63,8 +63,8 @@ type CheckResponse struct {
 
 // IdentifyResponse 识别到已有用户的响应
 type IdentifyResponse struct {
-	Connection string          `json:"connection"`      // 当前登录的 IDP（github/google 等）
-	User       *IdentifiedUser `json:"user,omitempty"`  // 匹配到的已有用户
+	Connection string          `json:"connection"`     // 当前登录的 IDP（github/google 等）
+	User       *IdentifiedUser `json:"user,omitempty"` // 匹配到的已有用户
 }
 
 // IdentifiedUser 被识别到的已有用户摘要

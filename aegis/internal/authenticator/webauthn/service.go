@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-json-experiment/json"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
@@ -15,18 +16,12 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/hermes/models"
-	"github.com/go-json-experiment/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 const (
 	DefaultWebAuthnSessionTTL = 5 * time.Minute
 )
-
-// IsEnabled 检查 WebAuthn 是否启用
-func IsEnabled() bool {
-	return config.Cfg().GetBool("mfa.webauthn.enabled")
-}
 
 // Service WebAuthn 协议引擎（internal，仅 aegis 内部使用）
 type Service struct {
@@ -37,10 +32,6 @@ type Service struct {
 
 // NewService 创建 WebAuthn 服务
 func NewService(cm *cache.Manager) (*Service, error) {
-	if !IsEnabled() {
-		return nil, fmt.Errorf("webauthn is not enabled")
-	}
-
 	cfg := config.Cfg()
 
 	rpID := cfg.GetString("mfa.webauthn.rp-id")

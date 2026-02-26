@@ -2,65 +2,46 @@ package token
 
 import (
 	"fmt"
-	"time"
 
 	"aidanwoods.dev/go-paseto"
+	"github.com/go-json-experiment/json"
 
-	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/token"
+	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
-// SSO Token 常量
 const (
-	SSOIssuer   = "aegis"          // SSO Token 签发者
-	SSOAudience = "aegis"          // SSO Token 目标受众
-	TokenTypeSSO = TokenType("sso") // SSO Token 类型标识
+	SSOIssuer   = "aegis"
+	SSOAudience = "aegis"
 )
 
-// SSOToken SSO 会话令牌
-// 仅 Aegis 内部使用，不对外暴露
-// Claims 明文（签名保护），用户身份加密存储在 footer 中
+// SSOToken represents a single sign-on session token.
+// Claims are signed (public token), identities are encrypted into the sub field
+// as a nested v4.local token.
 //
-// 设计说明：
-//   - 不含 cli（不绑定具体应用）
-//   - 不含 scope（不代表授权，仅代表认证）
-//   - iss = aud = "aegis"（自签发自验证）
-//   - footer 为 domain→openID 的平铺映射，如 {"consumer":"openid_xxx","platform":"openid_yyy"}
-//     每个域下的 openID 是该域中 t_user.openid（域隔离的用户标识）
+// Footer: {"kid":"k4.pid.xxxx"} (signing key)
+// Sub:    v4.local.<encrypted identities>.<inner footer with k4.lid>
 type SSOToken struct {
-	pkgtoken.Claims                // 内嵌基础 Claims
-	identities      map[string]string // domain → openID（从 footer 解密获取）
+	pkgtoken.Claims
+	identities map[string]string // domain → openID
 }
 
-// ==================== 构建 ====================
+// ==================== Builder ====================
 
-// SSOTokenBuilder SSO Token 构建器
 type SSOTokenBuilder struct {
-	issuer     string
-	expiresIn  time.Duration
 	identities map[string]string
 }
 
-// NewSSOTokenBuilder 创建 SSO Token 构建器
 func NewSSOTokenBuilder() *SSOTokenBuilder {
 	return &SSOTokenBuilder{
-		issuer:     SSOIssuer,
 		identities: make(map[string]string),
 	}
 }
 
-// ExpiresIn 设置过期时间
-func (b *SSOTokenBuilder) ExpiresIn(d time.Duration) *SSOTokenBuilder {
-	b.expiresIn = d
-	return b
-}
-
-// Identity 添加一条域身份
 func (b *SSOTokenBuilder) Identity(domain, openID string) *SSOTokenBuilder {
 	b.identities[domain] = openID
 	return b
 }
 
-// Identities 批量设置域身份映射
 func (b *SSOTokenBuilder) Identities(identities map[string]string) *SSOTokenBuilder {
 	for domain, openID := range identities {
 		b.identities[domain] = openID
@@ -68,18 +49,11 @@ func (b *SSOTokenBuilder) Identities(identities map[string]string) *SSOTokenBuil
 	return b
 }
 
-// Build 构建 SSOToken
-func (b *SSOTokenBuilder) Build() *SSOToken {
+func (b *SSOTokenBuilder) Build(claims pkgtoken.Claims) pkgtoken.Token {
 	cp := make(map[string]string, len(b.identities))
 	for k, v := range b.identities {
 		cp[k] = v
 	}
-
-	claims := pkgtoken.NewClaimsBuilder().
-		Issuer(SSOIssuer).
-		Audience(SSOAudience).
-		ExpiresIn(b.expiresIn).
-		BuildClaims()
 
 	return &SSOToken{
 		Claims:     claims,
@@ -87,9 +61,19 @@ func (b *SSOTokenBuilder) Build() *SSOToken {
 	}
 }
 
-// ==================== PASETO 构建 ====================
+// ==================== Token Interface ====================
 
-// BuildPaseto 构建 PASETO Token（不含签名和 footer）
+func (s *SSOToken) Type() pkgtoken.TokenType {
+	return pkgtoken.TokenTypeSSO
+}
+
+// MarshalPayload implements EncryptableToken.
+func (s *SSOToken) MarshalPayload() ([]byte, error) {
+	return s.MarshalIdentities()
+}
+
+// BuildPaseto builds the PASETO claims token. The sub field will be set
+// by the service layer after encrypting identities.
 func (s *SSOToken) BuildPaseto() (*paseto.Token, error) {
 	t := paseto.NewToken()
 	if err := s.SetStandardClaims(&t); err != nil {
@@ -98,9 +82,8 @@ func (s *SSOToken) BuildPaseto() (*paseto.Token, error) {
 	return &t, nil
 }
 
-// ==================== 解析 ====================
+// ==================== Parse ====================
 
-// ParseSSOToken 从 PASETO Token 解析 SSOToken（仅解析 claims，footer 由 service 层解密后填充）
 func ParseSSOToken(pasetoToken *paseto.Token) (*SSOToken, error) {
 	claims, err := pkgtoken.ParseClaims(pasetoToken)
 	if err != nil {
@@ -112,34 +95,44 @@ func ParseSSOToken(pasetoToken *paseto.Token) (*SSOToken, error) {
 	}, nil
 }
 
-// ==================== Footer 数据 ====================
+// ==================== Identity Data ====================
 
-// GetFooterData 获取用于 footer 加密的数据
-// 返回 domain→openID 的平铺 map，直接序列化为 JSON
-func (s *SSOToken) GetFooterData() map[string]string {
+// MarshalIdentities serializes identity mapping as JSON for inner token encryption.
+func (s *SSOToken) MarshalIdentities() ([]byte, error) {
 	if len(s.identities) == 0 {
-		return nil
+		return nil, fmt.Errorf("no identities to marshal")
 	}
-	cp := make(map[string]string, len(s.identities))
-	for k, v := range s.identities {
-		cp[k] = v
-	}
-	return cp
+	return json.Marshal(s.identities)
 }
 
-// SetIdentities 设置域身份映射（从解密的 footer 填充）
+// UnmarshalPayload deserializes identity mapping from decrypted inner token claims
+// and sets it on the SSOToken.
+func (s *SSOToken) UnmarshalPayload(data []byte) error {
+	identities, err := UnmarshalIdentities(data)
+	if err != nil {
+		return err
+	}
+	s.identities = identities
+	return nil
+}
+
+// UnmarshalIdentities deserializes identity mapping from decrypted inner token claims.
+func UnmarshalIdentities(data []byte) (map[string]string, error) {
+	var identities map[string]string
+	if err := json.Unmarshal(data, &identities); err != nil {
+		return nil, fmt.Errorf("unmarshal identities: %w", err)
+	}
+	return identities, nil
+}
+
 func (s *SSOToken) SetIdentities(identities map[string]string) {
 	s.identities = identities
 }
 
-// HasUser 检查是否有任何域身份
 func (s *SSOToken) HasUser() bool {
 	return len(s.identities) > 0
 }
 
-// ==================== Getter ====================
-
-// GetOpenID 返回指定域下的 OpenID，不存在则返回空字符串
 func (s *SSOToken) GetOpenID(domain string) string {
 	if s.identities == nil {
 		return ""
@@ -147,7 +140,6 @@ func (s *SSOToken) GetOpenID(domain string) string {
 	return s.identities[domain]
 }
 
-// GetIdentities 返回全部域身份映射（防御性拷贝）
 func (s *SSOToken) GetIdentities() map[string]string {
 	if s.identities == nil {
 		return nil

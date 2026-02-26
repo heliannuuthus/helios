@@ -162,7 +162,11 @@ func (s *Service) Render(ctx context.Context, templateID string, data map[string
 // getOrParseTemplate 获取或解析模板
 func (s *Service) getOrParseTemplate(tpl *models.EmailTemplate) (*template.Template, error) {
 	if cached, ok := s.templates.Load(tpl.TemplateID); ok {
-		return cached.(*template.Template), nil
+		t, ok := cached.(*template.Template)
+		if !ok {
+			return nil, fmt.Errorf("cached template has unexpected type %T", cached)
+		}
+		return t, nil
 	}
 
 	parsed, err := template.New(tpl.TemplateID).Parse(tpl.Content)

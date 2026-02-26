@@ -1,14 +1,13 @@
 package token
 
 import (
-	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/token"
+	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
 // 类型别名（便于 internal 包使用）
 type (
 	Token              = pkgtoken.Token
 	TokenType          = pkgtoken.TokenType
-	ChannelType        = pkgtoken.ChannelType
 	UserAccessToken    = pkgtoken.UserAccessToken
 	ServiceAccessToken = pkgtoken.ServiceAccessToken
 	ChallengeToken     = pkgtoken.ChallengeToken
@@ -17,10 +16,10 @@ type (
 	ClaimsBuilder    = pkgtoken.ClaimsBuilder
 	TokenTypeBuilder = pkgtoken.TokenTypeBuilder
 	// TokenType Builder 别名
-	UAT       = pkgtoken.UAT
-	SAT       = pkgtoken.SAT
-	CAT       = pkgtoken.CAT
-	Challenge  = pkgtoken.Challenge
+	UAT = pkgtoken.UAT
+	SAT = pkgtoken.SAT
+	CAT = pkgtoken.CAT
+	XT  = pkgtoken.XT
 )
 
 // 常量别名
@@ -29,18 +28,7 @@ const (
 	TokenTypeUAT       = pkgtoken.TokenTypeUAT
 	TokenTypeSAT       = pkgtoken.TokenTypeSAT
 	TokenTypeChallenge = pkgtoken.TokenTypeChallenge
-)
-
-// ChannelType 常量别名
-const (
-	ChannelTypeCaptcha  = pkgtoken.ChannelTypeCaptcha
-	ChannelTypeEmailOTP = pkgtoken.ChannelTypeEmailOTP
-	ChannelTypeTOTP     = pkgtoken.ChannelTypeTOTP
-	ChannelTypeSmsOTP   = pkgtoken.ChannelTypeSmsOTP
-	ChannelTypeTgOTP    = pkgtoken.ChannelTypeTgOTP
-	ChannelTypeWebAuthn = pkgtoken.ChannelTypeWebAuthn
-	ChannelTypeWechatMP = pkgtoken.ChannelTypeWechatMP
-	ChannelTypeAlipayMP = pkgtoken.ChannelTypeAlipayMP
+	TokenTypeSSO       = pkgtoken.TokenTypeSSO
 )
 
 // 构造函数别名

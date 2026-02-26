@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
-	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
 // GinFactory Gin 框架中间件工厂
@@ -132,12 +132,12 @@ func (m *GinMiddleware) RequireAnyRelationOn(relations []string, objectType, obj
 }
 
 // GetTokenFromGin 从 Gin context 中获取验证后的 Token
-func GetTokenFromGin(c *gin.Context) token.Token {
+func GetTokenFromGin(c *gin.Context) tokendef.Token {
 	t, exists := c.Get(string(ClaimsKey))
 	if !exists {
 		return nil
 	}
-	result, ok := t.(token.Token)
+	result, ok := t.(tokendef.Token)
 	if !ok {
 		return nil
 	}
@@ -150,7 +150,7 @@ func GetOpenIDFromGin(c *gin.Context) string {
 	if t == nil {
 		return ""
 	}
-	if uat, ok := t.(*token.UserAccessToken); ok && uat.HasUser() {
+	if uat, ok := t.(*tokendef.UserAccessToken); ok && uat.HasUser() {
 		return uat.GetOpenID()
 	}
 	return ""

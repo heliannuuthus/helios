@@ -13,7 +13,7 @@ import (
 
 const (
 	// 配置文件名（位于 config/ 目录）
-	ConfigFile       = "config"
+	ConfigFile       = "base"
 	ZweiConfigFile   = "zwei"
 	HermesConfigFile = "hermes"
 	AegisConfigFile  = "aegis"
@@ -21,7 +21,7 @@ const (
 	ChaosConfigFile  = "chaos"
 
 	// 配置名称
-	ConfigName       = "helios"
+	ConfigName       = "base"
 	ZweiConfigName   = "zwei"
 	HermesConfigName = "hermes"
 	AegisConfigName  = "aegis"
@@ -268,11 +268,6 @@ func IsDebug() bool {
 	return Config().GetBool("app.debug")
 }
 
-// GetEnv 获取环境标识
-func GetEnv() string {
-	return Config().GetString("app.env")
-}
-
 // GetServerHost 获取服务监听地址
 func GetServerHost() string {
 	host := Config().GetString("server.host")
@@ -307,43 +302,6 @@ func GetLogFormat() string {
 		return "console"
 	}
 	return format
-}
-
-// IsModuleEnabled 检查模块是否启用
-func IsModuleEnabled(module string) bool {
-	return Config().GetBool("modules." + module)
-}
-
-// GetRedisURL 获取 Redis URL
-func GetRedisURL() string {
-	return Config().GetString("redis.url")
-}
-
-// ==================== R2 (Cloudflare) 配置访问函数 ====================
-
-// GetR2AccountID 获取 Cloudflare Account ID
-func GetR2AccountID() string {
-	return Config().GetString("r2.account-id")
-}
-
-// GetR2AccessKeyID 获取 R2 Access Key ID
-func GetR2AccessKeyID() string {
-	return Config().GetString("r2.access-key-id")
-}
-
-// GetR2AccessKeySecret 获取 R2 Access Key Secret
-func GetR2AccessKeySecret() string {
-	return Config().GetString("r2.access-key-secret")
-}
-
-// GetR2Bucket 获取 R2 Bucket 名称
-func GetR2Bucket() string {
-	return Config().GetString("r2.bucket")
-}
-
-// GetR2Domain 获取 R2 自定义域名
-func GetR2Domain() string {
-	return Config().GetString("r2.domain")
 }
 
 // Name 返回配置名称

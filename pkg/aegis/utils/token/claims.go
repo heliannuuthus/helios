@@ -26,7 +26,7 @@ type Claims struct {
 // TokenTypeBuilder Token 类型构建器接口
 // 各 Token 类型实现此接口，用于 ClaimsBuilder.Build() 构建具体 Token
 type TokenTypeBuilder interface {
-	build(claims Claims) Token
+	Build(claims Claims) Token
 }
 
 // ==================== ClaimsBuilder ====================
@@ -77,7 +77,7 @@ func (b *ClaimsBuilder) ExpiresIn(expiresIn time.Duration) *ClaimsBuilder {
 
 // Build 使用 TokenTypeBuilder 构建具体 Token
 func (b *ClaimsBuilder) Build(typeBuilder TokenTypeBuilder) Token {
-	return typeBuilder.build(b.claims)
+	return typeBuilder.Build(b.claims)
 }
 
 // BuildClaims 仅构建 Claims（不构建具体 Token）

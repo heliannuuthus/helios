@@ -14,12 +14,12 @@ import (
 )
 
 const (
-	defaultPort       = 587
-	defaultSSLPort    = 465
-	defaultTimeout    = 30 * time.Second
-	defaultMaxConns   = 5
+	defaultPort        = 587
+	defaultSSLPort     = 465
+	defaultTimeout     = 30 * time.Second
+	defaultMaxConns    = 5
 	defaultIdleTimeout = 30 * time.Second
-	defaultPoolWait   = 5 * time.Second
+	defaultPoolWait    = 5 * time.Second
 )
 
 // Client SMTP 连接池客户端
@@ -157,31 +157,9 @@ func (c *Client) toPoolEmail(msg *Message) smtppool.Email {
 	}
 
 	for _, att := range msg.Attachments {
-		content, err := io.ReadAll(att.Reader)
-		if err != nil {
-			logger.Warnf("[Mail] 读取附件 %s 失败: %v", att.Filename, err)
-			continue
+		if a := convertAttachment(att); a != nil {
+			e.Attachments = append(e.Attachments, *a)
 		}
-		a := smtppool.Attachment{
-			Filename: att.Filename,
-			Content:  content,
-			Header:   textproto.MIMEHeader{},
-		}
-		ct := att.ContentType
-		if ct == "" {
-			ct = "application/octet-stream"
-		}
-		a.Header.Set("Content-Type", ct)
-		a.Header.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, att.Filename))
-		a.Header.Set("Content-Transfer-Encoding", "base64")
-		if att.Inline {
-			a.HTMLRelated = true
-			a.Header.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, att.Filename))
-			if att.ContentID != "" {
-				a.Header.Set("Content-ID", fmt.Sprintf("<%s>", att.ContentID))
-			}
-		}
-		e.Attachments = append(e.Attachments, a)
 	}
 
 	if len(msg.Headers) > 0 {
@@ -194,4 +172,36 @@ func (c *Client) toPoolEmail(msg *Message) smtppool.Email {
 	}
 
 	return e
+}
+
+func convertAttachment(att Attachment) *smtppool.Attachment {
+	content, err := io.ReadAll(att.Reader)
+	if err != nil {
+		logger.Warnf("[Mail] 读取附件 %s 失败: %v", att.Filename, err)
+		return nil
+	}
+
+	ct := att.ContentType
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+
+	a := smtppool.Attachment{
+		Filename: att.Filename,
+		Content:  content,
+		Header:   textproto.MIMEHeader{},
+	}
+	a.Header.Set("Content-Type", ct)
+	a.Header.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, att.Filename))
+	a.Header.Set("Content-Transfer-Encoding", "base64")
+
+	if att.Inline {
+		a.HTMLRelated = true
+		a.Header.Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, att.Filename))
+		if att.ContentID != "" {
+			a.Header.Set("Content-ID", fmt.Sprintf("<%s>", att.ContentID))
+		}
+	}
+
+	return &a
 }

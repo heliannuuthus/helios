@@ -33,7 +33,7 @@ func (s *SAT) Scope(scope string) *SAT {
 }
 
 // build 实现 TokenTypeBuilder 接口
-func (s *SAT) build(claims Claims) Token {
+func (s *SAT) Build(claims Claims) Token {
 	return &ServiceAccessToken{
 		Claims: claims,
 		scope:  s.scope,

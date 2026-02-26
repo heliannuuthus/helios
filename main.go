@@ -14,7 +14,6 @@ import (
 	irisconfig "github.com/heliannuuthus/helios/iris/config"
 	"github.com/heliannuuthus/helios/pkg/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/pkg/r2"
 )
 
 // @title Helios API
@@ -40,20 +39,6 @@ func main() {
 		Debug:  config.IsDebug(),
 	})
 	defer logger.Sync()
-
-	// 初始化 R2（如果配置了）
-	if config.GetR2AccountID() != "" {
-		r2Cfg := r2.Config{
-			AccountID:       config.GetR2AccountID(),
-			AccessKeyID:     config.GetR2AccessKeyID(),
-			AccessKeySecret: config.GetR2AccessKeySecret(),
-			Bucket:          config.GetR2Bucket(),
-			Domain:          config.GetR2Domain(),
-		}
-		if err := r2.Init(r2Cfg); err != nil {
-			logger.Warnf("R2 初始化失败（将跳过图片上传功能）: %v", err)
-		}
-	}
 
 	// 通过 Wire 初始化应用
 	app, err := InitializeApp()
@@ -97,8 +82,8 @@ func main() {
 		authGroup.GET("/connections", aegisCORS, app.AegisHandler.GetConnections)        // 获取可用的 Connection 配置
 		authGroup.GET("/context", aegisCORS, app.AegisHandler.GetContext)                // 获取当前流程的应用和服务信息
 		authGroup.POST("/login", aegisCORS, app.AegisHandler.Login)                      // IDP 登录
-		authGroup.GET("/binding", aegisCORS, app.AegisHandler.GetIdentifyContext)         // 获取识别到的已有用户信息
-		authGroup.POST("/binding", aegisCORS, app.AegisHandler.ConfirmIdentify)           // 确认/取消账户关联
+		authGroup.GET("/binding", aegisCORS, app.AegisHandler.GetIdentifyContext)        // 获取识别到的已有用户信息
+		authGroup.POST("/binding", aegisCORS, app.AegisHandler.ConfirmIdentify)          // 确认/取消账户关联
 		authGroup.POST("/challenge", aegisCORS, app.AegisHandler.InitiateChallenge)      // 发起 Challenge
 		authGroup.POST("/challenge/:cid", aegisCORS, app.AegisHandler.ContinueChallenge) // 验证 Challenge
 
@@ -234,12 +219,6 @@ func main() {
 			recommend.POST("/context", app.RecommendHandler.GetContext)
 		}
 
-		// 上传路由
-		upload := api.Group("/upload")
-		upload.Use(middleware.RequireToken(app.Interpreter))
-		{
-			upload.POST("/image", app.UploadHandler.UploadImage)
-		}
 	}
 
 	// Hermes 身份与访问管理路由

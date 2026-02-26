@@ -1,6 +1,7 @@
 package home
 
 import (
+	"fmt"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -134,6 +135,9 @@ func getString(m map[string]interface{}, key, defaultVal string) string {
 }
 
 func generateBannerID(index int) string {
+	if index < 0 || index > 25 {
+		return fmt.Sprintf("banner_%d", index)
+	}
 	return "banner_" + string(rune('a'+index))
 }
 

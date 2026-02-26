@@ -265,18 +265,12 @@ func GetPublicKeyCacheMaxAge() time.Duration {
 
 // MailConfig 邮件配置
 type MailConfig struct {
-	Enabled  bool
 	Provider string
 	Host     string
 	Port     int
 	UseSSL   bool
 	Username string
 	Password string
-}
-
-// IsMailEnabled 检查是否启用邮件服务
-func IsMailEnabled() bool {
-	return Cfg().GetBool("mail.enabled")
 }
 
 // mailProviderDefaults 邮件服务商默认配置
@@ -324,7 +318,6 @@ func GetMailConfig() *MailConfig {
 		port = 587
 	}
 	return &MailConfig{
-		Enabled:  c.GetBool("mail.enabled"),
 		Provider: provider,
 		Host:     host,
 		Port:     port,
@@ -481,7 +474,7 @@ func parseIntMap(raw map[string]interface{}) map[string]int {
 // SSO 默认值
 const (
 	DefaultAegisSSOTTL        = 7 * 24 * time.Hour // SSO Token 默认有效期 7 天
-	DefaultAegisSSOCookieName = "aegis-sso"         // SSO Cookie 默认名称
+	DefaultAegisSSOCookieName = "aegis-sso"        // SSO Cookie 默认名称
 )
 
 // GetSSOMasterKey 获取 SSO master key（Base64URL 编码的 32 字节密钥）

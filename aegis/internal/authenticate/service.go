@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-json-experiment/json"
+
 	"github.com/heliannuuthus/helios/aegis/config"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
@@ -11,7 +13,6 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/accessctl"
-	"github.com/go-json-experiment/json"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 

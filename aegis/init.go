@@ -53,8 +53,22 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	// 3. 初始化 KeyStore
 	watcher := key.NewSimpleWatcher()
 
-	// 域密钥：clientID → domain.Main
+	ssoMasterKeyFetcher := func() ([][]byte, error) {
+		masterKey, err := config.GetSSOMasterKey()
+		if err != nil {
+			return nil, fmt.Errorf("get sso master key: %w", err)
+		}
+		if masterKey == nil {
+			return nil, fmt.Errorf("sso master key not configured")
+		}
+		return [][]byte{masterKey}, nil
+	}
+
+	// 域密钥：clientID → domain.Main（id="aegis" 时返回 SSO master key）
 	domainKeyStore := key.NewStore(key.FetcherFunc(func(ctx context.Context, clientID string) ([][]byte, error) {
+		if clientID == token.SSOIssuer {
+			return ssoMasterKeyFetcher()
+		}
 		app, err := cacheManager.GetApplication(ctx, clientID)
 		if err != nil {
 			return nil, fmt.Errorf("get application: %w", err)
@@ -66,8 +80,11 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 		return [][]byte{domain.Main}, nil
 	}), watcher)
 
-	// 服务密钥：audience → service.Key
+	// 服务密钥：audience → service.Key（id="aegis" 时返回 SSO master key）
 	serviceKeyStore := key.NewStore(key.FetcherFunc(func(ctx context.Context, audience string) ([][]byte, error) {
+		if audience == token.SSOAudience {
+			return ssoMasterKeyFetcher()
+		}
 		svc, err := cacheManager.GetService(ctx, audience)
 		if err != nil {
 			return nil, fmt.Errorf("get service: %w", err)
@@ -84,29 +101,14 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 		return [][]byte{app.Key}, nil
 	}), watcher)
 
-	// SSO 密钥：从配置读取
-	ssoKeyStore := key.NewStore(key.FetcherFunc(func(ctx context.Context, _ string) ([][]byte, error) {
-		masterKey, err := config.GetSSOMasterKey()
-		if err != nil {
-			return nil, fmt.Errorf("get sso master key: %w", err)
-		}
-		if masterKey == nil {
-			return nil, fmt.Errorf("sso master key not configured")
-		}
-		return [][]byte{masterKey}, nil
-	}), nil)
-
 	// 4. 初始化 Token Service
-	tokenSvc := token.NewService(cacheManager, domainKeyStore, serviceKeyStore, appKeyStore, ssoKeyStore)
+	tokenSvc := token.NewService(cacheManager, domainKeyStore, serviceKeyStore, appKeyStore)
 	logger.Info("[Auth] Token Service 初始化完成")
 
-	// 4. 初始化邮件发送器（如果启用）
-	var emailSender *mail.Sender
-	if config.IsMailEnabled() {
-		emailSender = initMailSender()
-		if emailSender != nil {
-			logger.Info("[Auth] 邮件发送器初始化完成")
-		}
+	// 4. 初始化邮件发送器
+	emailSender := initMailSender()
+	if emailSender != nil {
+		logger.Info("[Auth] 邮件发送器初始化完成")
 	}
 
 	// 5. 初始化底层 Provider
@@ -118,7 +120,7 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	logger.Info("[Auth] 访问控制管理器初始化完成")
 
 	// 7. 初始化全局 Registry（胶水层 Authenticator 统一注册）
-	registry := initRegistry(userSvc, cacheManager, emailSender, webauthnSvc, captchaVerifier, totpVerifier, ac)
+	registry := initRegistry(userSvc, cacheManager, emailSender, webauthnSvc, captchaVerifier, totpVerifier, ac, tokenSvc)
 
 	// 8. 初始化异步任务池
 	pool, err := async.NewPool(64)
@@ -152,23 +154,17 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 func initProviders(credentialSvc *hermes.CredentialService, cacheManager *cache.Manager) (*webauthn.Service, captcha.Verifier, factor.TOTPVerifier) {
 	// WebAuthn
 	var webauthnSvc *webauthn.Service
-	if webauthn.IsEnabled() {
-		var err error
-		webauthnSvc, err = webauthn.NewService(cacheManager)
-		if err != nil {
-			logger.Warnf("[Auth] WebAuthn 初始化失败: %v", err)
-		} else {
-			logger.Info("[Auth] WebAuthn 初始化完成")
-		}
+	if svc, err := webauthn.NewService(cacheManager); err != nil {
+		logger.Warnf("[Auth] WebAuthn 初始化失败: %v", err)
+	} else {
+		webauthnSvc = svc
+		logger.Info("[Auth] WebAuthn 初始化完成")
 	}
 
 	// Captcha
-	var captchaVerifier captcha.Verifier
-	if isCaptchaEnabled() {
-		captchaVerifier = initCaptchaVerifier()
-		if captchaVerifier != nil {
-			logger.Infof("[Auth] Captcha 验证器初始化完成: provider=%s", captchaVerifier.GetProvider())
-		}
+	captchaVerifier := initCaptchaVerifier()
+	if captchaVerifier != nil {
+		logger.Infof("[Auth] Captcha 验证器初始化完成: provider=%s", captchaVerifier.GetProvider())
 	}
 
 	// TOTP
@@ -182,7 +178,7 @@ func initProviders(credentialSvc *hermes.CredentialService, cacheManager *cache.
 }
 
 // initRegistry 初始化全局 Registry（注册胶水层 Authenticator）
-func initRegistry(userSvc *hermes.UserService, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier factor.TOTPVerifier, ac *accessctl.Manager) *authenticator.Registry {
+func initRegistry(userSvc *hermes.UserService, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier factor.TOTPVerifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
 	registry := authenticator.NewRegistry()
 
 	// ==================== IDP Authenticators ====================
@@ -215,21 +211,16 @@ func initRegistry(userSvc *hermes.UserService, cacheManager *cache.Manager, emai
 
 	// ==================== Factor Authenticators ====================
 
-	aegisCfg := config.Cfg()
-
-	// Email OTP
-	if aegisCfg.GetBool("mfa.email-otp.enabled") && emailSender != nil {
-		registry.Register(authenticate.NewFactorAuthenticator(factor.NewEmailOTPProvider(emailSender, cacheManager), ac))
+	if emailSender != nil {
+		registry.Register(authenticate.NewFactorAuthenticator(factor.NewEmailOTPProvider(emailSender, cacheManager), ac, tokenVerifier))
 	}
 
-	// TOTP
-	if aegisCfg.GetBool("mfa.totp.enabled") && totpVerifier != nil {
-		registry.Register(authenticate.NewFactorAuthenticator(factor.NewTOTPProvider(totpVerifier), ac))
+	if totpVerifier != nil {
+		registry.Register(authenticate.NewFactorAuthenticator(factor.NewTOTPProvider(totpVerifier), ac, tokenVerifier))
 	}
 
-	// WebAuthn Factor
-	if aegisCfg.GetBool("mfa.webauthn.enabled") && webauthnSvc != nil {
-		registry.Register(authenticate.NewFactorAuthenticator(factor.NewWebAuthnProvider(webauthnSvc), ac))
+	if webauthnSvc != nil {
+		registry.Register(authenticate.NewFactorAuthenticator(factor.NewWebAuthnProvider(webauthnSvc), ac, tokenVerifier))
 	}
 
 	logger.Infof("[Auth] Registry 初始化完成: %v", registry.Summary())
@@ -244,12 +235,6 @@ func getRedisURL() string {
 		url = "redis://localhost:6379/0"
 	}
 	return url
-}
-
-// isCaptchaEnabled 检查是否启用 Captcha
-func isCaptchaEnabled() bool {
-	cfg := config.Cfg()
-	return cfg.GetBool("vchan.captcha.enabled")
 }
 
 // initCaptchaVerifier 初始化 Captcha 验证器

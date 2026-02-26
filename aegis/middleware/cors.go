@@ -2,14 +2,15 @@ package middleware
 
 import (
 	"bytes"
-	"github.com/go-json-experiment/json"
 	"io"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-json-experiment/json"
 
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
 	"github.com/heliannuuthus/helios/pkg/config"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 const (
@@ -92,7 +93,9 @@ func getClientID(c *gin.Context, paramName string) string {
 	// 3. 从 JSON body peek（读取后还原 body）
 	if c.Request.Body != nil && c.ContentType() == "application/json" {
 		bodyBytes, err := io.ReadAll(c.Request.Body)
-		_ = c.Request.Body.Close()
+		if err := c.Request.Body.Close(); err != nil {
+			logger.Warnf("failed to close request body: %v", err)
+		}
 		// 无论是否解析成功，都还原 body
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		if err == nil && len(bodyBytes) > 0 {

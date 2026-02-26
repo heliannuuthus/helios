@@ -6,21 +6,12 @@ import (
 	"sync"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
+	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
-// ErrUnsupportedAudience audience 不支持错误
 var ErrUnsupportedAudience = fmt.Errorf("unsupported audience")
 
-// footerUserInfo footer 中存储的用户信息结构
-type footerUserInfo struct {
-	Subject  string `json:"sub,omitempty"`
-	Nickname string `json:"nickname,omitempty"`
-	Picture  string `json:"picture,omitempty"`
-	Email    string `json:"email,omitempty"`
-	Phone    string `json:"phone,omitempty"`
-}
-
-// Interpreter Token 解释器
+// Interpreter verifies tokens and decrypts encrypted sub fields for UAT tokens.
 type Interpreter struct {
 	signKeyStore    *key.Store
 	encryptKeyStore *key.Store
@@ -30,7 +21,6 @@ type Interpreter struct {
 	mu         sync.RWMutex
 }
 
-// NewInterpreter 创建解释器
 func NewInterpreter(signKeyStore *key.Store, encryptKeyStore *key.Store) *Interpreter {
 	return &Interpreter{
 		signKeyStore:    signKeyStore,
@@ -40,68 +30,71 @@ func NewInterpreter(signKeyStore *key.Store, encryptKeyStore *key.Store) *Interp
 	}
 }
 
-// Interpret 验证并解释 token，返回 Token 接口
-func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (Token, error) {
-	pasetoToken, err := UnsafeParseToken(tokenString)
+// Interpret verifies the token signature and decrypts the sub field for UAT tokens.
+func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (tokendef.Token, error) {
+	pasetoToken, err := tokendef.UnsafeParseToken(tokenString)
 	if err != nil {
 		return nil, err
 	}
 
-	clientID, err := GetClientID(pasetoToken)
+	clientID, err := tokendef.GetClientID(pasetoToken)
 	if err != nil {
 		return nil, err
 	}
 
-	audience, err := GetAudience(pasetoToken)
+	audience, err := tokendef.GetAudience(pasetoToken)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrMissingClaims, err)
+		return nil, fmt.Errorf("%w: %w", tokendef.ErrMissingClaims, err)
 	}
 
-	tokenType := DetectType(pasetoToken)
+	tokenType := tokendef.DetectType(pasetoToken)
 
-	verifier := i.getVerifier(clientID)
-
-	t, err := verifier.Verify(ctx, tokenString, tokenType)
+	pasetoToken, err = i.Verifier(clientID).Verify(ctx, tokenString)
 	if err != nil {
 		return nil, err
 	}
 
-	if uat, ok := t.(*UserAccessToken); ok {
-		footer := ExtractFooter(tokenString)
-		if footer != "" {
-			userInfo, err := i.decryptFooter(ctx, footer, audience)
+	t, err := tokendef.ParseToken(pasetoToken, tokenType)
+	if err != nil {
+		return nil, err
+	}
+
+	if uat, ok := t.(*tokendef.UserAccessToken); ok {
+		encryptedSub := uat.GetSubject()
+		if encryptedSub != "" {
+			userInfo, err := i.decryptUserSub(ctx, encryptedSub, audience)
 			if err != nil {
 				return nil, err
 			}
-			if userInfo != nil {
-				uat.SetUserInfo(userInfo.Subject, userInfo.Nickname, userInfo.Picture, userInfo.Email, userInfo.Phone)
-			}
+			uat.SetUserInfo(userInfo)
 		}
 	}
 
 	return t, nil
 }
 
-// Verify 只验证签名，不解密 footer
-func (i *Interpreter) Verify(ctx context.Context, tokenString string) (Token, error) {
-	pasetoToken, err := UnsafeParse(tokenString)
+// Verify only verifies the signature without decrypting the sub field.
+func (i *Interpreter) Verify(ctx context.Context, tokenString string) (tokendef.Token, error) {
+	pasetoToken, err := tokendef.UnsafeParseToken(tokenString)
 	if err != nil {
 		return nil, err
 	}
 
-	clientID, err := GetClientID(pasetoToken)
+	clientID, err := tokendef.GetClientID(pasetoToken)
 	if err != nil {
 		return nil, err
 	}
 
-	tokenType := DetectType(pasetoToken)
+	tokenType := tokendef.DetectType(pasetoToken)
 
-	verifier := i.getVerifier(clientID)
-
-	return verifier.Verify(ctx, tokenString, tokenType)
+	pasetoToken, err = i.Verifier(clientID).Verify(ctx, tokenString)
+	if err != nil {
+		return nil, err
+	}
+	return tokendef.ParseToken(pasetoToken, tokenType)
 }
 
-func (i *Interpreter) getVerifier(clientID string) *Verifier {
+func (i *Interpreter) Verifier(clientID string) *Verifier {
 	i.mu.RLock()
 	v, ok := i.verifiers[clientID]
 	i.mu.RUnlock()
@@ -113,7 +106,6 @@ func (i *Interpreter) getVerifier(clientID string) *Verifier {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// double check
 	if v, ok := i.verifiers[clientID]; ok {
 		return v
 	}
@@ -123,7 +115,7 @@ func (i *Interpreter) getVerifier(clientID string) *Verifier {
 	return v
 }
 
-func (i *Interpreter) getDecryptor(audience string) *Decryptor {
+func (i *Interpreter) Decryptor(audience string) *Decryptor {
 	i.mu.RLock()
 	d, ok := i.decryptors[audience]
 	i.mu.RUnlock()
@@ -135,7 +127,6 @@ func (i *Interpreter) getDecryptor(audience string) *Decryptor {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	// double check
 	if d, ok := i.decryptors[audience]; ok {
 		return d
 	}
@@ -145,17 +136,13 @@ func (i *Interpreter) getDecryptor(audience string) *Decryptor {
 	return d
 }
 
-func (i *Interpreter) decryptFooter(ctx context.Context, footer string, audience string) (*footerUserInfo, error) {
-	if footer == "" {
-		return nil, nil
+func (i *Interpreter) decryptUserSub(ctx context.Context, encryptedSub, audience string) (*tokendef.UserInfo, error) {
+	decryptor := i.Decryptor(audience)
+
+	claimsJSON, _, err := decryptor.Decrypt(ctx, encryptedSub)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt sub: %w", err)
 	}
 
-	decryptor := i.getDecryptor(audience)
-
-	var userInfo footerUserInfo
-	if err := decryptor.Decrypt(ctx, footer, &userInfo); err != nil {
-		return nil, fmt.Errorf("decrypt footer: %w", err)
-	}
-
-	return &userInfo, nil
+	return tokendef.UnmarshalUserInfo(claimsJSON)
 }

@@ -31,11 +31,11 @@ type AudienceScope struct {
 // MultiAudienceTokenRequest 多 audience Token 请求（application/json）
 type MultiAudienceTokenRequest struct {
 	GrantType    string                    `json:"grant_type" binding:"required,oneof=authorization_code refresh_token"`
-	Code         string                    `json:"code,omitempty"`           // authorization_code 时必填
-	RedirectURI  string                    `json:"redirect_uri,omitempty"`   // authorization_code 时必填
+	Code         string                    `json:"code,omitempty"`         // authorization_code 时必填
+	RedirectURI  string                    `json:"redirect_uri,omitempty"` // authorization_code 时必填
 	ClientID     string                    `json:"client_id" binding:"required"`
-	CodeVerifier string                    `json:"code_verifier,omitempty"`  // PKCE 验证器
-	RefreshToken string                    `json:"refresh_token,omitempty"`  // refresh_token grant 时必填
+	CodeVerifier string                    `json:"code_verifier,omitempty"` // PKCE 验证器
+	RefreshToken string                    `json:"refresh_token,omitempty"` // refresh_token grant 时必填
 	Audiences    map[string]*AudienceScope `json:"audiences" binding:"required,min=1"`
 }
 

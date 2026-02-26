@@ -15,6 +15,9 @@ func WithRemoteIP(ctx context.Context, ip string) context.Context {
 
 // RemoteIPFrom 从 context 中读取客户端 IP
 func RemoteIPFrom(ctx context.Context) string {
-	ip, _ := ctx.Value(remoteIPKey).(string)
+	ip, ok := ctx.Value(remoteIPKey).(string)
+	if !ok {
+		return ""
+	}
 	return ip
 }

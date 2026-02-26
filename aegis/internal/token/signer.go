@@ -6,27 +6,28 @@ import (
 	"sync"
 
 	"aidanwoods.dev/go-paseto"
+
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
+	pasetokit "github.com/heliannuuthus/helios/pkg/aegis/utils/paseto"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// Signer 签名器，持有派生后的私钥
+// Signer signs PASETO v4.public tokens with kid footer.
 type Signer struct {
 	provider key.Provider
 	id       string
 
 	mu        sync.RWMutex
 	secretKey paseto.V4AsymmetricSecretKey
+	pid       string // precomputed PASERK pid
 }
 
-// NewSigner 创建 Signer（懒加载模式）
 func NewSigner(provider key.Provider, id string) *Signer {
 	s := &Signer{
 		provider: provider,
 		id:       id,
 	}
 
-	// 如果 provider 支持订阅，订阅密钥变更
 	if sub, ok := provider.(key.Subscribable); ok {
 		sub.Subscribe(id, func(newKeys [][]byte) {
 			if len(newKeys) > 0 {
@@ -40,9 +41,8 @@ func NewSigner(provider key.Provider, id string) *Signer {
 	return s
 }
 
-// updateKey 更新私钥（从原始 seed 派生）
 func (s *Signer) updateKey(rawKey []byte) error {
-	seed, err := key.ParseSeed(rawKey)
+	seed, err := pasetokit.ParseSeed(rawKey)
 	if err != nil {
 		return fmt.Errorf("parse seed: %w", err)
 	}
@@ -51,17 +51,22 @@ func (s *Signer) updateKey(rawKey []byte) error {
 		return fmt.Errorf("derive secret key: %w", err)
 	}
 
+	pid, err := pasetokit.ComputePID(sk.Public())
+	if err != nil {
+		return fmt.Errorf("compute pid: %w", err)
+	}
+
 	s.mu.Lock()
 	s.secretKey = sk
+	s.pid = pid
 	s.mu.Unlock()
 
 	return nil
 }
 
-// ensure 确保密钥已加载
 func (s *Signer) ensure(ctx context.Context) error {
 	s.mu.RLock()
-	hasKey := len(s.secretKey.ExportBytes()) > 0
+	hasKey := s.pid != ""
 	s.mu.RUnlock()
 
 	if hasKey {
@@ -76,20 +81,37 @@ func (s *Signer) ensure(ctx context.Context) error {
 	return s.updateKey(rawKey)
 }
 
-// Sign 签名 token
-func (s *Signer) Sign(ctx context.Context, token *paseto.Token, footer []byte) (string, error) {
+// Sign signs the token and includes the kid in the footer.
+func (s *Signer) Sign(ctx context.Context, token *paseto.Token) (string, error) {
 	if err := s.ensure(ctx); err != nil {
 		return "", fmt.Errorf("load key: %w", err)
 	}
 
 	s.mu.RLock()
 	sk := s.secretKey
+	pid := s.pid
 	s.mu.RUnlock()
+
+	footer, err := pasetokit.NewFooter(pid).Marshal()
+	if err != nil {
+		return "", fmt.Errorf("marshal footer: %w", err)
+	}
 
 	return token.V4Sign(sk, footer), nil
 }
 
-// PublicKey 返回对应的公钥
+// GetPID returns the current PASERK pid.
+func (s *Signer) GetPID(ctx context.Context) (string, error) {
+	if err := s.ensure(ctx); err != nil {
+		return "", fmt.Errorf("load key: %w", err)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.pid, nil
+}
+
+// PublicKey returns the corresponding public key.
 func (s *Signer) PublicKey(ctx context.Context) (paseto.V4AsymmetricPublicKey, error) {
 	if err := s.ensure(ctx); err != nil {
 		return paseto.V4AsymmetricPublicKey{}, fmt.Errorf("load key: %w", err)

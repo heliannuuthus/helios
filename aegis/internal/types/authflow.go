@@ -3,12 +3,13 @@
 package types
 
 import (
-	"strings"
 	"time"
 
-	"github.com/heliannuuthus/helios/hermes/models"
-	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/go-json-experiment/json"
+
+	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/binding"
+	"github.com/heliannuuthus/helios/pkg/helpers"
 )
 
 // FlowState 认证流程状态
@@ -35,8 +36,8 @@ type AuthFlow struct {
 	Request *AuthRequest `json:"request"`
 
 	// 实体信息（认证过程中填充）
-	Application *models.ApplicationWithKey  `json:"application,omitempty"`
-	Service     *models.ServiceWithKey      `json:"service,omitempty"`
+	Application *models.ApplicationWithKey `json:"application,omitempty"`
+	Service     *models.ServiceWithKey     `json:"service,omitempty"`
 	User        *models.UserWithDecrypted  `json:"user,omitempty"`     // 系统中的已有用户（identify 匹配到的 / 认证完成后的）
 	Identify    *models.TUserInfo          `json:"identify,omitempty"` // 当前 IDP 认证返回的身份信息（未绑定，用于 Account Linking 匹配）
 
@@ -65,51 +66,22 @@ type FlowError struct {
 // AuthRequest 认证请求参数
 type AuthRequest struct {
 	// OAuth2 标准参数
-	ResponseType        string `json:"response_type" form:"response_type" binding:"required,oneof=code"`
-	ClientID            string `json:"client_id" form:"client_id" binding:"required"`
-	Audience            string `json:"audience" form:"audience" binding:"required"`
-	RedirectURI         string `json:"redirect_uri" form:"redirect_uri" binding:"required"`
-	CodeChallenge       string `json:"code_challenge" form:"code_challenge" binding:"required"`
-	CodeChallengeMethod string `json:"code_challenge_method" form:"code_challenge_method" binding:"required,oneof=S256"`
-	State               string `json:"state,omitempty" form:"state"`
-	Scope               string `json:"scope,omitempty" form:"scope"`
+	ResponseType        string                 `json:"response_type" form:"response_type" binding:"required,oneof=code"`
+	ClientID            string                 `json:"client_id" form:"client_id" binding:"required"`
+	Audience            string                 `json:"audience" form:"audience" binding:"required"`
+	RedirectURI         string                 `json:"redirect_uri" form:"redirect_uri" binding:"required"`
+	CodeChallenge       string                 `json:"code_challenge" form:"code_challenge" binding:"required"`
+	CodeChallengeMethod string                 `json:"code_challenge_method" form:"code_challenge_method" binding:"required,oneof=S256"`
+	State               string                 `json:"state,omitempty" form:"state"`
+	Scope               binding.SpaceDelimited `json:"scope,omitempty" form:"scope"`
 
 	// OIDC 扩展参数
-	Prompt    string `json:"prompt,omitempty" form:"prompt"`         // none, login, consent
-	Nonce     string `json:"nonce,omitempty" form:"nonce"`           // 防重放攻击
-	LoginHint string `json:"login_hint,omitempty" form:"login_hint"` // 登录提示（邮箱/手机）
+	Prompt    binding.SpaceDelimited `json:"prompt,omitempty" form:"prompt"`         // none, login, consent
+	Nonce     string                 `json:"nonce,omitempty" form:"nonce"`           // 防重放攻击
+	LoginHint string                 `json:"login_hint,omitempty" form:"login_hint"` // 登录提示（邮箱/手机）
 
 	// 其他扩展参数 - 序列化时平铺到顶层
 	Params map[string]any `json:"-" form:"-"`
-}
-
-// GetPrompt 获取 prompt 参数
-func (r *AuthRequest) GetPrompt() string {
-	return r.Prompt
-}
-
-// HasPrompt 检查是否包含指定的 prompt 值
-func (r *AuthRequest) HasPrompt(p string) bool {
-	if r.Prompt == "" {
-		return false
-	}
-	// prompt 可以是空格分隔的多个值
-	for _, v := range splitScopes(r.Prompt) {
-		if v == p {
-			return true
-		}
-	}
-	return false
-}
-
-// GetNonce 获取 nonce 参数
-func (r *AuthRequest) GetNonce() string {
-	return r.Nonce
-}
-
-// GetLoginHint 获取 login_hint 参数
-func (r *AuthRequest) GetLoginHint() string {
-	return r.LoginHint
 }
 
 // authRequestAlias 用于避免 MarshalJSON/UnmarshalJSON 递归
@@ -227,25 +199,6 @@ func (r *AuthRequest) Set(key string, value any) {
 		r.Params = make(map[string]any)
 	}
 	r.Params[key] = value
-}
-
-// ParseScopes 解析 scope 字符串为列表
-func (r *AuthRequest) ParseScopes() []string {
-	if r.Scope == "" {
-		return nil
-	}
-	scopes := make([]string, 0)
-	for _, s := range splitScopes(r.Scope) {
-		if s != "" {
-			scopes = append(scopes, s)
-		}
-	}
-	return scopes
-}
-
-// splitScopes 按空格分割 scope
-func splitScopes(scope string) []string {
-	return strings.Fields(scope)
 }
 
 // Connection 前端公开的连接信息（不含密钥和运行时状态）

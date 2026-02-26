@@ -494,12 +494,6 @@ definitions:
     required:
     - label
     type: object
-  upload.UploadImageResponse:
-    properties:
-      url:
-        description: 上传后的图片 URL
-        type: string
-    type: object
   zwei.RecipeListItem:
     properties:
       category:
@@ -992,54 +986,6 @@ paths:
       summary: 更新标签
       tags:
       - tags
-  /api/upload/image:
-    post:
-      consumes:
-      - multipart/form-data
-      parameters:
-      - description: 完整的 OSS 对象键，如 avatars/user123.jpg（优先级高于 prefix）
-        in: formData
-        name: object-key
-        type: string
-      - description: 文件路径前缀，如 avatars, images（当 object-key 为空时使用）
-        in: formData
-        name: prefix
-        type: string
-      - description: 图片文件
-        in: formData
-        name: file
-        required: true
-        type: file
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/upload.UploadImageResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "401":
-          description: Unauthorized
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - Bearer: []
-      summary: 上传图片到 OSS
-      tags:
-      - upload
   /api/user/favorites:
     get:
       parameters:

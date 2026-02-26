@@ -4,13 +4,13 @@
 
 Aegis 使用 **PASETO v4 Public Token**（Ed25519 签名）作为统一凭证格式，定义了 5 种 Token 类型：
 
-| 类型 | 标识 | 用途 | 签发方 | 验证方 | Footer |
-|------|------|------|--------|--------|--------|
-| CAT | `cat` | 客户端自签发凭证 | 应用 | Aegis | 无 |
-| UAT | `uat` | 用户访问令牌 | Aegis | 应用 | 有（加密） |
-| SAT | `sat` | 服务访问令牌（M2M） | Aegis | 应用 | 无 |
-| XAT | `challenge` | 验证挑战令牌 | Aegis | Aegis | 无 |
-| SSO | `sso` | 单点登录会话（内部） | Aegis | Aegis | 有（加密） |
+| 类型 | 标识 | 用途 | 签发方 | 验证方 | Footer | 加密数据 |
+|------|------|------|--------|--------|--------|----------|
+| CAT | `cat` | 客户端自签发凭证 | 应用 | Aegis | kid | 无 |
+| UAT | `uat` | 用户访问令牌 | Aegis | 应用 | kid | sub（v4.local） |
+| SAT | `sat` | 服务访问令牌（M2M） | Aegis | 应用 | kid | 无 |
+| XAT | `challenge` | 验证挑战令牌 | Aegis | Aegis | kid | 无 |
+| SSO | `sso` | 单点登录会话（内部） | Aegis | Aegis | kid | sub（v4.local） |
 
 ---
 
@@ -27,9 +27,19 @@ v4.public.<payload>.<footer>
 | `v4` | PASETO 版本 |
 | `public` | 公钥签名模式（Ed25519） |
 | `payload` | Base64URL(claims_json + signature) |
-| `footer` | 可选，Base64URL(附加数据) |
+| `footer` | JSON，包含 kid（密钥标识） |
 
-### 2.2 通用 Claims
+### 2.2 Footer 格式（所有 Token 统一）
+
+```json
+{"kid":"k4.pid.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
+```
+
+- `kid`：PASERK 格式的签名密钥标识符
+- 使用 BLAKE2b-264 从公钥派生，确定性、不可逆
+- 用于密钥轮换场景下精确匹配验签公钥
+
+### 2.3 通用 Claims
 
 所有 Token 共享的标准字段：
 
@@ -49,26 +59,68 @@ v4.public.<payload>.<footer>
 |-------|------|------|
 | `iss` | string | 签发者 |
 | `aud` | string | 目标受众 |
-| `sub` | string | 主体（可选） |
+| `sub` | string | 主体（可选，UAT/SSO 为加密的 v4.local token） |
 | `iat` | RFC3339 | 签发时间 |
 | `exp` | RFC3339 | 过期时间 |
 | `nbf` | RFC3339 | 生效时间 |
 | `jti` | string | Token ID（16 字节随机 hex） |
 
-### 2.3 扩展 Claims
+### 2.4 扩展 Claims
 
 | Claim | 使用者 | 说明 |
 |-------|--------|------|
-| `cli` | UAT, SAT, XAT | 应用 ID |
+| `cli` | UAT, SAT, XAT, SSO | 应用/签发者 ID |
 | `scope` | UAT, SAT | 授权范围（空格分隔） |
-| `typ` | XAT | 验证方式（ChannelType） |
-| `biz` | XAT | 业务场景 |
+| `ctp` | XAT | 验证方式（ChannelType） |
+| `typ` | XAT | 业务场景 |
 
 ---
 
-## 3. Token 类型详解
+## 3. 嵌套加密结构
 
-### 3.1 CAT (Client Access Token)
+### 3.1 双层 Token 架构（UAT/SSO）
+
+UAT 和 SSO Token 使用嵌套 PASETO Token 结构存储敏感数据：
+
+```
+外层 v4.public Token（签名）:
+  payload: { iss, aud, cli, scope, exp, ..., sub: "<v4.local token>" }
+  footer:  { "kid": "k4.pid.xxxx" }   ← 签名密钥的 PASERK pid
+
+内层 v4.local Token（加密，嵌在 sub 字段中）:
+  payload: { 加密的用户信息 / 域身份映射 }
+  footer:  { "kid": "k4.lid.yyyy" }   ← 加密密钥的 PASERK lid
+```
+
+- 外层 footer 的 `k4.pid` 标识签名密钥，用于验签
+- 内层 footer 的 `k4.lid` 标识加密密钥，用于解密 sub
+- 两个 kid 来自不同的 Seed，轮换完全独立
+
+### 3.2 kid 派生（PASERK 规范）
+
+**签名密钥 kid（k4.pid）**：
+
+```
+paserk = "k4.public." + base64url(ed25519_public_key_bytes)
+h      = "k4.pid."
+d      = BLAKE2b(message: h || paserk, output_size: 33)
+kid    = h + base64url(d)    // 总长 51 字符
+```
+
+**加密密钥 kid（k4.lid）**：
+
+```
+paserk = "k4.local." + base64url(symmetric_key_bytes)
+h      = "k4.lid."
+d      = BLAKE2b(message: h || paserk, output_size: 33)
+kid    = h + base64url(d)    // 总长 51 字符
+```
+
+---
+
+## 4. Token 类型详解
+
+### 4.1 CAT (Client Access Token)
 
 **用途**：应用自签发凭证，用于 Client-Credentials 流程向 Aegis 请求 SAT。
 
@@ -86,41 +138,22 @@ v4.public.<payload>.<footer>
 }
 ```
 
-| Claim | 说明 |
-|-------|------|
-| `iss` | 应用 ID（自签发） |
-| `sub` | 应用 ID（⚠️ CAT 特殊：clientID 存于 sub） |
-| `aud` | 固定为 `https://aegis.heliannuuthus.com/api` |
-
-**Footer**：无
-
-**流程**
-
-```
-┌────────────────────────────────────────────────────┐
-│  应用                      Aegis                   │
-├────────────────────────────────────────────────────┤
-│  1. 使用私钥签发 CAT                                │
-│  2. POST /oauth/token ──────────────────────────▶  │
-│                            3. 验证 CAT 签名         │
-│                            4. 签发 SAT              │
-│  5. 获得 SAT  ◀──────────────────────────────────  │
-└────────────────────────────────────────────────────┘
-```
+**Footer**：`{"kid":"k4.pid.xxxx"}` — 应用密钥的 pid
 
 **特性**
 
 - 短期有效（推荐 1-5 分钟）
 - 一次性交换使用
 - 不含 `cli`、`scope`
+- `sub` = 应用 ID（明文）
 
 ---
 
-### 3.2 UAT (User Access Token)
+### 4.2 UAT (User Access Token)
 
 **用途**：用户访问令牌，代表用户身份调用受保护资源。
 
-**Claims**
+**外层 Claims**
 
 ```json
 {
@@ -131,18 +164,14 @@ v4.public.<payload>.<footer>
   "exp": "2024-01-01T01:00:00Z",
   "nbf": "2024-01-01T00:00:00Z",
   "jti": "a1b2c3d4e5f67890",
-  "scope": "openid profile email"
+  "scope": "openid profile email",
+  "sub": "v4.local.加密的用户信息..."
 }
 ```
 
-| Claim | 说明 |
-|-------|------|
-| `iss` | 固定为 `https://aegis.heliannuuthus.com/api` |
-| `cli` | 发起请求的应用 ID |
-| `aud` | 目标资源服务 |
-| `scope` | 授权范围（空格分隔） |
+**外层 Footer**：`{"kid":"k4.pid.xxxx"}` — domain.main 的 pid
 
-**Footer**（加密存储）
+**内层 v4.local Token（sub 字段值）的解密内容**
 
 ```json
 {
@@ -154,47 +183,27 @@ v4.public.<payload>.<footer>
 }
 ```
 
-| Key | 说明 | 依赖 Scope |
-|-----|------|------------|
-| `sub` | 用户 OpenID | `openid` |
-| `nickname` | 用户昵称 | `profile` |
-| `picture` | 用户头像 | `profile` |
-| `email` | 用户邮箱 | `email` |
-| `phone` | 用户手机号 | `phone` |
+**内层 Footer**：`{"kid":"k4.lid.yyyy"}` — service.key 的 lid
 
 **Scope 定义**
 
-| Scope | 允许访问 | 备注 |
-|-------|----------|------|
-| `openid` | sub | 具备 openid 权限的 scope 才能访问 sub |
-| `profile` | nickname, picture | 具备 profile 权限的 scope 才能访问 nickname, picture |
-| `email` | email | 具备 email 权限的 scope 才能访问 email |
-| `phone` | phone | 具备 phone 权限的 scope 才能访问 phone |
-| `offline_access` | 请求 Refresh Token | - |
-**流程**
-
-```
-┌────────────────────────────────────────────────────┐
-│  用户         应用           Aegis       资源服务   │
-├────────────────────────────────────────────────────┤
-│  1. 登录认证                                        │
-│  2. 授权同意                                        │
-│              3. 获取 UAT ◀────                     │
-│              4. 调用 API ─────────────────────────▶ │
-│                                    5. 验证 UAT      │
-│              6. 响应数据 ◀───────────────────────── │
-└────────────────────────────────────────────────────┘
-```
+| Scope | 允许访问 |
+|-------|----------|
+| `openid` | sub |
+| `profile` | nickname, picture |
+| `email` | email |
+| `phone` | phone |
+| `offline_access` | 请求 Refresh Token |
 
 **特性**
 
 - 推荐有效期 15-60 分钟
 - 配合 Refresh Token 使用
-- 敏感信息加密存储于 Footer
+- 敏感信息加密存储于 sub 字段（嵌套 v4.local token）
 
 ---
 
-### 3.3 SAT (Service Access Token)
+### 4.3 SAT (Service Access Token)
 
 **用途**：服务间 M2M 通信凭证，无用户上下文。
 
@@ -208,52 +217,21 @@ v4.public.<payload>.<footer>
   "iat": "2024-01-01T00:00:00Z",
   "exp": "2024-01-02T00:00:00Z",
   "nbf": "2024-01-01T00:00:00Z",
-  "jti": "a1b2c3d4e5f67890",
+  "jti": "a1b2c3d4e5f67890"
 }
 ```
 
-| Claim | 说明 |
-|-------|------|
-| `iss` | 固定为 `https://aegis.heliannuuthus.com/api` |
-| `cli` | 请求方应用 ID |
-| `aud` | 目标服务 |
-
-**Footer**：无
-
-**流程**
-
-```
-┌────────────────────────────────────────────────────┐
-│  服务 A                   Aegis         服务 B      │
-├────────────────────────────────────────────────────┤
-│  1. 签发 CAT                                        │
-│  2. 请求 SAT ──────────────▶                        │
-│                            3. 验证 CAT              │
-│  4. 获得 SAT ◀──────────────                        │
-│  5. 调用 API ──────────────────────────────────────▶│
-│                                      6. 验证 SAT    │
-│  7. 响应 ◀─────────────────────────────────────────│
-└────────────────────────────────────────────────────┘
-```
+**Footer**：`{"kid":"k4.pid.xxxx"}` — domain.main 的 pid
 
 **特性**
 
 - 推荐有效期 1-24 小时
-- 无用户信息
+- 无用户信息，无 sub
 - 适用于后台任务、微服务调用
-
-**CAT vs SAT 对比**
-
-| 维度 | CAT | SAT |
-|------|-----|-----|
-| 签发方 | 应用自己 | Aegis |
-| 用途 | 请求 SAT | 访问资源 |
-| 有效期 | 分钟级 | 小时级 |
-| clientID 位置 | `sub` | `cli` |
 
 ---
 
-### 3.4 XAT (Challenge Token)
+### 4.4 XAT (Challenge Token)
 
 **用途**：证明用户已完成特定身份验证挑战，用于 MFA 和敏感操作。
 
@@ -274,87 +252,38 @@ v4.public.<payload>.<footer>
 }
 ```
 
-| Claim | 说明 |
-|-------|------|
-| `iss` | 固定为 `https://aegis.heliannuuthus.com/api` |
-| `cli` | 发起验证的应用 ID |
-| `aud` | 固定为 `https://aegis.heliannuuthus.com/api` |
-| `sub` | 完成验证的 principal |
-| `ctp` | 验证方式（ChannelType） |
-| `typ` | 验证场景（可选） |
-
-**Footer**：无
-
-**ChannelType 枚举**
-
-| 值 | 分类 | sub 含义 |
-|----|------|----------|
-| `captcha` | 前置条件 | — |
-| `email_otp` | 验证类 | 邮箱地址 |
-| `sms_otp` | 验证类 | 手机号 |
-| `totp` | 验证类 | 用户 OpenID |
-| `tg_otp` | 验证类 | Telegram ID |
-| `webauthn` | 验证类 | Credential ID |
-| `wechat-mp` | 交换类 | 手机号 |
-| `alipay-mp` | 交换类 | 手机号 |
-
-**bizType 常见值**
-
-| 值 | 说明 |
-|----|------|
-| `login` | 登录验证 |
-| `forget_password` | 忘记密码 |
-| `change_password` | 修改密码 |
-| `bind_phone` | 绑定手机 |
-| `bind_email` | 绑定邮箱 |
-
-**流程（MFA 示例）**
-
-```
-┌────────────────────────────────────────────────────┐
-│  用户                      Aegis                   │
-├────────────────────────────────────────────────────┤
-│  1. 完成密码登录                                    │
-│                            2. 要求 TOTP 验证        │
-│  3. 输入 TOTP 验证码 ─────────────────────────────▶ │
-│                            4. 验证成功，签发 XAT    │
-│  5. 获得 XAT ◀───────────────────────────────────  │
-│  6. 提交 XAT 到 /authenticate ─────────────────▶   │
-│                            7. 验证 XAT，完成登录    │
-└────────────────────────────────────────────────────┘
-```
+**Footer**：`{"kid":"k4.pid.xxxx"}` — domain.main 的 pid
 
 **特性**
 
 - 推荐有效期 5-15 分钟
 - 一次性使用
-- 绑定特定业务场景
+- `sub` = 完成验证的 principal（明文）
 
 ---
 
-### 3.5 SSO Token（内部专用）
+### 4.5 SSO Token（内部专用）
 
 **用途**：跨应用单点登录会话，存储于浏览器 Cookie，仅 Aegis 内部使用。
 
-**Claims**
+**外层 Claims**
 
 ```json
 {
-  "iss": "https://aegis.heliannuuthus.com/api",
-  "aud": "https://aegis.heliannuuthus.com/api",
+  "iss": "aegis",
+  "cli": "aegis",
+  "aud": "aegis",
   "iat": "2024-01-01T00:00:00Z",
   "exp": "2024-01-08T00:00:00Z",
   "nbf": "2024-01-01T00:00:00Z",
-  "jti": "a1b2c3d4e5f67890"
+  "jti": "a1b2c3d4e5f67890",
+  "sub": "v4.local.加密的域身份映射..."
 }
 ```
 
-| Claim | 说明 |
-|-------|------|
-| `iss` | 固定为 `https://aegis.heliannuuthus.com/api` |
-| `aud` | 固定为 `https://aegis.heliannuuthus.com/api` |
+**外层 Footer**：`{"kid":"k4.pid.xxxx"}` — sso.master_key 的 pid
 
-**Footer**（加密存储）
+**内层 v4.local Token（sub 字段值）的解密内容**
 
 ```json
 {
@@ -363,76 +292,103 @@ v4.public.<payload>.<footer>
 }
 ```
 
-| Key | 说明 |
-|-----|------|
-| `{domain}` | 该域下的用户 OpenID |
-
-**流程（SSO 快速路径）**
-
-```
-┌────────────────────────────────────────────────────┐
-│  用户         应用 B        Aegis                  │
-├────────────────────────────────────────────────────┤
-│  （已在应用 A 登录，浏览器存有 SSO Cookie）          │
-│  1. 访问应用 B                                      │
-│              2. 重定向 /authorize ─────────────────▶│
-│                             3. 检测 SSO Cookie      │
-│                             4. 查找当前域 openID    │
-│                             5. 验证用户状态         │
-│                             6. 直接签发授权码       │
-│              7. 重定向回应用 B ◀───────────────────│
-│  8. 无需登录，直接进入                              │
-└────────────────────────────────────────────────────┘
-```
+**内层 Footer**：`{"kid":"k4.lid.yyyy"}` — sso.master_key 的 lid
 
 **特性**
 
 - 默认有效期 7 天
 - 域隔离身份（每个域独立 OpenID）
-- 自签发自验证（iss = aud = issuer URL）
-- 无 `cli`、无 `scope`
-
-**Cookie 配置**
-
-| 配置项 | 默认值 |
-|--------|--------|
-| name | `aegis-sso` |
-| ttl | `168h` |
-| Secure | `true` |
-| HttpOnly | `true` |
-| SameSite | `Lax` |
-
-**prompt 参数交互**
-
-| prompt | 行为 |
-|--------|------|
-| （无） | 优先使用 SSO 快速路径 |
-| `login` | 忽略 SSO，强制重新登录 |
-| `none` | 仅使用 SSO，不可用则报错 |
+- 自签发自验证（iss = cli = aud = "aegis"）
+- 无 `scope`
 
 ---
 
-## 4. 安全设计
+## 5. 统一签发 / 验证架构
 
-### 4.1 签名与加密
+### 5.1 设计原则
 
-| Token | 签名密钥 | Footer 加密 |
-|-------|----------|-------------|
-| CAT | 应用私钥 | — |
-| UAT | 服务私钥 | 服务对称密钥 |
-| SAT | 服务私钥 | — |
-| XAT | 服务私钥 | — |
-| SSO | SSO 主密钥派生 | SSO 对称密钥 |
+所有 Token 类型共享统一的 `Issue` 和 `Verify` 入口，通过接口多态区分行为差异：
 
-### 4.2 SSO 密钥派生
+- **签发差异**由 `encryptableToken` 接口决定：实现该接口的 Token（UAT、SSO）会将 payload 加密到 sub 字段；未实现的（SAT、XAT）直接签名
+- **验证差异**由 `decryptableToken` 接口决定：实现该接口的 Token 在验签后自动解密 sub 并填充数据
+- **密钥选择**由 Token 自身的 `GetClientID()` 和 `GetAudience()` 驱动，无需特殊分支
 
-SSO Token 使用单一 master key 通过 KDF 派生：
+### 5.2 Token 构建（Builder 模式）
 
-- Ed25519 签名私钥
-- Ed25519 验证公钥
-- 对称加密密钥（Footer）
+所有 Token 通过统一的 `ClaimsBuilder + TokenTypeBuilder` 模式构建：
 
-### 4.3 有效期建议
+```
+token := NewClaimsBuilder().
+    Issuer(issuer).
+    ClientID(clientID).
+    Audience(audience).
+    ExpiresIn(duration).
+    Build(typeBuilder)    // UAT / SAT / XT / CAT / SSOTokenBuilder
+```
+
+`TokenTypeBuilder` 接口负责将通用 Claims 与类型特有字段组合为具体 Token 实例。
+
+### 5.3 签发流程（`Service.Issue`）
+
+```
+1. Build: Token → *paseto.Token（通过 tokenBuilder 接口）
+2. 检查是否实现 encryptableToken 且 HasUser()：
+   是 → MarshalPayload → Encrypt(audience) → SetSubject(encrypted)
+   否 → 跳过
+3. Sign(clientID) → 返回 token 字符串
+```
+
+密钥选择规则：
+- 签名：`domainKeyStore.Get(clientID)` — SSO 时 clientID = "aegis"
+- 加密：`serviceKeyStore.Get(audience)` — SSO 时 audience = "aegis"
+
+### 5.4 验证流程（`Service.Verify`）
+
+```
+1. UnsafeParse → 提取 claims（不验签）
+2. DetectType → 判断 Token 类型
+3. 选择验签 KeyStore：
+   CAT → appKeyStore（应用自签，用应用公钥验证）
+   其他 → domainKeyStore（Aegis 签发，用域公钥验证）
+4. 验签（遍历候选 Seed，通过 kid 精确匹配）
+5. ParseToken → 解析为具体 Token 类型
+6. 检查是否实现 decryptableToken：
+   是 → Decrypt(audience) → UnmarshalPayload → 填充数据
+   否 → 跳过
+7. 返回 Token（调用方按需类型断言）
+```
+
+验签密钥匹配细节：
+```
+a. 用 clientID 从 KeyStore 获取所有 Seed
+b. 逐个派生公钥，计算 k4.pid
+c. 与 footer kid 做 constant-time comparison
+d. 匹配成功 → ParseV4Public 验签
+```
+
+---
+
+## 6. 安全设计
+
+### 6.1 签名与加密
+
+| Token | 签名密钥来源 | Footer kid 类型 | 加密密钥来源 | 内层 kid 类型 |
+|-------|-------------|-----------------|-------------|--------------|
+| CAT | `app.key` | k4.pid | — | — |
+| UAT | `domain.main` | k4.pid | `service.key` | k4.lid |
+| SAT | `domain.main` | k4.pid | — | — |
+| XAT | `domain.main` | k4.pid | — | — |
+| SSO | `sso.master_key` | k4.pid | `sso.master_key` | k4.lid |
+
+### 6.2 安全要点
+
+- kid 是公钥/对称密钥的 BLAKE2b 哈希摘要，明文存放无安全风险
+- 外层签名覆盖整个 payload（包括加密的 sub），防止加密数据被替换
+- 内层 v4.local 使用 XChaCha20-Poly1305 (AEAD)，提供认证加密
+- kid 比对使用 constant-time comparison，防止时序侧信道攻击
+- UnsafeParse 仅用于确定 KeyStore 查找目标，kid 用于精确匹配
+
+### 6.3 有效期建议
 
 | Token | 推荐有效期 | 说明 |
 |-------|------------|------|
@@ -444,24 +400,15 @@ SSO Token 使用单一 master key 通过 KDF 派生：
 
 ---
 
-## 5. Token 类型检测
+## 7. Token 类型检测
 
-### 5.1 判断逻辑
+### 7.1 判断逻辑
 
 ```
-1. 有 "typ" 字段，有 "cli" 字段 → XAT
-2. 有 "cli" 字段，无 Footer → SAT
-3. 有 "cli" 字段，有 Footer → UAT
-4. 仅有 "sub"，无 "cli"/"typ" → CAT
-5. "iss" = "aud" = issuer URL → SSO
+1. iss == aud == cli（三者相等且非空） → SSO
+2. 有 "ctp" 字段 → XAT
+3. 有 "cli" 字段 → UAT（sub 加密）或 SAT（无 sub）
+4. 无 "cli"/"ctp" → CAT
 ```
 
-### 5.2 识别规则
-
-| 特征 | Token 类型 |
-|------|------------|
-| 有 `typ`，有 `cli` | XAT |
-| 有 `cli`，无 Footer | SAT |
-| 有 `cli`，有 Footer | UAT |
-| 仅 `sub`，无 `cli`/`typ` | CAT |
-| `iss` = `aud` = issuer URL | SSO |
+> SSO 优先判断，因为 SSO 也携带 `cli` 字段，必须先排除。

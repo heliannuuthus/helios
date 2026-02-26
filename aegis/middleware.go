@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/heliannuuthus/helios/aegis/internal/token"
-	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/token"
+	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
 // Middleware 认证中间件（用于验证 CAT）

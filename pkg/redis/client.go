@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -70,7 +71,7 @@ func (c *GoRedisClient) Exists(ctx context.Context, keys ...string) (int64, erro
 }
 func (c *GoRedisClient) Eval(ctx context.Context, script string, keys []string, args ...any) (any, error) {
 	result, err := c.client.Eval(ctx, script, keys, args...).Result()
-	if err != nil && err == goredis.Nil {
+	if err != nil && errors.Is(err, goredis.Nil) {
 		return nil, ErrNil
 	}
 	return result, err

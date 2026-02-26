@@ -20,13 +20,6 @@ type Watcher interface {
 	Notifiable
 }
 
-// trySubscribe 尝试订阅密钥变更（如果 provider 支持）
-func trySubscribe(provider Provider, id string, callback func(keys [][]byte)) {
-	if sub, ok := provider.(Subscribable); ok {
-		sub.Subscribe(id, callback)
-	}
-}
-
 // SimpleWatcher 简单的 Watcher 实现（异步通知）
 type SimpleWatcher struct {
 	mu        sync.RWMutex

@@ -1,8 +1,9 @@
 package telegram
 
 import (
-	"github.com/go-json-experiment/json/jsontext"
 	"io"
+
+	"github.com/go-json-experiment/json/jsontext"
 )
 
 // ChatID 可以是 int64（chat_id）或 string（@username）
@@ -36,10 +37,10 @@ const (
 
 // Response Telegram API 通用响应
 type Response struct {
-	OK          bool            `json:"ok"`
+	OK          bool           `json:"ok"`
 	Result      jsontext.Value `json:"result,omitempty"`
-	Description string          `json:"description,omitempty"`
-	ErrorCode   int             `json:"error_code,omitempty"`
+	Description string         `json:"description,omitempty"`
+	ErrorCode   int            `json:"error_code,omitempty"`
 }
 
 // User Telegram 用户
