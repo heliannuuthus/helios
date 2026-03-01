@@ -14,19 +14,6 @@ import (
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// encryptableToken is a Token whose payload should be encrypted into the sub field.
-type encryptableToken interface {
-	Token
-	HasUser() bool
-	MarshalPayload() ([]byte, error)
-}
-
-// decryptableToken is a Token whose sub field contains encrypted payload to be decrypted.
-type decryptableToken interface {
-	Token
-	UnmarshalPayload(data []byte) error
-}
-
 // Service is the token service that handles issuing and verifying all token types.
 type Service struct {
 	issuer string
@@ -83,21 +70,15 @@ func (s *Service) Issue(ctx context.Context, t tokendef.Token) (string, error) {
 		return "", fmt.Errorf("build token: %w", err)
 	}
 
-	if et, ok := t.(encryptableToken); ok && et.HasUser() {
-		payload, err := et.MarshalPayload()
-		if err != nil {
-			return "", fmt.Errorf("marshal payload: %w", err)
-		}
-
-		encryptor := s.getServiceEncryptor(t.GetAudience())
-		encryptedSub, err := encryptor.Encrypt(ctx, payload)
+	if payload, ok := s.marshalPayload(t); ok {
+		encryptedSub, err := s.serviceEncryptor(t.GetAudience()).Encrypt(ctx, payload)
 		if err != nil {
 			return "", fmt.Errorf("encrypt sub: %w", err)
 		}
 		pasetoToken.SetSubject(encryptedSub)
 	}
 
-	signer := s.getDomainSigner(t.GetClientID())
+	signer := s.domainSigner(t.GetClientID())
 	return signer.Sign(ctx, pasetoToken)
 }
 
@@ -120,9 +101,9 @@ func (s *Service) Verify(ctx context.Context, tokenString string) (Token, error)
 
 	var verifier *pkgtoken.Verifier
 	if tokenType == tokendef.TokenTypeCAT {
-		verifier = s.getAppVerifier(clientID)
+		verifier = s.appVerifier(clientID)
 	} else {
-		verifier = s.getDomainVerifier(clientID)
+		verifier = s.domainVerifier(clientID)
 	}
 
 	pasetoToken, err = verifier.Verify(ctx, tokenString)
@@ -140,7 +121,7 @@ func (s *Service) Verify(ctx context.Context, tokenString string) (Token, error)
 		return nil, fmt.Errorf("parse token: %w", err)
 	}
 
-	if dt, ok := t.(decryptableToken); ok {
+	if s.needsDecryption(tokenType) {
 		encryptedSub := t.GetSubject()
 		if encryptedSub == "" {
 			return nil, errors.New("missing encrypted sub")
@@ -150,13 +131,12 @@ func (s *Service) Verify(ctx context.Context, tokenString string) (Token, error)
 		if err != nil {
 			logger.Warnf("failed to get audience from token: %v", err)
 		}
-		decryptor := s.getServiceDecryptor(audience)
-		claimsJSON, _, err := decryptor.Decrypt(ctx, encryptedSub)
+		claimsJSON, err := s.serviceDecryptor(audience).Decrypt(ctx, encryptedSub)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt sub: %w", err)
 		}
 
-		if err := dt.UnmarshalPayload(claimsJSON); err != nil {
+		if err := s.unmarshalPayload(t, claimsJSON); err != nil {
 			return nil, fmt.Errorf("unmarshal payload: %w", err)
 		}
 	}
@@ -166,7 +146,7 @@ func (s *Service) Verify(ctx context.Context, tokenString string) (Token, error)
 
 // ============= Lazy Component Getters =============
 
-func (s *Service) getDomainSigner(clientID string) *Signer {
+func (s *Service) domainSigner(clientID string) *Signer {
 	s.mu.RLock()
 	signer, ok := s.domainSigners[clientID]
 	s.mu.RUnlock()
@@ -186,7 +166,7 @@ func (s *Service) getDomainSigner(clientID string) *Signer {
 	return signer
 }
 
-func (s *Service) getDomainVerifier(clientID string) *pkgtoken.Verifier {
+func (s *Service) domainVerifier(clientID string) *pkgtoken.Verifier {
 	s.mu.RLock()
 	verifier, ok := s.domainVerifiers[clientID]
 	s.mu.RUnlock()
@@ -206,7 +186,7 @@ func (s *Service) getDomainVerifier(clientID string) *pkgtoken.Verifier {
 	return verifier
 }
 
-func (s *Service) getServiceEncryptor(audience string) *Encryptor {
+func (s *Service) serviceEncryptor(audience string) *Encryptor {
 	s.mu.RLock()
 	encryptor, ok := s.serviceEncryptors[audience]
 	s.mu.RUnlock()
@@ -226,7 +206,7 @@ func (s *Service) getServiceEncryptor(audience string) *Encryptor {
 	return encryptor
 }
 
-func (s *Service) getServiceDecryptor(audience string) *pkgtoken.Decryptor {
+func (s *Service) serviceDecryptor(audience string) *pkgtoken.Decryptor {
 	s.mu.RLock()
 	decryptor, ok := s.serviceDecryptors[audience]
 	s.mu.RUnlock()
@@ -246,7 +226,7 @@ func (s *Service) getServiceDecryptor(audience string) *pkgtoken.Decryptor {
 	return decryptor
 }
 
-func (s *Service) getAppVerifier(clientID string) *pkgtoken.Verifier {
+func (s *Service) appVerifier(clientID string) *pkgtoken.Verifier {
 	s.mu.RLock()
 	verifier, ok := s.appVerifiers[clientID]
 	s.mu.RUnlock()
@@ -264,4 +244,58 @@ func (s *Service) getAppVerifier(clientID string) *pkgtoken.Verifier {
 	verifier = pkgtoken.NewVerifier(s.appKeyStore, clientID)
 	s.appVerifiers[clientID] = verifier
 	return verifier
+}
+
+// ============= Payload Encryption Helpers =============
+
+// marshalPayload extracts the payload that needs encryption for UAT and SSO tokens.
+func (*Service) marshalPayload(t tokendef.Token) ([]byte, bool) {
+	switch v := t.(type) {
+	case *tokendef.UserAccessToken:
+		if !v.HasUser() {
+			return nil, false
+		}
+		data, err := v.MarshalUserPayload()
+		if err != nil {
+			return nil, false
+		}
+		return data, true
+	case *SSOToken:
+		if !v.HasUser() {
+			return nil, false
+		}
+		data, err := v.MarshalIdentities()
+		if err != nil {
+			return nil, false
+		}
+		return data, true
+	default:
+		return nil, false
+	}
+}
+
+func (*Service) needsDecryption(tokenType tokendef.TokenType) bool {
+	return tokenType == tokendef.TokenTypeUAT || tokenType == tokendef.TokenTypeSSO
+}
+
+// unmarshalPayload decrypts and sets the payload on UAT and SSO tokens.
+func (*Service) unmarshalPayload(t tokendef.Token, data []byte) error {
+	switch v := t.(type) {
+	case *tokendef.UserAccessToken:
+		info, err := tokendef.UnmarshalUserInfo(data)
+		if err != nil {
+			return err
+		}
+		v.SetUserInfo(info)
+		return nil
+	case *SSOToken:
+		identities, err := UnmarshalIdentities(data)
+		if err != nil {
+			return err
+		}
+		v.SetIdentities(identities)
+		return nil
+	default:
+		return fmt.Errorf("token type %s does not support payload decryption", t.Type())
+	}
 }

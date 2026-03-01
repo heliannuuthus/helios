@@ -18,6 +18,10 @@ type Provider interface {
 	// 返回: 第三方 IDP 用户信息的通用模型
 	Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error)
 
+	// Resolve 通过 principal 查找用户信息（不验证凭证）
+	// 用于 delegate 验证成功后，填充被委托 IDP 的身份信息
+	Resolve(ctx context.Context, principal string) (*models.TUserInfo, error)
+
 	// FetchAdditionalInfo 补充获取用户信息（手机号、邮箱等）
 	// infoType: "phone", "email", "realname" 等
 	// params: 通用参数，不同 IDP 需要不同参数

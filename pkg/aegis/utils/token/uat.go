@@ -122,13 +122,10 @@ func (u *UserAccessToken) Type() TokenType {
 	return TokenTypeUAT
 }
 
-func (u *UserAccessToken) build() (*paseto.Token, error) {
-	return u.BuildPaseto()
-}
 
-// BuildPaseto builds the PASETO token claims.
+// Build builds the PASETO token claims.
 // Note: the sub field is set by the service layer after encryption.
-func (u *UserAccessToken) BuildPaseto() (*paseto.Token, error) {
+func (u *UserAccessToken) Build() (*paseto.Token, error) {
 	t := paseto.NewToken()
 	if err := u.SetStandardClaims(&t); err != nil {
 		return nil, fmt.Errorf("set standard claims: %w", err)
@@ -202,28 +199,12 @@ func (u *UserAccessToken) GetUserInfo() *UserInfo {
 	return u.userInfo
 }
 
-// MarshalPayload implements EncryptableToken.
-func (u *UserAccessToken) MarshalPayload() ([]byte, error) {
-	return u.MarshalUserPayload()
-}
-
 // MarshalUserPayload serializes the user info to JSON for inner token encryption.
 func (u *UserAccessToken) MarshalUserPayload() ([]byte, error) {
 	if u.userInfo == nil {
 		return nil, fmt.Errorf("%w: no user info", ErrMissingClaims)
 	}
 	return json.Marshal(u.userInfo)
-}
-
-// UnmarshalPayload deserializes user info from decrypted inner token claims JSON
-// and sets it on the UserAccessToken.
-func (u *UserAccessToken) UnmarshalPayload(data []byte) error {
-	info, err := UnmarshalUserInfo(data)
-	if err != nil {
-		return err
-	}
-	u.userInfo = info
-	return nil
 }
 
 // UnmarshalUserInfo deserializes user info from decrypted inner token claims JSON.

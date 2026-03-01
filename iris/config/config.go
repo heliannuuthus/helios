@@ -26,7 +26,7 @@ func GetAegisSecretKey() string {
 	return Cfg().GetString("aegis.secret-key")
 }
 
-// GetAegisSecretKeyBytes 获取 Iris 服务解密密钥（32 字节 raw key）
+// GetAegisSecretKeyBytes 获取 Iris 服务密钥（48 字节 seed: 16-byte salt + 32-byte key）
 func GetAegisSecretKeyBytes() ([]byte, error) {
 	secretStr := GetAegisSecretKey()
 	if secretStr == "" {
@@ -36,8 +36,8 @@ func GetAegisSecretKeyBytes() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("解码 iris aegis.secret-key 失败: %w", err)
 	}
-	if len(secretBytes) != 32 {
-		return nil, fmt.Errorf("iris aegis.secret-key 长度错误: 期望 32 字节, 实际 %d 字节", len(secretBytes))
+	if len(secretBytes) != 48 {
+		return nil, fmt.Errorf("iris aegis.secret-key 长度错误: 期望 48 字节 seed, 实际 %d 字节", len(secretBytes))
 	}
 	return secretBytes, nil
 }

@@ -56,7 +56,10 @@ func (s Seed) Key() []byte {
 
 // Derive 使用 Argon2id 派生子密钥
 func (s Seed) Derive(purpose string) []byte {
-	salt := append(s.Salt(), []byte(purpose)...)
+	raw := s.Salt()
+	salt := make([]byte, len(raw), len(raw)+len(purpose))
+	copy(salt, raw)
+	salt = append(salt, []byte(purpose)...)
 	return argon2.IDKey(s.Key(), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
 }
 

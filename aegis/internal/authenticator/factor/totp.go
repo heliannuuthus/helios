@@ -7,6 +7,10 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 )
 
+var (
+	_ Provider = (*TOTPProvider)(nil)
+)
+
 // TOTPVerifier TOTP 验证接口
 type TOTPVerifier interface {
 	Verify(ctx context.Context, openid, code string) (bool, error)
@@ -29,21 +33,11 @@ func (*TOTPProvider) Type() string {
 	return TypeTOTP
 }
 
-// Initiate 校验 user_id 并构建 Challenge（TOTP 无副作用）
-// channel: user_id
-// params: clientID, audience, bizType
-func (p *TOTPProvider) Initiate(ctx context.Context, channel string, params ...any) (*InitiateResult, error) {
-	if channel == "" {
-		return nil, fmt.Errorf("user_id is required for totp")
+func (p *TOTPProvider) Initiate(_ context.Context, challenge *types.Challenge) error {
+	if challenge.Channel == "" {
+		return fmt.Errorf("user_id is required for totp")
 	}
-
-	ip, err := ParseInitiateParams(params...)
-	if err != nil {
-		return nil, err
-	}
-
-	challenge := NewChallenge(types.ChannelTypeTOTP, channel, ip)
-	return &InitiateResult{Challenge: challenge}, nil
+	return nil
 }
 
 // Verify 验证 TOTP 验证码

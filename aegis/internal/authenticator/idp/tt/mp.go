@@ -160,6 +160,11 @@ func (p *MPProvider) parseUserInfo(bodyBytes []byte) (*models.TUserInfo, error) 
 	}, nil
 }
 
+// Resolve 小程序不支持通过 principal 本地查找
+func (*MPProvider) Resolve(_ context.Context, _ string) (*models.TUserInfo, error) {
+	return nil, errors.New("tt mp provider does not support resolve")
+}
+
 // FetchAdditionalInfo 补充获取用户信息
 func (p *MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, params ...any) (*idp.AdditionalInfo, error) {
 	switch infoType {

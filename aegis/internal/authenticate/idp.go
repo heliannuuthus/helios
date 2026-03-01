@@ -7,10 +7,14 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
+	"github.com/heliannuuthus/helios/hermes/models"
 )
 
 // 编译期接口检查
-var _ authenticator.Authenticator = (*IDPAuthenticator)(nil)
+var (
+	_ authenticator.Authenticator    = (*IDPAuthenticator)(nil)
+	_ authenticator.IdentityResolver = (*IDPAuthenticator)(nil)
+)
 
 // IDPAuthenticator IDP 认证器包装器
 // 持有 idp.Provider，实现 Authenticator 接口
@@ -80,6 +84,12 @@ func (a *IDPAuthenticator) Authenticate(ctx context.Context, flow *types.AuthFlo
 	}
 
 	return true, nil
+}
+
+// Resolve 通过 principal 查找用户信息（委托 Provider.Resolve）
+// 实现 authenticator.IdentityResolver 接口
+func (a *IDPAuthenticator) Resolve(ctx context.Context, principal string) (*models.TUserInfo, error) {
+	return a.provider.Resolve(ctx, principal)
 }
 
 // ==================== Exchanger 实现（条件） ====================

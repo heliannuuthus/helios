@@ -65,7 +65,7 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	}
 
 	// 域密钥：clientID → domain.Main（id="aegis" 时返回 SSO master key）
-	domainKeyStore := key.NewStore(key.FetcherFunc(func(ctx context.Context, clientID string) ([][]byte, error) {
+	domainKeyStore := key.NewNamedStore("domain", key.FetcherFunc(func(ctx context.Context, clientID string) ([][]byte, error) {
 		if clientID == token.SSOIssuer {
 			return ssoMasterKeyFetcher()
 		}
@@ -81,7 +81,7 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	}), watcher)
 
 	// 服务密钥：audience → service.Key（id="aegis" 时返回 SSO master key）
-	serviceKeyStore := key.NewStore(key.FetcherFunc(func(ctx context.Context, audience string) ([][]byte, error) {
+	serviceKeyStore := key.NewNamedStore("service", key.FetcherFunc(func(ctx context.Context, audience string) ([][]byte, error) {
 		if audience == token.SSOAudience {
 			return ssoMasterKeyFetcher()
 		}
@@ -93,7 +93,7 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	}), watcher)
 
 	// 应用密钥：clientID → app.Key
-	appKeyStore := key.NewStore(key.FetcherFunc(func(ctx context.Context, clientID string) ([][]byte, error) {
+	appKeyStore := key.NewNamedStore("app", key.FetcherFunc(func(ctx context.Context, clientID string) ([][]byte, error) {
 		app, err := cacheManager.GetApplication(ctx, clientID)
 		if err != nil {
 			return nil, fmt.Errorf("get application: %w", err)

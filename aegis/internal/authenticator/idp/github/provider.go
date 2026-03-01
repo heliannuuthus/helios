@@ -243,6 +243,11 @@ func (p *Provider) getPrimaryEmail(ctx context.Context, accessToken string) stri
 	return fallbackEmail
 }
 
+// Resolve 社交登录不支持通过 principal 本地查找
+func (*Provider) Resolve(_ context.Context, _ string) (*models.TUserInfo, error) {
+	return nil, errors.New("github provider does not support resolve")
+}
+
 // FetchAdditionalInfo 补充获取用户信息
 func (*Provider) FetchAdditionalInfo(ctx context.Context, infoType string, params ...any) (*idp.AdditionalInfo, error) {
 	return nil, fmt.Errorf("GitHub does not support fetching %s", infoType)

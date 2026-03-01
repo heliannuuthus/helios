@@ -68,14 +68,10 @@ func (s *ServiceAccessToken) Type() TokenType {
 	return TokenTypeSAT
 }
 
-// build 实现 tokenBuilder 接口（小写，内部使用）
-func (s *ServiceAccessToken) build() (*paseto.Token, error) {
-	return s.BuildPaseto()
-}
 
-// BuildPaseto 构建 PASETO Token（不包含签名）
-// ServiceAccessToken 没有 footer（无用户信息）
-func (s *ServiceAccessToken) BuildPaseto() (*paseto.Token, error) {
+
+// Build 构建 PASETO Token（不包含签名）
+func (s *ServiceAccessToken) Build() (*paseto.Token, error) {
 	t := paseto.NewToken()
 	if err := s.SetStandardClaims(&t); err != nil {
 		return nil, fmt.Errorf("set standard claims: %w", err)

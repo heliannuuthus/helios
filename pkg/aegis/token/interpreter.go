@@ -139,7 +139,7 @@ func (i *Interpreter) Decryptor(audience string) *Decryptor {
 func (i *Interpreter) decryptUserSub(ctx context.Context, encryptedSub, audience string) (*tokendef.UserInfo, error) {
 	decryptor := i.Decryptor(audience)
 
-	claimsJSON, _, err := decryptor.Decrypt(ctx, encryptedSub)
+	claimsJSON, err := decryptor.Decrypt(ctx, encryptedSub)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt sub: %w", err)
 	}

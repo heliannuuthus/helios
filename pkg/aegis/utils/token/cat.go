@@ -87,14 +87,10 @@ func (c *ClientAccessToken) Type() TokenType {
 	return TokenTypeCAT
 }
 
-// build 实现 tokenBuilder 接口（小写，内部使用）
-func (c *ClientAccessToken) build() (*paseto.Token, error) {
-	return c.BuildPaseto()
-}
 
-// BuildPaseto 构建 PASETO Token（不包含签名）
-// 注意：CAT 使用 sub 字段存储 clientID，而不是 cli 字段
-func (c *ClientAccessToken) BuildPaseto() (*paseto.Token, error) {
+
+// Build 构建 PASETO Token（不包含签名）
+func (c *ClientAccessToken) Build() (*paseto.Token, error) {
 	now := time.Now()
 	t := paseto.NewToken()
 

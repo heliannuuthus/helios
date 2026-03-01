@@ -100,7 +100,8 @@ func (i *Issuer) sign(ctx context.Context, token *paseto.Token) (string, error) 
 		return "", fmt.Errorf("marshal footer: %w", err)
 	}
 
-	return token.V4Sign(sk, footer), nil
+	token.SetFooter(footer)
+	return token.V4Sign(sk, nil), nil
 }
 
 // Issue issues a default CAT token.

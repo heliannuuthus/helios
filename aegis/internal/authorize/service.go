@@ -110,7 +110,7 @@ func (s *Service) ComputeGrantedScopes(flow *types.AuthFlow) ([]string, error) {
 		return nil, fmt.Errorf("connection %s not found in flow", flow.Connection)
 	}
 
-	requestedScopes := []string(flow.Request.Scope)
+	requestedScopes := helpers.ParseScopes(strings.Join(flow.Request.Scope, " "))
 	hasOpenID := false
 	for _, scope := range requestedScopes {
 		if scope == ScopeOpenID {
@@ -128,6 +128,8 @@ func (s *Service) ComputeGrantedScopes(flow *types.AuthFlow) ([]string, error) {
 	}
 
 	grantedScopes := helpers.ScopeIntersection(requestedScopes, allowedScopes)
+
+	logger.Debugf("[Authorize] Scope 计算结果 - Requested: %q, Allowed: %q, Granted: %q", requestedScopes, allowedScopes, grantedScopes)
 
 	hasValidScope := false
 	for _, scope := range grantedScopes {

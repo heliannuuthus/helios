@@ -83,7 +83,7 @@ func GetDomainSignKeys(domainID string) []string {
 	return strings.Split(keyStr, ",")
 }
 
-// GetDomainSignKeysBytes 获取域签名密钥列表（解码后的 32 字节 Ed25519 seed）
+// GetDomainSignKeysBytes 获取域签名密钥列表（解码后的 48 字节 seed: 16-byte salt + 32-byte key）
 func GetDomainSignKeysBytes(domainID string) ([][]byte, error) {
 	keyStrs := GetDomainSignKeys(domainID)
 	if len(keyStrs) == 0 {
@@ -123,7 +123,7 @@ func GetAegisSecretKey() string {
 	return Cfg().GetString("aegis.secret-key")
 }
 
-// GetAegisSecretKeyBytes 获取 Hermes 服务解密密钥（32 字节 raw key）
+// GetAegisSecretKeyBytes 获取 Hermes 服务密钥（48 字节 seed: 16-byte salt + 32-byte key）
 func GetAegisSecretKeyBytes() ([]byte, error) {
 	secretStr := GetAegisSecretKey()
 	if secretStr == "" {
@@ -133,8 +133,8 @@ func GetAegisSecretKeyBytes() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("解码 hermes aegis.secret-key 失败: %w", err)
 	}
-	if len(secretBytes) != 32 {
-		return nil, fmt.Errorf("hermes aegis.secret-key 长度错误: 期望 32 字节, 实际 %d 字节", len(secretBytes))
+	if len(secretBytes) != 48 {
+		return nil, fmt.Errorf("hermes aegis.secret-key 长度错误: 期望 48 字节 seed, 实际 %d 字节", len(secretBytes))
 	}
 	return secretBytes, nil
 }

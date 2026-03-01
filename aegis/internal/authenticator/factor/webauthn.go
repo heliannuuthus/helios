@@ -27,17 +27,8 @@ func (*WebAuthnProvider) Type() string {
 	return TypeWebAuthn
 }
 
-// Initiate 构建 Challenge（WebAuthn channel 可空，支持 discoverable login）
-// channel: user_id（可空）
-// params: clientID, audience, bizType
-func (p *WebAuthnProvider) Initiate(ctx context.Context, channel string, params ...any) (*InitiateResult, error) {
-	ip, err := ParseInitiateParams(params...)
-	if err != nil {
-		return nil, err
-	}
-
-	challenge := NewChallenge(types.ChannelTypeWebAuthn, channel, ip)
-	return &InitiateResult{Challenge: challenge}, nil
+func (p *WebAuthnProvider) Initiate(_ context.Context, _ *types.Challenge) error {
+	return nil
 }
 
 // Verify 验证 WebAuthn 凭证

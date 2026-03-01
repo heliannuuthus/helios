@@ -113,6 +113,20 @@ func (p *Provider) getCredential(ctx context.Context, identifier string) (*crede
 	}, nil
 }
 
+// Resolve 通过 principal 查找用户信息（不验证凭证）
+func (p *Provider) Resolve(ctx context.Context, principal string) (*models.TUserInfo, error) {
+	cred, err := p.getCredential(ctx, principal)
+	if err != nil {
+		return nil, err
+	}
+	return &models.TUserInfo{
+		TOpenID:  cred.OpenID,
+		Nickname: cred.Nickname,
+		Email:    cred.Email,
+		Picture:  cred.Picture,
+	}, nil
+}
+
 // FetchAdditionalInfo 补充获取用户信息
 func (*Provider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...any) (*idp.AdditionalInfo, error) {
 	return nil, fmt.Errorf("user provider does not support fetching %s", infoType)

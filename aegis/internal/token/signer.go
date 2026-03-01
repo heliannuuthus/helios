@@ -56,6 +56,8 @@ func (s *Signer) updateKey(rawKey []byte) error {
 		return fmt.Errorf("compute pid: %w", err)
 	}
 
+	logger.Debugf("[Signer] updateKey id=%s, key len=%d, salt_hex=%x, derived pid=%s", s.id, len(rawKey), rawKey[:16], pid)
+
 	s.mu.Lock()
 	s.secretKey = sk
 	s.pid = pid
@@ -97,7 +99,9 @@ func (s *Signer) Sign(ctx context.Context, token *paseto.Token) (string, error) 
 		return "", fmt.Errorf("marshal footer: %w", err)
 	}
 
-	return token.V4Sign(sk, footer), nil
+	token.SetFooter(footer)
+	logger.Debugf("[Signer] signing token for id=%s with pid=%s", s.id, pid)
+	return token.V4Sign(sk, nil), nil
 }
 
 // GetPID returns the current PASERK pid.

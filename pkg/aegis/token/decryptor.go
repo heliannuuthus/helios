@@ -2,9 +2,7 @@ package token
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
-	"strings"
 	"sync"
 
 	"aidanwoods.dev/go-paseto"
@@ -85,35 +83,20 @@ func (d *Decryptor) ensure(ctx context.Context) error {
 	return d.updateKey(rawKey)
 }
 
-func (d *Decryptor) Decrypt(ctx context.Context, encrypted string) ([]byte, string, error) {
+func (d *Decryptor) Decrypt(ctx context.Context, encrypted string) ([]byte, error) {
 	if err := d.ensure(ctx); err != nil {
-		return nil, "", fmt.Errorf("load key: %w", err)
+		return nil, fmt.Errorf("load key: %w", err)
 	}
 
 	d.mu.RLock()
 	sk := d.symmetricKey
 	d.mu.RUnlock()
 
-	parts := strings.Split(encrypted, ".")
-	if len(parts) < 4 || parts[3] == "" {
-		return nil, "", fmt.Errorf("%w: no footer in local token", pasetokit.ErrKIDNotFound)
-	}
-
-	footerBytes, err := base64.RawURLEncoding.DecodeString(parts[3])
+	parser := paseto.NewParserWithoutExpiryCheck()
+	t, err := parser.ParseV4Local(sk, encrypted, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: decode local footer: %w", pasetokit.ErrInvalidFooter, err)
+		return nil, fmt.Errorf("decrypt inner token: %w", err)
 	}
 
-	f, err := pasetokit.ParseFooter(footerBytes)
-	if err != nil {
-		return nil, "", err
-	}
-
-	parser := paseto.NewParser()
-	t, err := parser.ParseV4Local(sk, encrypted, footerBytes)
-	if err != nil {
-		return nil, "", fmt.Errorf("decrypt inner token: %w", err)
-	}
-
-	return t.ClaimsJSON(), f.KID, nil
+	return t.ClaimsJSON(), nil
 }
