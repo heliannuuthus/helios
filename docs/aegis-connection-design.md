@@ -1,7 +1,7 @@
 # Aegis Connection 设计与实现文档
 
-> 涵盖：Connection 设计模型、数据结构、认证流程、API 端点、安全机制、客户端集成架构
-> 更新日期：2026-02-17
+> 涵盖：Connection 设计模型、数据结构、认证流程、Delegate 机制、API 端点、安全机制、客户端集成架构
+> 更新日期：2026-02-27
 
 ---
 
@@ -12,11 +12,12 @@
 3. [Connection 类型体系](#3-connection-类型体系)
 4. [API 端点](#4-api-端点)
 5. [认证流程](#5-认证流程)
-6. [缓存与状态管理](#6-缓存与状态管理)
-7. [错误处理体系](#7-错误处理体系)
-8. [安全机制与设计要点](#8-安全机制与设计要点)
-9. [客户端（Atlas）集成架构](#9-客户端atlas集成架构)
-10. [附录](#10-附录)
+6. [Delegate 实现设计](#6-delegate-实现设计)
+7. [缓存与状态管理](#7-缓存与状态管理)
+8. [错误处理体系](#8-错误处理体系)
+9. [安全机制与设计要点](#9-安全机制与设计要点)
+10. [客户端（Atlas）集成架构](#10-客户端atlas集成架构)
+11. [附录](#11-附录)
 
 ---
 
@@ -338,9 +339,244 @@ Strategy 和 Delegate 是同级替代关系，用户选择其中一种路径完�
 
 ---
 
-## 6. 缓存与状态管理
+## 6. Delegate 实现设计
 
-### 6.1 本地缓存（Ristretto）
+> Delegate 机制的语义见 [2.1 ConnectionConfig](#21-connectionconfig)，本节聚焦实现架构和运行时行为。
+
+### 6.1 设计目标
+
+Delegate 解决的核心问题：让非密码类的认证因子（如 email_otp、totp、webauthn）能**替代** IDP 的主认证方式直接完成登录，而不是作为主认证的后置附加验证。
+
+设计约束：
+
+| 约束 | 说明 |
+|------|------|
+| 用户解析归属于 IDP | delegate 验证的是因子，但登录的身份必须从 delegating IDP 解析 |
+| ChallengeToken 必须绑定 IDP | 防止跨 IDP 滥用同一 ChallengeToken |
+| Factor 不持有用户查询逻辑 | factor.Provider 只做验证，不负责用户查找 |
+| 扩展新 delegate 不改 IDP | 只需注册新的 FactorAuthenticator，IDP Provider 无需修改 |
+
+### 6.2 核心接口
+
+#### IdentityResolver
+
+IDP Provider 实现此接口后才能作为 delegating IDP，允许 delegate 验证成功后通过 principal 查找用户：
+
+```go
+// authenticator/registry.go
+type IdentityResolver interface {
+    Resolve(ctx context.Context, principal string) (*models.TUserInfo, error)
+}
+```
+
+| IDP Provider | 实现 IdentityResolver | 说明 |
+|-------------|----------------------|------|
+| user | 是 | 通过 identifier 查找 C 端用户 |
+| staff | 是 | 通过 identifier 查找 B 端运营人员 |
+| github | 否 | OAuth IDP，无 principal → 用户的映射 |
+| google | 否 | OAuth IDP，同上 |
+| passkey | 否 | WebAuthn 自身即认证方式 |
+| wechat-mp | 否 | 小程序 IDP，无 principal 查找能力 |
+
+> 只有支持 `Resolve` 的 IDP 才能在配置中声明 `delegate`。
+
+#### FactorAuthenticator
+
+包装 factor.Provider，同时实现 `Authenticator`（Login 流程）和 `ChallengeVerifier`（Challenge 流程）两个接口：
+
+```
+FactorAuthenticator
+├── Authenticator 接口  → Login 流程：验证 ChallengeToken，通过 IdentityResolver 解析用户
+└── ChallengeVerifier 接口 → Challenge 流程：委托 factor.Provider.Initiate / Verify
+```
+
+Login 阶段不调用 `provider.Verify`（因为 proof 已经是 ChallengeToken 而非原始验证码），而是统一走 ChallengeToken 验证逻辑。
+
+### 6.3 配置来源
+
+Delegate 列表的配置链路：
+
+```
+数据库 t_application_idp_config
+   ├── type: "staff"
+   ├── delegate: "email_otp,totp"       ← 逗号分隔存储
+   └── GetDelegateList() → ["email_otp", "totp"]
+                 │
+                 ▼
+authenticate.Service.SetConnections()
+   ├── 读取 ApplicationIDPConfig
+   ├── 合并 delegate 列表到 IDP 的 ConnectionConfig.Delegate
+   └── 把被引用的 factor connections 加入 ConnectionMap
+                 │
+                 ▼
+ConnectionMap (AuthFlow 中的运行时状态)
+   ├── "staff": { type: "idp", delegate: ["email_otp", "totp"], ... }
+   ├── "email_otp": { type: "factor", ... }   ← 自动加入
+   └── "totp": { type: "factor", ... }        ← 自动加入
+```
+
+`SetConnections` 中 delegate 引用的 connection 会被自动加入 `ConnectionMap`，确保前端 `ConnectionsMap.delegated` 列表中包含所有可用的 delegate 选项。
+
+### 6.4 ChallengeToken 的 IDP 绑定
+
+ChallengeToken 的 `typ` 字段编码了 delegating IDP 前缀，格式为 `{delegatingIDP}:{bizType}`：
+
+| 场景 | typ 值 | 含义 |
+|------|--------|------|
+| staff 的 email_otp 代理登录 | `staff:verify` | 由 staff Challenge 签发，用于 staff 登录 |
+| user 的 totp 代理登录 | `user:verify` | 由 user Challenge 签发，用于 user 登录 |
+
+签发时（Challenge Handler）：
+
+```go
+// handler.go issueChallengeToken
+typ := delegatingIDP + ":" + challenge.Type   // e.g. "staff:verify"
+```
+
+验证时（FactorAuthenticator.Authenticate）：
+
+```go
+expectedPrefix := delegatingIDP + ":"
+if !strings.HasPrefix(ct.GetType(), expectedPrefix) {
+    return false, "challenge token type is not valid for IDP"
+}
+```
+
+这保证了：
+- staff IDP 签发的 ChallengeToken 不能用于 user IDP 的 delegate 登录
+- 跨 IDP 的 ChallengeToken 无法被滥用
+
+### 6.5 Delegate 登录完整时序
+
+```
+前端                              后端
+
+1. GET /auth/connections
+   ──────────────────────────────>
+   返回 ConnectionsMap:
+   {
+     idp: [{ connection: "staff",
+             delegate: ["email_otp"],
+             require: ["captcha"] }],
+     delegated: [{ connection: "email_otp" }],
+     required: [{ connection: "captcha" }]
+   }
+   <──────────────────────────────
+
+2. POST /auth/challenge
+   { client_id, audience,
+     type: "staff:verify",            ← typ 编码了 delegating IDP
+     channel_type: "email_otp",
+     channel: "admin@example.com" }
+   ──────────────────────────────>
+   Validate → ProbeIPRate → NewChallenge
+   → StrikeRequirement → Initiate(发邮件) → Save
+   { challenge_id: "cid_xxx" }
+   <──────────────────────────────
+
+3. POST /auth/challenge/:cid
+   { type: "email_otp",
+     proof: "382910" }
+   ──────────────────────────────>
+   VerifyProof ✓ → Delete
+   → issueChallengeToken(typ="staff:verify", sub="admin@example.com")
+   { verified: true,
+     challenge_token: "v4.public.xxx" }
+   <──────────────────────────────
+
+4. POST /auth/login
+   { connection: "email_otp",         ← 提交 factor connection
+     proof: "v4.public.xxx" }          ← ChallengeToken 作为 proof
+   ──────────────────────────────>
+
+   FactorAuthenticator.Authenticate:
+   ┌─────────────────────────────────────────────────┐
+   │ a. tokenVerifier.Verify(proof) → ChallengeToken │
+   │ b. findDelegatingIDP("email_otp")               │
+   │    → 遍历 ConnectionMap，找到 staff.delegate     │
+   │      包含 "email_otp" → return "staff"           │
+   │ c. HasPrefix(ct.typ, "staff:") ✓                 │
+   │ d. Registry.Get("staff").(IdentityResolver)      │
+   │ e. resolver.Resolve("admin@example.com")          │
+   │    → 查找 staff 用户 → 返回 UserInfo             │
+   │ f. flow.AddIdentity(identity)                     │
+   │ g. 标记 email_otp.Verified = true                │
+   │    标记 staff.Verified = true                     │
+   └─────────────────────────────────────────────────┘
+
+   → resolveUser → authorizeAndGenerateCode
+   → 300 + Location: redirect_uri?code=xxx&state=yyy
+   <──────────────────────────────
+```
+
+### 6.6 findDelegatingIDP 查找算法
+
+```go
+// authenticate/factor.go
+func findDelegatingIDP(flow *types.AuthFlow, connection string) string {
+    for name, cfg := range flow.ConnectionMap {
+        if cfg.Type != types.ConnTypeIDP {
+            continue
+        }
+        for _, d := range cfg.Delegate {
+            if d == connection {
+                return name
+            }
+        }
+    }
+    return ""
+}
+```
+
+遍历 `ConnectionMap` 中所有 IDP 类型的 connection，检查其 `Delegate` 列表是否包含当前 factor connection。一个 factor 理论上只被一个 IDP delegate（如果多个 IDP delegate 了同一 factor，返回第一个匹配的）。
+
+### 6.7 Handler 层 Delegate 已验证跳过
+
+Login Handler 在执行认证前检查当前 connection 的 `Verified` 状态：
+
+```go
+// handler.go Login
+connCfg := flow.GetCurrentConnConfig()
+if connCfg != nil && !connCfg.Verified {
+    // 执行认证...
+} else {
+    // 跳过认证（delegate 完成时 FactorAuthenticator 同步标记了 IDP.Verified）
+}
+```
+
+FactorAuthenticator 在验证成功后会同时标记：
+- 当前 factor connection 的 `Verified = true`
+- delegating IDP connection 的 `Verified = true`
+
+这使得后续对 IDP connection 的登录请求可以直接跳过认证步骤。
+
+### 6.8 Delegate 与 MFA 的区别
+
+| 维度 | Delegate | MFA |
+|------|----------|-----|
+| 本质 | 主认证的替代路径 | 主认证的追加加固 |
+| 触发 | 用户主动选择 | 风险评估动态触发 |
+| 时机 | 代替主认证 | 主认证之后 |
+| 因子数量 | 单因子 | ≥ 2 个不同类别因子 |
+| 前端展示 | ConnectionsMap.delegated 预展示 | 不预展示（运行时决策） |
+| 配置字段 | ConnectionConfig.Delegate | MFA 独立配置（见 mfa-orchestration-design.md） |
+
+两者共同点：都复用 Challenge 能力签发 ChallengeToken，但编排层赋予了完全不同的语义。
+
+### 6.9 扩展新 Delegate 类型
+
+新增 delegate 类型（如 sms_otp）的步骤：
+
+1. **实现 factor.Provider**：创建 `SmsOTPProvider`，实现 `Type() / Initiate() / Verify() / Prepare()`
+2. **注册到 Registry**：`NewFactorAuthenticator(smsOTPProvider, ac, tokenVerifier)` → `registry.Register(...)`
+3. **数据库配置**：在 `t_application_idp_config.delegate` 字段中添加 `sms_otp`
+4. **不需要修改任何 IDP Provider**：只要 IDP 实现了 `IdentityResolver`（如 user、staff），delegate 机制自动生效
+
+---
+
+## 7. 缓存与状态管理
+
+### 7.1 本地缓存（Ristretto）
 
 | 缓存 | Key | Value | 用途 |
 |------|-----|-------|------|
@@ -354,7 +590,7 @@ Strategy 和 Delegate 是同级替代关系，用户选择其中一种路径完�
 | appIDPConfigCache | app_id | []*ApplicationIDPConfig | 应用 IDP 配置 |
 | pubKeyCache | client_id | KeyEntry | 公钥 |
 
-### 6.2 Redis 数据
+### 7.2 Redis 数据
 
 | Key 格式 | 用途 | TTL |
 |----------|------|-----|
@@ -365,7 +601,7 @@ Strategy 和 Delegate 是同级替代关系，用户选择其中一种路径完�
 | auth:ch:{challengeID} | Challenge 会话 | 5 分钟 |
 | auth:otp:email-otp:{challengeID} | Email OTP 验证码 | 5 分钟 |
 
-### 6.3 AuthFlow 生命周期
+### 7.3 AuthFlow 生命周期
 
 ```
 创建 -> SaveFlow (Redis SET + TTL)
@@ -380,7 +616,7 @@ GetAndValidateFlow -> 检查过期 -> RenewFlow -> SaveFlow
 
 ---
 
-## 7. 错误处理体系
+## 8. 错误处理体系
 
 ### 设计原则
 
@@ -426,9 +662,9 @@ GetAndValidateFlow -> 检查过期 -> RenewFlow -> SaveFlow
 
 ---
 
-## 8. 安全机制与设计要点
+## 9. 安全机制与设计要点
 
-### 8.1 OAuth 2.1 + PKCE
+### 9.1 OAuth 2.1 + PKCE
 
 - 强制 S256 Code Challenge Method（不允许 plain）
 - Token 交换必须提供 code_verifier
@@ -463,20 +699,20 @@ OAuth 2.1 明确规定（Section 2.3.1）：
 客户端 state → AuthRequest.State → AuthorizationCode.State → redirect_uri?code=xxx&state=yyy
 ```
 
-### 8.2 Session Cookie
+### 9.2 Session Cookie
 
 - Secure=true (仅 HTTPS)
 - HttpOnly=true (防 XSS)
 - SameSite=None (跨站 OAuth)
 
-### 8.3 Token
+### 9.3 Token
 
 - PASETO v4 (无算法混淆风险)
 - Access Token 短 TTL (默认2h), 不可吊销
 - Refresh Token 存 Redis, 可吊销, 数量上限 (默认10个)
 - Refresh Token 超过上限时自动删除最旧的
 
-### 8.4 Connection 安全
+### 9.4 Connection 安全
 
 - 系统账号(user/staff)错误不泄露具体原因(统一返回 "authentication failed")
 - Captcha 前置验证: 高风险操作需先通过人机验证。访问控制仅保留 ACAllowed / ACCaptcha 两级，由 Strike 记录每次尝试并决策
@@ -484,7 +720,7 @@ OAuth 2.1 明确规定（Section 2.3.1）：
 - MFA: 主认证成功后由风险评估动态触发的追加验证阶段，详见 mfa-orchestration-design.md
 - 域隔离: Consumer/Platform 分域, IDP 不可跨域
 
-### 8.5 密码学
+### 9.5 密码学
 
 - 敏感字段加密存储 (AES-GCM)
 - Token 签名 Ed25519, 支持密钥轮换
@@ -492,11 +728,11 @@ OAuth 2.1 明确规定（Section 2.3.1）：
 
 ---
 
-## 9. 客户端（Atlas）集成架构
+## 10. 客户端（Atlas）集成架构
 
 Atlas 作为 OAuth 2.1 客户端应用，通过 `@aegis/sdk` 与 Aegis 认证服务器交互。
 
-### 9.1 整体架构
+### 10.1 整体架构
 
 ```
 Atlas 前端                         Aegis 认证服务
@@ -543,7 +779,7 @@ Atlas 前端                         Aegis 认证服务
 └──────────────────┘
 ```
 
-### 9.2 SDK 存储布局（localStorage）
+### 10.2 SDK 存储布局（localStorage）
 
 | Key | 用途 | 生命周期 |
 |-----|------|----------|
@@ -556,7 +792,7 @@ Atlas 前端                         Aegis 认证服务
 | `aegis_audience` | 目标服务 audience | authorize 时写入，handleCallback 时消费 |
 | `aegis_redirect_uri` | 回调地址 | authorize 时写入，handleCallback 时消费 |
 
-### 9.3 关键设计决策
+### 10.3 关键设计决策
 
 **1. redirect_uri 固定为 `/auth/callback`**
 
@@ -590,7 +826,7 @@ React StrictMode 在开发环境下会**双重执行** useEffect，导致 `initi
 
 ---
 
-## 10. 附录
+## 11. 附录
 
 ### 附录 A: ConnectionsMap 响应示例
 
