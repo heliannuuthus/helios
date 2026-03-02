@@ -94,7 +94,8 @@ type Challenge struct {
 	IP          string            `json:"ip,omitempty"`       // 客户端 IP（用于 IP 维度限流）
 	CreatedAt   time.Time         `json:"created_at"`
 	ExpiresAt   time.Time         `json:"expires_at"`
-	Data        map[string]any    `json:"data,omitempty"` // 临时验证数据（如 masked_email、session 等）
+	RetryAfter  int               `json:"-"` // 限流冷却秒数（仅运行时使用，不持久化）
+	Data        map[string]any    `json:"data,omitempty"`
 }
 
 // IsUnmet 检查是否有未完成的前置条件

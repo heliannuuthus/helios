@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/heliannuuthus/helios/aegis/config"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/captcha"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 )
@@ -40,18 +39,8 @@ func (*CaptchaProvider) Type() string {
 	return TypeCaptcha
 }
 
-// Initiate captcha 无副作用，直接构建 Challenge
-func (p *CaptchaProvider) Initiate(_ context.Context, channel string, params ...any) (*InitiateResult, error) {
-	ip := parseInitiateParams(params...)
-
-	challenge := types.NewChallenge(
-		ip.clientID, ip.audience, ip.bizType,
-		types.ChannelTypeCaptcha, channel,
-		config.GetChallengeBusinessExpiresIn(),
-		nil, "", // limits, ip - captcha 不需要限流
-	)
-
-	return &InitiateResult{Challenge: challenge}, nil
+func (p *CaptchaProvider) Initiate(_ context.Context, _ *types.Challenge) error {
+	return nil
 }
 
 // Verify 验证 captcha proof
@@ -77,7 +66,6 @@ func (p *CaptchaProvider) Verify(ctx context.Context, proof string, params ...an
 	return verifier.Verify(ctx, proof, remoteIP)
 }
 
-// getVerifier 根据 strategy 获取对应的 verifier
 func (p *CaptchaProvider) getVerifier(strategy string) (captcha.Verifier, error) {
 	if strategy == "" {
 		strategy = p.defaultStrategy
@@ -90,7 +78,6 @@ func (p *CaptchaProvider) getVerifier(strategy string) (captcha.Verifier, error)
 }
 
 // Prepare 返回前端公开配置
-// 返回默认 strategy 的配置（用于前端渲染）
 func (p *CaptchaProvider) Prepare() *types.ConnectionConfig {
 	strategies := make([]string, 0, len(p.verifiers))
 	var identifier string
@@ -118,32 +105,4 @@ func (p *CaptchaProvider) GetIdentifier() string {
 // GetProvider 获取默认 strategy 名称
 func (p *CaptchaProvider) GetProvider() string {
 	return p.defaultStrategy
-}
-
-// initiateParams Initiate 通用参数
-type initiateParams struct {
-	clientID string
-	audience string
-	bizType  string
-}
-
-// parseInitiateParams 解析 Initiate 参数
-func parseInitiateParams(params ...any) *initiateParams {
-	var p initiateParams
-	if len(params) >= 1 {
-		if v, ok := params[0].(string); ok {
-			p.clientID = v
-		}
-	}
-	if len(params) >= 2 {
-		if v, ok := params[1].(string); ok {
-			p.audience = v
-		}
-	}
-	if len(params) >= 3 {
-		if v, ok := params[2].(string); ok {
-			p.bizType = v
-		}
-	}
-	return &p
 }

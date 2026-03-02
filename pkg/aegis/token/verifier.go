@@ -3,9 +3,7 @@ package token
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/base64"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -52,7 +50,7 @@ func NewVerifier(provider key.Provider, id string) *Verifier {
 
 func (v *Verifier) updateKeys(rawKeys [][]byte) error {
 	entries := make([]keyEntry, 0, len(rawKeys))
-	for _, raw := range rawKeys {
+	for i, raw := range rawKeys {
 		seed, err := pasetokit.ParseSeed(raw)
 		if err != nil {
 			return fmt.Errorf("parse seed: %w", err)
@@ -65,6 +63,7 @@ func (v *Verifier) updateKeys(rawKeys [][]byte) error {
 		if err != nil {
 			return fmt.Errorf("compute pid: %w", err)
 		}
+		logger.Debugf("[Verifier] updateKeys id=%s, key[%d] len=%d, salt_hex=%x, derived pid=%s", v.id, i, len(raw), raw[:16], pid)
 		entries = append(entries, keyEntry{pid: pid, publicKey: pk})
 	}
 
@@ -120,31 +119,26 @@ func (v *Verifier) Verify(ctx context.Context, tokenString string) (*paseto.Toke
 		return nil, fmt.Errorf("extract kid: %w", err)
 	}
 
+	v.mu.RLock()
+	knownPIDs := make([]string, len(v.keys))
+	for i, e := range v.keys {
+		knownPIDs[i] = e.pid
+	}
+	v.mu.RUnlock()
+	logger.Debugf("[Verifier] id=%s, token kid=%s, known pids=%v", v.id, kid, knownPIDs)
+
 	pk, err := v.findKeyByKID(kid)
 	if err != nil {
 		return nil, fmt.Errorf("find key: %w", err)
 	}
 
-	footerBytes, err := extractFooterBytes(tokenString)
-	if err != nil {
-		logger.Warnf("failed to extract footer bytes: %v", err)
-	}
-
 	parser := paseto.NewParser()
 	parser.AddRule(paseto.ValidAt(time.Now()))
 
-	pasetoToken, err := parser.ParseV4Public(pk, tokenString, footerBytes)
+	pasetoToken, err := parser.ParseV4Public(pk, tokenString, nil)
 	if err != nil {
 		return nil, fmt.Errorf("signature verification failed: %w", err)
 	}
 
 	return pasetoToken, nil
-}
-
-func extractFooterBytes(tokenString string) ([]byte, error) {
-	parts := strings.Split(tokenString, ".")
-	if len(parts) < 4 || parts[3] == "" {
-		return nil, nil
-	}
-	return base64.RawURLEncoding.DecodeString(parts[3])
 }

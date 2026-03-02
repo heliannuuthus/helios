@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/heliannuuthus/helios/aegis/internal/types"
+	"github.com/heliannuuthus/helios/hermes/models"
 )
 
 // Authenticator 统一认证器接口
@@ -33,13 +34,17 @@ type Authenticator interface {
 // Challenge Service 通过类型断言 authenticator.(ChallengeVerifier) 发现此能力
 type ChallengeVerifier interface {
 	// Initiate 启动 Challenge（执行副作用：发邮件、发短信等）
-	// 无副作用的渠道（如 captcha、totp）也需实现，可直接返回
-	// 返回 retryAfter：下次可重发的冷却时间（秒）
-	// 被限流时返回 RateLimitedError
-	Initiate(ctx context.Context, challenge *types.Challenge) (retryAfter int, err error)
+	// 限流冷却时间写入 challenge.RetryAfter
+	Initiate(ctx context.Context, challenge *types.Challenge) error
 
 	// Verify 验证 Challenge proof
 	Verify(ctx context.Context, challenge *types.Challenge, proof string) (bool, error)
+}
+
+// IdentityResolver 身份解析能力接口
+// IDP Authenticator 可实现此接口，允许 delegate 验证成功后通过 principal 查找用户信息
+type IdentityResolver interface {
+	Resolve(ctx context.Context, principal string) (*models.TUserInfo, error)
 }
 
 // Exchanger 一步交换能力接口（用于 Exchange 类型的 ChannelType）

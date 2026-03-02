@@ -93,6 +93,11 @@ func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*models
 	}, nil
 }
 
+// Resolve 小程序不支持通过 principal 本地查找
+func (*MPProvider) Resolve(_ context.Context, _ string) (*models.TUserInfo, error) {
+	return nil, errors.New("wechat mp provider does not support resolve")
+}
+
 // FetchAdditionalInfo 补充获取用户信息
 func (p *MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, params ...any) (*idp.AdditionalInfo, error) {
 	switch infoType {

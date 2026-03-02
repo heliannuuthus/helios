@@ -82,12 +82,10 @@ func (s *Service) BuildRequired(challenge *types.Challenge) bool {
 	}
 }
 
-// Initiate resolves the verifier and executes Initiate, returns retryAfter (冷却时间)
-// 被限流时返回 TooManyRequestsError
-func (s *Service) Initiate(ctx context.Context, challenge *types.Challenge) (retryAfter int, err error) {
+func (s *Service) Initiate(ctx context.Context, challenge *types.Challenge) error {
 	verifier, err := s.getChallengeVerifier(string(challenge.ChannelType))
 	if err != nil {
-		return 0, err
+		return err
 	}
 	return verifier.Initiate(ctx, challenge)
 }
@@ -177,9 +175,11 @@ func (s *Service) Delete(ctx context.Context, challengeID string) error {
 func (s *Service) GetAndValidate(ctx context.Context, challengeID string) (*types.Challenge, error) {
 	ch, err := s.cache.GetChallenge(ctx, challengeID)
 	if err != nil {
-		return nil, autherrors.NewNotFound("challenge not found")
+		logger.Warnf("[Challenge] 获取 challenge 失败: %v", err)
+		return nil, autherrors.NewChallengeExpired("challenge not found or expired")
 	}
 	if ch.IsExpired() {
+		logger.Warnf("[Challenge] challenge 过期: %v", ch)
 		return nil, autherrors.NewChallengeExpired("challenge expired")
 	}
 	return ch, nil

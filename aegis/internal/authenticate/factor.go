@@ -80,6 +80,7 @@ func (a *FactorAuthenticator) Authenticate(ctx context.Context, flow *types.Auth
 
 	t, err := a.tokenVerifier.Verify(ctx, proof)
 	if err != nil {
+		logger.Errorf("[Factor] challenge-token 验证失败 - Factor: %s, Error: %v, ProofLen: %d", a.Type(), err, len(proof))
 		return false, autherrors.NewInvalidCredentials("invalid challenge token")
 	}
 
@@ -98,11 +99,34 @@ func (a *FactorAuthenticator) Authenticate(ctx context.Context, flow *types.Auth
 		return false, autherrors.NewInvalidRequestf("challenge token type %q is not valid for IDP %q", ct.GetType(), delegatingIDP)
 	}
 
+	// 通过 IDP Provider 查找用户信息并填充 identity
+	principal := ct.GetSubject()
+	idpAuth, ok := authenticator.GlobalRegistry().Get(delegatingIDP)
+	if !ok {
+		return false, autherrors.NewServerErrorf("delegating IDP %q not registered", delegatingIDP)
+	}
+	resolver, ok := idpAuth.(authenticator.IdentityResolver)
+	if !ok {
+		return false, autherrors.NewServerErrorf("delegating IDP %q does not support identity resolve", delegatingIDP)
+	}
+	userInfo, err := resolver.Resolve(ctx, principal)
+	if err != nil {
+		logger.Errorf("[Factor] IDP 用户查找失败 - Factor: %s, IDP: %s, Principal: %s, Error: %v", a.Type(), delegatingIDP, principal, err)
+		return false, autherrors.NewInvalidCredentials("failed to resolve user for delegate")
+	}
+
+	domain := flow.Application.DomainID
+	identity := userInfo.ToUserIdentity(domain, delegatingIDP)
+	flow.AddIdentity(identity, userInfo)
+
 	if connCfg := flow.GetCurrentConnConfig(); connCfg != nil {
 		connCfg.Verified = true
 	}
+	if idpCfg, ok := flow.ConnectionMap[delegatingIDP]; ok {
+		idpCfg.Verified = true
+	}
 
-	logger.Infof("[Factor] challenge-token 验证通过 - Factor: %s, IDP: %s, Type: %s", a.Type(), delegatingIDP, ct.GetType())
+	logger.Infof("[Factor] challenge-token 验证通过 - Factor: %s, IDP: %s, Type: %s, Principal: %s", a.Type(), delegatingIDP, ct.GetType(), principal)
 	return true, nil
 }
 
@@ -123,57 +147,33 @@ func findDelegatingIDP(flow *types.AuthFlow, connection string) string {
 
 // ==================== ChallengeVerifier 实现 ====================
 
-// Initiate 启动 Challenge（限流检查 + 委托 factor.Provider.Initiate）
-func (a *FactorAuthenticator) Initiate(ctx context.Context, challenge *types.Challenge) (int, error) {
-	// 1. 限流检查
-	retryAfter, err := a.probeRate(ctx, challenge)
-	if err != nil {
-		return 0, err
+func (a *FactorAuthenticator) Initiate(ctx context.Context, challenge *types.Challenge) error {
+	if err := a.probeRate(ctx, challenge); err != nil {
+		return err
 	}
-
-	// 2. 委托 Provider 执行副作用
-	result, err := a.provider.Initiate(ctx, challenge.Channel, challenge.ClientID, challenge.Audience, challenge.Type)
-	if err != nil {
-		return 0, err
-	}
-
-	// 将 Provider 产生的 Challenge 数据同步回原 Challenge（保持原 ID）
-	if result.Challenge != nil && result.Challenge.Data != nil {
-		for k, v := range result.Challenge.Data {
-			challenge.SetData(k, v)
-		}
-	}
-
-	// 优先使用 Provider 返回的 retryAfter（如果有）
-	if result.RetryAfter > 0 {
-		retryAfter = result.RetryAfter
-	}
-
-	return retryAfter, nil
+	return a.provider.Initiate(ctx, challenge)
 }
 
-// probeRate 检查限流（IP + Channel 维度），返回 retryAfter 或 error
-func (a *FactorAuthenticator) probeRate(ctx context.Context, challenge *types.Challenge) (retryAfter int, err error) {
-	// 1. IP 维度限流
+// probeRate 检查限流（IP + Channel 维度），结果写入 challenge.RetryAfter
+func (a *FactorAuthenticator) probeRate(ctx context.Context, challenge *types.Challenge) error {
 	if ip := challenge.IP; ip != "" {
 		ipKey := types.RateLimitKeyPrefixCreateIP + ip
 		ipPolicy := accessctl.NewPolicy(ipKey).RateLimits(config.GetRateLimitIPLimits())
 		if waitSeconds := a.ac.ProbeRate(ctx, ipPolicy); waitSeconds > 0 {
-			return 0, autherrors.NewTooManyRequests(waitSeconds)
+			return autherrors.NewTooManyRequests(waitSeconds)
 		}
 	}
 
-	// 2. Channel 维度限流（从 challenge.Limits 读取）
 	if len(challenge.Limits) > 0 {
 		channelKey := types.RateLimitKeyPrefixCreate + challenge.Audience + ":" + challenge.Type + ":" + challenge.Channel
 		policy := accessctl.NewPolicy(channelKey).RateLimits(challenge.Limits)
 		if waitSeconds := a.ac.ProbeRate(ctx, policy); waitSeconds > 0 {
-			return 0, autherrors.NewTooManyRequests(waitSeconds)
+			return autherrors.NewTooManyRequests(waitSeconds)
 		}
 	}
 
-	// 3. 没被限流，返回最小窗口作为前端倒计时
-	return config.GetRetryAfterFromLimits(challenge.Limits), nil
+	challenge.RetryAfter = config.GetRetryAfterFromLimits(challenge.Limits)
+	return nil
 }
 
 // Verify 验证 Challenge proof（委托 factor.Provider.Verify）

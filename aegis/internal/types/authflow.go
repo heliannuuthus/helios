@@ -23,6 +23,11 @@ const (
 	FlowStateFailed        FlowState = "failed"        // 已失败（发生错误）
 )
 
+// Extra key 常量
+const (
+	ExtraKeyStrategy = "strategy"
+)
+
 // AuthFlow 认证流程上下文
 // auth session = flowID
 type AuthFlow struct {
@@ -50,6 +55,9 @@ type AuthFlow struct {
 
 	// 授权结果
 	GrantedScopes []string `json:"granted_scopes,omitempty"`
+
+	// 额外数据（不序列化，仅在当前请求生命周期内有效）
+	Extra map[string]string `json:"-"`
 
 	// 错误状态（发生错误时填充）
 	Error *FlowError `json:"error,omitempty"`
@@ -235,6 +243,19 @@ type ConnectionConfig struct {
 	Verified   bool           `json:"verified,omitempty"`  // 运行时：是否已通过验证
 }
 
+// ContainsStrategy 判断给定 strategy 是否在当前 connection 的 strategy 列表中
+func (c *ConnectionConfig) ContainsStrategy(strategy string) bool {
+	if strategy == "" || len(c.Strategy) == 0 {
+		return false
+	}
+	for _, s := range c.Strategy {
+		if s == strategy {
+			return true
+		}
+	}
+	return false
+}
+
 // ConnectionsMap API 响应：按 ConnectionType 分类
 // JSON 示例: {"idp": [...], "vchan": [...], "factor": [...]}
 type ConnectionsMap map[ConnectionType][]*Connection
@@ -288,6 +309,11 @@ func (f *AuthFlow) Renew(ttl time.Duration) {
 // CanAuthenticate 检查是否可以进行认证
 func (f *AuthFlow) CanAuthenticate() bool {
 	return f.State == FlowStateInitialized && !f.IsExpired()
+}
+
+// SetConnectionMap 设置 ConnectionMap
+func (f *AuthFlow) SetConnectionMap(connMap map[string]*ConnectionConfig) {
+	f.ConnectionMap = connMap
 }
 
 // SetConnection 设置当前正在验证的 Connection
@@ -405,4 +431,22 @@ func (f *AuthFlow) Fail(err AuthErrorInterface) {
 // HasError 检查是否有错误
 func (f *AuthFlow) HasError() bool {
 	return f.Error != nil || f.State == FlowStateFailed
+}
+
+// ==================== Extra ====================
+
+// SetExtra 设置额外数据
+func (f *AuthFlow) SetExtra(key, value string) {
+	if f.Extra == nil {
+		f.Extra = make(map[string]string)
+	}
+	f.Extra[key] = value
+}
+
+// GetExtra 获取额外数据
+func (f *AuthFlow) GetExtra(key string) string {
+	if f.Extra == nil {
+		return ""
+	}
+	return f.Extra[key]
 }

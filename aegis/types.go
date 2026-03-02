@@ -1,6 +1,9 @@
 package aegis
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/heliannuuthus/helios/aegis/internal/token"
 )
 
@@ -31,6 +34,37 @@ type LoginRequest struct {
 	// 凭证证明（any 类型，由各 authenticator 自行解析）
 	// 可能是 string（password/OTP/captcha token）或复杂对象（OAuth 回调数据等）
 	Proof any `json:"proof,omitempty"`
+}
+
+// String 返回脱敏的日志表示
+func (r LoginRequest) String() string {
+	proofHint := "<nil>"
+	if r.Proof != nil {
+		switch v := r.Proof.(type) {
+		case string:
+			if len(v) > 0 {
+				proofHint = fmt.Sprintf("<string:%d>", len(v))
+			}
+		default:
+			proofHint = fmt.Sprintf("<%T>", v)
+		}
+	}
+	return fmt.Sprintf("{Connection: %s, Strategy: %s, Principal: %s, Proof: %s}",
+		r.Connection, r.Strategy, maskPrincipal(r.Principal), proofHint)
+}
+
+func maskPrincipal(s string) string {
+	if s == "" {
+		return ""
+	}
+	if idx := strings.Index(s, "@"); idx > 0 {
+		prefix := s[:min(3, idx)]
+		return prefix + "***" + s[idx:]
+	}
+	if len(s) <= 3 {
+		return s + "***"
+	}
+	return s[:3] + "***"
 }
 
 // LoginResponse 登录响应
@@ -76,4 +110,24 @@ type IdentifiedUser struct {
 // ConfirmIdentifyRequest 确认/取消关联请求
 type ConfirmIdentifyRequest struct {
 	Confirm bool `json:"confirm"` // true=确认关联，false=取消
+}
+
+// ApplicationInfo 应用信息
+type ApplicationInfo struct {
+	AppID   string  `json:"app_id"`
+	Name    string  `json:"name"`
+	LogoURL *string `json:"logo_url,omitempty"`
+}
+
+// ServiceInfo 服务信息
+type ServiceInfo struct {
+	ServiceID   string  `json:"service_id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+}
+
+// AuthContextResponse 认证上下文响应（/auth/context 接口返回给前端的公开信息）
+type AuthContextResponse struct {
+	Application *ApplicationInfo `json:"application,omitempty"`
+	Service     *ServiceInfo     `json:"service,omitempty"`
 }

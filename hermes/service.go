@@ -29,11 +29,10 @@ func NewService(db *gorm.DB) *Service {
 	}
 }
 
-// generateEncryptedKey 生成 AES-256 密钥并用数据库加密密钥加密
+// generateEncryptedKey 生成 48 字节 seed（16-byte salt + 32-byte key）并用数据库加密密钥加密
 // aad 用于 AES-GCM 加密的附加认证数据
 func generateEncryptedKey(aad string) (string, error) {
-	// 生成 AES-256 密钥
-	key := make([]byte, 32)
+	key := make([]byte, 48)
 	if _, err := rand.Read(key); err != nil {
 		return "", fmt.Errorf("生成密钥失败: %w", err)
 	}

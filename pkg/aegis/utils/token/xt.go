@@ -130,13 +130,8 @@ func (c *ChallengeToken) Type() TokenType {
 	return TokenTypeChallenge
 }
 
-// build 实现 tokenBuilder 接口
-func (c *ChallengeToken) build() (*paseto.Token, error) {
-	return c.BuildPaseto()
-}
-
-// BuildPaseto 构建 PASETO Token（不包含签名）
-func (c *ChallengeToken) BuildPaseto() (*paseto.Token, error) {
+// Build 构建 PASETO Token（不包含签名）
+func (c *ChallengeToken) Build() (*paseto.Token, error) {
 	t := paseto.NewToken()
 	if err := c.SetStandardClaims(&t); err != nil {
 		return nil, fmt.Errorf("set standard claims: %w", err)

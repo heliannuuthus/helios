@@ -3,10 +3,13 @@ package key
 import (
 	"context"
 	"sync"
+
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // Store 密钥存储，实现 Provider 接口
 type Store struct {
+	name    string
 	fetcher Fetcher
 	watcher Watcher
 
@@ -16,10 +19,16 @@ type Store struct {
 
 // NewStore 创建 Store
 func NewStore(fetcher Fetcher, watcher Watcher) *Store {
+	return NewNamedStore("", fetcher, watcher)
+}
+
+// NewNamedStore 创建带名称的 Store（方便调试）
+func NewNamedStore(name string, fetcher Fetcher, watcher Watcher) *Store {
 	if watcher == nil {
 		watcher = NopWatcher{}
 	}
 	return &Store{
+		name:    name,
 		fetcher: fetcher,
 		watcher: watcher,
 		cache:   make(map[string][][]byte),
@@ -70,10 +79,21 @@ func (s *Store) load(ctx context.Context, id string) ([][]byte, error) {
 		return nil, err
 	}
 
+	for i, k := range keys {
+		logger.Debugf("[KeyStore:%s] load id=%s, key[%d] len=%d, salt_hex=%x", s.name, id, i, len(k), k[:min(16, len(k))])
+	}
+
 	s.cache[id] = keys
 
 	// 通知订阅者
 	s.watcher.Notify(id, keys)
 
 	return keys, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

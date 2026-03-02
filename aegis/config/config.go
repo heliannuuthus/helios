@@ -477,7 +477,7 @@ const (
 	DefaultAegisSSOCookieName = "aegis-sso"        // SSO Cookie 默认名称
 )
 
-// GetSSOMasterKey 获取 SSO master key（Base64URL 编码的 32 字节密钥）
+// GetSSOMasterKey 获取 SSO master key（Base64URL 编码的 48 字节 seed: 16-byte salt + 32-byte key）
 // 未配置时返回 nil, nil；配置了但格式错误时返回 nil, error
 func GetSSOMasterKey() ([]byte, error) {
 	secretStr := Cfg().GetString("sso.master-key")
@@ -488,8 +488,8 @@ func GetSSOMasterKey() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode sso master key: %w", err)
 	}
-	if len(secretBytes) != 32 {
-		return nil, fmt.Errorf("sso master key must be 32 bytes, got %d", len(secretBytes))
+	if len(secretBytes) != 48 {
+		return nil, fmt.Errorf("sso master key must be 48 bytes, got %d", len(secretBytes))
 	}
 	return secretBytes, nil
 }

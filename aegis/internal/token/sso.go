@@ -67,14 +67,9 @@ func (s *SSOToken) Type() pkgtoken.TokenType {
 	return pkgtoken.TokenTypeSSO
 }
 
-// MarshalPayload implements EncryptableToken.
-func (s *SSOToken) MarshalPayload() ([]byte, error) {
-	return s.MarshalIdentities()
-}
-
-// BuildPaseto builds the PASETO claims token. The sub field will be set
+// Build builds the PASETO claims token. The sub field will be set
 // by the service layer after encrypting identities.
-func (s *SSOToken) BuildPaseto() (*paseto.Token, error) {
+func (s *SSOToken) Build() (*paseto.Token, error) {
 	t := paseto.NewToken()
 	if err := s.SetStandardClaims(&t); err != nil {
 		return nil, fmt.Errorf("set standard claims: %w", err)
@@ -103,17 +98,6 @@ func (s *SSOToken) MarshalIdentities() ([]byte, error) {
 		return nil, fmt.Errorf("no identities to marshal")
 	}
 	return json.Marshal(s.identities)
-}
-
-// UnmarshalPayload deserializes identity mapping from decrypted inner token claims
-// and sets it on the SSOToken.
-func (s *SSOToken) UnmarshalPayload(data []byte) error {
-	identities, err := UnmarshalIdentities(data)
-	if err != nil {
-		return err
-	}
-	s.identities = identities
-	return nil
 }
 
 // UnmarshalIdentities deserializes identity mapping from decrypted inner token claims.

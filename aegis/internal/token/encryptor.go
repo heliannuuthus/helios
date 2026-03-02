@@ -100,7 +100,8 @@ func (e *Encryptor) Encrypt(ctx context.Context, payload []byte) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("marshal inner footer: %w", err)
 	}
-	return t.V4Encrypt(sk, footerBytes), nil
+	t.SetFooter(footerBytes)
+	return t.V4Encrypt(sk, nil), nil
 }
 
 // GetLID returns the current PASERK lid.

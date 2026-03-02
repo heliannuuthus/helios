@@ -12,16 +12,18 @@ func JoinScopes(scopes []string) string {
 	return strings.Join(scopes, " ")
 }
 
-// ScopeIntersection 计算 scope 交集
+// ScopeIntersection 计算 scope 交集（去重）
 func ScopeIntersection(requested, allowed []string) []string {
 	allowedSet := make(map[string]bool)
 	for _, s := range allowed {
 		allowedSet[s] = true
 	}
 
+	seen := make(map[string]bool)
 	var result []string
 	for _, s := range requested {
-		if allowedSet[s] {
+		if allowedSet[s] && !seen[s] {
+			seen[s] = true
 			result = append(result, s)
 		}
 	}

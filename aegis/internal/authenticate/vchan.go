@@ -85,20 +85,8 @@ func (a *VChanAuthenticator) Authenticate(ctx context.Context, flow *types.AuthF
 
 // ==================== ChallengeVerifier 实现 ====================
 
-// Initiate 启动验证渠道 Challenge（委托 vchan.Provider.Initiate）
-func (a *VChanAuthenticator) Initiate(ctx context.Context, challenge *types.Challenge) (int, error) {
-	result, err := a.provider.Initiate(ctx, challenge.Channel, challenge.ClientID, challenge.Audience, challenge.Type)
-	if err != nil {
-		return 0, err
-	}
-
-	if result.Challenge != nil && result.Challenge.Data != nil {
-		for k, v := range result.Challenge.Data {
-			challenge.SetData(k, v)
-		}
-	}
-
-	return result.RetryAfter, nil
+func (a *VChanAuthenticator) Initiate(ctx context.Context, challenge *types.Challenge) error {
+	return a.provider.Initiate(ctx, challenge)
 }
 
 // Verify 验证 Challenge proof（委托 vchan.Provider.Verify）

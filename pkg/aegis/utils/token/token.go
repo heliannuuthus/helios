@@ -38,16 +38,16 @@ type Token interface {
 	IsExpired() bool
 }
 
-// tokenBuilder is the internal interface for building PASETO tokens.
-type tokenBuilder interface {
+// TokenBuilder is the interface for building PASETO tokens.
+type TokenBuilder interface {
 	Token
-	build() (*paseto.Token, error)
+	Build() (*paseto.Token, error)
 }
 
-// Build constructs a paseto.Token from a Token that implements tokenBuilder.
+// Build constructs a paseto.Token from a Token that implements TokenBuilder.
 func Build(t Token) (*paseto.Token, error) {
-	if builder, ok := t.(tokenBuilder); ok {
-		return builder.build()
+	if builder, ok := t.(TokenBuilder); ok {
+		return builder.Build()
 	}
 	return nil, fmt.Errorf("%w: token does not support building", ErrUnsupportedToken)
 }

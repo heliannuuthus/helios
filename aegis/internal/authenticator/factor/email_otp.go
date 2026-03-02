@@ -11,6 +11,8 @@ import (
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
+var _ Provider = (*EmailOTPProvider)(nil)
+
 // EmailSender 邮件发送接口
 type EmailSender interface {
 	SendCode(ctx context.Context, email, code string) error
@@ -35,31 +37,11 @@ func (*EmailOTPProvider) Type() string {
 	return TypeEmailOTP
 }
 
-// Initiate 校验邮箱格式、发送验证码
-// channel: 邮箱地址
-// params: clientID, audience, bizType
-// 注意：限流检查已移至 FactorAuthenticator.Initiate
-func (p *EmailOTPProvider) Initiate(ctx context.Context, channel string, params ...any) (*InitiateResult, error) {
-	// 1. 校验邮箱格式
-	if _, err := mail.ParseAddress(channel); err != nil {
-		return nil, fmt.Errorf("invalid email format: %s", channel)
+func (p *EmailOTPProvider) Initiate(ctx context.Context, challenge *types.Challenge) error {
+	if _, err := mail.ParseAddress(challenge.Channel); err != nil {
+		return fmt.Errorf("invalid email format: %s", challenge.Channel)
 	}
-
-	// 2. 解析通用参数
-	initiateParams, err := ParseInitiateParams(params...)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. 构建临时 Challenge（仅用于生成 ID 和存储 OTP）
-	challenge := NewChallenge(types.ChannelTypeEmailOTP, channel, initiateParams)
-
-	// 4. 发送 OTP
-	if err := p.sendOTP(ctx, channel, challenge.ID); err != nil {
-		return nil, err
-	}
-
-	return &InitiateResult{Challenge: challenge}, nil
+	return p.sendOTP(ctx, challenge.Channel, challenge.ID)
 }
 
 // Verify 验证邮件验证码

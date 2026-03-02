@@ -4,29 +4,31 @@ Hermes 初始化脚本
 
 功能：
 1. 生成数据库加密密钥，直接写入 hermes.toml
-2. 生成域签名密钥（32 字节 Ed25519 seed），直接写入 hermes.toml
-3. 生成 SSO master key（32 字节），直接写入 aegis.toml
-4. 生成服务密钥（32 字节），直接写入 hermes.toml / iris.toml
+2. 生成域签名密钥（48 字节 seed: 16-byte salt + 32-byte key），直接写入 hermes.toml
+3. 生成 SSO master key（48 字节 seed），直接写入 aegis.toml
+4. 生成服务密钥（48 字节 seed: 16-byte salt + 32-byte key），直接写入 hermes.toml / iris.toml
 5. 生成加密后的服务密钥，直接写入 sql/hermes/init.sql
 6. 生成初始用户密码（随机），写入 init.sql
 
 密钥说明：
 ==========
 
-所有密钥统一使用 32 字节原始格式，Base64URL 编码（无填充）
+密钥分为两种格式：
+- 32 字节原始 AES-256 密钥（仅 db.enc-key）
+- 48 字节 seed（16-byte salt + 32-byte key），通过 KDF 派生签名/加密密钥
 
 aegis.toml:
-  - [sso] master-key: Base64URL 编码的 32 字节密钥
+  - [sso] master-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)
     通过 KDF 派生 Ed25519 签名密钥和 AES-256 加密密钥
 
 hermes.toml:
   - [db] enc-key: Base64 编码的 32 字节 AES-256 密钥，用于加密敏感数据
-  - [aegis.domains.{domain}] sign-keys: Base64URL 编码的 32 字节 Ed25519 seed
+  - [aegis.domains.{domain}] sign-keys: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)
     支持密钥轮换，逗号分隔多个密钥，第一把是主密钥
-  - [aegis] secret-key: Base64URL 编码的 32 字节密钥，服务的对称加密密钥
+  - [aegis] secret-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)，服务密钥
 
 iris.toml:
-  - [aegis] secret-key: Base64URL 编码的 32 字节密钥，服务的对称加密密钥
+  - [aegis] secret-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)，服务密钥
 
 sql/hermes/init.sql:
   - t_service.encrypted_key: 服务密钥的密文（用 db.enc-key 加密）
@@ -173,6 +175,11 @@ def generate_32byte_key() -> bytes:
     return secrets.token_bytes(32)
 
 
+def generate_seed() -> bytes:
+    """48 bytes: 16-byte salt + 32-byte key material."""
+    return secrets.token_bytes(48)
+
+
 def generate_password(length: int = 16) -> str:
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
     while True:
@@ -316,12 +323,12 @@ class Initializer:
         self.db_enc_key = generate_32byte_key()
 
         for domain in DOMAINS:
-            self.domain_sign_keys[domain.domain_id] = generate_32byte_key()
+            self.domain_sign_keys[domain.domain_id] = generate_seed()
 
-        self.sso_master_key = generate_32byte_key()
+        self.sso_master_key = generate_seed()
 
         for service in SERVICES:
-            secret_key = generate_32byte_key()
+            secret_key = generate_seed()
             encrypted = encrypt_aes_gcm(self.db_enc_key, secret_key, service.service_id)
             self.services_data.append(ServiceData(
                 service=service,

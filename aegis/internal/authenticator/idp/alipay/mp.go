@@ -230,6 +230,11 @@ func (p *MPProvider) parseUserID(bodyStr string) (*models.TUserInfo, error) {
 	}, nil
 }
 
+// Resolve 小程序不支持通过 principal 本地查找
+func (*MPProvider) Resolve(_ context.Context, _ string) (*models.TUserInfo, error) {
+	return nil, errors.New("alipay mp provider does not support resolve")
+}
+
 // FetchAdditionalInfo 补充获取用户信息
 func (*MPProvider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...any) (*idp.AdditionalInfo, error) {
 	logger.Warnf("[Alipay] 支付宝获取 %s 暂未实现", infoType)

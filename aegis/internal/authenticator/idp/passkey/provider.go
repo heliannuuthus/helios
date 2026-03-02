@@ -82,6 +82,11 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*mod
 	}, nil
 }
 
+// Resolve Passkey 不支持通过 principal 本地查找
+func (*Provider) Resolve(_ context.Context, _ string) (*models.TUserInfo, error) {
+	return nil, fmt.Errorf("passkey provider does not support resolve")
+}
+
 // FetchAdditionalInfo Passkey 不支持获取额外信息
 func (*Provider) FetchAdditionalInfo(_ context.Context, _ string, _ ...any) (*idp.AdditionalInfo, error) {
 	return nil, fmt.Errorf("passkey does not support fetching additional info")
