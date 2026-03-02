@@ -122,7 +122,6 @@ func (u *UserAccessToken) Type() TokenType {
 	return TokenTypeUAT
 }
 
-
 // Build builds the PASETO token claims.
 // Note: the sub field is set by the service layer after encryption.
 func (u *UserAccessToken) Build() (*paseto.Token, error) {

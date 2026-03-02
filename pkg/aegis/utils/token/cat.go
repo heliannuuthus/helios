@@ -87,8 +87,6 @@ func (c *ClientAccessToken) Type() TokenType {
 	return TokenTypeCAT
 }
 
-
-
 // Build 构建 PASETO Token（不包含签名）
 func (c *ClientAccessToken) Build() (*paseto.Token, error) {
 	now := time.Now()

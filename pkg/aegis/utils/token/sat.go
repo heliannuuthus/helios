@@ -68,8 +68,6 @@ func (s *ServiceAccessToken) Type() TokenType {
 	return TokenTypeSAT
 }
 
-
-
 // Build 构建 PASETO Token（不包含签名）
 func (s *ServiceAccessToken) Build() (*paseto.Token, error) {
 	t := paseto.NewToken()

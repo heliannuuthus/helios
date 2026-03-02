@@ -142,4 +142,3 @@ func (v *Verifier) Verify(ctx context.Context, tokenString string) (*paseto.Toke
 
 	return pasetoToken, nil
 }
-

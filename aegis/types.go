@@ -111,3 +111,23 @@ type IdentifiedUser struct {
 type ConfirmIdentifyRequest struct {
 	Confirm bool `json:"confirm"` // true=确认关联，false=取消
 }
+
+// ApplicationInfo 应用信息
+type ApplicationInfo struct {
+	AppID   string  `json:"app_id"`
+	Name    string  `json:"name"`
+	LogoURL *string `json:"logo_url,omitempty"`
+}
+
+// ServiceInfo 服务信息
+type ServiceInfo struct {
+	ServiceID   string  `json:"service_id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
+}
+
+// AuthContextResponse 认证上下文响应（/auth/context 接口返回给前端的公开信息）
+type AuthContextResponse struct {
+	Application *ApplicationInfo `json:"application,omitempty"`
+	Service     *ServiceInfo     `json:"service,omitempty"`
+}

@@ -130,8 +130,6 @@ func (c *ChallengeToken) Type() TokenType {
 	return TokenTypeChallenge
 }
 
-
-
 // Build 构建 PASETO Token（不包含签名）
 func (c *ChallengeToken) Build() (*paseto.Token, error) {
 	t := paseto.NewToken()
