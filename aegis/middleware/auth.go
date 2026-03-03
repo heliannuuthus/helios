@@ -10,7 +10,7 @@ import (
 
 	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
-	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -21,7 +21,7 @@ func tokenPreview(tokenStr string, length int) string {
 	return tokenStr[:length]
 }
 
-func RequireToken(v *token.Interpreter) gin.HandlerFunc {
+func RequireToken(v *web.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
 		if authorization == "" {
@@ -38,12 +38,13 @@ func RequireToken(v *token.Interpreter) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "unauthorized"})
 			return
 		}
-		c.Set("user", identity)
+		tc := web.NewTokenContext(identity)
+		c.Set(string(web.ClaimsKey), tc)
 		c.Next()
 	}
 }
 
-func OptionalToken(v *token.Interpreter) gin.HandlerFunc {
+func OptionalToken(v *web.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authorization := c.GetHeader("Authorization")
 		if authorization == "" {
@@ -56,7 +57,8 @@ func OptionalToken(v *token.Interpreter) gin.HandlerFunc {
 		}
 		identity, err := v.Interpret(c.Request.Context(), tokenStr)
 		if err == nil && identity != nil {
-			c.Set("user", identity)
+			tc := web.NewTokenContext(identity)
+			c.Set(string(web.ClaimsKey), tc)
 		}
 		c.Next()
 	}

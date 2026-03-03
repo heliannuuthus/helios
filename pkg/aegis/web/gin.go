@@ -1,4 +1,4 @@
-package middleware
+package web
 
 import (
 	"errors"
@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
-	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
 // GinFactory Gin 框架中间件工厂
@@ -43,7 +42,7 @@ type GinMiddleware struct {
 // RequireAuth 返回要求认证的 Gin 中间件
 func (m *GinMiddleware) RequireAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, err := m.authenticate(c.Request)
+		tc, err := m.authenticate(c.Request)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":   "unauthorized",
@@ -52,7 +51,7 @@ func (m *GinMiddleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		c.Set(string(ClaimsKey), claims)
+		c.Set(string(ClaimsKey), tc)
 		c.Next()
 	}
 }
@@ -65,7 +64,7 @@ func (m *GinMiddleware) RequireRelation(relation string) gin.HandlerFunc {
 // RequireRelationOn 返回要求指定关系的 Gin 中间件（指定资源）
 func (m *GinMiddleware) RequireRelationOn(relation, objectType, objectID string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, err := m.authenticate(c.Request)
+		tc, err := m.authenticate(c.Request)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":   "unauthorized",
@@ -74,7 +73,7 @@ func (m *GinMiddleware) RequireRelationOn(relation, objectType, objectID string)
 			return
 		}
 
-		if err := m.authorize(c.Request.Context(), claims, relation, objectType, objectID); err != nil {
+		if err := m.authorize(c.Request.Context(), tc, relation, objectType, objectID); err != nil {
 			if errors.Is(err, errForbidden) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error":   "forbidden",
@@ -89,7 +88,7 @@ func (m *GinMiddleware) RequireRelationOn(relation, objectType, objectID string)
 			return
 		}
 
-		c.Set(string(ClaimsKey), claims)
+		c.Set(string(ClaimsKey), tc)
 		c.Next()
 	}
 }
@@ -102,7 +101,7 @@ func (m *GinMiddleware) RequireAnyRelation(relations ...string) gin.HandlerFunc 
 // RequireAnyRelationOn 返回要求任意一个指定关系的 Gin 中间件（指定资源）
 func (m *GinMiddleware) RequireAnyRelationOn(relations []string, objectType, objectID string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		claims, err := m.authenticate(c.Request)
+		tc, err := m.authenticate(c.Request)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":   "unauthorized",
@@ -111,7 +110,7 @@ func (m *GinMiddleware) RequireAnyRelationOn(relations []string, objectType, obj
 			return
 		}
 
-		if err := m.authorizeAny(c.Request.Context(), claims, relations, objectType, objectID); err != nil {
+		if err := m.authorizeAny(c.Request.Context(), tc, relations, objectType, objectID); err != nil {
 			if errors.Is(err, errForbidden) {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 					"error":   "forbidden",
@@ -126,31 +125,31 @@ func (m *GinMiddleware) RequireAnyRelationOn(relations []string, objectType, obj
 			return
 		}
 
-		c.Set(string(ClaimsKey), claims)
+		c.Set(string(ClaimsKey), tc)
 		c.Next()
 	}
 }
 
-// GetTokenFromGin 从 Gin context 中获取验证后的 Token
-func GetTokenFromGin(c *gin.Context) tokendef.Token {
+// TokenContextFromGin 从 Gin context 中获取 TokenContext
+func TokenContextFromGin(c *gin.Context) *TokenContext {
 	t, exists := c.Get(string(ClaimsKey))
 	if !exists {
 		return nil
 	}
-	result, ok := t.(tokendef.Token)
+	result, ok := t.(*TokenContext)
 	if !ok {
 		return nil
 	}
 	return result
 }
 
-// GetOpenIDFromGin 从 Gin context 中获取用户标识
-func GetOpenIDFromGin(c *gin.Context) string {
-	t := GetTokenFromGin(c)
-	if t == nil {
+// OpenIDFromGin 从 Gin context 中获取用户 OpenID（快捷方法）
+func OpenIDFromGin(c *gin.Context) string {
+	tc := TokenContextFromGin(c)
+	if tc == nil {
 		return ""
 	}
-	if uat, ok := t.(*tokendef.UserAccessToken); ok && uat.HasUser() {
+	if uat := tc.UserAccessToken(); uat != nil {
 		return uat.GetOpenID()
 	}
 	return ""

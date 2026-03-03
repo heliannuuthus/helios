@@ -1,21 +1,13 @@
-// Package middleware 提供 Aegis 认证和鉴权中间件
+// Package web 提供 Aegis 认证和鉴权中间件
 //
 // 使用示例：
 //
-//	// 创建 KeyStore
-//	signKeyStore := key.NewStore(signFetcher, watcher)
-//	encryptKeyStore := key.NewStore(encryptFetcher, watcher)
-//	catKeyStore := key.NewStore(catFetcher, watcher)
-//
-//	// 创建全局 Factory
-//	factory := middleware.NewFactory("http://auth.example.com", signKeyStore, encryptKeyStore, catKeyStore)
-//
-//	// 为特定 audience 创建中间件
+//	factory := web.NewFactory("http://auth.example.com", signKeyStore, encryptKeyStore, catKeyStore)
 //	mw := factory.WithAudience("my-service-id")
 //
 //	r.Use(mw.RequireAuth())                      // 仅认证
 //	r.GET("/admin", mw.RequireRelation("admin")) // 认证 + 鉴权
-package middleware
+package web
 
 import (
 	"context"
@@ -26,8 +18,8 @@ import (
 
 	"github.com/heliannuuthus/helios/pkg/aegis/authz"
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
-	"github.com/heliannuuthus/helios/pkg/aegis/token"
 	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
+	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // ContextKey 上下文 key 类型
@@ -35,7 +27,10 @@ type ContextKey string
 
 const (
 	// ClaimsKey 用户身份信息在 context 中的 key
-	ClaimsKey ContextKey = "aegis:claims"
+	ClaimsKey ContextKey = "aegis:user"
+
+	// ChallengeTokenHeader X-Challenge-Token header 名称（参考 RFC 9449 DPoP 独立 header 模式）
+	ChallengeTokenHeader = "X-Challenge-Token"
 )
 
 // Factory 中间件工厂
@@ -63,7 +58,7 @@ func NewFactory(
 
 // WithAudience 为特定 audience 创建中间件
 func (f *Factory) WithAudience(audience string) *Middleware {
-	interp := token.NewInterpreter(f.signKeyStore, f.encryptKeyStore)
+	interp := NewInterpreter(f.signKeyStore, f.encryptKeyStore)
 	return &Middleware{
 		interpreter: interp,
 		authzClient: f.authzClient,
@@ -73,7 +68,7 @@ func (f *Factory) WithAudience(audience string) *Middleware {
 
 // Middleware Aegis 中间件
 type Middleware struct {
-	interpreter *token.Interpreter
+	interpreter *Interpreter
 	authzClient *authz.Client
 	audience    string
 }
@@ -85,13 +80,13 @@ type MiddlewareFunc func(next http.Handler) http.Handler
 func (m *Middleware) RequireAuth() MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			claims, err := m.authenticate(r)
+			tc, err := m.authenticate(r)
 			if err != nil {
 				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "未登录或登录已过期")
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), ClaimsKey, claims)
+			ctx := context.WithValue(r.Context(), ClaimsKey, tc)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -106,13 +101,13 @@ func (m *Middleware) RequireRelation(relation string) MiddlewareFunc {
 func (m *Middleware) RequireRelationOn(relation, objectType, objectID string) MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			claims, err := m.authenticate(r)
+			tc, err := m.authenticate(r)
 			if err != nil {
 				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "未登录或登录已过期")
 				return
 			}
 
-			if err := m.authorize(r.Context(), claims, relation, objectType, objectID); err != nil {
+			if err := m.authorize(r.Context(), tc, relation, objectType, objectID); err != nil {
 				if errors.Is(err, errForbidden) {
 					writeJSONError(w, http.StatusForbidden, "forbidden", "无权限访问")
 				} else {
@@ -121,7 +116,7 @@ func (m *Middleware) RequireRelationOn(relation, objectType, objectID string) Mi
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), ClaimsKey, claims)
+			ctx := context.WithValue(r.Context(), ClaimsKey, tc)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -136,13 +131,13 @@ func (m *Middleware) RequireAnyRelation(relations ...string) MiddlewareFunc {
 func (m *Middleware) RequireAnyRelationOn(relations []string, objectType, objectID string) MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			claims, err := m.authenticate(r)
+			tc, err := m.authenticate(r)
 			if err != nil {
 				writeJSONError(w, http.StatusUnauthorized, "unauthorized", "未登录或登录已过期")
 				return
 			}
 
-			if err := m.authorizeAny(r.Context(), claims, relations, objectType, objectID); err != nil {
+			if err := m.authorizeAny(r.Context(), tc, relations, objectType, objectID); err != nil {
 				if errors.Is(err, errForbidden) {
 					writeJSONError(w, http.StatusForbidden, "forbidden", "无权限访问")
 				} else {
@@ -151,7 +146,7 @@ func (m *Middleware) RequireAnyRelationOn(relations []string, objectType, object
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), ClaimsKey, claims)
+			ctx := context.WithValue(r.Context(), ClaimsKey, tc)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -163,9 +158,9 @@ type forbiddenError struct{}
 
 func (e *forbiddenError) Error() string { return "forbidden" }
 
-// authenticate 认证：验证用户 token
-func (m *Middleware) authenticate(r *http.Request) (tokendef.Token, error) {
-	tokenStr := extractToken(r)
+// authenticate 认证：验证 Authorization token，可选解析 X-Challenge-Token，组装 TokenContext
+func (m *Middleware) authenticate(r *http.Request) (*TokenContext, error) {
+	tokenStr := extractBearerToken(r)
 	if tokenStr == "" {
 		return nil, tokendef.ErrMissingClaims
 	}
@@ -176,15 +171,42 @@ func (m *Middleware) authenticate(r *http.Request) (tokendef.Token, error) {
 	}
 
 	if m.audience != "" && t.GetAudience() != m.audience {
-		return nil, fmt.Errorf("%w: expected %s, got %s", token.ErrUnsupportedAudience, m.audience, t.GetAudience())
+		return nil, fmt.Errorf("%w: expected %s, got %s", ErrUnsupportedAudience, m.audience, t.GetAudience())
 	}
 
-	return t, nil
+	tc := NewTokenContext(t)
+
+	if challengeStr := r.Header.Get(ChallengeTokenHeader); challengeStr != "" {
+		ct, err := m.interpreter.Interpret(r.Context(), challengeStr)
+		if err != nil {
+			logger.Warnf("[Auth] X-Challenge-Token 验证失败: %v", err)
+		} else if xt, ok := ct.(*tokendef.ChallengeToken); ok {
+			tc.WithChallenge(xt)
+		}
+	}
+
+	return tc, nil
+}
+
+// accessToken 从 TokenContext 中提取 access token（用于鉴权）
+func (m *Middleware) accessToken(tc *TokenContext) tokendef.Token {
+	if uat := tc.UserAccessToken(); uat != nil {
+		return uat
+	}
+	if sat := tc.ServiceAccessToken(); sat != nil {
+		return sat
+	}
+	return nil
 }
 
 // authorize 鉴权：检查单个关系
-func (m *Middleware) authorize(ctx context.Context, t tokendef.Token, relation, objectType, objectID string) error {
+func (m *Middleware) authorize(ctx context.Context, tc *TokenContext, relation, objectType, objectID string) error {
 	if m.authzClient == nil {
+		return errForbidden
+	}
+
+	t := m.accessToken(tc)
+	if t == nil {
 		return errForbidden
 	}
 
@@ -199,8 +221,13 @@ func (m *Middleware) authorize(ctx context.Context, t tokendef.Token, relation, 
 }
 
 // authorizeAny 鉴权：检查任意一个关系
-func (m *Middleware) authorizeAny(ctx context.Context, t tokendef.Token, relations []string, objectType, objectID string) error {
+func (m *Middleware) authorizeAny(ctx context.Context, tc *TokenContext, relations []string, objectType, objectID string) error {
 	if m.authzClient == nil {
+		return errForbidden
+	}
+
+	t := m.accessToken(tc)
+	if t == nil {
 		return errForbidden
 	}
 
@@ -229,7 +256,7 @@ func writeJSONError(w http.ResponseWriter, statusCode int, errType, message stri
 	}
 }
 
-func extractToken(r *http.Request) string {
+func extractBearerToken(r *http.Request) string {
 	authorization := r.Header.Get("Authorization")
 	if authorization == "" {
 		return ""
@@ -237,27 +264,6 @@ func extractToken(r *http.Request) string {
 
 	if strings.HasPrefix(authorization, "Bearer ") {
 		return authorization[7:]
-	}
-	return ""
-}
-
-// GetToken 从 context 中获取验证后的 Token
-func GetToken(ctx context.Context) tokendef.Token {
-	t, ok := ctx.Value(ClaimsKey).(tokendef.Token)
-	if !ok {
-		return nil
-	}
-	return t
-}
-
-// GetOpenID 从 context 中获取用户标识
-func GetOpenID(ctx context.Context) string {
-	t := GetToken(ctx)
-	if t == nil {
-		return ""
-	}
-	if uat, ok := t.(*tokendef.UserAccessToken); ok && uat.HasUser() {
-		return uat.GetOpenID()
 	}
 	return ""
 }

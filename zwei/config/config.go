@@ -17,6 +17,15 @@ func Cfg() *baseconfig.Cfg {
 	return baseconfig.Zwei()
 }
 
+// GetAegisAudience 获取 Zwei 服务 audience（用于 token 验证）
+func GetAegisAudience() string {
+	audience := Cfg().GetString("aegis.audience")
+	if audience == "" {
+		return "zwei"
+	}
+	return audience
+}
+
 // parseDSNFromURL 将 mysql://user:pass@host:port/db?params 格式转换为 Go MySQL DSN 格式
 func parseDSNFromURL(dbURL string) string {
 	if !strings.HasPrefix(dbURL, "mysql://") {

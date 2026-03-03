@@ -12,8 +12,7 @@ import (
 	"github.com/heliannuuthus/helios/hermes"
 	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
 	"github.com/heliannuuthus/helios/iris"
-	"github.com/heliannuuthus/helios/pkg/aegis/middleware"
-	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	zweiconfig "github.com/heliannuuthus/helios/zwei/config"
 	"github.com/heliannuuthus/helios/zwei/favorite"
 	"github.com/heliannuuthus/helios/zwei/history"
@@ -89,17 +88,17 @@ func provideChaosHandler() (*chaos.Handler, error) {
 }
 
 // provideInterpreter 创建 Token 解释器（用于 API 路由认证中间件）
-func provideInterpreter() (*token.Interpreter, error) {
+func provideInterpreter() (*web.Interpreter, error) {
 	keyStore, err := intMw.NewHermesKeyStore()
 	if err != nil {
 		return nil, err
 	}
 
-	return token.NewInterpreter(keyStore, keyStore), nil
+	return web.NewInterpreter(keyStore, keyStore), nil
 }
 
 // provideGinMiddlewareFactory 创建 Gin 中间件工厂
-func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
+func provideGinMiddlewareFactory() (*web.GinFactory, error) {
 	endpoint := aegisconfig.GetIssuer()
 
 	keyStore, err := intMw.NewHermesKeyStore()
@@ -107,17 +106,16 @@ func provideGinMiddlewareFactory() (*middleware.GinFactory, error) {
 		return nil, err
 	}
 
-	return middleware.NewGinFactory(
+	return web.NewGinFactory(
 		endpoint,
-		keyStore, // 签名验证
-		keyStore, // footer 解密
-		keyStore, // CAT 签发
+		keyStore,
+		keyStore,
+		keyStore,
 	), nil
 }
 
 // ProviderSet 提供者集合
 var ProviderSet = wire.NewSet(
-	// 业务模块（使用 Zwei 数据库）
 	recipe.NewService,
 	favorite.NewService,
 	history.NewService,
@@ -131,16 +129,11 @@ var ProviderSet = wire.NewSet(
 	provideTagHandler,
 	provideRecommendHandler,
 	provideHomeHandler,
-	// Hermes 模块（使用 Hermes 数据库，提供给 aegis 复用）
 	provideHermesService,
 	provideHermesHandler,
-	// 认证模块（使用 Hermes 数据库，依赖 hermes.Service）
 	provideAegisHandler,
-	// Iris 用户信息模块
 	provideIrisHandler,
-	// Chaos 业务聚合模块
 	provideChaosHandler,
-	// 中间件
 	provideInterpreter,
 	provideGinMiddlewareFactory,
 )
@@ -158,8 +151,8 @@ type App struct {
 	PreferenceHandler *preference.Handler
 	HermesHandler     *hermes.Handler
 	ChaosHandler      *chaos.Handler
-	MiddlewareFactory *middleware.GinFactory
-	Interpreter       *token.Interpreter
+	MiddlewareFactory *web.GinFactory
+	Interpreter       *web.Interpreter
 }
 
 // InitializeApp 初始化应用（由 wire 生成）

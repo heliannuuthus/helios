@@ -24,6 +24,7 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/user"
 	"github.com/heliannuuthus/helios/hermes/models"
 	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
+	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -638,6 +639,45 @@ func (h *Handler) Check(c *gin.Context) {
 	})
 }
 
+// --- 用户信息 ---
+
+// UserInfo GET /auth/userinfo
+// 从 UAT 中解密用户信息并返回脱敏结构
+func (h *Handler) UserInfo(c *gin.Context) {
+	tc := web.TokenContextFromGin(c)
+	if tc == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":             "invalid_token",
+			"error_description": "missing access token",
+		})
+		return
+	}
+
+	uat := tc.UserAccessToken()
+	if uat == nil || !uat.HasUser() {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error":             "invalid_token",
+			"error_description": "token does not contain user info",
+		})
+		return
+	}
+
+	email := uat.GetEmail()
+	phone := uat.GetPhone()
+
+	resp := &UserInfoResponse{
+		Sub:           uat.GetOpenID(),
+		Nickname:      uat.GetNickname(),
+		Picture:       uat.GetPicture(),
+		Email:         helpers.MaskEmail(email),
+		EmailVerified: email != "",
+		Phone:         helpers.MaskPhone(phone),
+		PhoneVerified: phone != "",
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 // --- 登出与撤销 ---
 
 // Revoke POST /auth/revoke
@@ -659,15 +699,14 @@ func (h *Handler) Revoke(c *gin.Context) {
 // Logout POST /auth/logout
 // 登出（撤销 refresh token + 清除 SSO cookie）
 func (h *Handler) Logout(c *gin.Context) {
-	claims := GetToken(c)
-	if claims == nil {
-		// 即使没有 access token，也可以清除 SSO cookie（全局登出）
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		clearSSOCookie(c)
 		c.Status(http.StatusOK)
 		return
 	}
 
-	if err := h.cache.RevokeUserRefreshTokens(c.Request.Context(), GetOpenIDFromToken(claims)); err != nil {
+	if err := h.cache.RevokeUserRefreshTokens(c.Request.Context(), openID); err != nil {
 		h.errorResponse(c, autherrors.NewServerError("failed to revoke tokens"))
 		return
 	}
@@ -696,18 +735,6 @@ func (h *Handler) PublicKeys(c *gin.Context) {
 	maxAge := int(config.GetPublicKeyCacheMaxAge().Seconds())
 	c.Header("Cache-Control", fmt.Sprintf("public, max-age=%d", maxAge))
 	c.JSON(http.StatusOK, publicKey)
-}
-
-// --- 包级别公开函数 ---
-
-// GetToken 从上下文获取验证后的 Token
-func GetToken(c *gin.Context) token.Token {
-	if t, exists := c.Get(ContextKeyUser); exists {
-		if tk, ok := t.(token.Token); ok {
-			return tk
-		}
-	}
-	return nil
 }
 
 // ==================== 私有方法（按引用顺序） ====================

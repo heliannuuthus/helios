@@ -3,22 +3,7 @@ package aegis
 import (
 	"fmt"
 	"strings"
-
-	"github.com/heliannuuthus/helios/aegis/internal/token"
 )
-
-// ============= Type Aliases =============
-
-// Token Token 接口（类型别名，实际定义在 token 包）
-type Token = token.Token
-
-// GetOpenIDFromToken 从 Token 获取用户标识（t_user.openid）
-func GetOpenIDFromToken(t Token) string {
-	if uat, ok := t.(*token.UserAccessToken); ok && uat.HasUser() {
-		return uat.GetOpenID()
-	}
-	return ""
-}
 
 // LoginRequest 登录请求
 type LoginRequest struct {
@@ -110,6 +95,17 @@ type IdentifiedUser struct {
 // ConfirmIdentifyRequest 确认/取消关联请求
 type ConfirmIdentifyRequest struct {
 	Confirm bool `json:"confirm"` // true=确认关联，false=取消
+}
+
+// UserInfoResponse /auth/userinfo 响应（脱敏结构，从 PASETO token 解密获取）
+type UserInfoResponse struct {
+	Sub           string `json:"sub"`
+	Nickname      string `json:"nickname,omitempty"`
+	Picture       string `json:"picture,omitempty"`
+	Email         string `json:"email,omitempty"`
+	EmailVerified bool   `json:"email_verified"`
+	Phone         string `json:"phone,omitempty"`
+	PhoneVerified bool   `json:"phone_verified"`
 }
 
 // ApplicationInfo 应用信息

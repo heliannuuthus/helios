@@ -12,7 +12,7 @@ const (
 	QueryClientID = "client_id" // Client ID 查询参数
 
 	// Gin Context Key
-	ContextKeyUser = "user" // 用户 Token 在 Gin Context 中的 key
+	ContextKeyUser = "aegis:user" // 用户 Token 在 Gin Context 中的 key
 
 	// Cookie
 	AuthSessionCookie = "aegis-session" // Auth 会话 Cookie 名称

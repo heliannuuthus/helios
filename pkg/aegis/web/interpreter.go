@@ -1,4 +1,4 @@
-package token
+package web
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
+	"github.com/heliannuuthus/helios/pkg/aegis/token"
 	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
@@ -16,8 +17,8 @@ type Interpreter struct {
 	signKeyStore    *key.Store
 	encryptKeyStore *key.Store
 
-	verifiers  map[string]*Verifier
-	decryptors map[string]*Decryptor
+	verifiers  map[string]*token.Verifier
+	decryptors map[string]*token.Decryptor
 	mu         sync.RWMutex
 }
 
@@ -25,8 +26,8 @@ func NewInterpreter(signKeyStore *key.Store, encryptKeyStore *key.Store) *Interp
 	return &Interpreter{
 		signKeyStore:    signKeyStore,
 		encryptKeyStore: encryptKeyStore,
-		verifiers:       make(map[string]*Verifier),
-		decryptors:      make(map[string]*Decryptor),
+		verifiers:       make(map[string]*token.Verifier),
+		decryptors:      make(map[string]*token.Decryptor),
 	}
 }
 
@@ -94,7 +95,7 @@ func (i *Interpreter) Verify(ctx context.Context, tokenString string) (tokendef.
 	return tokendef.ParseToken(pasetoToken, tokenType)
 }
 
-func (i *Interpreter) Verifier(clientID string) *Verifier {
+func (i *Interpreter) Verifier(clientID string) *token.Verifier {
 	i.mu.RLock()
 	v, ok := i.verifiers[clientID]
 	i.mu.RUnlock()
@@ -110,12 +111,12 @@ func (i *Interpreter) Verifier(clientID string) *Verifier {
 		return v
 	}
 
-	v = NewVerifier(i.signKeyStore, clientID)
+	v = token.NewVerifier(i.signKeyStore, clientID)
 	i.verifiers[clientID] = v
 	return v
 }
 
-func (i *Interpreter) Decryptor(audience string) *Decryptor {
+func (i *Interpreter) Decryptor(audience string) *token.Decryptor {
 	i.mu.RLock()
 	d, ok := i.decryptors[audience]
 	i.mu.RUnlock()
@@ -131,7 +132,7 @@ func (i *Interpreter) Decryptor(audience string) *Decryptor {
 		return d
 	}
 
-	d = NewDecryptor(i.encryptKeyStore, audience)
+	d = token.NewDecryptor(i.encryptKeyStore, audience)
 	i.decryptors[audience] = d
 	return d
 }

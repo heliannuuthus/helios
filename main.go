@@ -14,6 +14,7 @@ import (
 	irisconfig "github.com/heliannuuthus/helios/iris/config"
 	"github.com/heliannuuthus/helios/pkg/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	zweiconfig "github.com/heliannuuthus/helios/zwei/config"
 )
 
 // @title Helios API
@@ -88,8 +89,9 @@ func main() {
 		authGroup.POST("/challenge/:cid", aegisCORS, app.AegisHandler.ContinueChallenge) // 验证 Challenge
 
 		// 业务前端调用的接口（SPA 跨域调用，需要 CORS 支持应用配置的 allowed_origins）
-		authGroup.POST("/token", aegisCORS, app.AegisHandler.Token)   // 获取/刷新 Token
-		authGroup.POST("/revoke", aegisCORS, app.AegisHandler.Revoke) // 撤销 Token
+		authGroup.POST("/token", aegisCORS, app.AegisHandler.Token)                                                  // 获取/刷新 Token
+		authGroup.POST("/revoke", aegisCORS, app.AegisHandler.Revoke)                                                // 撤销 Token
+		authGroup.GET("/userinfo", aegisCORS, middleware.RequireToken(app.Interpreter), app.AegisHandler.UserInfo) // 获取用户基础信息（从 token 解密）
 		// 服务端调用的接口（不需要 CORS）
 		authGroup.POST("/check", app.AegisHandler.Check) // 关系检查（使用 CAT 认证）
 		authGroup.POST("/logout", middleware.RequireToken(app.Interpreter), app.AegisHandler.Logout)
@@ -122,10 +124,11 @@ func main() {
 		userGroup.DELETE("/mfa", app.IrisHandler.DeleteMFA)
 	}
 
-	// API 路由
+	// Zwei 业务 API 路由
+	zweiMw := app.MiddlewareFactory.WithAudience(zweiconfig.GetAegisAudience())
 	api := r.Group("/api")
 	{
-		// 菜谱路由
+		// 菜谱路由（公开）
 		recipes := api.Group("/recipes")
 		{
 			recipes.POST("", app.RecipeHandler.CreateRecipe)
@@ -137,12 +140,12 @@ func main() {
 			recipes.DELETE("/:recipe_id", app.RecipeHandler.DeleteRecipe)
 		}
 
-		// 用户相关路由（统一使用 /user 前缀）
+		// 用户相关路由（需要 Zwei audience 认证）
 		user := api.Group("/user")
 		{
 			// 收藏路由
 			favorites := user.Group("/favorites")
-			favorites.Use(middleware.RequireToken(app.Interpreter))
+			favorites.Use(zweiMw.RequireAuth())
 			{
 				favorites.GET("", app.FavoriteHandler.GetFavorites)
 				favorites.POST("", app.FavoriteHandler.AddFavorite)
@@ -153,7 +156,7 @@ func main() {
 
 			// 浏览历史路由
 			history := user.Group("/history")
-			history.Use(middleware.RequireToken(app.Interpreter))
+			history.Use(zweiMw.RequireAuth())
 			{
 				history.GET("", app.HistoryHandler.GetViewHistory)
 				history.POST("", app.HistoryHandler.AddViewHistory)
@@ -164,12 +167,12 @@ func main() {
 			// 用户偏好路由
 			preference := user.Group("/preference")
 			{
-				preference.GET("", middleware.RequireToken(app.Interpreter), app.PreferenceHandler.GetUserPreferences)    // 获取用户偏好（需登录）
-				preference.PUT("", middleware.RequireToken(app.Interpreter), app.PreferenceHandler.UpdateUserPreferences) // 更新用户偏好（需登录）
+				preference.GET("", zweiMw.RequireAuth(), app.PreferenceHandler.GetUserPreferences)
+				preference.PUT("", zweiMw.RequireAuth(), app.PreferenceHandler.UpdateUserPreferences)
 			}
 		}
 
-		// 首页路由
+		// 首页路由（公开）
 		home := api.Group("/home")
 		{
 			home.GET("/banners", app.HomeHandler.GetBanners)
@@ -177,46 +180,24 @@ func main() {
 			home.GET("/hot", app.HomeHandler.GetHotRecipes)
 		}
 
-		// 偏好选项路由（无需登录，获取所有可选选项）
+		// 偏好选项路由（公开）
 		api.GET("/preferences", app.PreferenceHandler.GetOptions)
 
-		// 标签路由（RESTful 风格，统一管理所有标签和选项）
+		// 标签路由
 		tags := api.Group("/tags")
 		{
-			// GET /api/tags - 获取标签列表（支持查询参数）
-			// GET /api/tags?type=cuisine - 获取特定类型的标签
-			// GET /api/tags?type=taboo - 获取特定类型的选项
-			// GET /api/tags?type=flavor&recipe_id=xxx - 获取特定菜谱的标签
 			tags.GET("", app.TagHandler.ListTags)
-
-			// GET /api/tags/{type} - 获取特定类型的标签/选项
-			// 支持所有类型：cuisine/flavor/scene/taboo/allergy
 			tags.GET("/:type", app.TagHandler.GetTagsByType)
-
-			// POST /api/tags - 创建标签/选项（后台管理）
-			// recipe_id 为空时创建选项，不为空时创建菜谱标签
-			tags.POST("", middleware.RequireToken(app.Interpreter), app.TagHandler.CreateTag)
-
-			// PUT /api/tags/{type}/{value} - 更新标签/选项（后台管理）
-			// recipe_id 查询参数为空时更新选项，不为空时更新菜谱标签
-			tags.PUT("/:type/:value", middleware.RequireToken(app.Interpreter), app.TagHandler.UpdateTag)
-
-			// DELETE /api/tags/{type}/{value} - 删除标签/选项（后台管理）
-			// recipe_id 查询参数为空时删除选项，不为空时删除菜谱标签
-			tags.DELETE("/:type/:value", middleware.RequireToken(app.Interpreter), app.TagHandler.DeleteTag)
-
+			tags.POST("", zweiMw.RequireAuth(), app.TagHandler.CreateTag)
+			tags.PUT("/:type/:value", zweiMw.RequireAuth(), app.TagHandler.UpdateTag)
+			tags.DELETE("/:type/:value", zweiMw.RequireAuth(), app.TagHandler.DeleteTag)
 		}
 
 		// 推荐路由
 		recommend := api.Group("/recommend")
 		{
-			// LLM 推荐菜谱（支持可选认证）
-			recommend.Use(middleware.OptionalToken(app.Interpreter))
-			recommend.POST("", app.RecommendHandler.GetRecommendations)
-
-			// 获取推荐上下文信息（需要登录）
-			recommend.Use(middleware.RequireToken(app.Interpreter))
-			recommend.POST("/context", app.RecommendHandler.GetContext)
+			recommend.POST("", middleware.OptionalToken(app.Interpreter), app.RecommendHandler.GetRecommendations)
+			recommend.POST("/context", zweiMw.RequireAuth(), app.RecommendHandler.GetContext)
 		}
 
 	}

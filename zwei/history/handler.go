@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/aegis"
+	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/zwei"
 )
 
@@ -54,18 +54,11 @@ type HistoryListResponse struct {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history [post]
 func (h *Handler) AddViewHistory(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
-
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的认证信息"})
-		return
-	}
-	openID := aegis.GetOpenIDFromToken(identity)
 
 	var req HistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -93,18 +86,11 @@ func (h *Handler) AddViewHistory(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history/{recipe_id} [delete]
 func (h *Handler) RemoveViewHistory(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
-
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的认证信息"})
-		return
-	}
-	openID := aegis.GetOpenIDFromToken(identity)
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveViewHistory(openID, recipeID); err != nil {
@@ -122,18 +108,11 @@ func (h *Handler) RemoveViewHistory(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history [delete]
 func (h *Handler) ClearViewHistory(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
-
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的认证信息"})
-		return
-	}
-	openID := aegis.GetOpenIDFromToken(identity)
 
 	if err := h.service.ClearViewHistory(openID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -155,18 +134,11 @@ func (h *Handler) ClearViewHistory(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history [get]
 func (h *Handler) GetViewHistory(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
-
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的认证信息"})
-		return
-	}
-	openID := aegis.GetOpenIDFromToken(identity)
 
 	category := c.Query("category")
 	search := c.Query("search")
