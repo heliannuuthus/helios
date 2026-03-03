@@ -33,25 +33,6 @@ func (e *KeyEntry) NeedsRefresh() bool {
 	return time.Now().After(refreshThreshold)
 }
 
-// 公钥缓存相关字段（在 Manager 中初始化）
-var (
-	pubKeySF singleflight.Group
-)
-
-// initPubKeyCache 初始化公钥缓存
-func (cm *Manager) initPubKeyCache() {
-	pubKeyCache, err := ristretto.NewCache(&ristretto.Config[string, *KeyEntry]{
-		NumCounters: config.GetCacheNumCounters("pubkey"),
-		MaxCost:     config.GetCacheSize("pubkey"),
-		BufferItems: config.GetCacheBufferItems("pubkey"),
-	})
-	if err != nil {
-		logger.Errorf("[Manager] 创建 PubKey 缓存失败: %v", err)
-	} else {
-		cm.pubKeyCache = pubKeyCache
-	}
-}
-
 // GetPublicKey 获取公钥（观察者模式：获取时检查过期并触发异步刷新）
 // clientID 可以是应用 ID 或服务 ID
 func (cm *Manager) GetPublicKey(ctx context.Context, clientID string) (paseto.V4AsymmetricPublicKey, error) {
@@ -76,6 +57,82 @@ func (cm *Manager) GetPublicKey(ctx context.Context, clientID string) (paseto.V4
 
 	// 2. 缓存未命中 -> 阻塞获取
 	return cm.fetchPublicKey(ctx, clientID, cacheKey)
+}
+
+// GetAllPublicKeys 获取所有有效公钥（用于验证轮换期间的 token）
+func (cm *Manager) GetAllPublicKeys(ctx context.Context, clientID string) ([]paseto.V4AsymmetricPublicKey, error) {
+	// 1. 获取 Application
+	app, err := cm.GetApplication(ctx, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get application: %w", err)
+	}
+
+	// 2. 获取域信息
+	domain, err := cm.GetDomain(ctx, app.DomainID)
+	if err != nil {
+		return nil, fmt.Errorf("get domain: %w", err)
+	}
+
+	// 3. 从所有域密钥（48 字节 seed）派生公钥
+	publicKeys := make([]paseto.V4AsymmetricPublicKey, 0, len(domain.Keys))
+	for _, signKey := range domain.Keys {
+		seed, err := pasetokit.ParseSeed(signKey)
+		if err != nil {
+			logger.Warnf("[Manager] 解析 seed 失败: %v", err)
+			continue
+		}
+		publicKey, err := seed.DerivePublicKey()
+		if err != nil {
+			logger.Warnf("[Manager] 派生公钥失败: %v", err)
+			continue
+		}
+		publicKeys = append(publicKeys, publicKey)
+	}
+
+	return publicKeys, nil
+}
+
+// UpdatePublicKey 直接更新公钥缓存
+func (cm *Manager) UpdatePublicKey(clientID string, entry *KeyEntry) {
+	if cm.pubKeyCache == nil {
+		return
+	}
+
+	cacheKey := config.GetCacheKeyPrefix("pubkey") + clientID
+	ttl := time.Until(entry.ExpiresAt)
+	if ttl <= 0 {
+		ttl = config.GetCacheTTL("pubkey")
+	}
+	cm.pubKeyCache.SetWithTTL(cacheKey, entry, 1, ttl)
+}
+
+// InvalidatePublicKey 使公钥缓存失效
+func (cm *Manager) InvalidatePublicKey(clientID string) {
+	if cm.pubKeyCache == nil {
+		return
+	}
+
+	cacheKey := config.GetCacheKeyPrefix("pubkey") + clientID
+	cm.pubKeyCache.Del(cacheKey)
+}
+
+// 公钥缓存相关字段（在 Manager 中初始化）
+var (
+	pubKeySF singleflight.Group
+)
+
+// initPubKeyCache 初始化公钥缓存
+func (cm *Manager) initPubKeyCache() {
+	pubKeyCache, err := ristretto.NewCache(&ristretto.Config[string, *KeyEntry]{
+		NumCounters: config.GetCacheNumCounters("pubkey"),
+		MaxCost:     config.GetCacheSize("pubkey"),
+		BufferItems: config.GetCacheBufferItems("pubkey"),
+	})
+	if err != nil {
+		logger.Errorf("[Manager] 创建 PubKey 缓存失败: %v", err)
+	} else {
+		cm.pubKeyCache = pubKeyCache
+	}
 }
 
 // fetchPublicKey 获取公钥（使用 singleflight 防止并发请求）
@@ -146,61 +203,4 @@ func (cm *Manager) asyncRefreshPublicKey(clientID, cacheKey string) {
 	if err != nil {
 		logger.Debugf("[Manager] 异步刷新公钥 singleflight 错误 clientID=%s: %v", clientID, err)
 	}
-}
-
-// GetAllPublicKeys 获取所有有效公钥（用于验证轮换期间的 token）
-func (cm *Manager) GetAllPublicKeys(ctx context.Context, clientID string) ([]paseto.V4AsymmetricPublicKey, error) {
-	// 1. 获取 Application
-	app, err := cm.GetApplication(ctx, clientID)
-	if err != nil {
-		return nil, fmt.Errorf("get application: %w", err)
-	}
-
-	// 2. 获取域信息
-	domain, err := cm.GetDomain(ctx, app.DomainID)
-	if err != nil {
-		return nil, fmt.Errorf("get domain: %w", err)
-	}
-
-	// 3. 从所有域密钥（48 字节 seed）派生公钥
-	publicKeys := make([]paseto.V4AsymmetricPublicKey, 0, len(domain.Keys))
-	for _, signKey := range domain.Keys {
-		seed, err := pasetokit.ParseSeed(signKey)
-		if err != nil {
-			logger.Warnf("[Manager] 解析 seed 失败: %v", err)
-			continue
-		}
-		publicKey, err := seed.DerivePublicKey()
-		if err != nil {
-			logger.Warnf("[Manager] 派生公钥失败: %v", err)
-			continue
-		}
-		publicKeys = append(publicKeys, publicKey)
-	}
-
-	return publicKeys, nil
-}
-
-// UpdatePublicKey 直接更新公钥缓存
-func (cm *Manager) UpdatePublicKey(clientID string, entry *KeyEntry) {
-	if cm.pubKeyCache == nil {
-		return
-	}
-
-	cacheKey := config.GetCacheKeyPrefix("pubkey") + clientID
-	ttl := time.Until(entry.ExpiresAt)
-	if ttl <= 0 {
-		ttl = config.GetCacheTTL("pubkey")
-	}
-	cm.pubKeyCache.SetWithTTL(cacheKey, entry, 1, ttl)
-}
-
-// InvalidatePublicKey 使公钥缓存失效
-func (cm *Manager) InvalidatePublicKey(clientID string) {
-	if cm.pubKeyCache == nil {
-		return
-	}
-
-	cacheKey := config.GetCacheKeyPrefix("pubkey") + clientID
-	cm.pubKeyCache.Del(cacheKey)
 }

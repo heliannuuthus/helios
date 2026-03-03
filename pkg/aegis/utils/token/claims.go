@@ -137,6 +137,17 @@ func ParseClaims(pasetoToken *paseto.Token) (Claims, error) {
 	}, nil
 }
 
+// ==================== 辅助函数 ====================
+
+func generateJTI() string {
+	jtiBytes := make([]byte, 16)
+	if _, err := rand.Read(jtiBytes); err != nil {
+		// crypto/rand 失败说明系统熵源不可用，不应回退到可预测值
+		panic(fmt.Sprintf("crypto/rand.Read failed: %v", err))
+	}
+	return hex.EncodeToString(jtiBytes)
+}
+
 // SetStandardClaims 设置标准 Claims 到 PASETO Token
 func (c *Claims) SetStandardClaims(token *paseto.Token) error {
 	now := time.Now()
@@ -160,23 +171,20 @@ func (c *Claims) SetStandardClaims(token *paseto.Token) error {
 
 // ==================== Getter 方法 ====================
 
-func (c *Claims) GetIssuer() string           { return c.Issuer }
-func (c *Claims) GetClientID() string         { return c.ClientID }
-func (c *Claims) GetAudience() string         { return c.Audience }
-func (c *Claims) GetSubject() string          { return c.Subject }
-func (c *Claims) GetIssuedAt() time.Time      { return c.IssuedAt }
-func (c *Claims) GetExpiresAt() time.Time     { return c.ExpiresAt }
-func (c *Claims) GetJTI() string              { return c.JTI }
+func (c *Claims) GetIssuer() string { return c.Issuer }
+
+func (c *Claims) GetClientID() string { return c.ClientID }
+
+func (c *Claims) GetAudience() string { return c.Audience }
+
+func (c *Claims) GetSubject() string { return c.Subject }
+
+func (c *Claims) GetIssuedAt() time.Time { return c.IssuedAt }
+
+func (c *Claims) GetExpiresAt() time.Time { return c.ExpiresAt }
+
+func (c *Claims) GetJTI() string { return c.JTI }
+
 func (c *Claims) GetExpiresIn() time.Duration { return c.ExpiresIn }
-func (c *Claims) IsExpired() bool             { return time.Now().After(c.ExpiresAt) }
 
-// ==================== 辅助函数 ====================
-
-func generateJTI() string {
-	jtiBytes := make([]byte, 16)
-	if _, err := rand.Read(jtiBytes); err != nil {
-		// crypto/rand 失败说明系统熵源不可用，不应回退到可预测值
-		panic(fmt.Sprintf("crypto/rand.Read failed: %v", err))
-	}
-	return hex.EncodeToString(jtiBytes)
-}
+func (c *Claims) IsExpired() bool { return time.Now().After(c.ExpiresAt) }

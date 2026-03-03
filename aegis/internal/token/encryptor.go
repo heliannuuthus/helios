@@ -42,6 +42,39 @@ func NewEncryptor(provider key.Provider, id string) *Encryptor {
 	return e
 }
 
+func (e *Encryptor) Encrypt(ctx context.Context, payload []byte) (string, error) {
+	if err := e.ensure(ctx); err != nil {
+		return "", fmt.Errorf("load key: %w", err)
+	}
+
+	e.mu.RLock()
+	sk := e.symmetricKey
+	lid := e.lid
+	e.mu.RUnlock()
+
+	t, err := paseto.NewTokenFromClaimsJSON(payload, nil)
+	if err != nil {
+		return "", fmt.Errorf("create inner token: %w", err)
+	}
+	footerBytes, err := pasetokit.NewFooter(lid).Marshal()
+	if err != nil {
+		return "", fmt.Errorf("marshal inner footer: %w", err)
+	}
+	t.SetFooter(footerBytes)
+	return t.V4Encrypt(sk, nil), nil
+}
+
+// GetLID returns the current PASERK lid.
+func (e *Encryptor) GetLID(ctx context.Context) (string, error) {
+	if err := e.ensure(ctx); err != nil {
+		return "", fmt.Errorf("load key: %w", err)
+	}
+
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.lid, nil
+}
+
 func (e *Encryptor) updateKey(rawKey []byte) error {
 	seed, err := pasetokit.ParseSeed(rawKey)
 	if err != nil {
@@ -80,37 +113,4 @@ func (e *Encryptor) ensure(ctx context.Context) error {
 	}
 
 	return e.updateKey(rawKey)
-}
-
-func (e *Encryptor) Encrypt(ctx context.Context, payload []byte) (string, error) {
-	if err := e.ensure(ctx); err != nil {
-		return "", fmt.Errorf("load key: %w", err)
-	}
-
-	e.mu.RLock()
-	sk := e.symmetricKey
-	lid := e.lid
-	e.mu.RUnlock()
-
-	t, err := paseto.NewTokenFromClaimsJSON(payload, nil)
-	if err != nil {
-		return "", fmt.Errorf("create inner token: %w", err)
-	}
-	footerBytes, err := pasetokit.NewFooter(lid).Marshal()
-	if err != nil {
-		return "", fmt.Errorf("marshal inner footer: %w", err)
-	}
-	t.SetFooter(footerBytes)
-	return t.V4Encrypt(sk, nil), nil
-}
-
-// GetLID returns the current PASERK lid.
-func (e *Encryptor) GetLID(ctx context.Context) (string, error) {
-	if err := e.ensure(ctx); err != nil {
-		return "", fmt.Errorf("load key: %w", err)
-	}
-
-	e.mu.RLock()
-	defer e.mu.RUnlock()
-	return e.lid, nil
 }

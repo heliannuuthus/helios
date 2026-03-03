@@ -10,27 +10,16 @@ import (
 
 	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
-	"github.com/heliannuuthus/helios/pkg/aegis/token"
+	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-func tokenPreview(tokenStr string, length int) string {
-	if len(tokenStr) <= length {
-		return tokenStr
-	}
-	return tokenStr[:length]
-}
-
-func RequireToken(v *token.Interpreter) gin.HandlerFunc {
+func RequireToken(v *web.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authorization := c.GetHeader("Authorization")
-		if authorization == "" {
+		tokenStr := extractBearer(c.GetHeader("Authorization"))
+		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "unauthorized"})
 			return
-		}
-		tokenStr := authorization
-		if strings.HasPrefix(authorization, "Bearer ") {
-			tokenStr = authorization[7:]
 		}
 		identity, err := v.Interpret(c.Request.Context(), tokenStr)
 		if err != nil {
@@ -38,26 +27,35 @@ func RequireToken(v *token.Interpreter) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "unauthorized"})
 			return
 		}
-		c.Set("user", identity)
+		tc, err := web.NewTokenContext(identity)
+		if err != nil {
+			logger.Warnf("[Auth] TokenContext failed - Path: %s, Error: %v", c.Request.URL.Path, err)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "unauthorized"})
+			return
+		}
+		c.Set(string(web.ClaimsKey), tc)
 		c.Next()
 	}
 }
 
-func OptionalToken(v *token.Interpreter) gin.HandlerFunc {
+func OptionalToken(v *web.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authorization := c.GetHeader("Authorization")
-		if authorization == "" {
+		tokenStr := extractBearer(c.GetHeader("Authorization"))
+		if tokenStr == "" {
 			c.Next()
 			return
 		}
-		tokenStr := authorization
-		if strings.HasPrefix(authorization, "Bearer ") {
-			tokenStr = authorization[7:]
-		}
 		identity, err := v.Interpret(c.Request.Context(), tokenStr)
-		if err == nil && identity != nil {
-			c.Set("user", identity)
+		if err != nil || identity == nil {
+			c.Next()
+			return
 		}
+		tc, err := web.NewTokenContext(identity)
+		if err != nil {
+			c.Next()
+			return
+		}
+		c.Set(string(web.ClaimsKey), tc)
 		c.Next()
 	}
 }
@@ -71,4 +69,18 @@ func NewHermesKeyStore() (*key.Store, error) {
 	return key.NewStore(key.FetcherFunc(func(ctx context.Context, id string) ([][]byte, error) {
 		return [][]byte{masterKey}, nil
 	}), nil), nil
+}
+
+func tokenPreview(tokenStr string, length int) string {
+	if len(tokenStr) <= length {
+		return tokenStr
+	}
+	return tokenStr[:length]
+}
+
+func extractBearer(authorization string) string {
+	if len(authorization) > 7 && strings.EqualFold(authorization[:7], "Bearer ") {
+		return authorization[7:]
+	}
+	return ""
 }

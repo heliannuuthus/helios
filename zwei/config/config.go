@@ -17,6 +17,28 @@ func Cfg() *baseconfig.Cfg {
 	return baseconfig.Zwei()
 }
 
+// GetAegisAudience 获取 Zwei 服务 audience（用于 token 验证）
+func GetAegisAudience() string {
+	audience := Cfg().GetString("aegis.audience")
+	if audience == "" {
+		return "zwei"
+	}
+	return audience
+}
+
+// InitDB 初始化 Zwei 数据库连接
+func InitDB() *gorm.DB {
+	cfg := Cfg()
+	dsn := parseDSNFromURL(cfg.GetString("db.url"))
+
+	db, err := pkgdb.Connect(dsn)
+	if err != nil {
+		logger.Fatalf("连接 Zwei 数据库失败: %v", err)
+	}
+	logger.Infof("数据库连接成功 (zwei): %s", dsn)
+	return db
+}
+
 // parseDSNFromURL 将 mysql://user:pass@host:port/db?params 格式转换为 Go MySQL DSN 格式
 func parseDSNFromURL(dbURL string) string {
 	if !strings.HasPrefix(dbURL, "mysql://") {
@@ -36,17 +58,4 @@ func parseDSNFromURL(dbURL string) string {
 		dsn += "?" + query
 	}
 	return dsn
-}
-
-// InitDB 初始化 Zwei 数据库连接
-func InitDB() *gorm.DB {
-	cfg := Cfg()
-	dsn := parseDSNFromURL(cfg.GetString("db.url"))
-
-	db, err := pkgdb.Connect(dsn)
-	if err != nil {
-		logger.Fatalf("连接 Zwei 数据库失败: %v", err)
-	}
-	logger.Infof("数据库连接成功 (zwei): %s", dsn)
-	return db
 }

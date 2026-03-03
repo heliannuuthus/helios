@@ -13,7 +13,7 @@ import (
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
-	"github.com/heliannuuthus/helios/pkg/aegis/utils/token"
+	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
@@ -24,6 +24,22 @@ type Handler struct {
 	mfaSvc        *aegis.MFAService
 }
 
+// getOpenID 从 Gin context 中获取用户标识
+func getOpenID(c *gin.Context) string {
+	return web.OpenIDFromGin(c)
+}
+
+// errorResponse 统一错误响应
+func errorResponse(c *gin.Context, err error) {
+	authErr := autherrors.ToAuthError(err)
+	c.JSON(authErr.HTTPStatus, authErr)
+}
+
+// encodeCredentialID 编码凭证 ID 为 Base64URL 字符串
+func encodeCredentialID(id []byte) string {
+	return base64.RawURLEncoding.EncodeToString(id)
+}
+
 // NewHandler 创建用户信息处理器
 func NewHandler(userSvc *hermes.UserService, credentialSvc *hermes.CredentialService, mfaSvc *aegis.MFAService) *Handler {
 	return &Handler{
@@ -31,30 +47,6 @@ func NewHandler(userSvc *hermes.UserService, credentialSvc *hermes.CredentialSer
 		credentialSvc: credentialSvc,
 		mfaSvc:        mfaSvc,
 	}
-}
-
-// getToken 从上下文获取验证后的 Token
-func getToken(c *gin.Context) token.Token {
-	if vt, exists := c.Get("user"); exists {
-		if t, ok := vt.(token.Token); ok {
-			return t
-		}
-	}
-	return nil
-}
-
-// getOpenID 从 Token 中获取用户标识（t_user.openid）
-func getOpenID(t token.Token) string {
-	if uat, ok := t.(*token.UserAccessToken); ok && uat.HasUser() {
-		return uat.GetOpenID()
-	}
-	return ""
-}
-
-// errorResponse 统一错误响应
-func errorResponse(c *gin.Context, err error) {
-	authErr := autherrors.ToAuthError(err)
-	c.JSON(authErr.HTTPStatus, authErr)
 }
 
 // ==================== 用户信息 ====================
@@ -72,13 +64,12 @@ type ProfileResponse struct {
 // GetProfile GET /user/profile
 // 获取当前用户信息
 func (h *Handler) GetProfile(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
+	openid := getOpenID(c)
+	if openid == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
 
-	openid := getOpenID(claims)
 	user, err := h.userSvc.GetUserWithDecrypted(c.Request.Context(), openid)
 	if err != nil {
 		errorResponse(c, autherrors.NewNotFound("user not found"))
@@ -106,8 +97,8 @@ type UpdateProfileRequest struct {
 // UpdateProfile PATCH /user/profile
 // 更新用户信息
 func (h *Handler) UpdateProfile(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
+	openid := getOpenID(c)
+	if openid == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
@@ -119,7 +110,6 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	openid := getOpenID(claims)
 
 	// 收集基础字段更新
 	updates := patch.Collect(
@@ -158,8 +148,8 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 // UploadAvatar POST /user/profile/avatar
 // 上传头像
 func (h *Handler) UploadAvatar(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
+	openid := getOpenID(c)
+	if openid == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
@@ -177,8 +167,7 @@ type UpdateEmailRequest struct {
 // UpdateEmail PUT /user/profile/email
 // 绑定/更新邮箱
 func (h *Handler) UpdateEmail(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
+	if getOpenID(c) == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
@@ -205,8 +194,7 @@ type UpdatePhoneRequest struct {
 // UpdatePhone PUT /user/profile/phone
 // 绑定/更新手机号
 func (h *Handler) UpdatePhone(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
+	if getOpenID(c) == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
@@ -232,13 +220,13 @@ type IdentityResponse struct {
 // ListIdentities GET /user/identities
 // 获取绑定的第三方身份列表
 func (h *Handler) ListIdentities(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
+	openid := getOpenID(c)
+	if openid == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
 
-	identities, err := h.userSvc.GetIdentities(c.Request.Context(), getOpenID(claims))
+	identities, err := h.userSvc.GetIdentities(c.Request.Context(), openid)
 	if err != nil {
 		errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
@@ -258,8 +246,7 @@ func (h *Handler) ListIdentities(c *gin.Context) {
 // BindIdentity POST /user/identities/:idp
 // 绑定第三方身份
 func (h *Handler) BindIdentity(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
+	if getOpenID(c) == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
@@ -279,8 +266,7 @@ func (h *Handler) BindIdentity(c *gin.Context) {
 // UnbindIdentity DELETE /user/identities/:idp
 // 解绑第三方身份
 func (h *Handler) UnbindIdentity(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
+	if getOpenID(c) == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
@@ -300,15 +286,13 @@ func (h *Handler) UnbindIdentity(c *gin.Context) {
 // GetMFAStatus GET /user/mfa
 // 获取 MFA 状态
 func (h *Handler) GetMFAStatus(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
+	openid := getOpenID(c)
+	if openid == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
 
 	ctx := c.Request.Context()
-
-	openid := getOpenID(claims)
 	status, err := h.credentialSvc.GetUserMFAStatus(ctx, openid)
 	if err != nil {
 		errorResponse(c, autherrors.NewServerError(err.Error()))
@@ -347,8 +331,8 @@ type SetupMFARequest struct {
 // - TOTP: 直接返回 secret 和 otpauth_uri
 // - WebAuthn: action=begin 返回 options，action=finish 完成注册
 func (h *Handler) SetupMFA(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
+	openid := getOpenID(c)
+	if openid == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
@@ -364,7 +348,7 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
 		resp, err := h.credentialSvc.SetupTOTP(ctx, &hermes.TOTPSetupRequest{
-			OpenID:  getOpenID(claims),
+			OpenID:  openid,
 			AppName: req.AppName,
 		})
 		if err != nil {
@@ -379,11 +363,192 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 		})
 
 	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		h.setupWebAuthn(c, getOpenID(claims), req.Type, req.Action, req.ChallengeID, req.Credential)
+		h.setupWebAuthn(c, openid, req.Type, req.Action, req.ChallengeID, req.Credential)
 
 	default:
 		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
 	}
+}
+
+// VerifyMFARequest 验证 MFA 请求
+type VerifyMFARequest struct {
+	Type   string `json:"type" binding:"required,oneof=totp webauthn passkey"`
+	Action string `json:"action,omitempty"` // "begin" 或 "finish"（WebAuthn 专用）
+
+	// TOTP 专用
+	CredentialID uint   `json:"credential_id,omitempty"`
+	Code         string `json:"code,omitempty"`
+	Confirm      bool   `json:"confirm,omitempty"` // 首次绑定确认
+
+	// WebAuthn finish 阶段专用
+	ChallengeID string         `json:"challenge_id,omitempty"`
+	Credential  jsontext.Value `json:"credential,omitempty"` // assertion response JSON
+}
+
+// VerifyMFA PUT /user/mfa
+// 验证 MFA
+// - TOTP: 直接验证 code
+// - WebAuthn: action=begin 返回 options，action=finish 完成验证
+func (h *Handler) VerifyMFA(c *gin.Context) {
+	openid := getOpenID(c)
+	if openid == "" {
+		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
+		return
+	}
+
+	var req VerifyMFARequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	switch models.CredentialType(req.Type) {
+	case models.CredentialTypeTOTP:
+		if req.Code == "" {
+			errorResponse(c, autherrors.NewInvalidRequest("code is required"))
+			return
+		}
+
+		if req.Confirm {
+			if req.CredentialID == 0 {
+				errorResponse(c, autherrors.NewInvalidRequest("credential_id is required for confirm"))
+				return
+			}
+			err := h.credentialSvc.ConfirmTOTP(ctx, &hermes.ConfirmTOTPRequest{
+				OpenID:       openid,
+				CredentialID: req.CredentialID,
+				Code:         req.Code,
+			})
+			if err != nil {
+				errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+				return
+			}
+		} else {
+			err := h.credentialSvc.VerifyTOTP(ctx, &hermes.VerifyTOTPRequest{
+				OpenID: openid,
+				Code:   req.Code,
+			})
+			if err != nil {
+				errorResponse(c, autherrors.NewAccessDenied(err.Error()))
+				return
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"type": "totp", "success": true})
+
+	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
+		h.verifyWebAuthn(c, openid, req.Type, req.Action, req.ChallengeID, req.Credential)
+
+	default:
+		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
+	}
+}
+
+// UpdateMFARequest 更新 MFA 请求
+type UpdateMFARequest struct {
+	Type         string `json:"type" binding:"required,oneof=totp webauthn passkey"`
+	CredentialID string `json:"credential_id,omitempty"`
+	Enabled      *bool  `json:"enabled"`
+}
+
+// UpdateMFA PATCH /user/mfa
+// 启用/禁用 MFA
+func (h *Handler) UpdateMFA(c *gin.Context) {
+	openid := getOpenID(c)
+	if openid == "" {
+		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
+		return
+	}
+
+	var req UpdateMFARequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		return
+	}
+
+	if req.Enabled == nil {
+		errorResponse(c, autherrors.NewInvalidRequest("enabled is required"))
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	switch models.CredentialType(req.Type) {
+	case models.CredentialTypeTOTP:
+		err := h.credentialSvc.SetTOTPEnabled(ctx, openid, *req.Enabled)
+		if err != nil {
+			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+			return
+		}
+
+	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
+		if req.CredentialID == "" {
+			errorResponse(c, autherrors.NewInvalidRequest("credential_id is required"))
+			return
+		}
+		err := h.credentialSvc.SetWebAuthnEnabled(ctx, openid, req.CredentialID, *req.Enabled)
+		if err != nil {
+			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+			return
+		}
+
+	default:
+		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// DeleteMFARequest 删除 MFA 请求
+type DeleteMFARequest struct {
+	Type         string `json:"type" binding:"required,oneof=totp webauthn passkey"`
+	CredentialID string `json:"credential_id,omitempty"`
+}
+
+// DeleteMFA DELETE /user/mfa
+// 删除 MFA
+func (h *Handler) DeleteMFA(c *gin.Context) {
+	openid := getOpenID(c)
+	if openid == "" {
+		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
+		return
+	}
+
+	var req DeleteMFARequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	switch models.CredentialType(req.Type) {
+	case models.CredentialTypeTOTP:
+		err := h.credentialSvc.DisableTOTP(ctx, openid)
+		if err != nil {
+			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+			return
+		}
+
+	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
+		if req.CredentialID == "" {
+			errorResponse(c, autherrors.NewInvalidRequest("credential_id is required"))
+			return
+		}
+		err := h.credentialSvc.DeleteWebAuthn(ctx, openid, req.CredentialID)
+		if err != nil {
+			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+			return
+		}
+
+	default:
+		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 // setupWebAuthn 处理 WebAuthn 设置流程
@@ -446,81 +611,6 @@ func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challe
 	}
 }
 
-// VerifyMFARequest 验证 MFA 请求
-type VerifyMFARequest struct {
-	Type   string `json:"type" binding:"required,oneof=totp webauthn passkey"`
-	Action string `json:"action,omitempty"` // "begin" 或 "finish"（WebAuthn 专用）
-
-	// TOTP 专用
-	CredentialID uint   `json:"credential_id,omitempty"`
-	Code         string `json:"code,omitempty"`
-	Confirm      bool   `json:"confirm,omitempty"` // 首次绑定确认
-
-	// WebAuthn finish 阶段专用
-	ChallengeID string         `json:"challenge_id,omitempty"`
-	Credential  jsontext.Value `json:"credential,omitempty"` // assertion response JSON
-}
-
-// VerifyMFA PUT /user/mfa
-// 验证 MFA
-// - TOTP: 直接验证 code
-// - WebAuthn: action=begin 返回 options，action=finish 完成验证
-func (h *Handler) VerifyMFA(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
-		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
-		return
-	}
-
-	var req VerifyMFARequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	switch models.CredentialType(req.Type) {
-	case models.CredentialTypeTOTP:
-		if req.Code == "" {
-			errorResponse(c, autherrors.NewInvalidRequest("code is required"))
-			return
-		}
-
-		if req.Confirm {
-			if req.CredentialID == 0 {
-				errorResponse(c, autherrors.NewInvalidRequest("credential_id is required for confirm"))
-				return
-			}
-			err := h.credentialSvc.ConfirmTOTP(ctx, &hermes.ConfirmTOTPRequest{
-				OpenID:       getOpenID(claims),
-				CredentialID: req.CredentialID,
-				Code:         req.Code,
-			})
-			if err != nil {
-				errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-				return
-			}
-		} else {
-			err := h.credentialSvc.VerifyTOTP(ctx, &hermes.VerifyTOTPRequest{
-				OpenID: getOpenID(claims),
-				Code:   req.Code,
-			})
-			if err != nil {
-				errorResponse(c, autherrors.NewAccessDenied(err.Error()))
-				return
-			}
-		}
-		c.JSON(http.StatusOK, gin.H{"type": "totp", "success": true})
-
-	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		h.verifyWebAuthn(c, getOpenID(claims), req.Type, req.Action, req.ChallengeID, req.Credential)
-
-	default:
-		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
-	}
-}
-
 // verifyWebAuthn 处理 WebAuthn 验证流程
 func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, challengeID string, credentialJSON jsontext.Value) {
 	if !h.mfaSvc.WebAuthnEnabled() {
@@ -577,115 +667,4 @@ func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, chall
 	default:
 		errorResponse(c, autherrors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
 	}
-}
-
-// UpdateMFARequest 更新 MFA 请求
-type UpdateMFARequest struct {
-	Type         string `json:"type" binding:"required,oneof=totp webauthn passkey"`
-	CredentialID string `json:"credential_id,omitempty"`
-	Enabled      *bool  `json:"enabled"`
-}
-
-// UpdateMFA PATCH /user/mfa
-// 启用/禁用 MFA
-func (h *Handler) UpdateMFA(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
-		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
-		return
-	}
-
-	var req UpdateMFARequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	if req.Enabled == nil {
-		errorResponse(c, autherrors.NewInvalidRequest("enabled is required"))
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	switch models.CredentialType(req.Type) {
-	case models.CredentialTypeTOTP:
-		err := h.credentialSvc.SetTOTPEnabled(ctx, getOpenID(claims), *req.Enabled)
-		if err != nil {
-			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-			return
-		}
-
-	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		if req.CredentialID == "" {
-			errorResponse(c, autherrors.NewInvalidRequest("credential_id is required"))
-			return
-		}
-		err := h.credentialSvc.SetWebAuthnEnabled(ctx, getOpenID(claims), req.CredentialID, *req.Enabled)
-		if err != nil {
-			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-			return
-		}
-
-	default:
-		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true})
-}
-
-// DeleteMFARequest 删除 MFA 请求
-type DeleteMFARequest struct {
-	Type         string `json:"type" binding:"required,oneof=totp webauthn passkey"`
-	CredentialID string `json:"credential_id,omitempty"`
-}
-
-// DeleteMFA DELETE /user/mfa
-// 删除 MFA
-func (h *Handler) DeleteMFA(c *gin.Context) {
-	claims := getToken(c)
-	if claims == nil {
-		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
-		return
-	}
-
-	var req DeleteMFARequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	switch models.CredentialType(req.Type) {
-	case models.CredentialTypeTOTP:
-		err := h.credentialSvc.DisableTOTP(ctx, getOpenID(claims))
-		if err != nil {
-			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-			return
-		}
-
-	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		if req.CredentialID == "" {
-			errorResponse(c, autherrors.NewInvalidRequest("credential_id is required"))
-			return
-		}
-		err := h.credentialSvc.DeleteWebAuthn(ctx, getOpenID(claims), req.CredentialID)
-		if err != nil {
-			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-			return
-		}
-
-	default:
-		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true})
-}
-
-// encodeCredentialID 编码凭证 ID 为 Base64URL 字符串
-func encodeCredentialID(id []byte) string {
-	return base64.RawURLEncoding.EncodeToString(id)
 }

@@ -14,15 +14,6 @@ type Notifier struct {
 	defaultTo ChatID
 }
 
-// NewNotifier 创建通知发送器
-// defaultTo: 默认发送目标（chat_id 或 @username）
-func NewNotifier(client *Client, defaultTo ChatID) *Notifier {
-	return &Notifier{
-		client:    client,
-		defaultTo: defaultTo,
-	}
-}
-
 // NotifyOption 通知选项
 type NotifyOption func(*SendMessageRequest)
 
@@ -89,57 +80,6 @@ func WithDisablePreview() NotifyOption {
 	}
 }
 
-// Notify 发送通知消息
-func (n *Notifier) Notify(ctx context.Context, text string, opts ...NotifyOption) (*Message, error) {
-	req := &SendMessageRequest{
-		ChatID: n.defaultTo,
-		Text:   text,
-	}
-
-	for _, opt := range opts {
-		opt(req)
-	}
-
-	return n.client.SendMessage(ctx, req)
-}
-
-// NotifyWithTimeout 带超时的发送通知
-func (n *Notifier) NotifyWithTimeout(text string, timeout time.Duration, opts ...NotifyOption) (*Message, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	return n.Notify(ctx, text, opts...)
-}
-
-// NotifyAsync 异步发送通知（不阻塞，错误只记录日志）
-func (n *Notifier) NotifyAsync(text string, opts ...NotifyOption) {
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		if _, err := n.Notify(ctx, text, opts...); err != nil {
-			logger.Errorf("[Telegram] 异步发送通知失败: %v", err)
-		}
-	}()
-}
-
-// NotifyHTML 发送 HTML 格式消息
-func (n *Notifier) NotifyHTML(ctx context.Context, text string, opts ...NotifyOption) (*Message, error) {
-	opts = append([]NotifyOption{WithHTML()}, opts...)
-	return n.Notify(ctx, text, opts...)
-}
-
-// NotifyMarkdown 发送 Markdown 格式消息
-func (n *Notifier) NotifyMarkdown(ctx context.Context, text string, opts ...NotifyOption) (*Message, error) {
-	opts = append([]NotifyOption{WithMarkdown()}, opts...)
-	return n.Notify(ctx, text, opts...)
-}
-
-// Client 获取底层客户端（用于更复杂的操作）
-func (n *Notifier) Client() *Client {
-	return n.client
-}
-
 // ---- 便捷构建方法 ----
 
 // NewInlineKeyboard 创建内联键盘
@@ -180,17 +120,6 @@ func EscapeMarkdownV2(text string) string {
 		result = escapeChar(result, c)
 	}
 	return result
-}
-
-func escapeChar(s string, c rune) string {
-	var result []rune
-	for _, r := range s {
-		if r == c {
-			result = append(result, '\\')
-		}
-		result = append(result, r)
-	}
-	return string(result)
 }
 
 // Bold 加粗文本（HTML）
@@ -241,4 +170,75 @@ func Strikethrough(text string) string {
 // Underline 下划线文本（HTML）
 func Underline(text string) string {
 	return fmt.Sprintf("<u>%s</u>", text)
+}
+
+func escapeChar(s string, c rune) string {
+	var result []rune
+	for _, r := range s {
+		if r == c {
+			result = append(result, '\\')
+		}
+		result = append(result, r)
+	}
+	return string(result)
+}
+
+// NewNotifier 创建通知发送器
+// defaultTo: 默认发送目标（chat_id 或 @username）
+func NewNotifier(client *Client, defaultTo ChatID) *Notifier {
+	return &Notifier{
+		client:    client,
+		defaultTo: defaultTo,
+	}
+}
+
+// Notify 发送通知消息
+func (n *Notifier) Notify(ctx context.Context, text string, opts ...NotifyOption) (*Message, error) {
+	req := &SendMessageRequest{
+		ChatID: n.defaultTo,
+		Text:   text,
+	}
+
+	for _, opt := range opts {
+		opt(req)
+	}
+
+	return n.client.SendMessage(ctx, req)
+}
+
+// NotifyWithTimeout 带超时的发送通知
+func (n *Notifier) NotifyWithTimeout(text string, timeout time.Duration, opts ...NotifyOption) (*Message, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	return n.Notify(ctx, text, opts...)
+}
+
+// NotifyAsync 异步发送通知（不阻塞，错误只记录日志）
+func (n *Notifier) NotifyAsync(text string, opts ...NotifyOption) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		if _, err := n.Notify(ctx, text, opts...); err != nil {
+			logger.Errorf("[Telegram] 异步发送通知失败: %v", err)
+		}
+	}()
+}
+
+// NotifyHTML 发送 HTML 格式消息
+func (n *Notifier) NotifyHTML(ctx context.Context, text string, opts ...NotifyOption) (*Message, error) {
+	opts = append([]NotifyOption{WithHTML()}, opts...)
+	return n.Notify(ctx, text, opts...)
+}
+
+// NotifyMarkdown 发送 Markdown 格式消息
+func (n *Notifier) NotifyMarkdown(ctx context.Context, text string, opts ...NotifyOption) (*Message, error) {
+	opts = append([]NotifyOption{WithMarkdown()}, opts...)
+	return n.Notify(ctx, text, opts...)
+}
+
+// Client 获取底层客户端（用于更复杂的操作）
+func (n *Notifier) Client() *Client {
+	return n.client
 }

@@ -66,17 +66,6 @@ func (p *CaptchaProvider) Verify(ctx context.Context, proof string, params ...an
 	return verifier.Verify(ctx, proof, remoteIP)
 }
 
-func (p *CaptchaProvider) getVerifier(strategy string) (captcha.Verifier, error) {
-	if strategy == "" {
-		strategy = p.defaultStrategy
-	}
-	v, ok := p.verifiers[strategy]
-	if !ok {
-		return nil, fmt.Errorf("unsupported captcha strategy: %s", strategy)
-	}
-	return v, nil
-}
-
 // Prepare 返回前端公开配置
 func (p *CaptchaProvider) Prepare() *types.ConnectionConfig {
 	strategies := make([]string, 0, len(p.verifiers))
@@ -105,4 +94,15 @@ func (p *CaptchaProvider) GetIdentifier() string {
 // GetProvider 获取默认 strategy 名称
 func (p *CaptchaProvider) GetProvider() string {
 	return p.defaultStrategy
+}
+
+func (p *CaptchaProvider) getVerifier(strategy string) (captcha.Verifier, error) {
+	if strategy == "" {
+		strategy = p.defaultStrategy
+	}
+	v, ok := p.verifiers[strategy]
+	if !ok {
+		return nil, fmt.Errorf("unsupported captcha strategy: %s", strategy)
+	}
+	return v, nil
 }

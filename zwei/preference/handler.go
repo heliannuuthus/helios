@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/aegis"
+	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/zwei/tag"
 )
@@ -54,19 +54,13 @@ func (h *Handler) GetOptions(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/user/preference [get]
 func (h *Handler) GetUserPreferences(c *gin.Context) {
-	// 获取当前用户
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
 		return
 	}
 
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的用户信息"})
-		return
-	}
-	prefs, err := h.service.GetUserPreferences(aegis.GetOpenIDFromToken(identity))
+	prefs, err := h.service.GetUserPreferences(openID)
 	if err != nil {
 		logger.Error("获取用户偏好失败", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取用户偏好失败"})
@@ -90,18 +84,12 @@ func (h *Handler) GetUserPreferences(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/user/preference [put]
 func (h *Handler) UpdateUserPreferences(c *gin.Context) {
-	// 获取当前用户
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
 		return
 	}
 
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "无效的用户信息"})
-		return
-	}
 	var req UpdatePreferencesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误: " + err.Error()})
@@ -116,7 +104,7 @@ func (h *Handler) UpdateUserPreferences(c *gin.Context) {
 	}
 
 	// 更新偏好
-	if err := h.service.UpdateUserPreferences(aegis.GetOpenIDFromToken(identity), &req); err != nil {
+	if err := h.service.UpdateUserPreferences(openID, &req); err != nil {
 		logger.Error("更新用户偏好失败", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新用户偏好失败"})
 		return

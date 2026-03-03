@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/aegis"
+	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/zwei"
 )
@@ -83,12 +83,7 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 		ExcludeIDs: req.ExcludeIDs,
 	}
 
-	// 获取用户身份（如果已登录）
-	if user, exists := c.Get("user"); exists {
-		if identity, ok := user.(aegis.Token); ok {
-			ctx.UserID = aegis.GetOpenIDFromToken(identity)
-		}
-	}
+	ctx.UserID = web.OpenIDFromGin(c)
 
 	// 检查每日推荐次数限制
 	remaining, allowed := h.rateLimiter.Check(ctx.UserID)

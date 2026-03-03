@@ -70,32 +70,6 @@ func (s *Service) GetRPID() string {
 	return s.rpID
 }
 
-// credentialsToExclusions 将凭证转换为排除列表
-func credentialsToExclusions(credentials []webauthn.Credential) []protocol.CredentialDescriptor {
-	exclusions := make([]protocol.CredentialDescriptor, 0, len(credentials))
-	for _, cred := range credentials {
-		exclusions = append(exclusions, protocol.CredentialDescriptor{
-			Type:         protocol.PublicKeyCredentialType,
-			CredentialID: cred.ID,
-			Transport:    cred.Transport,
-		})
-	}
-	return exclusions
-}
-
-// credentialsToAllowed 将凭证转换为允许列表
-func credentialsToAllowed(credentials []webauthn.Credential) []protocol.CredentialDescriptor {
-	allowed := make([]protocol.CredentialDescriptor, 0, len(credentials))
-	for _, cred := range credentials {
-		allowed = append(allowed, protocol.CredentialDescriptor{
-			Type:         protocol.PublicKeyCredentialType,
-			CredentialID: cred.ID,
-			Transport:    cred.Transport,
-		})
-	}
-	return allowed
-}
-
 // ==================== 注册流程 ====================
 
 // BeginRegistration 开始注册
@@ -374,6 +348,29 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertion
 	return openid, credential, nil
 }
 
+// ==================== 凭证管理 ====================
+
+// SaveCredential 保存凭证
+func (s *Service) SaveCredential(ctx context.Context, openid string, credential *webauthn.Credential) error {
+	stored := cache.FromWebAuthnCredential(credential)
+	return s.cache.SaveUserWebAuthnCredential(ctx, openid, stored)
+}
+
+// UpdateCredentialSignCount 更新凭证签名计数
+func (s *Service) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
+	return s.cache.UpdateWebAuthnCredentialSignCount(ctx, credentialID, signCount)
+}
+
+// DeleteCredential 删除凭证
+func (s *Service) DeleteCredential(ctx context.Context, openid, credentialID string) error {
+	return s.cache.DeleteUserWebAuthnCredential(ctx, openid, credentialID)
+}
+
+// ListCredentials 列出用户的所有 WebAuthn 凭证
+func (s *Service) ListCredentials(ctx context.Context, openid string) ([]*cache.StoredWebAuthnCredential, error) {
+	return s.cache.GetUserWebAuthnCredentials(ctx, openid)
+}
+
 // finishDiscoverableLogin 完成可发现凭证登录
 func (s *Service) finishDiscoverableLogin(ctx context.Context, session *webauthn.SessionData, parsedResponse *protocol.ParsedCredentialAssertionData) (*webauthn.Credential, error) {
 	credentialID := base64.RawURLEncoding.EncodeToString(parsedResponse.RawID)
@@ -413,25 +410,28 @@ func (s *Service) finishDiscoverableLogin(ctx context.Context, session *webauthn
 	return credential, nil
 }
 
-// ==================== 凭证管理 ====================
-
-// SaveCredential 保存凭证
-func (s *Service) SaveCredential(ctx context.Context, openid string, credential *webauthn.Credential) error {
-	stored := cache.FromWebAuthnCredential(credential)
-	return s.cache.SaveUserWebAuthnCredential(ctx, openid, stored)
+// credentialsToExclusions 将凭证转换为排除列表
+func credentialsToExclusions(credentials []webauthn.Credential) []protocol.CredentialDescriptor {
+	exclusions := make([]protocol.CredentialDescriptor, 0, len(credentials))
+	for _, cred := range credentials {
+		exclusions = append(exclusions, protocol.CredentialDescriptor{
+			Type:         protocol.PublicKeyCredentialType,
+			CredentialID: cred.ID,
+			Transport:    cred.Transport,
+		})
+	}
+	return exclusions
 }
 
-// UpdateCredentialSignCount 更新凭证签名计数
-func (s *Service) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
-	return s.cache.UpdateWebAuthnCredentialSignCount(ctx, credentialID, signCount)
-}
-
-// DeleteCredential 删除凭证
-func (s *Service) DeleteCredential(ctx context.Context, openid, credentialID string) error {
-	return s.cache.DeleteUserWebAuthnCredential(ctx, openid, credentialID)
-}
-
-// ListCredentials 列出用户的所有 WebAuthn 凭证
-func (s *Service) ListCredentials(ctx context.Context, openid string) ([]*cache.StoredWebAuthnCredential, error) {
-	return s.cache.GetUserWebAuthnCredentials(ctx, openid)
+// credentialsToAllowed 将凭证转换为允许列表
+func credentialsToAllowed(credentials []webauthn.Credential) []protocol.CredentialDescriptor {
+	allowed := make([]protocol.CredentialDescriptor, 0, len(credentials))
+	for _, cred := range credentials {
+		allowed = append(allowed, protocol.CredentialDescriptor{
+			Type:         protocol.PublicKeyCredentialType,
+			CredentialID: cred.ID,
+			Transport:    cred.Transport,
+		})
+	}
+	return allowed
 }

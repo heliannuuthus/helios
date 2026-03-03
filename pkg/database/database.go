@@ -89,20 +89,6 @@ func WithColorful(colorful bool) Option {
 	}
 }
 
-// defaultOptions 返回默认选项
-func defaultOptions() *options {
-	return &options{
-		maxIdleConns:    10,
-		maxOpenConns:    30,
-		connMaxLifetime: time.Hour,
-		connMaxIdleTime: 30 * time.Minute,
-		logLevel:        gormlogger.Error,
-		slowThreshold:   200 * time.Millisecond,
-		ignoreNotFound:  true,
-		colorful:        true,
-	}
-}
-
 // Connect 连接数据库
 // dsn 格式: user:password@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
 func Connect(dsn string, opts ...Option) (*gorm.DB, error) {
@@ -157,4 +143,18 @@ func MustConnect(dsn string, opts ...Option) *gorm.DB {
 		panic(err)
 	}
 	return db
+}
+
+// defaultOptions 返回默认选项
+func defaultOptions() *options {
+	return &options{
+		maxIdleConns:    10,
+		maxOpenConns:    30,
+		connMaxLifetime: time.Hour,
+		connMaxIdleTime: 30 * time.Minute,
+		logLevel:        gormlogger.Error,
+		slowThreshold:   200 * time.Millisecond,
+		ignoreNotFound:  true,
+		colorful:        true,
+	}
 }

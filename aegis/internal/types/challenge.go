@@ -98,6 +98,23 @@ type Challenge struct {
 	Data        map[string]any    `json:"data,omitempty"`
 }
 
+// NewChallenge 创建新的 Challenge（三层模型）
+func NewChallenge(clientID, audience, bizType string, channelType ChannelType, channel string, expiresIn time.Duration, limits map[string]int, ip string) *Challenge {
+	now := time.Now()
+	return &Challenge{
+		ID:          GenerateChallengeID(),
+		ClientID:    clientID,
+		Audience:    audience,
+		Type:        bizType,
+		ChannelType: channelType,
+		Channel:     channel,
+		Limits:      limits,
+		IP:          ip,
+		CreatedAt:   now,
+		ExpiresAt:   now.Add(expiresIn),
+	}
+}
+
 // IsUnmet 检查是否有未完成的前置条件
 func (c *Challenge) IsUnmet() bool {
 	for _, cfg := range c.Required {
@@ -116,28 +133,6 @@ func (c *Challenge) IsExpired() bool {
 // ExpiresIn 返回剩余有效时间
 func (c *Challenge) ExpiresIn() time.Duration {
 	return time.Until(c.ExpiresAt)
-}
-
-// GenerateChallengeID 生成 Challenge ID（16位 Base62）
-func GenerateChallengeID() string {
-	return helpers.GenerateID(16)
-}
-
-// NewChallenge 创建新的 Challenge（三层模型）
-func NewChallenge(clientID, audience, bizType string, channelType ChannelType, channel string, expiresIn time.Duration, limits map[string]int, ip string) *Challenge {
-	now := time.Now()
-	return &Challenge{
-		ID:          GenerateChallengeID(),
-		ClientID:    clientID,
-		Audience:    audience,
-		Type:        bizType,
-		ChannelType: channelType,
-		Channel:     channel,
-		Limits:      limits,
-		IP:          ip,
-		CreatedAt:   now,
-		ExpiresAt:   now.Add(expiresIn),
-	}
 }
 
 // SetData 设置附加数据
@@ -242,4 +237,9 @@ func (c *Challenge) UnmarshalFromStorage(data []byte) error {
 		}
 	}
 	return nil
+}
+
+// GenerateChallengeID 生成 Challenge ID（16位 Base62）
+func GenerateChallengeID() string {
+	return helpers.GenerateID(16)
 }

@@ -41,48 +41,6 @@ func NewSigner(provider key.Provider, id string) *Signer {
 	return s
 }
 
-func (s *Signer) updateKey(rawKey []byte) error {
-	seed, err := pasetokit.ParseSeed(rawKey)
-	if err != nil {
-		return fmt.Errorf("parse seed: %w", err)
-	}
-	sk, err := seed.DeriveSecretKey()
-	if err != nil {
-		return fmt.Errorf("derive secret key: %w", err)
-	}
-
-	pid, err := pasetokit.ComputePID(sk.Public())
-	if err != nil {
-		return fmt.Errorf("compute pid: %w", err)
-	}
-
-	logger.Debugf("[Signer] updateKey id=%s, key len=%d, salt_hex=%x, derived pid=%s", s.id, len(rawKey), rawKey[:16], pid)
-
-	s.mu.Lock()
-	s.secretKey = sk
-	s.pid = pid
-	s.mu.Unlock()
-
-	return nil
-}
-
-func (s *Signer) ensure(ctx context.Context) error {
-	s.mu.RLock()
-	hasKey := s.pid != ""
-	s.mu.RUnlock()
-
-	if hasKey {
-		return nil
-	}
-
-	rawKey, err := s.provider.OneOfKey(ctx, s.id)
-	if err != nil {
-		return err
-	}
-
-	return s.updateKey(rawKey)
-}
-
 // Sign signs the token and includes the kid in the footer.
 func (s *Signer) Sign(ctx context.Context, token *paseto.Token) (string, error) {
 	if err := s.ensure(ctx); err != nil {
@@ -124,4 +82,46 @@ func (s *Signer) PublicKey(ctx context.Context) (paseto.V4AsymmetricPublicKey, e
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.secretKey.Public(), nil
+}
+
+func (s *Signer) updateKey(rawKey []byte) error {
+	seed, err := pasetokit.ParseSeed(rawKey)
+	if err != nil {
+		return fmt.Errorf("parse seed: %w", err)
+	}
+	sk, err := seed.DeriveSecretKey()
+	if err != nil {
+		return fmt.Errorf("derive secret key: %w", err)
+	}
+
+	pid, err := pasetokit.ComputePID(sk.Public())
+	if err != nil {
+		return fmt.Errorf("compute pid: %w", err)
+	}
+
+	logger.Debugf("[Signer] updateKey id=%s, key len=%d, salt_hex=%x, derived pid=%s", s.id, len(rawKey), rawKey[:16], pid)
+
+	s.mu.Lock()
+	s.secretKey = sk
+	s.pid = pid
+	s.mu.Unlock()
+
+	return nil
+}
+
+func (s *Signer) ensure(ctx context.Context) error {
+	s.mu.RLock()
+	hasKey := s.pid != ""
+	s.mu.RUnlock()
+
+	if hasKey {
+		return nil
+	}
+
+	rawKey, err := s.provider.OneOfKey(ctx, s.id)
+	if err != nil {
+		return err
+	}
+
+	return s.updateKey(rawKey)
 }

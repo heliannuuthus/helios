@@ -44,6 +44,24 @@ func NewDecryptor(provider key.Provider, id string) *Decryptor {
 	return d
 }
 
+func (d *Decryptor) Decrypt(ctx context.Context, encrypted string) ([]byte, error) {
+	if err := d.ensure(ctx); err != nil {
+		return nil, fmt.Errorf("load key: %w", err)
+	}
+
+	d.mu.RLock()
+	sk := d.symmetricKey
+	d.mu.RUnlock()
+
+	parser := paseto.NewParserWithoutExpiryCheck()
+	t, err := parser.ParseV4Local(sk, encrypted, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt inner token: %w", err)
+	}
+
+	return t.ClaimsJSON(), nil
+}
+
 func (d *Decryptor) updateKey(rawKey []byte) error {
 	seed, err := pasetokit.ParseSeed(rawKey)
 	if err != nil {
@@ -81,22 +99,4 @@ func (d *Decryptor) ensure(ctx context.Context) error {
 	}
 
 	return d.updateKey(rawKey)
-}
-
-func (d *Decryptor) Decrypt(ctx context.Context, encrypted string) ([]byte, error) {
-	if err := d.ensure(ctx); err != nil {
-		return nil, fmt.Errorf("load key: %w", err)
-	}
-
-	d.mu.RLock()
-	sk := d.symmetricKey
-	d.mu.RUnlock()
-
-	parser := paseto.NewParserWithoutExpiryCheck()
-	t, err := parser.ParseV4Local(sk, encrypted, nil)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt inner token: %w", err)
-	}
-
-	return t.ClaimsJSON(), nil
 }

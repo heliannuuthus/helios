@@ -9,11 +9,12 @@ import (
 
 	aegisconfig "github.com/heliannuuthus/helios/aegis/config"
 	"github.com/heliannuuthus/helios/aegis/middleware"
-	_ "github.com/heliannuuthus/helios/docs" // swagger docs
+	_ "github.com/heliannuuthus/helios/docs"
 	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
 	irisconfig "github.com/heliannuuthus/helios/iris/config"
 	"github.com/heliannuuthus/helios/pkg/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	zweiconfig "github.com/heliannuuthus/helios/zwei/config"
 )
 
 // @title Helios API
@@ -77,22 +78,35 @@ func main() {
 	// Aegis 认证路由（OAuth2.1/OIDC 风格）
 	authGroup := r.Group("/auth")
 	{
-		// Aegis UI 调用的接口（需要 CORS）
-		authGroup.POST("/authorize", aegisCORS, app.AegisHandler.Authorize)              // 创建认证会话并重定向到登录页面
-		authGroup.GET("/connections", aegisCORS, app.AegisHandler.GetConnections)        // 获取可用的 Connection 配置
-		authGroup.GET("/context", aegisCORS, app.AegisHandler.GetContext)                // 获取当前流程的应用和服务信息
-		authGroup.POST("/login", aegisCORS, app.AegisHandler.Login)                      // IDP 登录
-		authGroup.GET("/binding", aegisCORS, app.AegisHandler.GetIdentifyContext)        // 获取识别到的已有用户信息
-		authGroup.POST("/binding", aegisCORS, app.AegisHandler.ConfirmIdentify)          // 确认/取消账户关联
-		authGroup.POST("/challenge", aegisCORS, app.AegisHandler.InitiateChallenge)      // 发起 Challenge
-		authGroup.POST("/challenge/:cid", aegisCORS, app.AegisHandler.ContinueChallenge) // 验证 Challenge
+		// 需要 CORS 的路由（aegis-ui / 业务前端 SPA 跨域调用）
+		// CORS 中间件挂在每个路由上；OPTIONS 方法单独注册以处理 preflight
+		corsRoutes := []struct {
+			method, path string
+			handler      gin.HandlerFunc
+		}{
+			{"POST", "/authorize", app.AegisHandler.Authorize},
+			{"GET", "/connections", app.AegisHandler.GetConnections},
+			{"GET", "/context", app.AegisHandler.GetContext},
+			{"POST", "/login", app.AegisHandler.Login},
+			{"GET", "/binding", app.AegisHandler.GetIdentifyContext},
+			{"POST", "/binding", app.AegisHandler.ConfirmIdentify},
+			{"POST", "/challenge", app.AegisHandler.InitiateChallenge},
+			{"POST", "/challenge/:cid", app.AegisHandler.ContinueChallenge},
+			{"POST", "/token", app.AegisHandler.Token},
+			{"POST", "/revoke", app.AegisHandler.Revoke},
+			{"POST", "/logout", app.AegisHandler.Logout},
+		}
+		registered := make(map[string]bool)
+		for _, route := range corsRoutes {
+			authGroup.Handle(route.method, route.path, aegisCORS, route.handler)
+			if !registered[route.path] {
+				authGroup.OPTIONS(route.path, aegisCORS)
+				registered[route.path] = true
+			}
+		}
 
-		// 业务前端调用的接口（SPA 跨域调用，需要 CORS 支持应用配置的 allowed_origins）
-		authGroup.POST("/token", aegisCORS, app.AegisHandler.Token)   // 获取/刷新 Token
-		authGroup.POST("/revoke", aegisCORS, app.AegisHandler.Revoke) // 撤销 Token
 		// 服务端调用的接口（不需要 CORS）
-		authGroup.POST("/check", app.AegisHandler.Check) // 关系检查（使用 CAT 认证）
-		authGroup.POST("/logout", middleware.RequireToken(app.Interpreter), app.AegisHandler.Logout)
+		authGroup.POST("/check", app.AegisHandler.Check)       // 关系检查（使用 CAT 认证）
 		authGroup.GET("/pubkeys", app.AegisHandler.PublicKeys) // 获取 PASETO 公钥
 	}
 
@@ -100,32 +114,40 @@ func main() {
 	// CORS: iris.heliannuuthus.com 前端使用 Bearer Token 跨域调用
 	irisMw := app.MiddlewareFactory.WithAudience(irisconfig.GetAegisAudience())
 	userGroup := r.Group("/user")
-	userGroup.Use(aegisCORS, irisMw.RequireAuth())
 	{
-		// /user/profile - 用户基本信息
-		userGroup.GET("/profile", app.IrisHandler.GetProfile)
-		userGroup.PATCH("/profile", app.IrisHandler.UpdateProfile)
-		userGroup.POST("/profile/avatar", app.IrisHandler.UploadAvatar)
-		userGroup.PUT("/profile/email", app.IrisHandler.UpdateEmail)
-		userGroup.PUT("/profile/phone", app.IrisHandler.UpdatePhone)
-
-		// /user/identities - 第三方身份
-		userGroup.GET("/identities", app.IrisHandler.ListIdentities)
-		userGroup.POST("/identities/:idp", app.IrisHandler.BindIdentity)
-		userGroup.DELETE("/identities/:idp", app.IrisHandler.UnbindIdentity)
-
-		// /user/mfa - MFA 设置（TOTP、WebAuthn、Passkey 统一入口）
-		userGroup.GET("/mfa", app.IrisHandler.GetMFAStatus)
-		userGroup.POST("/mfa", app.IrisHandler.SetupMFA)
-		userGroup.PUT("/mfa", app.IrisHandler.VerifyMFA)
-		userGroup.PATCH("/mfa", app.IrisHandler.UpdateMFA)
-		userGroup.DELETE("/mfa", app.IrisHandler.DeleteMFA)
+		userRoutes := []struct {
+			method, path string
+			handler      gin.HandlerFunc
+		}{
+			{"GET", "/profile", app.IrisHandler.GetProfile},
+			{"PATCH", "/profile", app.IrisHandler.UpdateProfile},
+			{"POST", "/profile/avatar", app.IrisHandler.UploadAvatar},
+			{"PUT", "/profile/email", app.IrisHandler.UpdateEmail},
+			{"PUT", "/profile/phone", app.IrisHandler.UpdatePhone},
+			{"GET", "/identities", app.IrisHandler.ListIdentities},
+			{"POST", "/identities/:idp", app.IrisHandler.BindIdentity},
+			{"DELETE", "/identities/:idp", app.IrisHandler.UnbindIdentity},
+			{"GET", "/mfa", app.IrisHandler.GetMFAStatus},
+			{"POST", "/mfa", app.IrisHandler.SetupMFA},
+			{"PUT", "/mfa", app.IrisHandler.VerifyMFA},
+			{"PATCH", "/mfa", app.IrisHandler.UpdateMFA},
+			{"DELETE", "/mfa", app.IrisHandler.DeleteMFA},
+		}
+		registered := make(map[string]bool)
+		for _, route := range userRoutes {
+			userGroup.Handle(route.method, route.path, aegisCORS, irisMw.RequireAuth(), route.handler)
+			if !registered[route.path] {
+				userGroup.OPTIONS(route.path, aegisCORS)
+				registered[route.path] = true
+			}
+		}
 	}
 
-	// API 路由
+	// Zwei 业务 API 路由
+	zweiMw := app.MiddlewareFactory.WithAudience(zweiconfig.GetAegisAudience())
 	api := r.Group("/api")
 	{
-		// 菜谱路由
+		// 菜谱路由（公开）
 		recipes := api.Group("/recipes")
 		{
 			recipes.POST("", app.RecipeHandler.CreateRecipe)
@@ -137,12 +159,12 @@ func main() {
 			recipes.DELETE("/:recipe_id", app.RecipeHandler.DeleteRecipe)
 		}
 
-		// 用户相关路由（统一使用 /user 前缀）
+		// 用户相关路由（需要 Zwei audience 认证）
 		user := api.Group("/user")
 		{
 			// 收藏路由
 			favorites := user.Group("/favorites")
-			favorites.Use(middleware.RequireToken(app.Interpreter))
+			favorites.Use(zweiMw.RequireAuth())
 			{
 				favorites.GET("", app.FavoriteHandler.GetFavorites)
 				favorites.POST("", app.FavoriteHandler.AddFavorite)
@@ -153,7 +175,7 @@ func main() {
 
 			// 浏览历史路由
 			history := user.Group("/history")
-			history.Use(middleware.RequireToken(app.Interpreter))
+			history.Use(zweiMw.RequireAuth())
 			{
 				history.GET("", app.HistoryHandler.GetViewHistory)
 				history.POST("", app.HistoryHandler.AddViewHistory)
@@ -164,12 +186,12 @@ func main() {
 			// 用户偏好路由
 			preference := user.Group("/preference")
 			{
-				preference.GET("", middleware.RequireToken(app.Interpreter), app.PreferenceHandler.GetUserPreferences)    // 获取用户偏好（需登录）
-				preference.PUT("", middleware.RequireToken(app.Interpreter), app.PreferenceHandler.UpdateUserPreferences) // 更新用户偏好（需登录）
+				preference.GET("", zweiMw.RequireAuth(), app.PreferenceHandler.GetUserPreferences)
+				preference.PUT("", zweiMw.RequireAuth(), app.PreferenceHandler.UpdateUserPreferences)
 			}
 		}
 
-		// 首页路由
+		// 首页路由（公开）
 		home := api.Group("/home")
 		{
 			home.GET("/banners", app.HomeHandler.GetBanners)
@@ -177,46 +199,24 @@ func main() {
 			home.GET("/hot", app.HomeHandler.GetHotRecipes)
 		}
 
-		// 偏好选项路由（无需登录，获取所有可选选项）
+		// 偏好选项路由（公开）
 		api.GET("/preferences", app.PreferenceHandler.GetOptions)
 
-		// 标签路由（RESTful 风格，统一管理所有标签和选项）
+		// 标签路由
 		tags := api.Group("/tags")
 		{
-			// GET /api/tags - 获取标签列表（支持查询参数）
-			// GET /api/tags?type=cuisine - 获取特定类型的标签
-			// GET /api/tags?type=taboo - 获取特定类型的选项
-			// GET /api/tags?type=flavor&recipe_id=xxx - 获取特定菜谱的标签
 			tags.GET("", app.TagHandler.ListTags)
-
-			// GET /api/tags/{type} - 获取特定类型的标签/选项
-			// 支持所有类型：cuisine/flavor/scene/taboo/allergy
 			tags.GET("/:type", app.TagHandler.GetTagsByType)
-
-			// POST /api/tags - 创建标签/选项（后台管理）
-			// recipe_id 为空时创建选项，不为空时创建菜谱标签
-			tags.POST("", middleware.RequireToken(app.Interpreter), app.TagHandler.CreateTag)
-
-			// PUT /api/tags/{type}/{value} - 更新标签/选项（后台管理）
-			// recipe_id 查询参数为空时更新选项，不为空时更新菜谱标签
-			tags.PUT("/:type/:value", middleware.RequireToken(app.Interpreter), app.TagHandler.UpdateTag)
-
-			// DELETE /api/tags/{type}/{value} - 删除标签/选项（后台管理）
-			// recipe_id 查询参数为空时删除选项，不为空时删除菜谱标签
-			tags.DELETE("/:type/:value", middleware.RequireToken(app.Interpreter), app.TagHandler.DeleteTag)
-
+			tags.POST("", zweiMw.RequireAuth(), app.TagHandler.CreateTag)
+			tags.PUT("/:type/:value", zweiMw.RequireAuth(), app.TagHandler.UpdateTag)
+			tags.DELETE("/:type/:value", zweiMw.RequireAuth(), app.TagHandler.DeleteTag)
 		}
 
 		// 推荐路由
 		recommend := api.Group("/recommend")
 		{
-			// LLM 推荐菜谱（支持可选认证）
-			recommend.Use(middleware.OptionalToken(app.Interpreter))
-			recommend.POST("", app.RecommendHandler.GetRecommendations)
-
-			// 获取推荐上下文信息（需要登录）
-			recommend.Use(middleware.RequireToken(app.Interpreter))
-			recommend.POST("/context", app.RecommendHandler.GetContext)
+			recommend.POST("", middleware.OptionalToken(app.Interpreter), app.RecommendHandler.GetRecommendations)
+			recommend.POST("/context", zweiMw.RequireAuth(), app.RecommendHandler.GetContext)
 		}
 
 	}
@@ -263,10 +263,13 @@ func main() {
 			}
 		}
 
-		// 关系管理（通用查询接口，保留向后兼容）
+		// 关系管理
 		relationships := hermes.Group("/relationships")
 		{
 			relationships.GET("", app.HermesHandler.ListRelationships)
+			relationships.POST("", app.HermesHandler.CreateRelationship)
+			relationships.PATCH("", app.HermesHandler.UpdateRelationship)
+			relationships.DELETE("", app.HermesHandler.DeleteRelationship)
 		}
 
 		// 组管理

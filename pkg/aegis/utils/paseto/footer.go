@@ -21,10 +21,6 @@ type Footer struct {
 	KID string `json:"kid"`
 }
 
-func NewFooter(kid string) Footer {
-	return Footer{KID: kid}
-}
-
 func ParseFooter(data []byte) (Footer, error) {
 	if len(data) == 0 {
 		return Footer{}, fmt.Errorf("%w: empty footer", ErrInvalidFooter)
@@ -37,10 +33,6 @@ func ParseFooter(data []byte) (Footer, error) {
 		return Footer{}, fmt.Errorf("%w: missing kid field", ErrInvalidFooter)
 	}
 	return f, nil
-}
-
-func (f Footer) Marshal() ([]byte, error) {
-	return json.Marshal(f)
 }
 
 // ExtractKID extracts the kid from a raw PASETO token string's footer segment.
@@ -58,4 +50,12 @@ func ExtractKID(tokenString string) (string, error) {
 		return "", err
 	}
 	return f.KID, nil
+}
+
+func NewFooter(kid string) Footer {
+	return Footer{KID: kid}
+}
+
+func (f Footer) Marshal() ([]byte, error) {
+	return json.Marshal(f)
 }

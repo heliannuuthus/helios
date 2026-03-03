@@ -231,6 +231,8 @@ DOMAINS = [
 SERVICES = [
     Service("hermes", "-", "Hermes 管理服务", "身份与访问管理服务"),
     Service("iris", "-", "Iris 用户服务", "用户信息管理服务"),
+    Service("zwei", "-", "Zwei 菜谱服务", "菜谱管理、收藏、推荐服务"),
+    Service("chaos", "-", "Chaos 聚合服务", "邮件发送、文件上传等业务聚合服务"),
 ]
 
 APPLICATIONS = [
@@ -272,6 +274,8 @@ APP_IDP_CONFIGS = [
 
 APP_SERVICE_RELATIONS = [
     AppServiceRelation("atlas", "hermes", "*"),
+    AppServiceRelation("atlas", "zwei", "*"),
+    AppServiceRelation("atlas", "chaos", "*"),
     AppServiceRelation("piris", "iris", "*"),
     AppServiceRelation("ciris", "iris", "*"),
 ]

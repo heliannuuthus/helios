@@ -206,14 +206,6 @@ func (cm *Manager) ValidateAppOrigin(ctx context.Context, appID, origin string) 
 	return false, nil
 }
 
-// normalizeOrigin 规范化 origin（移除末尾斜杠）
-func normalizeOrigin(origin string) string {
-	if len(origin) > 0 && origin[len(origin)-1] == '/' {
-		return origin[:len(origin)-1]
-	}
-	return origin
-}
-
 // GetApplicationIDPConfigs 获取应用 IDP 配置（带缓存）
 func (cm *Manager) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
 	cacheKey := config.GetCacheKeyPrefix("app-idp-config") + appID
@@ -240,13 +232,6 @@ func (cm *Manager) GetApplicationIDPConfigs(ctx context.Context, appID string) (
 	return configs, nil
 }
 
-// ==================== ServiceChallengeSetting（本地缓存 + DB）====================
-
-// serviceChallengeCacheKey 构造 ServiceChallengeSetting 缓存 key
-func serviceChallengeCacheKey(serviceID, challengeType string) string {
-	return config.GetCacheKeyPrefix("service-challenge-setting") + serviceID + ":" + challengeType
-}
-
 // GetServiceChallengeSetting 获取服务的 Challenge 配置（带本地缓存）
 func (cm *Manager) GetServiceChallengeSetting(ctx context.Context, serviceID, challengeType string) (*models.ServiceChallengeSetting, error) {
 	cacheKey := serviceChallengeCacheKey(serviceID, challengeType)
@@ -271,4 +256,19 @@ func (cm *Manager) GetServiceChallengeSetting(ctx context.Context, serviceID, ch
 	}
 
 	return result, nil
+}
+
+// normalizeOrigin 规范化 origin（移除末尾斜杠）
+func normalizeOrigin(origin string) string {
+	if len(origin) > 0 && origin[len(origin)-1] == '/' {
+		return origin[:len(origin)-1]
+	}
+	return origin
+}
+
+// ==================== ServiceChallengeSetting（本地缓存 + DB）====================
+
+// serviceChallengeCacheKey 构造 ServiceChallengeSetting 缓存 key
+func serviceChallengeCacheKey(serviceID, challengeType string) string {
+	return config.GetCacheKeyPrefix("service-challenge-setting") + serviceID + ":" + challengeType
 }

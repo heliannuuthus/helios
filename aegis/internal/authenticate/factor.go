@@ -130,21 +130,6 @@ func (a *FactorAuthenticator) Authenticate(ctx context.Context, flow *types.Auth
 	return true, nil
 }
 
-// findDelegatingIDP 查找 ConnectionMap 中哪个 IDP 的 Delegate 列表包含指定 connection
-func findDelegatingIDP(flow *types.AuthFlow, connection string) string {
-	for name, cfg := range flow.ConnectionMap {
-		if cfg.Type != types.ConnTypeIDP {
-			continue
-		}
-		for _, d := range cfg.Delegate {
-			if d == connection {
-				return name
-			}
-		}
-	}
-	return ""
-}
-
 // ==================== ChallengeVerifier 实现 ====================
 
 func (a *FactorAuthenticator) Initiate(ctx context.Context, challenge *types.Challenge) error {
@@ -152,6 +137,11 @@ func (a *FactorAuthenticator) Initiate(ctx context.Context, challenge *types.Cha
 		return err
 	}
 	return a.provider.Initiate(ctx, challenge)
+}
+
+// Verify 验证 Challenge proof（委托 factor.Provider.Verify）
+func (a *FactorAuthenticator) Verify(ctx context.Context, challenge *types.Challenge, proof string) (bool, error) {
+	return a.provider.Verify(ctx, proof, challenge.Channel, challenge.ID)
 }
 
 // probeRate 检查限流（IP + Channel 维度），结果写入 challenge.RetryAfter
@@ -176,7 +166,17 @@ func (a *FactorAuthenticator) probeRate(ctx context.Context, challenge *types.Ch
 	return nil
 }
 
-// Verify 验证 Challenge proof（委托 factor.Provider.Verify）
-func (a *FactorAuthenticator) Verify(ctx context.Context, challenge *types.Challenge, proof string) (bool, error) {
-	return a.provider.Verify(ctx, proof, challenge.Channel, challenge.ID)
+// findDelegatingIDP 查找 ConnectionMap 中哪个 IDP 的 Delegate 列表包含指定 connection
+func findDelegatingIDP(flow *types.AuthFlow, connection string) string {
+	for name, cfg := range flow.ConnectionMap {
+		if cfg.Type != types.ConnTypeIDP {
+			continue
+		}
+		for _, d := range cfg.Delegate {
+			if d == connection {
+				return name
+			}
+		}
+	}
+	return ""
 }

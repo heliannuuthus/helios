@@ -18,29 +18,6 @@ func Cfg() *baseconfig.Cfg {
 	return baseconfig.Hermes()
 }
 
-// ==================== 数据库 ====================
-
-// parseDSNFromURL 将 mysql://user:pass@host:port/db?params 格式转换为 Go MySQL DSN 格式
-func parseDSNFromURL(dbURL string) string {
-	if !strings.HasPrefix(dbURL, "mysql://") {
-		return dbURL
-	}
-	u, err := url.Parse(dbURL)
-	if err != nil {
-		logger.Fatalf("解析数据库 URL 失败: %v", err)
-	}
-	user := u.User.Username()
-	password, _ := u.User.Password()
-	host := u.Host
-	database := strings.TrimPrefix(u.Path, "/")
-	query := u.RawQuery
-	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, host, database)
-	if query != "" {
-		dsn += "?" + query
-	}
-	return dsn
-}
-
 // InitDB 初始化 Hermes 数据库连接
 func InitDB() *gorm.DB {
 	cfg := Cfg()
@@ -155,4 +132,27 @@ func GetDBEncKeyRaw() ([]byte, error) {
 		return nil, fmt.Errorf("数据库加密密钥长度错误: 期望 32 字节, 实际 %d 字节", len(key))
 	}
 	return key, nil
+}
+
+// ==================== 数据库 ====================
+
+// parseDSNFromURL 将 mysql://user:pass@host:port/db?params 格式转换为 Go MySQL DSN 格式
+func parseDSNFromURL(dbURL string) string {
+	if !strings.HasPrefix(dbURL, "mysql://") {
+		return dbURL
+	}
+	u, err := url.Parse(dbURL)
+	if err != nil {
+		logger.Fatalf("解析数据库 URL 失败: %v", err)
+	}
+	user := u.User.Username()
+	password, _ := u.User.Password()
+	host := u.Host
+	database := strings.TrimPrefix(u.Path, "/")
+	query := u.RawQuery
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, host, database)
+	if query != "" {
+		dsn += "?" + query
+	}
+	return dsn
 }

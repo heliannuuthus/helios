@@ -69,6 +69,24 @@ func (p *Provider) Login(ctx context.Context, proof string, _ ...any) (*models.T
 	return p.getUserInfo(ctx, accessToken)
 }
 
+// Resolve 社交登录不支持通过 principal 本地查找
+func (*Provider) Resolve(_ context.Context, _ string) (*models.TUserInfo, error) {
+	return nil, errors.New("google provider does not support resolve")
+}
+
+// FetchAdditionalInfo 补充获取用户信息
+func (*Provider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...any) (*idp.AdditionalInfo, error) {
+	return nil, fmt.Errorf("google does not support fetching %s", infoType)
+}
+
+// Prepare 准备前端所需的公开配置
+func (p *Provider) Prepare() *types.ConnectionConfig {
+	return &types.ConnectionConfig{
+		Connection: idp.TypeGoogle,
+		Identifier: p.clientID,
+	}
+}
+
 // getAccessToken 用 code 换取 access_token
 func (p *Provider) getAccessToken(ctx context.Context, code string) (string, error) {
 	form := url.Values{}
@@ -179,22 +197,4 @@ func (p *Provider) getUserInfo(ctx context.Context, accessToken string) (*models
 		Picture:  picture,
 		RawData:  bodyStr,
 	}, nil
-}
-
-// Resolve 社交登录不支持通过 principal 本地查找
-func (*Provider) Resolve(_ context.Context, _ string) (*models.TUserInfo, error) {
-	return nil, errors.New("google provider does not support resolve")
-}
-
-// FetchAdditionalInfo 补充获取用户信息
-func (*Provider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...any) (*idp.AdditionalInfo, error) {
-	return nil, fmt.Errorf("google does not support fetching %s", infoType)
-}
-
-// Prepare 准备前端所需的公开配置
-func (p *Provider) Prepare() *types.ConnectionConfig {
-	return &types.ConnectionConfig{
-		Connection: idp.TypeGoogle,
-		Identifier: p.clientID,
-	}
 }

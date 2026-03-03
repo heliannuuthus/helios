@@ -22,13 +22,6 @@ type Service struct {
 	db *gorm.DB
 }
 
-// NewService 创建管理服务
-func NewService(db *gorm.DB) *Service {
-	return &Service{
-		db: db,
-	}
-}
-
 // generateEncryptedKey 生成 48 字节 seed（16-byte salt + 32-byte key）并用数据库加密密钥加密
 // aad 用于 AES-GCM 加密的附加认证数据
 func generateEncryptedKey(aad string) (string, error) {
@@ -50,6 +43,13 @@ func generateEncryptedKey(aad string) (string, error) {
 	}
 
 	return base64.StdEncoding.EncodeToString(encryptedKey), nil
+}
+
+// NewService 创建管理服务
+func NewService(db *gorm.DB) *Service {
+	return &Service{
+		db: db,
+	}
 }
 
 // ==================== Domain 相关 ====================
@@ -191,27 +191,6 @@ func (s *Service) GetServiceWithKey(ctx context.Context, serviceID string) (*mod
 	return &models.ServiceWithKey{Service: *service, Key: key}, nil
 }
 
-// decryptServiceKey 解密服务密钥
-func (s *Service) decryptServiceKey(svc *models.Service) ([]byte, error) {
-	// 获取数据库加密密钥（原始字节）
-	domainKey, err := config.GetDBEncKeyRaw()
-	if err != nil {
-		return nil, fmt.Errorf("获取数据库加密密钥失败: %w", err)
-	}
-
-	encrypted, err := base64.StdEncoding.DecodeString(svc.EncryptedKey)
-	if err != nil {
-		return nil, fmt.Errorf("解码服务密钥失败: %w", err)
-	}
-
-	key, err := cryptoutil.DecryptAESGCM(domainKey, encrypted, svc.ServiceID)
-	if err != nil {
-		return nil, fmt.Errorf("解密服务密钥失败: %w", err)
-	}
-
-	return key, nil
-}
-
 // ListServices 列出所有服务
 func (s *Service) ListServices(ctx context.Context, domainID string) ([]models.Service, error) {
 	var services []models.Service
@@ -310,31 +289,6 @@ func (s *Service) GetApplicationWithKey(ctx context.Context, appID string) (*mod
 	}
 
 	return &models.ApplicationWithKey{Application: *app, Key: key}, nil
-}
-
-// decryptApplicationKey 解密应用密钥
-func (s *Service) decryptApplicationKey(app *models.Application) ([]byte, error) {
-	if app.EncryptedKey == nil || *app.EncryptedKey == "" {
-		return nil, nil
-	}
-
-	// 获取数据库加密密钥（原始字节）
-	domainKey, err := config.GetDBEncKeyRaw()
-	if err != nil {
-		return nil, fmt.Errorf("获取数据库加密密钥失败: %w", err)
-	}
-
-	encrypted, err := base64.StdEncoding.DecodeString(*app.EncryptedKey)
-	if err != nil {
-		return nil, fmt.Errorf("解码应用密钥失败: %w", err)
-	}
-
-	key, err := cryptoutil.DecryptAESGCM(domainKey, encrypted, app.AppID)
-	if err != nil {
-		return nil, fmt.Errorf("解密应用密钥失败: %w", err)
-	}
-
-	return key, nil
 }
 
 // ListApplications 列出所有应用
@@ -814,4 +768,50 @@ func (s *Service) GetServiceChallengeSetting(ctx context.Context, serviceID, cha
 		return nil, fmt.Errorf("获取 Challenge 配置失败: %w", err)
 	}
 	return &cfg, nil
+}
+
+// decryptServiceKey 解密服务密钥
+func (s *Service) decryptServiceKey(svc *models.Service) ([]byte, error) {
+	// 获取数据库加密密钥（原始字节）
+	domainKey, err := config.GetDBEncKeyRaw()
+	if err != nil {
+		return nil, fmt.Errorf("获取数据库加密密钥失败: %w", err)
+	}
+
+	encrypted, err := base64.StdEncoding.DecodeString(svc.EncryptedKey)
+	if err != nil {
+		return nil, fmt.Errorf("解码服务密钥失败: %w", err)
+	}
+
+	key, err := cryptoutil.DecryptAESGCM(domainKey, encrypted, svc.ServiceID)
+	if err != nil {
+		return nil, fmt.Errorf("解密服务密钥失败: %w", err)
+	}
+
+	return key, nil
+}
+
+// decryptApplicationKey 解密应用密钥
+func (s *Service) decryptApplicationKey(app *models.Application) ([]byte, error) {
+	if app.EncryptedKey == nil || *app.EncryptedKey == "" {
+		return nil, nil
+	}
+
+	// 获取数据库加密密钥（原始字节）
+	domainKey, err := config.GetDBEncKeyRaw()
+	if err != nil {
+		return nil, fmt.Errorf("获取数据库加密密钥失败: %w", err)
+	}
+
+	encrypted, err := base64.StdEncoding.DecodeString(*app.EncryptedKey)
+	if err != nil {
+		return nil, fmt.Errorf("解码应用密钥失败: %w", err)
+	}
+
+	key, err := cryptoutil.DecryptAESGCM(domainKey, encrypted, app.AppID)
+	if err != nil {
+		return nil, fmt.Errorf("解密应用密钥失败: %w", err)
+	}
+
+	return key, nil
 }

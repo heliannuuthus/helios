@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/aegis"
+	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/zwei"
 )
 
@@ -66,18 +66,11 @@ type BatchCheckResponse struct {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites [post]
 func (h *Handler) AddFavorite(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
-
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的用户信息"})
-		return
-	}
-	openID := aegis.GetOpenIDFromToken(identity)
 
 	var req FavoriteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -105,18 +98,11 @@ func (h *Handler) AddFavorite(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites/{recipe_id} [delete]
 func (h *Handler) RemoveFavorite(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
-
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的用户信息"})
-		return
-	}
-	openID := aegis.GetOpenIDFromToken(identity)
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveFavorite(openID, recipeID); err != nil {
@@ -136,18 +122,11 @@ func (h *Handler) RemoveFavorite(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites/{recipe_id}/check [get]
 func (h *Handler) CheckFavorite(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
-
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的用户信息"})
-		return
-	}
-	openID := aegis.GetOpenIDFromToken(identity)
 	recipeID := c.Param("recipe_id")
 
 	isFavorite, err := h.service.IsFavorite(openID, recipeID)
@@ -173,18 +152,11 @@ func (h *Handler) CheckFavorite(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites [get]
 func (h *Handler) GetFavorites(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
-
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的用户信息"})
-		return
-	}
-	openID := aegis.GetOpenIDFromToken(identity)
 
 	category := c.Query("category")
 	search := c.Query("search")
@@ -246,18 +218,11 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites/batch-check [post]
 func (h *Handler) BatchCheckFavorites(c *gin.Context) {
-	user, exists := c.Get("user")
-	if !exists {
+	openID := web.OpenIDFromGin(c)
+	if openID == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
 		return
 	}
-
-	identity, ok := user.(aegis.Token)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "无效的用户信息"})
-		return
-	}
-	openID := aegis.GetOpenIDFromToken(identity)
 
 	var req BatchCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -9,6 +9,15 @@ func Cfg() *baseconfig.Cfg {
 	return baseconfig.Chaos()
 }
 
+// GetAegisAudience 获取 Chaos 服务 audience（用于 token 验证）
+func GetAegisAudience() string {
+	audience := Cfg().GetString("aegis.audience")
+	if audience == "" {
+		return "chaos"
+	}
+	return audience
+}
+
 // GetSMTPHost 获取 SMTP 主机
 func GetSMTPHost() string {
 	return Cfg().GetString("smtp.host")

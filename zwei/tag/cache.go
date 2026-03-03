@@ -35,6 +35,11 @@ var (
 	cacheOnce      sync.Once
 )
 
+// GetTagCache 获取全局标签缓存实例（对外暴露，供其他包使用）
+func GetTagCache() *tagCache {
+	return getTagCache()
+}
+
 // getTagCache 获取全局标签缓存实例（内部使用）
 func getTagCache() *tagCache {
 	cacheOnce.Do(func() {
@@ -60,11 +65,6 @@ func getTagCache() *tagCache {
 		}
 	})
 	return globalTagCache
-}
-
-// GetTagCache 获取全局标签缓存实例（对外暴露，供其他包使用）
-func GetTagCache() *tagCache {
-	return getTagCache()
 }
 
 // cacheKey 生成缓存 key
@@ -98,18 +98,6 @@ func (c *tagCache) Get(tagType models.TagType, value string, db *gorm.DB) (*mode
 
 	// 缓存未命中，查询数据库并设置缓存
 	return c.loadFromDB(tagType, value, db)
-}
-
-// loadFromDB 从数据库加载标签并设置到缓存
-func (c *tagCache) loadFromDB(tagType models.TagType, value string, db *gorm.DB) (*models.Tag, error) {
-	var tag models.Tag
-	if err := db.Where("type = ? AND value = ?", tagType, value).First(&tag).Error; err != nil {
-		return nil, err
-	}
-
-	// 设置到缓存
-	c.Set(&tag)
-	return &tag, nil
 }
 
 // GetByType 从缓存获取指定类型的所有标签（使用索引，无需查询数据库）
@@ -148,6 +136,99 @@ func (c *tagCache) GetByType(tagType models.TagType, db *gorm.DB) ([]*models.Tag
 
 	// 索引未命中，查询数据库并构建索引
 	return c.loadTypeIndex(tagType, db)
+}
+
+// GetAll 获取所有标签（按类型分组，使用索引）
+func (c *tagCache) GetAll(db *gorm.DB) (map[models.TagType][]*models.Tag, error) {
+	if c.cache == nil {
+		// 降级：直接查询数据库
+		var tags []models.Tag
+		if err := db.Order("type, value").Find(&tags).Error; err != nil {
+			return nil, err
+		}
+		result := make(map[models.TagType][]*models.Tag)
+		for i := range tags {
+			result[tags[i].Type] = append(result[tags[i].Type], &tags[i])
+		}
+		return result, nil
+	}
+
+	// 查询数据库获取所有类型（只需要类型列表，不需要所有标签）
+	var tagTypes []models.TagType
+	if err := db.Model(&models.Tag{}).Distinct("type").Pluck("type", &tagTypes).Error; err != nil {
+		return nil, err
+	}
+
+	// 从索引获取每个类型（如果索引未命中，会自动加载）
+	result := make(map[models.TagType][]*models.Tag)
+	for _, tagType := range tagTypes {
+		tags, err := c.GetByType(tagType, db)
+		if err != nil {
+			// 如果某个类型加载失败，跳过（不影响其他类型）
+			continue
+		}
+		if len(tags) > 0 {
+			result[tagType] = tags
+		}
+	}
+
+	return result, nil
+}
+
+// Set 设置标签到缓存（同时更新索引）
+func (c *tagCache) Set(tag *models.Tag) {
+	if c.cache == nil {
+		return
+	}
+
+	key := cacheKey(tag.Type, tag.Value)
+	c.cache.SetWithTTL(key, tag, 1, tagCacheTTL)
+
+	// 更新索引（需要加锁保护）
+	c.updateTypeIndex(tag)
+}
+
+// Delete 从缓存删除标签（同时更新索引）
+func (c *tagCache) Delete(tagType models.TagType, value string) {
+	if c.cache == nil {
+		return
+	}
+
+	key := cacheKey(tagType, value)
+	c.cache.Del(key)
+
+	// 更新索引（需要加锁保护）
+	c.removeFromTypeIndex(tagType, value)
+}
+
+// DeleteWithDelay 延迟删除（用于延迟双删的第二次删除）
+// 注意：延迟删除不更新索引，因为延迟期间可能已经被重新设置了
+func (c *tagCache) DeleteWithDelay(tagType models.TagType, value string, delay time.Duration) {
+	if c.cache == nil {
+		return
+	}
+
+	go func() {
+		time.Sleep(delay)
+		key := cacheKey(tagType, value)
+		c.cache.Del(key)
+		// 不更新索引，因为：
+		// 1. 延迟期间可能已经被重新设置
+		// 2. 如果确实需要删除，下次 GetByType 时会重新加载索引
+		// 3. 避免索引和缓存不一致的问题
+	}()
+}
+
+// loadFromDB 从数据库加载标签并设置到缓存
+func (c *tagCache) loadFromDB(tagType models.TagType, value string, db *gorm.DB) (*models.Tag, error) {
+	var tag models.Tag
+	if err := db.Where("type = ? AND value = ?", tagType, value).First(&tag).Error; err != nil {
+		return nil, err
+	}
+
+	// 设置到缓存
+	c.Set(&tag)
+	return &tag, nil
 }
 
 // loadTypeIndex 加载指定类型的索引（需要加锁保护）
@@ -206,56 +287,6 @@ func (c *tagCache) loadTypeIndex(tagType models.TagType, db *gorm.DB) ([]*models
 	return result, nil
 }
 
-// GetAll 获取所有标签（按类型分组，使用索引）
-func (c *tagCache) GetAll(db *gorm.DB) (map[models.TagType][]*models.Tag, error) {
-	if c.cache == nil {
-		// 降级：直接查询数据库
-		var tags []models.Tag
-		if err := db.Order("type, value").Find(&tags).Error; err != nil {
-			return nil, err
-		}
-		result := make(map[models.TagType][]*models.Tag)
-		for i := range tags {
-			result[tags[i].Type] = append(result[tags[i].Type], &tags[i])
-		}
-		return result, nil
-	}
-
-	// 查询数据库获取所有类型（只需要类型列表，不需要所有标签）
-	var tagTypes []models.TagType
-	if err := db.Model(&models.Tag{}).Distinct("type").Pluck("type", &tagTypes).Error; err != nil {
-		return nil, err
-	}
-
-	// 从索引获取每个类型（如果索引未命中，会自动加载）
-	result := make(map[models.TagType][]*models.Tag)
-	for _, tagType := range tagTypes {
-		tags, err := c.GetByType(tagType, db)
-		if err != nil {
-			// 如果某个类型加载失败，跳过（不影响其他类型）
-			continue
-		}
-		if len(tags) > 0 {
-			result[tagType] = tags
-		}
-	}
-
-	return result, nil
-}
-
-// Set 设置标签到缓存（同时更新索引）
-func (c *tagCache) Set(tag *models.Tag) {
-	if c.cache == nil {
-		return
-	}
-
-	key := cacheKey(tag.Type, tag.Value)
-	c.cache.SetWithTTL(key, tag, 1, tagCacheTTL)
-
-	// 更新索引（需要加锁保护）
-	c.updateTypeIndex(tag)
-}
-
 // updateTypeIndex 更新类型索引（线程安全）
 func (c *tagCache) updateTypeIndex(tag *models.Tag) {
 	c.indexMu.Lock()
@@ -299,19 +330,6 @@ func (c *tagCache) updateTypeIndex(tag *models.Tag) {
 	c.typeIndex.Store(tag.Type, tagList)
 }
 
-// Delete 从缓存删除标签（同时更新索引）
-func (c *tagCache) Delete(tagType models.TagType, value string) {
-	if c.cache == nil {
-		return
-	}
-
-	key := cacheKey(tagType, value)
-	c.cache.Del(key)
-
-	// 更新索引（需要加锁保护）
-	c.removeFromTypeIndex(tagType, value)
-}
-
 // removeFromTypeIndex 从索引中删除标签（线程安全）
 func (c *tagCache) removeFromTypeIndex(tagType models.TagType, value string) {
 	c.indexMu.Lock()
@@ -343,22 +361,4 @@ func (c *tagCache) removeFromTypeIndex(tagType models.TagType, value string) {
 			return
 		}
 	}
-}
-
-// DeleteWithDelay 延迟删除（用于延迟双删的第二次删除）
-// 注意：延迟删除不更新索引，因为延迟期间可能已经被重新设置了
-func (c *tagCache) DeleteWithDelay(tagType models.TagType, value string, delay time.Duration) {
-	if c.cache == nil {
-		return
-	}
-
-	go func() {
-		time.Sleep(delay)
-		key := cacheKey(tagType, value)
-		c.cache.Del(key)
-		// 不更新索引，因为：
-		// 1. 延迟期间可能已经被重新设置
-		// 2. 如果确实需要删除，下次 GetByType 时会重新加载索引
-		// 3. 避免索引和缓存不一致的问题
-	}()
 }

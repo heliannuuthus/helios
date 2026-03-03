@@ -46,105 +46,6 @@ var (
 	chaosCfg  *Cfg
 )
 
-// newCfg 创建新的配置实例
-func newCfg(name, configFile string) *Cfg {
-	v := viper.New()
-
-	v.SetConfigName(configFile)
-	v.SetConfigType("toml")
-	v.AddConfigPath(".")
-	v.AddConfigPath("./config")
-
-	// 设置环境变量前缀和自动绑定
-	prefix := strings.ToUpper(name)
-	v.SetEnvPrefix(prefix)
-	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
-	v.AutomaticEnv()
-
-	// 读取配置文件
-	if err := v.ReadInConfig(); err != nil {
-		var configFileNotFoundErr viper.ConfigFileNotFoundError
-		if !errors.As(err, &configFileNotFoundErr) {
-			panic(fmt.Sprintf("[%s] 读取配置文件失败: %s", name, err.Error()))
-		}
-		panic(fmt.Sprintf("[%s] 配置文件 %s.toml 不存在", name, configFile))
-	}
-
-	cfg := &Cfg{
-		Viper:    v,
-		name:     name,
-		snapshot: v.AllSettings(),
-	}
-
-	// 启用热更新
-	v.WatchConfig()
-	v.OnConfigChange(func(e fsnotify.Event) {
-		newSettings := v.AllSettings()
-		changes := detectChanges("", cfg.snapshot, newSettings)
-
-		if len(changes) > 0 {
-			fmt.Printf("[%s] 配置热更新: %s\n", name, e.Name)
-			for _, change := range changes {
-				fmt.Printf("[%s]   %s (已更新)\n", name, change.Key)
-			}
-		}
-
-		cfg.snapshot = newSettings
-	})
-
-	fmt.Printf("[%s] 配置加载成功: %s\n", name, v.ConfigFileUsed())
-	return cfg
-}
-
-// Change 配置变更
-type Change struct {
-	Key      string
-	OldValue any
-	NewValue any
-}
-
-// detectChanges 检测配置变更
-func detectChanges(prefix string, old, new map[string]any) []Change {
-	var changes []Change
-
-	for k, newVal := range new {
-		key := k
-		if prefix != "" {
-			key = prefix + "." + k
-		}
-
-		oldVal, exists := old[k]
-		if !exists {
-			changes = append(changes, Change{Key: key, OldValue: nil, NewValue: newVal})
-			continue
-		}
-
-		if newMap, ok := newVal.(map[string]any); ok {
-			if oldMap, ok := oldVal.(map[string]any); ok {
-				changes = append(changes, detectChanges(key, oldMap, newMap)...)
-				continue
-			}
-		}
-
-		if !reflect.DeepEqual(oldVal, newVal) {
-			changes = append(changes, Change{Key: key, OldValue: oldVal, NewValue: newVal})
-		}
-	}
-
-	for k, oldVal := range old {
-		key := k
-		if prefix != "" {
-			key = prefix + "." + k
-		}
-
-		if _, exists := new[k]; !exists {
-			changes = append(changes, Change{Key: key, OldValue: oldVal, NewValue: nil})
-		}
-	}
-
-	return changes
-}
-
 // Load 加载所有配置
 func Load() {
 	LoadConfig()
@@ -302,6 +203,105 @@ func GetLogFormat() string {
 		return "console"
 	}
 	return format
+}
+
+// newCfg 创建新的配置实例
+func newCfg(name, configFile string) *Cfg {
+	v := viper.New()
+
+	v.SetConfigName(configFile)
+	v.SetConfigType("toml")
+	v.AddConfigPath(".")
+	v.AddConfigPath("./config")
+
+	// 设置环境变量前缀和自动绑定
+	prefix := strings.ToUpper(name)
+	v.SetEnvPrefix(prefix)
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
+	v.AutomaticEnv()
+
+	// 读取配置文件
+	if err := v.ReadInConfig(); err != nil {
+		var configFileNotFoundErr viper.ConfigFileNotFoundError
+		if !errors.As(err, &configFileNotFoundErr) {
+			panic(fmt.Sprintf("[%s] 读取配置文件失败: %s", name, err.Error()))
+		}
+		panic(fmt.Sprintf("[%s] 配置文件 %s.toml 不存在", name, configFile))
+	}
+
+	cfg := &Cfg{
+		Viper:    v,
+		name:     name,
+		snapshot: v.AllSettings(),
+	}
+
+	// 启用热更新
+	v.WatchConfig()
+	v.OnConfigChange(func(e fsnotify.Event) {
+		newSettings := v.AllSettings()
+		changes := detectChanges("", cfg.snapshot, newSettings)
+
+		if len(changes) > 0 {
+			fmt.Printf("[%s] 配置热更新: %s\n", name, e.Name)
+			for _, change := range changes {
+				fmt.Printf("[%s]   %s (已更新)\n", name, change.Key)
+			}
+		}
+
+		cfg.snapshot = newSettings
+	})
+
+	fmt.Printf("[%s] 配置加载成功: %s\n", name, v.ConfigFileUsed())
+	return cfg
+}
+
+// Change 配置变更
+type Change struct {
+	Key      string
+	OldValue any
+	NewValue any
+}
+
+// detectChanges 检测配置变更
+func detectChanges(prefix string, old, new map[string]any) []Change {
+	var changes []Change
+
+	for k, newVal := range new {
+		key := k
+		if prefix != "" {
+			key = prefix + "." + k
+		}
+
+		oldVal, exists := old[k]
+		if !exists {
+			changes = append(changes, Change{Key: key, OldValue: nil, NewValue: newVal})
+			continue
+		}
+
+		if newMap, ok := newVal.(map[string]any); ok {
+			if oldMap, ok := oldVal.(map[string]any); ok {
+				changes = append(changes, detectChanges(key, oldMap, newMap)...)
+				continue
+			}
+		}
+
+		if !reflect.DeepEqual(oldVal, newVal) {
+			changes = append(changes, Change{Key: key, OldValue: oldVal, NewValue: newVal})
+		}
+	}
+
+	for k, oldVal := range old {
+		key := k
+		if prefix != "" {
+			key = prefix + "." + k
+		}
+
+		if _, exists := new[k]; !exists {
+			changes = append(changes, Change{Key: key, OldValue: oldVal, NewValue: nil})
+		}
+	}
+
+	return changes
 }
 
 // Name 返回配置名称

@@ -28,15 +28,15 @@ type AudienceScope struct {
 	Scope string `json:"scope"` // 不指定时默认 "openid"
 }
 
-// MultiAudienceTokenRequest 多 audience Token 请求（application/json）
+// MultiAudienceTokenRequest 多 audience Token 请求（application/json，仅 authorization_code）
+// refresh_token 场景下每个 audience 独立刷新，走单 audience 的 TokenRequest
 type MultiAudienceTokenRequest struct {
-	GrantType    string                    `json:"grant_type" binding:"required,oneof=authorization_code refresh_token"`
-	Code         string                    `json:"code,omitempty"`         // authorization_code 时必填
-	RedirectURI  string                    `json:"redirect_uri,omitempty"` // authorization_code 时必填
+	GrantType    string                    `json:"grant_type" binding:"required,oneof=authorization_code"`
+	Code         string                    `json:"code" binding:"required"`
+	RedirectURI  string                    `json:"redirect_uri,omitempty"`
 	ClientID     string                    `json:"client_id" binding:"required"`
-	CodeVerifier string                    `json:"code_verifier,omitempty"` // PKCE 验证器
-	RefreshToken string                    `json:"refresh_token,omitempty"` // refresh_token grant 时必填
-	Audiences    map[string]*AudienceScope `json:"audiences" binding:"required,min=1"`
+	CodeVerifier string                    `json:"code_verifier,omitempty"`
+	Audiences    map[string]*AudienceScope `json:"audiences,omitempty"` // 可选，优先使用授权阶段存储在 flow 中的 audiences
 }
 
 // GetScope 获取 audience 的 scope，未指定时默认 "openid"

@@ -164,6 +164,12 @@ func (u *UserWithDecrypted) String() string {
 	return u.SafeString()
 }
 
+// GenerateOpenID 生成用户标识（128 位随机，base62 编码，~22 字符）
+// 同时作为 t_user.openid 和 global identity 的 t_openid
+func GenerateOpenID() string {
+	return generateRandomBase62(16)
+}
+
 // base62Chars base62 编码字符集
 const base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
@@ -198,12 +204,6 @@ func generateRandomBase62(byteLen int) string {
 		panic(fmt.Sprintf("generate random id failed: %v", err))
 	}
 	return base62Encode(b)
-}
-
-// GenerateOpenID 生成用户标识（128 位随机，base62 编码，~22 字符）
-// 同时作为 t_user.openid 和 global identity 的 t_openid
-func GenerateOpenID() string {
-	return generateRandomBase62(16)
 }
 
 // maskEmail 邮箱脱敏：a**@example.com
