@@ -162,12 +162,10 @@ type UpdateEmailRequest struct {
 // UpdateEmail PUT /user/profile/email
 // 绑定/更新邮箱
 func (h *Handler) UpdateEmail(c *gin.Context) {
-	openid := getOpenID(c)
-	if openid == "" {
+	if getOpenID(c) == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
-	_ = openid
 
 	var req UpdateEmailRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -191,12 +189,10 @@ type UpdatePhoneRequest struct {
 // UpdatePhone PUT /user/profile/phone
 // 绑定/更新手机号
 func (h *Handler) UpdatePhone(c *gin.Context) {
-	openid := getOpenID(c)
-	if openid == "" {
+	if getOpenID(c) == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
-	_ = openid
 
 	var req UpdatePhoneRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -245,12 +241,10 @@ func (h *Handler) ListIdentities(c *gin.Context) {
 // BindIdentity POST /user/identities/:idp
 // 绑定第三方身份
 func (h *Handler) BindIdentity(c *gin.Context) {
-	openid := getOpenID(c)
-	if openid == "" {
+	if getOpenID(c) == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
-	_ = openid
 
 	idp := c.Param("idp")
 	if idp == "" {
@@ -267,12 +261,10 @@ func (h *Handler) BindIdentity(c *gin.Context) {
 // UnbindIdentity DELETE /user/identities/:idp
 // 解绑第三方身份
 func (h *Handler) UnbindIdentity(c *gin.Context) {
-	openid := getOpenID(c)
-	if openid == "" {
+	if getOpenID(c) == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
-	_ = openid
 
 	idp := c.Param("idp")
 	if idp == "" {

@@ -1,5 +1,4 @@
-// Package authz 提供授权检查功能
-package authz
+package web
 
 import (
 	"bytes"
@@ -19,9 +18,9 @@ import (
 )
 
 const (
-	subjectTypeUser     = "user"
-	subjectTypeApp      = "app"
-	headerAuthorization = "Authorization"
+	subjectTypeUser = "user"
+	subjectTypeApp  = "app"
+	maxResponseBody = 1 << 20 // 1MB
 )
 
 type checkRequest struct {
@@ -38,16 +37,16 @@ type checkResponse struct {
 	Message   string `json:"message,omitempty"`
 }
 
-// Client 授权检查客户端
-type Client struct {
+// RelationChecker 远程关系鉴权客户端。
+type RelationChecker struct {
 	keyStore   *key.Store
 	endpoint   string
 	httpClient *http.Client
 }
 
-// NewClient 创建授权检查客户端
-func NewClient(endpoint string, keyStore *key.Store) *Client {
-	return &Client{
+// NewRelationChecker 创建关系鉴权客户端。
+func NewRelationChecker(endpoint string, keyStore *key.Store) *RelationChecker {
+	return &RelationChecker{
 		keyStore: keyStore,
 		endpoint: strings.TrimSuffix(endpoint, "/"),
 		httpClient: &http.Client{
@@ -56,8 +55,8 @@ func NewClient(endpoint string, keyStore *key.Store) *Client {
 	}
 }
 
-// Check 检查关系
-func (c *Client) Check(ctx context.Context, t tokendef.Token, relation, objectType, objectID string) (bool, error) {
+// Check 检查主体是否具备指定关系。
+func (c *RelationChecker) Check(ctx context.Context, t tokendef.Token, relation, objectType, objectID string) (bool, error) {
 	subjectType := subjectTypeApp
 	subjectID := t.GetClientID()
 
@@ -66,9 +65,7 @@ func (c *Client) Check(ctx context.Context, t tokendef.Token, relation, objectTy
 		subjectID = uat.GetOpenID()
 	}
 
-	// 创建 CAT Issuer 并签发
 	issuer := token.NewIssuer(c.keyStore, t.GetAudience())
-
 	cat, err := issuer.Issue(ctx)
 	if err != nil {
 		return false, fmt.Errorf("issue CAT: %w", err)
@@ -94,7 +91,7 @@ func (c *Client) Check(ctx context.Context, t tokendef.Token, relation, objectTy
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set(headerAuthorization, tokendef.TokenTypeBearer+" "+cat)
+	httpReq.Header.Set("Authorization", tokendef.TokenTypeBearer+" "+cat)
 
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
@@ -102,13 +99,17 @@ func (c *Client) Check(ctx context.Context, t tokendef.Token, relation, objectTy
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			logger.Warnf("[authz] 关闭响应体失败: %v", err)
+			logger.Warnf("[RelationChecker] close response body: %v", err)
 		}
 	}()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 	if err != nil {
 		return false, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("check failed with status %d: %s", resp.StatusCode, body)
 	}
 
 	var checkResp checkResponse
@@ -116,12 +117,5 @@ func (c *Client) Check(ctx context.Context, t tokendef.Token, relation, objectTy
 		return false, fmt.Errorf("unmarshal response: %w", err)
 	}
 
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return checkResp.Permitted, nil
-	case http.StatusUnauthorized:
-		return false, fmt.Errorf("CAT invalid: %s", checkResp.Message)
-	default:
-		return false, fmt.Errorf("check failed with status %d: %s", resp.StatusCode, checkResp.Message)
-	}
+	return checkResp.Permitted, nil
 }

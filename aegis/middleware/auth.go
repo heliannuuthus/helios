@@ -23,14 +23,10 @@ func tokenPreview(tokenStr string, length int) string {
 
 func RequireToken(v *web.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authorization := c.GetHeader("Authorization")
-		if authorization == "" {
+		tokenStr := extractBearer(c.GetHeader("Authorization"))
+		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "unauthorized"})
 			return
-		}
-		tokenStr := authorization
-		if strings.HasPrefix(authorization, "Bearer ") {
-			tokenStr = authorization[7:]
 		}
 		identity, err := v.Interpret(c.Request.Context(), tokenStr)
 		if err != nil {
@@ -38,7 +34,12 @@ func RequireToken(v *web.Interpreter) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "unauthorized"})
 			return
 		}
-		tc := web.NewTokenContext(identity)
+		tc, err := web.NewTokenContext(identity)
+		if err != nil {
+			logger.Warnf("[Auth] TokenContext failed - Path: %s, Error: %v", c.Request.URL.Path, err)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "unauthorized"})
+			return
+		}
 		c.Set(string(web.ClaimsKey), tc)
 		c.Next()
 	}
@@ -46,22 +47,31 @@ func RequireToken(v *web.Interpreter) gin.HandlerFunc {
 
 func OptionalToken(v *web.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authorization := c.GetHeader("Authorization")
-		if authorization == "" {
+		tokenStr := extractBearer(c.GetHeader("Authorization"))
+		if tokenStr == "" {
 			c.Next()
 			return
 		}
-		tokenStr := authorization
-		if strings.HasPrefix(authorization, "Bearer ") {
-			tokenStr = authorization[7:]
-		}
 		identity, err := v.Interpret(c.Request.Context(), tokenStr)
-		if err == nil && identity != nil {
-			tc := web.NewTokenContext(identity)
-			c.Set(string(web.ClaimsKey), tc)
+		if err != nil || identity == nil {
+			c.Next()
+			return
 		}
+		tc, err := web.NewTokenContext(identity)
+		if err != nil {
+			c.Next()
+			return
+		}
+		c.Set(string(web.ClaimsKey), tc)
 		c.Next()
 	}
+}
+
+func extractBearer(authorization string) string {
+	if len(authorization) > 7 && strings.EqualFold(authorization[:7], "Bearer ") {
+		return authorization[7:]
+	}
+	return ""
 }
 
 // NewHermesKeyStore 创建 Hermes 使用的 KeyStore

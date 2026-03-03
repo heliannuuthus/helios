@@ -16,7 +16,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/authz"
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
 	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -35,10 +34,8 @@ const (
 
 // Factory 中间件工厂
 type Factory struct {
-	signKeyStore    *key.Store
-	encryptKeyStore *key.Store
-	catKeyStore     *key.Store
-	authzClient     *authz.Client
+	interpreter *Interpreter
+	checker     *RelationChecker
 }
 
 // NewFactory 创建中间件工厂
@@ -49,19 +46,16 @@ func NewFactory(
 	catKeyStore *key.Store,
 ) *Factory {
 	return &Factory{
-		signKeyStore:    signKeyStore,
-		encryptKeyStore: encryptKeyStore,
-		catKeyStore:     catKeyStore,
-		authzClient:     authz.NewClient(endpoint, catKeyStore),
+		interpreter: NewInterpreter(signKeyStore, encryptKeyStore),
+		checker:     NewRelationChecker(endpoint, catKeyStore),
 	}
 }
 
 // WithAudience 为特定 audience 创建中间件
 func (f *Factory) WithAudience(audience string) *Middleware {
-	interp := NewInterpreter(f.signKeyStore, f.encryptKeyStore)
 	return &Middleware{
-		interpreter: interp,
-		authzClient: f.authzClient,
+		interpreter: f.interpreter,
+		checker:     f.checker,
 		audience:    audience,
 	}
 }
@@ -69,7 +63,7 @@ func (f *Factory) WithAudience(audience string) *Middleware {
 // Middleware Aegis 中间件
 type Middleware struct {
 	interpreter *Interpreter
-	authzClient *authz.Client
+	checker     *RelationChecker
 	audience    string
 }
 
@@ -152,11 +146,7 @@ func (m *Middleware) RequireAnyRelationOn(relations []string, objectType, object
 	}
 }
 
-var errForbidden = &forbiddenError{}
-
-type forbiddenError struct{}
-
-func (e *forbiddenError) Error() string { return "forbidden" }
+var errForbidden = errors.New("forbidden")
 
 // authenticate 认证：验证 Authorization token，可选解析 X-Challenge-Token，组装 TokenContext
 func (m *Middleware) authenticate(r *http.Request) (*TokenContext, error) {
@@ -174,14 +164,19 @@ func (m *Middleware) authenticate(r *http.Request) (*TokenContext, error) {
 		return nil, fmt.Errorf("%w: expected %s, got %s", ErrUnsupportedAudience, m.audience, t.GetAudience())
 	}
 
-	tc := NewTokenContext(t)
+	tc, err := NewTokenContext(t)
+	if err != nil {
+		return nil, err
+	}
 
 	if challengeStr := r.Header.Get(ChallengeTokenHeader); challengeStr != "" {
-		ct, err := m.interpreter.Interpret(r.Context(), challengeStr)
+		ct, err := m.interpreter.Verify(r.Context(), challengeStr)
 		if err != nil {
 			logger.Warnf("[Auth] X-Challenge-Token 验证失败: %v", err)
 		} else if xt, ok := ct.(*tokendef.ChallengeToken); ok {
-			tc.WithChallenge(xt)
+			tc.SetChallengeToken(xt)
+		} else {
+			logger.Warnf("[Auth] X-Challenge-Token 类型断言失败: %T", ct)
 		}
 	}
 
@@ -190,18 +185,12 @@ func (m *Middleware) authenticate(r *http.Request) (*TokenContext, error) {
 
 // accessToken 从 TokenContext 中提取 access token（用于鉴权）
 func (m *Middleware) accessToken(tc *TokenContext) tokendef.Token {
-	if uat := tc.UserAccessToken(); uat != nil {
-		return uat
-	}
-	if sat := tc.ServiceAccessToken(); sat != nil {
-		return sat
-	}
-	return nil
+	return accessTokenFrom(tc)
 }
 
 // authorize 鉴权：检查单个关系
 func (m *Middleware) authorize(ctx context.Context, tc *TokenContext, relation, objectType, objectID string) error {
-	if m.authzClient == nil {
+	if m.checker == nil {
 		return errForbidden
 	}
 
@@ -210,7 +199,7 @@ func (m *Middleware) authorize(ctx context.Context, tc *TokenContext, relation, 
 		return errForbidden
 	}
 
-	permitted, err := m.authzClient.Check(ctx, t, relation, objectType, objectID)
+	permitted, err := m.checker.Check(ctx, t, relation, objectType, objectID)
 	if err != nil {
 		return err
 	}
@@ -222,7 +211,7 @@ func (m *Middleware) authorize(ctx context.Context, tc *TokenContext, relation, 
 
 // authorizeAny 鉴权：检查任意一个关系
 func (m *Middleware) authorizeAny(ctx context.Context, tc *TokenContext, relations []string, objectType, objectID string) error {
-	if m.authzClient == nil {
+	if m.checker == nil {
 		return errForbidden
 	}
 
@@ -233,7 +222,7 @@ func (m *Middleware) authorizeAny(ctx context.Context, tc *TokenContext, relatio
 
 	var lastErr error
 	for _, relation := range relations {
-		permitted, err := m.authzClient.Check(ctx, t, relation, objectType, objectID)
+		permitted, err := m.checker.Check(ctx, t, relation, objectType, objectID)
 		if err != nil {
 			lastErr = err
 			continue
@@ -258,11 +247,7 @@ func writeJSONError(w http.ResponseWriter, statusCode int, errType, message stri
 
 func extractBearerToken(r *http.Request) string {
 	authorization := r.Header.Get("Authorization")
-	if authorization == "" {
-		return ""
-	}
-
-	if strings.HasPrefix(authorization, "Bearer ") {
+	if len(authorization) > 7 && strings.EqualFold(authorization[:7], "Bearer ") {
 		return authorization[7:]
 	}
 	return ""

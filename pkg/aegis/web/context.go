@@ -1,6 +1,8 @@
 package web
 
 import (
+	"fmt"
+
 	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
@@ -28,7 +30,8 @@ func (tc *TokenContext) ChallengeToken() *tokendef.ChallengeToken {
 }
 
 // NewTokenContext 从已解析的 token.Token 构造 TokenContext。
-func NewTokenContext(t tokendef.Token) *TokenContext {
+// 仅接受 UAT / SAT / ChallengeToken，其他类型返回 error。
+func NewTokenContext(t tokendef.Token) (*TokenContext, error) {
 	tc := &TokenContext{}
 	switch v := t.(type) {
 	case *tokendef.UserAccessToken:
@@ -37,11 +40,13 @@ func NewTokenContext(t tokendef.Token) *TokenContext {
 		tc.serviceAccessToken = v
 	case *tokendef.ChallengeToken:
 		tc.challengeToken = v
+	default:
+		return nil, fmt.Errorf("unsupported token type for TokenContext: %T", t)
 	}
-	return tc
+	return tc, nil
 }
 
-// WithChallenge 追加 ChallengeToken 到已有 TokenContext。
-func (tc *TokenContext) WithChallenge(ct *tokendef.ChallengeToken) {
+// SetChallengeToken 追加 ChallengeToken 到已有 TokenContext。
+func (tc *TokenContext) SetChallengeToken(ct *tokendef.ChallengeToken) {
 	tc.challengeToken = ct
 }

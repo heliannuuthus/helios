@@ -5,8 +5,10 @@ USE `hermes`;
 
 -- ==================== 服务 ====================
 INSERT INTO t_service (service_id, domain_id, name, description, encrypted_key, access_token_expires_in, refresh_token_expires_in) VALUES
-('hermes', '-', 'Hermes 管理服务', '身份与访问管理服务', 'n4V9jXnzqo1oDz3nvQr9pNutuMccQGUja/VPUI4X+NClYKj8qoPbOODjsv4yOgNxJAu5u4w5SfnRNxmmTnCm+ggAZw+OJNoHpjX5ng==', 7200, 604800),
-('iris', '-', 'Iris 用户服务', '用户信息管理服务', '2jaevz90oM23wcZjpSTN8rCDu1ywHPvcIzxneldXYnH1mMXkl0EBZAGjeQ5RNctLrAKdchqSNQx5EhQLKRV9qXG6eXWejhc/9W/ULA==', 7200, 604800)
+('hermes', '-', 'Hermes 管理服务', '身份与访问管理服务', '8dx5pTbaahQWx4jErH/u3mU8BmXzAjCIV2pQa6d4UoFH8YQFYNusoEouddTkdHXkqRouCLRCYmQc/sBNAD0HQUUSBWMa+ADceDetWQ==', 7200, 604800),
+('iris', '-', 'Iris 用户服务', '用户信息管理服务', 'xzkXgeK6F21GTIfh3QIt/+koi2nO++PHUxjGe8UA/B1OT70yVABRZLjhw268T6nMpGRuOwn9V6qYis/f4GgwR91CwIBGuMsZYu11hg==', 7200, 604800),
+('zwei', '-', 'Zwei 菜谱服务', '菜谱管理、收藏、推荐服务', 'YDcU1L65DQ0A5brqGxW0NwbGB0M84KP8yrXsFLl9S6UUy67Igda45NzzhtLK0PCjcBd6y7K4XlOZfoXXSB1f6/sO4kEBWY1442PlSA==', 7200, 604800),
+('chaos', '-', 'Chaos 聚合服务', '邮件发送、文件上传等业务聚合服务', 'pBgWfoon4LF//5I8n4U2y6FAdNnxIZQSxhyPuBX3LPi5PnL/CWFW+0PbdkgmOpZ7Tq/KntGbAknsbFPYRMgge8XRRc2oPToOCNkK8w==', 7200, 604800)
 ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), encrypted_key = VALUES(encrypted_key), domain_id = VALUES(domain_id);
 
 -- ==================== 应用 ====================
@@ -32,6 +34,8 @@ ON DUPLICATE KEY UPDATE priority = VALUES(priority), strategy = VALUES(strategy)
 -- ==================== 应用服务关系 ====================
 INSERT INTO t_application_service_relation (app_id, service_id, relation) VALUES
 ('atlas', 'hermes', '*'),
+('atlas', 'zwei', '*'),
+('atlas', 'chaos', '*'),
 ('piris', 'iris', '*'),
 ('ciris', 'iris', '*')
 ON DUPLICATE KEY UPDATE relation = VALUES(relation);
@@ -45,12 +49,12 @@ ON DUPLICATE KEY UPDATE expires_in = VALUES(expires_in), limits = VALUES(limits)
 
 -- ==================== 用户 ====================
 INSERT INTO t_user (openid, status, username, password_hash, email_verified, nickname, picture, email) VALUES
-('heliannuuthus', 0, 'heliannuuthus', '$2b$10$35mzSnuRsyGYKHujLLs1R.yiptxWHBN.zomqDYHU6mbI3pPEUh1pO', 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
+('heliannuuthus', 0, 'heliannuuthus', '$2b$10$QBdKVhHH5g5kJAGAzhYgOu4Vb3i10rRAGuoJ.hxkhhov5AGaLLwN6', 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
 ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified), username = VALUES(username), password_hash = VALUES(password_hash);
 
 -- ==================== 用户身份 ====================
 INSERT INTO t_user_identity (domain, openid, idp, t_openid) VALUES
-('platform', 'heliannuuthus', 'global', '960f4e397afcd3b648c45d91cf63420b'),
+('platform', 'heliannuuthus', 'global', 'df406fed3530ef8eb0bd9b7609b928f2'),
 ('platform', 'heliannuuthus', 'staff', 'heliannuuthus')
 ON DUPLICATE KEY UPDATE t_openid = VALUES(t_openid);
 
