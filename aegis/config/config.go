@@ -261,41 +261,6 @@ func GetPublicKeyCacheMaxAge() time.Duration {
 	return DefaultAegisPublicKeyCacheMaxAge
 }
 
-// ==================== Mail 配置 ====================
-
-// MailConfig 邮件配置
-type MailConfig struct {
-	Provider string
-	Host     string
-	Port     int
-	UseSSL   bool
-	Username string
-	Password string
-}
-
-// mailProviderDefaults 邮件服务商默认配置
-type mailProviderDefaults struct {
-	host   string
-	port   int
-	useSSL bool
-}
-
-// getMailProviderDefaults 根据服务商获取默认配置
-func getMailProviderDefaults(provider string) mailProviderDefaults {
-	defaults := map[string]mailProviderDefaults{
-		"qq-exmail": {host: "smtp.exmail.qq.com", port: 465, useSSL: true},
-		"qq":        {host: "smtp.qq.com", port: 465, useSSL: true},
-		"163":       {host: "smtp.163.com", port: 465, useSSL: true},
-		"gmail":     {host: "smtp.gmail.com", port: 587, useSSL: false},
-		"outlook":   {host: "smtp.office365.com", port: 587, useSSL: false},
-		"aliyun":    {host: "smtp.mxhichina.com", port: 465, useSSL: true},
-	}
-	if d, ok := defaults[provider]; ok {
-		return d
-	}
-	return mailProviderDefaults{port: 587}
-}
-
 // GetMailConfig 获取邮件配置
 func GetMailConfig() *MailConfig {
 	c := Cfg()
@@ -453,22 +418,6 @@ func GetLoginACFailWindow(connection string) time.Duration {
 	return DefaultLoginACFailWindow
 }
 
-// parseIntMap 解析 map[string]interface{} 为 map[string]int
-func parseIntMap(raw map[string]interface{}) map[string]int {
-	result := make(map[string]int, len(raw))
-	for k, v := range raw {
-		switch n := v.(type) {
-		case int64:
-			result[k] = int(n)
-		case float64:
-			result[k] = int(n)
-		case int:
-			result[k] = n
-		}
-	}
-	return result
-}
-
 // ==================== SSO 配置 ====================
 
 // SSO 默认值
@@ -533,4 +482,55 @@ func GetSecretBytes(audience string) ([]byte, error) {
 		return nil, fmt.Errorf("解码 audience %s 的 secret 失败: %w", audience, err)
 	}
 	return secretBytes, nil
+}
+
+// ==================== Mail 配置 ====================
+
+// MailConfig 邮件配置
+type MailConfig struct {
+	Provider string
+	Host     string
+	Port     int
+	UseSSL   bool
+	Username string
+	Password string
+}
+
+// mailProviderDefaults 邮件服务商默认配置
+type mailProviderDefaults struct {
+	host   string
+	port   int
+	useSSL bool
+}
+
+// getMailProviderDefaults 根据服务商获取默认配置
+func getMailProviderDefaults(provider string) mailProviderDefaults {
+	defaults := map[string]mailProviderDefaults{
+		"qq-exmail": {host: "smtp.exmail.qq.com", port: 465, useSSL: true},
+		"qq":        {host: "smtp.qq.com", port: 465, useSSL: true},
+		"163":       {host: "smtp.163.com", port: 465, useSSL: true},
+		"gmail":     {host: "smtp.gmail.com", port: 587, useSSL: false},
+		"outlook":   {host: "smtp.office365.com", port: 587, useSSL: false},
+		"aliyun":    {host: "smtp.mxhichina.com", port: 465, useSSL: true},
+	}
+	if d, ok := defaults[provider]; ok {
+		return d
+	}
+	return mailProviderDefaults{port: 587}
+}
+
+// parseIntMap 解析 map[string]interface{} 为 map[string]int
+func parseIntMap(raw map[string]interface{}) map[string]int {
+	result := make(map[string]int, len(raw))
+	for k, v := range raw {
+		switch n := v.(type) {
+		case int64:
+			result[k] = int(n)
+		case float64:
+			result[k] = int(n)
+		case int:
+			result[k] = n
+		}
+	}
+	return result
 }

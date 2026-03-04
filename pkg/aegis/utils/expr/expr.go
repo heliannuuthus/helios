@@ -33,13 +33,14 @@ type notNode struct{ operand Node }
 type andNode struct{ operands []Node }
 type orNode struct{ operands []Node }
 
-func (*identNode) node() {}
-func (*notNode) node()   {}
-func (*andNode) node()   {}
-func (*orNode) node()    {}
-
 func (n *identNode) String() string { return n.name }
-func (n *notNode) String() string   { return "!" + n.operand.String() }
+
+func (*identNode) node() {}
+
+func (n *notNode) String() string { return "!" + n.operand.String() }
+
+func (*notNode) node() {}
+
 func (n *andNode) String() string {
 	parts := make([]string, len(n.operands))
 	for i, op := range n.operands {
@@ -47,6 +48,9 @@ func (n *andNode) String() string {
 	}
 	return "(" + strings.Join(parts, " && ") + ")"
 }
+
+func (*andNode) node() {}
+
 func (n *orNode) String() string {
 	parts := make([]string, len(n.operands))
 	for i, op := range n.operands {
@@ -55,32 +59,14 @@ func (n *orNode) String() string {
 	return "(" + strings.Join(parts, " || ") + ")"
 }
 
+func (*orNode) node() {}
+
 // Idents 返回表达式中所有标识符（去重、保序）。
 func Idents(n Node) []string {
 	seen := make(map[string]struct{})
 	var result []string
 	collectIdents(n, seen, &result)
 	return result
-}
-
-func collectIdents(n Node, seen map[string]struct{}, result *[]string) {
-	switch v := n.(type) {
-	case *identNode:
-		if _, ok := seen[v.name]; !ok {
-			seen[v.name] = struct{}{}
-			*result = append(*result, v.name)
-		}
-	case *notNode:
-		collectIdents(v.operand, seen, result)
-	case *andNode:
-		for _, op := range v.operands {
-			collectIdents(op, seen, result)
-		}
-	case *orNode:
-		for _, op := range v.operands {
-			collectIdents(op, seen, result)
-		}
-	}
 }
 
 // Eval 对 AST 求值。resolver 将标识符映射为 bool（true=通过）。
@@ -123,6 +109,31 @@ func Parse(expression string) (Node, error) {
 		return nil, fmt.Errorf("unexpected character %q at position %d", p.input[p.pos], p.pos)
 	}
 	return node, nil
+}
+
+func collectIdents(n Node, seen map[string]struct{}, result *[]string) {
+	switch v := n.(type) {
+	case *identNode:
+		if _, ok := seen[v.name]; !ok {
+			seen[v.name] = struct{}{}
+			*result = append(*result, v.name)
+		}
+	case *notNode:
+		collectIdents(v.operand, seen, result)
+	case *andNode:
+		for _, op := range v.operands {
+			collectIdents(op, seen, result)
+		}
+	case *orNode:
+		for _, op := range v.operands {
+			collectIdents(op, seen, result)
+		}
+	}
+}
+
+func isIdentChar(c byte) bool {
+	return c == '_' || c == '-' || c == ':' || c == '.' || c == '*' ||
+		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 type parser struct {
@@ -239,9 +250,4 @@ func (p *parser) parseIdent() (Node, error) {
 		return nil, fmt.Errorf("unexpected character %q at position %d", p.input[p.pos], p.pos)
 	}
 	return &identNode{name: p.input[start:p.pos]}, nil
-}
-
-func isIdentChar(c byte) bool {
-	return c == '_' || c == '-' || c == ':' || c == '.' || c == '*' ||
-		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }

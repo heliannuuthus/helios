@@ -144,29 +144,6 @@ func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, params
 	return false, nil
 }
 
-// buildACPolicy 构建验证频率计数策略
-// Key 维度：rl:login:{audience}:{connection}:{principal}
-func buildACPolicy(flow *types.AuthFlow, principal string) *accessctl.Policy {
-	audience := ""
-	if flow.Request != nil {
-		audience = flow.Request.Audience
-	}
-	return accessctl.NewPolicy(types.RateLimitKeyPrefixLoginFail + audience + ":" + flow.Connection + ":" + principal).
-		FailWindow(config.GetLoginACFailWindow(flow.Connection)).
-		CaptchaAt(config.GetLoginACCaptchaThreshold(flow.Connection))
-}
-
-// extractStringParam 安全地从 params 切片中提取 string 类型参数
-func extractStringParam(params []any, index int) string {
-	if index >= len(params) {
-		return ""
-	}
-	if s, ok := params[index].(string); ok {
-		return s
-	}
-	return ""
-}
-
 // ==================== 辅助方法 ====================
 
 // SetConnections 根据应用 IDP 配置构建 ConnectionMap
@@ -212,16 +189,6 @@ func (s *Service) buildConnectionConfig(idpCfg *models.ApplicationIDPConfig) *ty
 	return cfg
 }
 
-// collectReferences 收集 cfg 中被引用的 require/delegate connection 名称
-func collectReferences(cfg *types.ConnectionConfig, set map[string]bool) {
-	for _, r := range cfg.Require {
-		set[r] = true
-	}
-	for _, d := range cfg.Delegate {
-		set[d] = true
-	}
-}
-
 // addReferencedConnections 将被引用但尚未在 result 中的 connections 加入 ConnectionMap
 func (s *Service) addReferencedConnections(result map[string]*types.ConnectionConfig, referencedSet map[string]bool) {
 	for conn := range referencedSet {
@@ -233,5 +200,38 @@ func (s *Service) addReferencedConnections(result map[string]*types.ConnectionCo
 				result[conn] = cfg
 			}
 		}
+	}
+}
+
+// buildACPolicy 构建验证频率计数策略
+// Key 维度：rl:login:{audience}:{connection}:{principal}
+func buildACPolicy(flow *types.AuthFlow, principal string) *accessctl.Policy {
+	audience := ""
+	if flow.Request != nil {
+		audience = flow.Request.Audience
+	}
+	return accessctl.NewPolicy(types.RateLimitKeyPrefixLoginFail + audience + ":" + flow.Connection + ":" + principal).
+		FailWindow(config.GetLoginACFailWindow(flow.Connection)).
+		CaptchaAt(config.GetLoginACCaptchaThreshold(flow.Connection))
+}
+
+// extractStringParam 安全地从 params 切片中提取 string 类型参数
+func extractStringParam(params []any, index int) string {
+	if index >= len(params) {
+		return ""
+	}
+	if s, ok := params[index].(string); ok {
+		return s
+	}
+	return ""
+}
+
+// collectReferences 收集 cfg 中被引用的 require/delegate connection 名称
+func collectReferences(cfg *types.ConnectionConfig, set map[string]bool) {
+	for _, r := range cfg.Require {
+		set[r] = true
+	}
+	for _, d := range cfg.Delegate {
+		set[d] = true
 	}
 }

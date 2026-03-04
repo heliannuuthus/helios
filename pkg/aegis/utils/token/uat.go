@@ -116,6 +116,15 @@ func ParseUserAccessToken(pasetoToken *paseto.Token) (*UserAccessToken, error) {
 	}, nil
 }
 
+// UnmarshalUserInfo deserializes user info from decrypted inner token claims JSON.
+func UnmarshalUserInfo(data []byte) (*UserInfo, error) {
+	var info UserInfo
+	if err := json.Unmarshal(data, &info); err != nil {
+		return nil, fmt.Errorf("unmarshal user info: %w", err)
+	}
+	return &info, nil
+}
+
 // ==================== Token Interface ====================
 
 func (u *UserAccessToken) Type() TokenType {
@@ -204,13 +213,4 @@ func (u *UserAccessToken) MarshalUserPayload() ([]byte, error) {
 		return nil, fmt.Errorf("%w: no user info", ErrMissingClaims)
 	}
 	return json.Marshal(u.userInfo)
-}
-
-// UnmarshalUserInfo deserializes user info from decrypted inner token claims JSON.
-func UnmarshalUserInfo(data []byte) (*UserInfo, error) {
-	var info UserInfo
-	if err := json.Unmarshal(data, &info); err != nil {
-		return nil, fmt.Errorf("unmarshal user info: %w", err)
-	}
-	return &info, nil
 }

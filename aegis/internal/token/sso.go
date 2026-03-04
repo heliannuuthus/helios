@@ -77,19 +77,6 @@ func (s *SSOToken) Build() (*paseto.Token, error) {
 	return &t, nil
 }
 
-// ==================== Parse ====================
-
-func ParseSSOToken(pasetoToken *paseto.Token) (*SSOToken, error) {
-	claims, err := pkgtoken.ParseClaims(pasetoToken)
-	if err != nil {
-		return nil, fmt.Errorf("parse claims: %w", err)
-	}
-
-	return &SSOToken{
-		Claims: claims,
-	}, nil
-}
-
 // ==================== Identity Data ====================
 
 // MarshalIdentities serializes identity mapping as JSON for inner token encryption.
@@ -98,15 +85,6 @@ func (s *SSOToken) MarshalIdentities() ([]byte, error) {
 		return nil, fmt.Errorf("no identities to marshal")
 	}
 	return json.Marshal(s.identities)
-}
-
-// UnmarshalIdentities deserializes identity mapping from decrypted inner token claims.
-func UnmarshalIdentities(data []byte) (map[string]string, error) {
-	var identities map[string]string
-	if err := json.Unmarshal(data, &identities); err != nil {
-		return nil, fmt.Errorf("unmarshal identities: %w", err)
-	}
-	return identities, nil
 }
 
 func (s *SSOToken) SetIdentities(identities map[string]string) {
@@ -133,4 +111,26 @@ func (s *SSOToken) GetIdentities() map[string]string {
 		cp[k] = v
 	}
 	return cp
+}
+
+// ==================== Parse ====================
+
+func ParseSSOToken(pasetoToken *paseto.Token) (*SSOToken, error) {
+	claims, err := pkgtoken.ParseClaims(pasetoToken)
+	if err != nil {
+		return nil, fmt.Errorf("parse claims: %w", err)
+	}
+
+	return &SSOToken{
+		Claims: claims,
+	}, nil
+}
+
+// UnmarshalIdentities deserializes identity mapping from decrypted inner token claims.
+func UnmarshalIdentities(data []byte) (map[string]string, error) {
+	var identities map[string]string
+	if err := json.Unmarshal(data, &identities); err != nil {
+		return nil, fmt.Errorf("unmarshal identities: %w", err)
+	}
+	return identities, nil
 }

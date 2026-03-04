@@ -195,56 +195,6 @@ func (h *Handler) UploadImage(c *gin.Context) {
 	c.JSON(http.StatusOK, UploadImageResponse{URL: result.PublicURL})
 }
 
-func validateImageFile(c *gin.Context, file *multipart.FileHeader) bool {
-	if file.Size > 5*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "图片大小不能超过 5MB"})
-		return false
-	}
-
-	contentType := file.Header.Get("Content-Type")
-	if !strings.HasPrefix(contentType, "image/") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "只支持上传图片文件"})
-		return false
-	}
-
-	src, err := file.Open()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件失败"})
-		return false
-	}
-	defer func() {
-		if closeErr := src.Close(); closeErr != nil {
-			logger.Warnf("[Upload] close file for magic bytes check failed: %v", closeErr)
-		}
-	}()
-
-	header := make([]byte, 512)
-	n, err := src.Read(header)
-	if err != nil && n == 0 {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件头失败"})
-		return false
-	}
-	detectedType := http.DetectContentType(header[:n])
-	if !strings.HasPrefix(detectedType, "image/") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "文件内容不是有效的图片格式"})
-		return false
-	}
-
-	return true
-}
-
-func resolveUploadPath(req UploadImageRequest, filename string) string {
-	if req.Path != "" {
-		return req.Path
-	}
-	prefix := req.Prefix
-	if prefix == "" {
-		prefix = "images"
-	}
-	now := time.Now()
-	return fmt.Sprintf("%s/%04d/%02d/%02d/%s", prefix, now.Year(), now.Month(), now.Day(), filename)
-}
-
 // UploadFile 上传文件 POST /chaos/files
 // 参数: file (multipart), path (可选，指定上传路径)
 func (h *Handler) UploadFile(c *gin.Context) {
@@ -311,6 +261,56 @@ func (h *Handler) TemplateService() *template.Service {
 // StorageService 获取存储服务（供内部调用）
 func (h *Handler) StorageService() *storage.Service {
 	return h.storageService
+}
+
+func validateImageFile(c *gin.Context, file *multipart.FileHeader) bool {
+	if file.Size > 5*1024*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "图片大小不能超过 5MB"})
+		return false
+	}
+
+	contentType := file.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "只支持上传图片文件"})
+		return false
+	}
+
+	src, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件失败"})
+		return false
+	}
+	defer func() {
+		if closeErr := src.Close(); closeErr != nil {
+			logger.Warnf("[Upload] close file for magic bytes check failed: %v", closeErr)
+		}
+	}()
+
+	header := make([]byte, 512)
+	n, err := src.Read(header)
+	if err != nil && n == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取文件头失败"})
+		return false
+	}
+	detectedType := http.DetectContentType(header[:n])
+	if !strings.HasPrefix(detectedType, "image/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "文件内容不是有效的图片格式"})
+		return false
+	}
+
+	return true
+}
+
+func resolveUploadPath(req UploadImageRequest, filename string) string {
+	if req.Path != "" {
+		return req.Path
+	}
+	prefix := req.Prefix
+	if prefix == "" {
+		prefix = "images"
+	}
+	now := time.Now()
+	return fmt.Sprintf("%s/%04d/%02d/%02d/%s", prefix, now.Year(), now.Month(), now.Day(), filename)
 }
 
 // Re-export types for external use

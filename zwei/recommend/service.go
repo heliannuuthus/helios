@@ -59,6 +59,21 @@ type ContextResponse struct {
 	Time     *TimeInfo            `json:"time"`
 }
 
+// NewService 创建推荐服务
+func NewService(db *gorm.DB) *Service {
+	cfg := config.Cfg()
+	// 配置 OpenRouter 客户端
+	apiKey := cfg.GetString("openrouter.api-key")
+	clientConfig := openai.DefaultConfig(apiKey)
+	clientConfig.BaseURL = "https://openrouter.ai/api/v1"
+
+	return &Service{
+		db:        db,
+		amap:      amap.NewClient(cfg.GetString("amap.api-key")),
+		llmClient: openai.NewClientWithConfig(clientConfig),
+	}
+}
+
 // GetContext 获取推荐上下文信息（位置、天气、时间）
 func (s *Service) GetContext(req *ContextRequest) *ContextResponse {
 	response := &ContextResponse{}
@@ -101,132 +116,6 @@ func (s *Service) GetContext(req *ContextRequest) *ContextResponse {
 	}
 
 	return response
-}
-
-// WeatherInfo 天气信息（内部使用）
-type WeatherInfo struct {
-	Temperature float64 `json:"temperature"`
-	Humidity    int     `json:"humidity"`
-	Weather     string  `json:"weather"`
-	City        string  `json:"city"`
-}
-
-// WeatherInfoResponse 天气信息响应（API 使用）
-type WeatherInfoResponse struct {
-	Temperature float64 `json:"temperature"`
-	Humidity    int     `json:"humidity"`
-	Weather     string  `json:"weather"`
-	Icon        string  `json:"icon"`
-}
-
-// Context 推荐上下文
-type Context struct {
-	UserID     string   `json:"user_id,omitempty"`
-	Latitude   float64  `json:"latitude"`
-	Longitude  float64  `json:"longitude"`
-	Timestamp  int64    `json:"timestamp"`
-	ExcludeIDs []string `json:"exclude_ids,omitempty"` // 排除的菜谱 ID（换一批时传入）
-}
-
-// RecipeWithReason 带推荐理由的菜谱
-type RecipeWithReason struct {
-	Recipe models.Recipe
-	Reason string
-}
-
-// Result 推荐结果（返回给调用方）
-type Result struct {
-	Recipes []RecipeWithReason
-	Summary string // LLM 生成的一句话整体评价
-}
-
-// recommendContext 推荐上下文（内部使用，用于构建 prompt）
-type recommendContext struct {
-	Weather     *WeatherInfo
-	MealTime    string
-	Season      string
-	Temperature string
-}
-
-// UserHistory 用户历史
-type UserHistory struct {
-	FavoriteRecipes []RecipeInfo `json:"favorite_recipes"`
-	ViewedRecipes   []RecipeInfo `json:"viewed_recipes"`
-	RecentDislikes  []string     `json:"recent_dislikes"`
-}
-
-// RecipeInfo 菜谱基本信息
-type RecipeInfo struct {
-	Name        string   `json:"name"`
-	Category    string   `json:"category"`
-	Tags        []string `json:"tags"`
-	Description string   `json:"description,omitempty"`
-}
-
-// LLMRecommendationItem 单个推荐项
-type LLMRecommendationItem struct {
-	RecipeID string `json:"recipe_id" jsonschema:"description=推荐的菜谱ID"`
-	Name     string `json:"name" jsonschema:"description=菜谱名称"`
-	Reason   string `json:"reason" jsonschema:"description=推荐理由,30-50字"`
-}
-
-// LLMRecommendation LLM 推荐结果
-type LLMRecommendation struct {
-	Recommendations []LLMRecommendationItem `json:"recommendations" jsonschema:"description=推荐列表,minItems=1"`
-	Summary         string                  `json:"summary" jsonschema:"description=一句话整体评价,例如:今天天气凉爽适合来点暖胃的家常菜"`
-}
-
-// JSONSchema 实现 json.Marshaler，用于结构化输出
-type JSONSchema struct {
-	schema interface{}
-}
-
-func (j JSONSchema) MarshalJSON() ([]byte, error) {
-	return json.Marshal(j.schema)
-}
-
-// generateSchema 生成 JSON Schema
-func generateSchema[T any]() interface{} {
-	reflector := jsonschema.Reflector{
-		AllowAdditionalProperties: false,
-		DoNotReference:            true,
-	}
-	var v T
-	schema := reflector.Reflect(v)
-	return schema
-}
-
-// recommendationSchema 推荐结果的 JSON Schema
-var recommendationSchema = generateSchema[LLMRecommendation]()
-
-// addReasoningEnabled 为 MiMo-V2-Flash 模型添加 reasoning_enabled 参数
-// 注意：go-openai 库目前不支持 reasoning_enabled 字段
-// 根据 OpenRouter 文档，MiMo-V2-Flash 在使用工具调用时应关闭 reasoning mode
-// 由于库的限制，这里只记录日志，实际参数需要通过修改 go-openai 库或使用自定义 HTTP 客户端来传递
-// 参考：https://openrouter.ai/docs/reasoning-tokens
-func addReasoningEnabled(req *openai.ChatCompletionRequest, enabled bool) {
-	// 记录日志，提醒开发者注意
-	logger.Infof("[Recommend] MiMo-V2-Flash 模型：reasoning_enabled=%v (当前 go-openai 库不支持此参数，需手动修改库或使用自定义 HTTP 客户端)", enabled)
-
-	// TODO: 如果需要完整支持，可以考虑：
-	// 1. 使用 reflect 包修改请求结构（可能不稳定）
-	// 2. Fork go-openai 库并添加 reasoning_enabled 字段支持
-	// 3. 使用自定义 HTTP 客户端直接调用 OpenRouter API
-}
-
-// NewService 创建推荐服务
-func NewService(db *gorm.DB) *Service {
-	cfg := config.Cfg()
-	// 配置 OpenRouter 客户端
-	apiKey := cfg.GetString("openrouter.api-key")
-	clientConfig := openai.DefaultConfig(apiKey)
-	clientConfig.BaseURL = "https://openrouter.ai/api/v1"
-
-	return &Service{
-		db:        db,
-		amap:      amap.NewClient(cfg.GetString("amap.api-key")),
-		llmClient: openai.NewClientWithConfig(clientConfig),
-	}
 }
 
 // GetRecommendations 获取推荐菜谱（基于 LLM）
@@ -637,26 +526,6 @@ func (s *Service) parseLLMResponse(content string) (*LLMRecommendation, error) {
 	return &result, nil
 }
 
-// cleanMarkdownCodeBlock 清理 Markdown 代码块包装
-func cleanMarkdownCodeBlock(content string) string {
-	content = strings.TrimSpace(content)
-	if strings.HasPrefix(content, "```json") {
-		content = strings.TrimPrefix(content, "```json")
-		content = strings.TrimPrefix(content, "```")
-		if idx := strings.LastIndex(content, "```"); idx != -1 {
-			content = content[:idx]
-		}
-		content = strings.TrimSpace(content)
-	} else if strings.HasPrefix(content, "```") {
-		content = strings.TrimPrefix(content, "```")
-		if idx := strings.LastIndex(content, "```"); idx != -1 {
-			content = content[:idx]
-		}
-		content = strings.TrimSpace(content)
-	}
-	return content
-}
-
 // buildRecommendPrompt 构建推荐 Prompt
 func (s *Service) buildRecommendPrompt(recCtx *recommendContext, userHistory *UserHistory, candidatesJSON string, limit int) string {
 	prompt := fmt.Sprintf(`请根据以下信息推荐 %d 道菜：
@@ -816,6 +685,137 @@ func (s *Service) fillTags(recipes []models.Recipe) error {
 	}
 
 	return nil
+}
+
+// WeatherInfo 天气信息（内部使用）
+type WeatherInfo struct {
+	Temperature float64 `json:"temperature"`
+	Humidity    int     `json:"humidity"`
+	Weather     string  `json:"weather"`
+	City        string  `json:"city"`
+}
+
+// WeatherInfoResponse 天气信息响应（API 使用）
+type WeatherInfoResponse struct {
+	Temperature float64 `json:"temperature"`
+	Humidity    int     `json:"humidity"`
+	Weather     string  `json:"weather"`
+	Icon        string  `json:"icon"`
+}
+
+// Context 推荐上下文
+type Context struct {
+	UserID     string   `json:"user_id,omitempty"`
+	Latitude   float64  `json:"latitude"`
+	Longitude  float64  `json:"longitude"`
+	Timestamp  int64    `json:"timestamp"`
+	ExcludeIDs []string `json:"exclude_ids,omitempty"` // 排除的菜谱 ID（换一批时传入）
+}
+
+// RecipeWithReason 带推荐理由的菜谱
+type RecipeWithReason struct {
+	Recipe models.Recipe
+	Reason string
+}
+
+// Result 推荐结果（返回给调用方）
+type Result struct {
+	Recipes []RecipeWithReason
+	Summary string // LLM 生成的一句话整体评价
+}
+
+// recommendContext 推荐上下文（内部使用，用于构建 prompt）
+type recommendContext struct {
+	Weather     *WeatherInfo
+	MealTime    string
+	Season      string
+	Temperature string
+}
+
+// UserHistory 用户历史
+type UserHistory struct {
+	FavoriteRecipes []RecipeInfo `json:"favorite_recipes"`
+	ViewedRecipes   []RecipeInfo `json:"viewed_recipes"`
+	RecentDislikes  []string     `json:"recent_dislikes"`
+}
+
+// RecipeInfo 菜谱基本信息
+type RecipeInfo struct {
+	Name        string   `json:"name"`
+	Category    string   `json:"category"`
+	Tags        []string `json:"tags"`
+	Description string   `json:"description,omitempty"`
+}
+
+// LLMRecommendationItem 单个推荐项
+type LLMRecommendationItem struct {
+	RecipeID string `json:"recipe_id" jsonschema:"description=推荐的菜谱ID"`
+	Name     string `json:"name" jsonschema:"description=菜谱名称"`
+	Reason   string `json:"reason" jsonschema:"description=推荐理由,30-50字"`
+}
+
+// LLMRecommendation LLM 推荐结果
+type LLMRecommendation struct {
+	Recommendations []LLMRecommendationItem `json:"recommendations" jsonschema:"description=推荐列表,minItems=1"`
+	Summary         string                  `json:"summary" jsonschema:"description=一句话整体评价,例如:今天天气凉爽适合来点暖胃的家常菜"`
+}
+
+// JSONSchema 实现 json.Marshaler，用于结构化输出
+type JSONSchema struct {
+	schema interface{}
+}
+
+func (j JSONSchema) MarshalJSON() ([]byte, error) {
+	return json.Marshal(j.schema)
+}
+
+// generateSchema 生成 JSON Schema
+func generateSchema[T any]() interface{} {
+	reflector := jsonschema.Reflector{
+		AllowAdditionalProperties: false,
+		DoNotReference:            true,
+	}
+	var v T
+	schema := reflector.Reflect(v)
+	return schema
+}
+
+// recommendationSchema 推荐结果的 JSON Schema
+var recommendationSchema = generateSchema[LLMRecommendation]()
+
+// addReasoningEnabled 为 MiMo-V2-Flash 模型添加 reasoning_enabled 参数
+// 注意：go-openai 库目前不支持 reasoning_enabled 字段
+// 根据 OpenRouter 文档，MiMo-V2-Flash 在使用工具调用时应关闭 reasoning mode
+// 由于库的限制，这里只记录日志，实际参数需要通过修改 go-openai 库或使用自定义 HTTP 客户端来传递
+// 参考：https://openrouter.ai/docs/reasoning-tokens
+func addReasoningEnabled(req *openai.ChatCompletionRequest, enabled bool) {
+	// 记录日志，提醒开发者注意
+	logger.Infof("[Recommend] MiMo-V2-Flash 模型：reasoning_enabled=%v (当前 go-openai 库不支持此参数，需手动修改库或使用自定义 HTTP 客户端)", enabled)
+
+	// TODO: 如果需要完整支持，可以考虑：
+	// 1. 使用 reflect 包修改请求结构（可能不稳定）
+	// 2. Fork go-openai 库并添加 reasoning_enabled 字段支持
+	// 3. 使用自定义 HTTP 客户端直接调用 OpenRouter API
+}
+
+// cleanMarkdownCodeBlock 清理 Markdown 代码块包装
+func cleanMarkdownCodeBlock(content string) string {
+	content = strings.TrimSpace(content)
+	if strings.HasPrefix(content, "```json") {
+		content = strings.TrimPrefix(content, "```json")
+		content = strings.TrimPrefix(content, "```")
+		if idx := strings.LastIndex(content, "```"); idx != -1 {
+			content = content[:idx]
+		}
+		content = strings.TrimSpace(content)
+	} else if strings.HasPrefix(content, "```") {
+		content = strings.TrimPrefix(content, "```")
+		if idx := strings.LastIndex(content, "```"); idx != -1 {
+			content = content[:idx]
+		}
+		content = strings.TrimSpace(content)
+	}
+	return content
 }
 
 // 辅助函数

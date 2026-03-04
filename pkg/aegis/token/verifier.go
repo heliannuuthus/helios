@@ -48,6 +48,43 @@ func NewVerifier(provider key.Provider, id string) *Verifier {
 	return v
 }
 
+// Verify verifies the token signature and returns the raw paseto.Token.
+// It extracts the kid from the footer, matches it against known keys,
+// and uses the matched key for signature verification.
+func (v *Verifier) Verify(ctx context.Context, tokenString string) (*paseto.Token, error) {
+	if err := v.ensure(ctx); err != nil {
+		return nil, fmt.Errorf("load keys: %w", err)
+	}
+
+	kid, err := pasetokit.ExtractKID(tokenString)
+	if err != nil {
+		return nil, fmt.Errorf("extract kid: %w", err)
+	}
+
+	v.mu.RLock()
+	knownPIDs := make([]string, len(v.keys))
+	for i, e := range v.keys {
+		knownPIDs[i] = e.pid
+	}
+	v.mu.RUnlock()
+	logger.Debugf("[Verifier] id=%s, token kid=%s, known pids=%v", v.id, kid, knownPIDs)
+
+	pk, err := v.findKeyByKID(kid)
+	if err != nil {
+		return nil, fmt.Errorf("find key: %w", err)
+	}
+
+	parser := paseto.NewParser()
+	parser.AddRule(paseto.ValidAt(time.Now()))
+
+	pasetoToken, err := parser.ParseV4Public(pk, tokenString, nil)
+	if err != nil {
+		return nil, fmt.Errorf("signature verification failed: %w", err)
+	}
+
+	return pasetoToken, nil
+}
+
 func (v *Verifier) updateKeys(rawKeys [][]byte) error {
 	entries := make([]keyEntry, 0, len(rawKeys))
 	for i, raw := range rawKeys {
@@ -104,41 +141,4 @@ func (v *Verifier) findKeyByKID(kid string) (paseto.V4AsymmetricPublicKey, error
 		}
 	}
 	return paseto.V4AsymmetricPublicKey{}, fmt.Errorf("%w: %s", pasetokit.ErrKIDNotFound, kid)
-}
-
-// Verify verifies the token signature and returns the raw paseto.Token.
-// It extracts the kid from the footer, matches it against known keys,
-// and uses the matched key for signature verification.
-func (v *Verifier) Verify(ctx context.Context, tokenString string) (*paseto.Token, error) {
-	if err := v.ensure(ctx); err != nil {
-		return nil, fmt.Errorf("load keys: %w", err)
-	}
-
-	kid, err := pasetokit.ExtractKID(tokenString)
-	if err != nil {
-		return nil, fmt.Errorf("extract kid: %w", err)
-	}
-
-	v.mu.RLock()
-	knownPIDs := make([]string, len(v.keys))
-	for i, e := range v.keys {
-		knownPIDs[i] = e.pid
-	}
-	v.mu.RUnlock()
-	logger.Debugf("[Verifier] id=%s, token kid=%s, known pids=%v", v.id, kid, knownPIDs)
-
-	pk, err := v.findKeyByKID(kid)
-	if err != nil {
-		return nil, fmt.Errorf("find key: %w", err)
-	}
-
-	parser := paseto.NewParser()
-	parser.AddRule(paseto.ValidAt(time.Now()))
-
-	pasetoToken, err := parser.ParseV4Public(pk, tokenString, nil)
-	if err != nil {
-		return nil, fmt.Errorf("signature verification failed: %w", err)
-	}
-
-	return pasetoToken, nil
 }

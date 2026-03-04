@@ -98,6 +98,25 @@ func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*models
 	return p.parseUserID(bodyStr)
 }
 
+// Resolve 小程序不支持通过 principal 本地查找
+func (*MPProvider) Resolve(_ context.Context, _ string) (*models.TUserInfo, error) {
+	return nil, errors.New("alipay mp provider does not support resolve")
+}
+
+// FetchAdditionalInfo 补充获取用户信息
+func (*MPProvider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...any) (*idp.AdditionalInfo, error) {
+	logger.Warnf("[Alipay] 支付宝获取 %s 暂未实现", infoType)
+	return nil, fmt.Errorf("alipay does not support fetching %s yet", infoType)
+}
+
+// Prepare 准备前端所需的公开配置
+func (p *MPProvider) Prepare() *types.ConnectionConfig {
+	return &types.ConnectionConfig{
+		Connection: "alipay-mp",
+		Identifier: p.appID,
+	}
+}
+
 // extractCode 提取授权码
 
 // validateConfig 验证配置
@@ -228,23 +247,4 @@ func (p *MPProvider) parseUserID(bodyStr string) (*models.TUserInfo, error) {
 		TOpenID: userID,
 		RawData: fmt.Sprintf(`{"openid":"%s"}`, userID),
 	}, nil
-}
-
-// Resolve 小程序不支持通过 principal 本地查找
-func (*MPProvider) Resolve(_ context.Context, _ string) (*models.TUserInfo, error) {
-	return nil, errors.New("alipay mp provider does not support resolve")
-}
-
-// FetchAdditionalInfo 补充获取用户信息
-func (*MPProvider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...any) (*idp.AdditionalInfo, error) {
-	logger.Warnf("[Alipay] 支付宝获取 %s 暂未实现", infoType)
-	return nil, fmt.Errorf("alipay does not support fetching %s yet", infoType)
-}
-
-// Prepare 准备前端所需的公开配置
-func (p *MPProvider) Prepare() *types.ConnectionConfig {
-	return &types.ConnectionConfig{
-		Connection: "alipay-mp",
-		Identifier: p.appID,
-	}
 }

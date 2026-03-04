@@ -46,6 +46,10 @@ func ParseSeed(data []byte) (Seed, error) {
 	return Seed(data), nil
 }
 
+func ExportPublicKeyBase64(publicKey gopaseto.V4AsymmetricPublicKey) string {
+	return base64.StdEncoding.EncodeToString(publicKey.ExportBytes())
+}
+
 func (s Seed) Salt() []byte {
 	return s[SeedSaltOffset:SeedSaltLength]
 }
@@ -78,8 +82,4 @@ func (s Seed) DerivePublicKey() (gopaseto.V4AsymmetricPublicKey, error) {
 		return gopaseto.V4AsymmetricPublicKey{}, err
 	}
 	return secretKey.Public(), nil
-}
-
-func ExportPublicKeyBase64(publicKey gopaseto.V4AsymmetricPublicKey) string {
-	return base64.StdEncoding.EncodeToString(publicKey.ExportBytes())
 }

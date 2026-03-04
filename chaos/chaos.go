@@ -54,6 +54,13 @@ func New(db *gorm.DB) (*Chaos, error) {
 	}, nil
 }
 
+// autoMigrate 自动迁移数据库
+func autoMigrate(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&models.EmailTemplate{},
+	)
+}
+
 // Handler 获取 HTTP Handler
 func (c *Chaos) Handler() *Handler {
 	return c.handler
@@ -79,11 +86,4 @@ func (c *Chaos) Close() {
 	if c.mailService != nil {
 		c.mailService.Close()
 	}
-}
-
-// autoMigrate 自动迁移数据库
-func autoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
-		&models.EmailTemplate{},
-	)
 }

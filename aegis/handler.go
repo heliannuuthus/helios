@@ -90,10 +90,14 @@ func (h *Handler) Authorize(c *gin.Context) {
 		return
 	}
 
+	if authErr := validateAuthorizeRequest(&req); authErr != nil {
+		h.authorizeErrorResponse(c, authErr)
+		return
+	}
+
 	ctx := c.Request.Context()
 	logger.Debugf("[Handler] Authorize request: %+v", req)
 
-	// 1. 获取并验证 Application
 	app, err := h.cache.GetApplication(ctx, req.ClientID)
 	if err != nil {
 		h.authorizeErrorResponse(c, autherrors.NewClientNotFoundf("application not found: %s", req.ClientID))
@@ -104,25 +108,18 @@ func (h *Handler) Authorize(c *gin.Context) {
 		return
 	}
 
-	// 2. 获取并验证 Service
-	svc, err := h.cache.GetService(ctx, req.Audience)
-	if err != nil {
-		h.authorizeErrorResponse(c, autherrors.NewServiceNotFoundf("service not found: %s", req.Audience))
+	audiences, authErr := collectAudiences(&req)
+	if authErr != nil {
+		h.authorizeErrorResponse(c, authErr)
 		return
 	}
 
-	// 3. 验证 Application-Service 关系
-	hasRelation, err := h.cache.CheckAppServiceRelation(ctx, req.ClientID, req.Audience)
-	if err != nil {
-		h.authorizeErrorResponse(c, autherrors.NewServerError("check relation failed"))
-		return
-	}
-	if !hasRelation {
-		h.authorizeErrorResponse(c, autherrors.NewAccessDeniedf("application %s has no access to service %s", req.ClientID, req.Audience))
+	svc, authErr := h.validateAudiences(ctx, req.ClientID, audiences)
+	if authErr != nil {
+		h.authorizeErrorResponse(c, authErr)
 		return
 	}
 
-	// 4. 获取应用 IDP 配置
 	idpConfigs, err := h.cache.GetApplicationIDPConfigs(ctx, req.ClientID)
 	if err != nil {
 		h.authorizeErrorResponse(c, autherrors.NewServerError("query idp configs failed"))
@@ -133,32 +130,27 @@ func (h *Handler) Authorize(c *gin.Context) {
 		return
 	}
 
-	// 5. 构建 AuthFlow
 	flow := types.NewAuthFlow(&req, time.Duration(config.GetCookieMaxAge())*time.Second, config.GetAuthFlowMaxLifetime())
 	flow.Application = app
 	flow.Service = svc
 	flow.SetConnectionMap(h.authenticateSvc.SetConnections(idpConfigs))
 
-	// 6. SSO 快速路径
 	if !req.Prompt.Contains(types.PromptLogin) {
 		if redirected := h.trySSOFastPath(c, ctx, flow); redirected {
 			return
 		}
 	}
 
-	// prompt=none 要求静默认证，但 SSO 不可用 → 返回错误
 	if req.Prompt.Contains(types.PromptNone) {
 		h.authorizeErrorResponse(c, autherrors.NewLoginRequired("no active SSO session"))
 		return
 	}
 
-	// 7. 持久化 Flow
 	if err := h.authenticateSvc.SaveFlow(ctx, flow); err != nil {
 		h.authorizeErrorResponse(c, autherrors.NewServerError("save flow failed"))
 		return
 	}
 
-	// 8. 设置 Cookie 并根据 flow 状态决定下一步
 	setAuthSessionCookie(c, flow.ID)
 	forwardNext(c, flow)
 }
@@ -543,9 +535,8 @@ func (h *Handler) ConfirmIdentify(c *gin.Context) {
 // --- Token ---
 
 // Token POST /auth/token
-// 换取 Token
-// Content-Type: application/x-www-form-urlencoded → 标准单 audience
-// Content-Type: application/json → 多 audience
+// Content-Type: application/x-www-form-urlencoded → 单 audience token 交换
+// Content-Type: application/json → 多 audience token 交换
 func (h *Handler) Token(c *gin.Context) {
 	if c.ContentType() == "application/json" {
 		h.tokenMultiAudience(c)
@@ -740,6 +731,59 @@ func (h *Handler) PublicKeys(c *gin.Context) {
 // ==================== 私有方法（按引用顺序） ====================
 
 // --- Authorize 引用链 ---
+
+func validateAuthorizeRequest(req *types.AuthRequest) *autherrors.AuthError {
+	if strings.Contains(req.ResponseType, "code") {
+		if req.CodeChallenge == "" || req.CodeChallengeMethod == "" {
+			return autherrors.NewInvalidRequest("code_challenge and code_challenge_method are required for authorization code flow")
+		}
+		if req.CodeChallengeMethod != "S256" {
+			return autherrors.NewInvalidRequest("unsupported code_challenge_method, only S256 is supported")
+		}
+	}
+	if req.Audience == "" && len(req.Audiences) == 0 {
+		return autherrors.NewInvalidRequest("audience or audiences is required")
+	}
+	if req.Audience != "" && len(req.Audiences) > 0 {
+		return autherrors.NewInvalidRequest("audience and audiences are mutually exclusive")
+	}
+	return nil
+}
+
+func collectAudiences(req *types.AuthRequest) ([]string, *autherrors.AuthError) {
+	if req.Audience != "" {
+		return []string{req.Audience}, nil
+	}
+	if len(req.Audiences) > 10 {
+		return nil, autherrors.NewInvalidRequest("too many audiences: max 10")
+	}
+	audiences := make([]string, 0, len(req.Audiences))
+	for aud := range req.Audiences {
+		audiences = append(audiences, aud)
+	}
+	return audiences, nil
+}
+
+func (h *Handler) validateAudiences(ctx context.Context, clientID string, audiences []string) (*models.ServiceWithKey, *autherrors.AuthError) {
+	var svc *models.ServiceWithKey
+	for i, aud := range audiences {
+		s, err := h.cache.GetService(ctx, aud)
+		if err != nil {
+			return nil, autherrors.NewServiceNotFoundf("service not found: %s", aud)
+		}
+		if i == 0 {
+			svc = s
+		}
+		ok, err := h.cache.CheckAppServiceRelation(ctx, clientID, aud)
+		if err != nil {
+			return nil, autherrors.NewServerError("check relation failed")
+		}
+		if !ok {
+			return nil, autherrors.NewAccessDeniedf("application %s has no access to service %s", clientID, aud)
+		}
+	}
+	return svc, nil
+}
 
 // trySSOFastPath 尝试 SSO 快速路径：如果用户有有效 SSO 会话，直接签发授权码并重定向。
 // 返回 true 表示已处理（成功重定向），false 表示需要走正常登录流程。
@@ -1127,7 +1171,7 @@ func (h *Handler) initiateChallenge(ctx context.Context, ch *types.Challenge) er
 
 // --- Token 引用链 ---
 
-// tokenSingleAudience 标准 OAuth2 单 audience token 交换
+// tokenSingleAudience 单 audience token 交换（form-urlencoded）
 func (h *Handler) tokenSingleAudience(c *gin.Context) {
 	var req authorize.TokenRequest
 	if err := c.ShouldBind(&req); err != nil {
@@ -1141,13 +1185,11 @@ func (h *Handler) tokenSingleAudience(c *gin.Context) {
 		return
 	}
 
-	logger.Debugf("[Handler] Token response - ClientID: %s, ExpiresIn: %d, Scope: %s, HasRefreshToken: %v",
-		req.ClientID, resp.ExpiresIn, resp.Scope, resp.RefreshToken != "")
-
 	c.JSON(http.StatusOK, resp)
 }
 
-// tokenMultiAudience 多 audience token 交换
+// tokenMultiAudience 多 audience token 交换（JSON，仅 authorization_code）
+// audiences 优先从 flow 获取（授权阶段已校验），请求参数作为 fallback
 func (h *Handler) tokenMultiAudience(c *gin.Context) {
 	var req authorize.MultiAudienceTokenRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

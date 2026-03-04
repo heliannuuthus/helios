@@ -37,6 +37,49 @@ type Service struct {
 	authCodeExpiresIn time.Duration
 }
 
+func defaultDuration(val, def time.Duration) time.Duration {
+	if val == 0 {
+		return def
+	}
+	return val
+}
+
+// ==================== 辅助函数 ====================
+
+// verifyCodeChallenge 验证 PKCE
+func verifyCodeChallenge(method, challenge, verifier string) bool {
+	if verifier == "" {
+		return false
+	}
+
+	switch method {
+	case "S256":
+		hash := sha256.Sum256([]byte(verifier))
+		computed := base64.RawURLEncoding.EncodeToString(hash[:])
+		return computed == challenge
+	default:
+		return false
+	}
+}
+
+// parseScopeSet 解析 scope 为集合
+func parseScopeSet(scope string) map[string]bool {
+	set := make(map[string]bool)
+	for _, s := range strings.Fields(scope) {
+		set[s] = true
+	}
+	return set
+}
+
+// generateRefreshTokenValue 生成 refresh token 值
+func generateRefreshTokenValue() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate refresh token value: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
 // NewService 创建授权服务
 func NewService(
 	cache *cache.Manager,
@@ -52,13 +95,6 @@ func NewService(
 		pool:              pool,
 		authCodeExpiresIn: defaultDuration(authCodeExpiresIn, 5*time.Minute),
 	}
-}
-
-func defaultDuration(val, def time.Duration) time.Duration {
-	if val == 0 {
-		return def
-	}
-	return val
 }
 
 // ==================== 授权准备 ====================
@@ -171,7 +207,7 @@ func (s *Service) GenerateAuthCode(ctx context.Context, flow *types.AuthFlow) (*
 
 // ==================== Token 交换 ====================
 
-// ExchangeToken 用授权码换取 Token
+// ExchangeToken 单 audience 授权码换取 Token
 func (s *Service) ExchangeToken(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
 	switch req.GrantType {
 	case GrantTypeAuthorizationCode:
@@ -181,6 +217,123 @@ func (s *Service) ExchangeToken(ctx context.Context, req *TokenRequest) (*TokenR
 	default:
 		return nil, fmt.Errorf("unsupported grant type: %s", req.GrantType)
 	}
+}
+
+// ==================== 多 Audience Token 交换 ====================
+
+// ExchangeMultiAudienceToken 多 audience token 交换（仅 authorization_code）
+// refresh_token 场景下每个 audience 独立刷新，走单 audience 的 ExchangeToken
+func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudienceTokenRequest) (MultiAudienceTokenResponse, error) {
+	switch req.GrantType {
+	case GrantTypeAuthorizationCode:
+		return s.exchangeMultiAudienceAuthorizationCode(ctx, req)
+	default:
+		return nil, fmt.Errorf("unsupported grant type for multi-audience: %s (use single-audience refresh_token instead)", req.GrantType)
+	}
+}
+
+// ==================== 关系检查 ====================
+
+// CheckRelation 检查用户是否具有指定的关系
+func (s *Service) CheckRelation(ctx context.Context, serviceID, subjectID, relation, objectType, objectID string) (bool, error) {
+	// 从 hermes 查询关系
+	relationships, err := s.cache.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
+	if err != nil {
+		return false, err
+	}
+
+	// 检查是否有匹配的关系
+	for _, rel := range relationships {
+		// 检查关系类型匹配
+		if rel.Relation != relation && rel.Relation != "*" {
+			continue
+		}
+
+		// 检查资源类型匹配
+		if objectType != "*" && rel.ObjectType != objectType && rel.ObjectType != "*" {
+			continue
+		}
+
+		// 检查资源 ID 匹配
+		if objectID != "*" && rel.ObjectID != objectID && rel.ObjectID != "*" {
+			continue
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// ==================== Public Keys ====================
+
+// PublicKeyInfo 公钥信息
+type PublicKeyInfo struct {
+	Version   string `json:"version"`    // PASETO 版本（v4）
+	Purpose   string `json:"purpose"`    // 用途（public）
+	PublicKey string `json:"public_key"` // Base64 编码的公钥
+}
+
+// PublicKeysResponse PASETO 公钥响应（支持密钥轮换）
+type PublicKeysResponse struct {
+	Main PublicKeyInfo   `json:"main"` // 当前主密钥（用于签发新 token）
+	Keys []PublicKeyInfo `json:"keys"` // 所有有效公钥（包括主密钥和轮换中的旧密钥，用于验证）
+}
+
+// GetPublicKey 获取公钥（根据 client_id 返回其所属域的所有有效公钥）
+// 返回的公钥列表包含主密钥和轮换期间的旧密钥，用于验证不同时期签发的 token
+func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKeysResponse, error) {
+	// 1. 获取 Application
+	app, err := s.cache.GetApplication(ctx, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("client not found: %w", err)
+	}
+
+	// 2. 获取域信息和公钥
+	domain, err := s.cache.GetDomain(ctx, app.DomainID)
+	if err != nil {
+		return nil, fmt.Errorf("domain not found: %w", err)
+	}
+
+	// 3. 从域主密钥（48 字节 seed）派生公钥
+	mainSeed, err := pasetokit.ParseSeed(domain.Main)
+	if err != nil {
+		return nil, fmt.Errorf("parse main seed: %w", err)
+	}
+	mainPublicKey, err := mainSeed.DerivePublicKey()
+	if err != nil {
+		return nil, fmt.Errorf("derive main public key: %w", err)
+	}
+	main := PublicKeyInfo{
+		Version:   tokendef.PasetoVersion,
+		Purpose:   tokendef.PasetoPurpose,
+		PublicKey: pasetokit.ExportPublicKeyBase64(mainPublicKey),
+	}
+
+	// 4. 从所有域密钥（48 字节 seed）派生公钥
+	keyInfos := make([]PublicKeyInfo, 0, len(domain.Keys))
+	for _, signKey := range domain.Keys {
+		seed, err := pasetokit.ParseSeed(signKey)
+		if err != nil {
+			return nil, fmt.Errorf("parse seed: %w", err)
+		}
+		publicKey, err := seed.DerivePublicKey()
+		if err != nil {
+			return nil, fmt.Errorf("derive public key: %w", err)
+		}
+
+		keyInfos = append(keyInfos, PublicKeyInfo{
+			Version:   tokendef.PasetoVersion,
+			Purpose:   tokendef.PasetoPurpose,
+			PublicKey: pasetokit.ExportPublicKeyBase64(publicKey),
+		})
+	}
+
+	// 5. 构建响应
+	return &PublicKeysResponse{
+		Main: main,
+		Keys: keyInfos,
+	}, nil
 }
 
 func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
@@ -222,15 +375,18 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 		return nil, err
 	}
 
-	// 7. Token 签发完成，flow 使命结束，异步清理
-	flowID := authCode.FlowID
+	// 7. 异步清理 flow
+	s.asyncCleanupFlow(ctx, authCode.FlowID)
+
+	return resp, nil
+}
+
+func (s *Service) asyncCleanupFlow(ctx context.Context, flowID string) {
 	s.pool.GoWithContext(ctx, func(ctx context.Context) {
 		if err := s.cache.DeleteAuthFlow(ctx, flowID); err != nil {
 			logger.Warnf("[Authorize] 清理 flow 失败 - FlowID: %s, Error: %v", flowID, err)
 		}
 	})
-
-	return resp, nil
 }
 
 func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
@@ -406,20 +562,6 @@ func (s *Service) cleanupOldRefreshTokens(ctx context.Context, openid, clientID 
 	}
 }
 
-// ==================== 多 Audience Token 交换 ====================
-
-// ExchangeMultiAudienceToken 多 audience token 交换
-func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudienceTokenRequest) (MultiAudienceTokenResponse, error) {
-	switch req.GrantType {
-	case GrantTypeAuthorizationCode:
-		return s.exchangeMultiAudienceAuthorizationCode(ctx, req)
-	case GrantTypeRefreshToken:
-		return s.refreshMultiAudienceToken(ctx, req)
-	default:
-		return nil, fmt.Errorf("unsupported grant type: %s", req.GrantType)
-	}
-}
-
 func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, req *MultiAudienceTokenRequest) (MultiAudienceTokenResponse, error) {
 	// 1. 原子消费授权码
 	authCode, err := s.cache.ConsumeAuthCode(ctx, req.Code)
@@ -443,8 +585,8 @@ func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, re
 		return nil, autherrors.NewInvalidGrant("client_id mismatch")
 	}
 
-	// 4. 验证 redirect_uri
-	if req.RedirectURI != flow.Request.RedirectURI {
+	// 4. 验证 redirect_uri（客户端不传时跳过，由授权阶段保证）
+	if req.RedirectURI != "" && req.RedirectURI != flow.Request.RedirectURI {
 		return nil, autherrors.NewInvalidGrant("redirect_uri mismatch")
 	}
 
@@ -457,87 +599,31 @@ func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, re
 		return nil, autherrors.NewServerError("failed to resolve user subject")
 	}
 
-	// 6. 为每个 audience 签发独立的 token
-	resp, err := s.generateMultiAudienceTokens(ctx, &flow, req.Audiences)
+	// 6. audiences 优先从 flow 获取（授权阶段已校验），请求参数作为 fallback
+	audiences := req.Audiences
+	if len(flow.Request.Audiences) > 0 {
+		audiences = make(map[string]*AudienceScope, len(flow.Request.Audiences))
+		for aud, ras := range flow.Request.Audiences {
+			scope := ""
+			if ras != nil {
+				scope = ras.Scope
+			}
+			audiences[aud] = &AudienceScope{Scope: scope}
+		}
+	}
+
+	if len(audiences) == 0 {
+		return nil, autherrors.NewInvalidRequest("no audiences specified")
+	}
+
+	// 7. 为每个 audience 签发独立的 token
+	resp, err := s.generateMultiAudienceTokens(ctx, &flow, audiences)
 	if err != nil {
 		return nil, err
 	}
 
-	// 7. 异步清理 flow
-	flowID := authCode.FlowID
-	s.pool.GoWithContext(ctx, func(ctx context.Context) {
-		if err := s.cache.DeleteAuthFlow(ctx, flowID); err != nil {
-			logger.Warnf("[Authorize] 清理 flow 失败 - FlowID: %s, Error: %v", flowID, err)
-		}
-	})
-
-	return resp, nil
-}
-
-func (s *Service) refreshMultiAudienceToken(ctx context.Context, req *MultiAudienceTokenRequest) (MultiAudienceTokenResponse, error) {
-	if req.RefreshToken == "" {
-		return nil, autherrors.NewInvalidRequest("refresh_token is required")
-	}
-
-	// 1. 获取 refresh token（用于验证 client_id 和获取用户信息）
-	rt, err := s.cache.GetRefreshToken(ctx, req.RefreshToken)
-	if err != nil {
-		return nil, autherrors.NewInvalidGrant("invalid refresh token")
-	}
-
-	// 2. 验证 client_id
-	if req.ClientID != rt.ClientID {
-		return nil, autherrors.NewInvalidGrant("client_id mismatch")
-	}
-
-	// 3. 获取用户和应用信息
-	user, err := s.userSvc.GetUser(ctx, rt.OpenID)
-	if err != nil {
-		return nil, fmt.Errorf("user not found: %w", err)
-	}
-
-	app, err := s.cache.GetApplication(ctx, rt.ClientID)
-	if err != nil {
-		return nil, fmt.Errorf("application not found: %w", err)
-	}
-
-	// 4. 为每个 audience 签发独立的 token
-	resp := make(MultiAudienceTokenResponse, len(req.Audiences))
-	for audience, audienceScope := range req.Audiences {
-		// 验证 Application-Service 关系
-		hasRelation, err := s.cache.CheckAppServiceRelation(ctx, req.ClientID, audience)
-		if err != nil {
-			return nil, autherrors.NewServerError("check relation failed")
-		}
-		if !hasRelation {
-			return nil, autherrors.NewAccessDeniedf("application %s has no access to service %s", req.ClientID, audience)
-		}
-
-		svc, err := s.cache.GetService(ctx, audience)
-		if err != nil {
-			return nil, autherrors.NewServiceNotFoundf("service not found: %s", audience)
-		}
-
-		scope := audienceScope.GetScope()
-
-		// 签发 access token
-		tokenResp, err := s.generateAccessToken(ctx, app, svc, user, rt.OpenID, scope)
-		if err != nil {
-			return nil, fmt.Errorf("generate token for audience %s: %w", audience, err)
-		}
-
-		// 如果 scope 包含 offline_access，签发独立的 refresh token
-		scopes := strings.Fields(scope)
-		if helpers.ContainsScope(scopes, ScopeOfflineAccess) {
-			rtValue, err := s.createRefreshTokenForAudience(ctx, rt.OpenID, rt.ClientID, svc, scope)
-			if err != nil {
-				return nil, fmt.Errorf("create refresh token for audience %s: %w", audience, err)
-			}
-			tokenResp.RefreshToken = rtValue
-		}
-
-		resp[audience] = tokenResp
-	}
+	// 8. 异步清理 flow
+	s.asyncCleanupFlow(ctx, authCode.FlowID)
 
 	return resp, nil
 }
@@ -622,146 +708,6 @@ func (s *Service) createRefreshTokenForAudience(
 	}
 
 	return rt.Token, nil
-}
-
-// ==================== 关系检查 ====================
-
-// CheckRelation 检查用户是否具有指定的关系
-func (s *Service) CheckRelation(ctx context.Context, serviceID, subjectID, relation, objectType, objectID string) (bool, error) {
-	// 从 hermes 查询关系
-	relationships, err := s.cache.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
-	if err != nil {
-		return false, err
-	}
-
-	// 检查是否有匹配的关系
-	for _, rel := range relationships {
-		// 检查关系类型匹配
-		if rel.Relation != relation && rel.Relation != "*" {
-			continue
-		}
-
-		// 检查资源类型匹配
-		if objectType != "*" && rel.ObjectType != objectType && rel.ObjectType != "*" {
-			continue
-		}
-
-		// 检查资源 ID 匹配
-		if objectID != "*" && rel.ObjectID != objectID && rel.ObjectID != "*" {
-			continue
-		}
-
-		return true, nil
-	}
-
-	return false, nil
-}
-
-// ==================== Public Keys ====================
-
-// PublicKeyInfo 公钥信息
-type PublicKeyInfo struct {
-	Version   string `json:"version"`    // PASETO 版本（v4）
-	Purpose   string `json:"purpose"`    // 用途（public）
-	PublicKey string `json:"public_key"` // Base64 编码的公钥
-}
-
-// PublicKeysResponse PASETO 公钥响应（支持密钥轮换）
-type PublicKeysResponse struct {
-	Main PublicKeyInfo   `json:"main"` // 当前主密钥（用于签发新 token）
-	Keys []PublicKeyInfo `json:"keys"` // 所有有效公钥（包括主密钥和轮换中的旧密钥，用于验证）
-}
-
-// GetPublicKey 获取公钥（根据 client_id 返回其所属域的所有有效公钥）
-// 返回的公钥列表包含主密钥和轮换期间的旧密钥，用于验证不同时期签发的 token
-func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKeysResponse, error) {
-	// 1. 获取 Application
-	app, err := s.cache.GetApplication(ctx, clientID)
-	if err != nil {
-		return nil, fmt.Errorf("client not found: %w", err)
-	}
-
-	// 2. 获取域信息和公钥
-	domain, err := s.cache.GetDomain(ctx, app.DomainID)
-	if err != nil {
-		return nil, fmt.Errorf("domain not found: %w", err)
-	}
-
-	// 3. 从域主密钥（48 字节 seed）派生公钥
-	mainSeed, err := pasetokit.ParseSeed(domain.Main)
-	if err != nil {
-		return nil, fmt.Errorf("parse main seed: %w", err)
-	}
-	mainPublicKey, err := mainSeed.DerivePublicKey()
-	if err != nil {
-		return nil, fmt.Errorf("derive main public key: %w", err)
-	}
-	main := PublicKeyInfo{
-		Version:   tokendef.PasetoVersion,
-		Purpose:   tokendef.PasetoPurpose,
-		PublicKey: pasetokit.ExportPublicKeyBase64(mainPublicKey),
-	}
-
-	// 4. 从所有域密钥（48 字节 seed）派生公钥
-	keyInfos := make([]PublicKeyInfo, 0, len(domain.Keys))
-	for _, signKey := range domain.Keys {
-		seed, err := pasetokit.ParseSeed(signKey)
-		if err != nil {
-			return nil, fmt.Errorf("parse seed: %w", err)
-		}
-		publicKey, err := seed.DerivePublicKey()
-		if err != nil {
-			return nil, fmt.Errorf("derive public key: %w", err)
-		}
-
-		keyInfos = append(keyInfos, PublicKeyInfo{
-			Version:   tokendef.PasetoVersion,
-			Purpose:   tokendef.PasetoPurpose,
-			PublicKey: pasetokit.ExportPublicKeyBase64(publicKey),
-		})
-	}
-
-	// 5. 构建响应
-	return &PublicKeysResponse{
-		Main: main,
-		Keys: keyInfos,
-	}, nil
-}
-
-// ==================== 辅助函数 ====================
-
-// verifyCodeChallenge 验证 PKCE
-func verifyCodeChallenge(method, challenge, verifier string) bool {
-	if verifier == "" {
-		return false
-	}
-
-	switch method {
-	case "S256":
-		hash := sha256.Sum256([]byte(verifier))
-		computed := base64.RawURLEncoding.EncodeToString(hash[:])
-		return computed == challenge
-	default:
-		return false
-	}
-}
-
-// parseScopeSet 解析 scope 为集合
-func parseScopeSet(scope string) map[string]bool {
-	set := make(map[string]bool)
-	for _, s := range strings.Fields(scope) {
-		set[s] = true
-	}
-	return set
-}
-
-// generateRefreshTokenValue 生成 refresh token 值
-func generateRefreshTokenValue() (string, error) {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("generate refresh token value: %w", err)
-	}
-	return hex.EncodeToString(b), nil
 }
 
 // getAllowedScopes 获取允许的 scope

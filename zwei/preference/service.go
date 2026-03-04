@@ -73,31 +73,6 @@ func (s *Service) GetOptions() (*OptionsResponse, error) {
 	}, nil
 }
 
-// OptionsResponse 偏好选项响应
-type OptionsResponse struct {
-	Flavors   []OptionItem `json:"flavors"`   // 口味选项
-	Taboos    []OptionItem `json:"taboos"`    // 忌口选项
-	Allergies []OptionItem `json:"allergies"` // 过敏选项
-}
-
-// OptionItem 选项项
-type OptionItem struct {
-	Value string `json:"value"` // 标签值
-	Label string `json:"label"` // 显示名称
-}
-
-// convertTagsToOptions 转换标签为选项
-func convertTagsToOptions(tags []models.Tag) []OptionItem {
-	result := make([]OptionItem, len(tags))
-	for i, tag := range tags {
-		result[i] = OptionItem{
-			Value: tag.Value,
-			Label: tag.Label,
-		}
-	}
-	return result
-}
-
 // GetUserPreferences 获取用户偏好（包含已选择的选项）
 func (s *Service) GetUserPreferences(openid string) (*UserPreferencesResponse, error) {
 	// 获取所有选项
@@ -213,27 +188,29 @@ func (s *Service) UpdateUserPreferences(openid string, req *UpdatePreferencesReq
 	return tx.Commit().Error
 }
 
-// UpdatePreferencesRequest 更新偏好请求
-type UpdatePreferencesRequest struct {
-	Flavors   []string `json:"flavors"`   // 口味选项值列表
-	Taboos    []string `json:"taboos"`    // 忌口选项值列表
-	Allergies []string `json:"allergies"` // 过敏选项值列表
+// OptionsResponse 偏好选项响应
+type OptionsResponse struct {
+	Flavors   []OptionItem `json:"flavors"`   // 口味选项
+	Taboos    []OptionItem `json:"taboos"`    // 忌口选项
+	Allergies []OptionItem `json:"allergies"` // 过敏选项
 }
 
-// Validate 验证请求数据（需要传入 tagService）
-func (r *UpdatePreferencesRequest) Validate(tagService *tag.Service) error {
-	// 验证口味选项是否存在
-	if err := validateTagValues(r.Flavors, models.TagTypeFlavor, tagService); err != nil {
-		return err
-	}
+// OptionItem 选项项
+type OptionItem struct {
+	Value string `json:"value"` // 标签值
+	Label string `json:"label"` // 显示名称
+}
 
-	// 验证忌口选项是否存在
-	if err := validateTagValues(r.Taboos, models.TagTypeTaboo, tagService); err != nil {
-		return err
+// convertTagsToOptions 转换标签为选项
+func convertTagsToOptions(tags []models.Tag) []OptionItem {
+	result := make([]OptionItem, len(tags))
+	for i, tag := range tags {
+		result[i] = OptionItem{
+			Value: tag.Value,
+			Label: tag.Label,
+		}
 	}
-
-	// 验证过敏选项是否存在
-	return validateTagValues(r.Allergies, models.TagTypeAllergy, tagService)
+	return result
 }
 
 // validateTagValues 验证标签值是否存在
@@ -265,6 +242,29 @@ func validateTagValues(values []string, tagType models.TagType, tagService *tag.
 	}
 
 	return nil
+}
+
+// UpdatePreferencesRequest 更新偏好请求
+type UpdatePreferencesRequest struct {
+	Flavors   []string `json:"flavors"`   // 口味选项值列表
+	Taboos    []string `json:"taboos"`    // 忌口选项值列表
+	Allergies []string `json:"allergies"` // 过敏选项值列表
+}
+
+// Validate 验证请求数据（需要传入 tagService）
+func (r *UpdatePreferencesRequest) Validate(tagService *tag.Service) error {
+	// 验证口味选项是否存在
+	if err := validateTagValues(r.Flavors, models.TagTypeFlavor, tagService); err != nil {
+		return err
+	}
+
+	// 验证忌口选项是否存在
+	if err := validateTagValues(r.Taboos, models.TagTypeTaboo, tagService); err != nil {
+		return err
+	}
+
+	// 验证过敏选项是否存在
+	return validateTagValues(r.Allergies, models.TagTypeAllergy, tagService)
 }
 
 // InvalidTagValueError 无效标签值错误

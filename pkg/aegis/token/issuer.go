@@ -44,6 +44,40 @@ func NewIssuer(provider key.Provider, id string) *Issuer {
 	return i
 }
 
+// Issue issues a default CAT token.
+func (i *Issuer) Issue(ctx context.Context) (string, error) {
+	cat := tokendef.NewClaimsBuilder().
+		Issuer(i.id).
+		ClientID(i.id).
+		Audience("aegis").
+		ExpiresIn(5 * time.Minute).
+		Build(tokendef.NewClientAccessTokenBuilder())
+
+	pasetoToken, err := tokendef.Build(cat)
+	if err != nil {
+		return "", fmt.Errorf("build token: %w", err)
+	}
+
+	return i.sign(ctx, pasetoToken)
+}
+
+// IssueWithAudience issues a CAT token with a specific audience and expiry.
+func (i *Issuer) IssueWithAudience(ctx context.Context, audience string, expiresIn time.Duration) (string, error) {
+	cat := tokendef.NewClaimsBuilder().
+		Issuer(i.id).
+		ClientID(i.id).
+		Audience(audience).
+		ExpiresIn(expiresIn).
+		Build(tokendef.NewClientAccessTokenBuilder())
+
+	pasetoToken, err := tokendef.Build(cat)
+	if err != nil {
+		return "", fmt.Errorf("build token: %w", err)
+	}
+
+	return i.sign(ctx, pasetoToken)
+}
+
 func (i *Issuer) updateKey(rawKey []byte) error {
 	seed, err := pasetokit.ParseSeed(rawKey)
 	if err != nil {
@@ -102,38 +136,4 @@ func (i *Issuer) sign(ctx context.Context, token *paseto.Token) (string, error) 
 
 	token.SetFooter(footer)
 	return token.V4Sign(sk, nil), nil
-}
-
-// Issue issues a default CAT token.
-func (i *Issuer) Issue(ctx context.Context) (string, error) {
-	cat := tokendef.NewClaimsBuilder().
-		Issuer(i.id).
-		ClientID(i.id).
-		Audience("aegis").
-		ExpiresIn(5 * time.Minute).
-		Build(tokendef.NewClientAccessTokenBuilder())
-
-	pasetoToken, err := tokendef.Build(cat)
-	if err != nil {
-		return "", fmt.Errorf("build token: %w", err)
-	}
-
-	return i.sign(ctx, pasetoToken)
-}
-
-// IssueWithAudience issues a CAT token with a specific audience and expiry.
-func (i *Issuer) IssueWithAudience(ctx context.Context, audience string, expiresIn time.Duration) (string, error) {
-	cat := tokendef.NewClaimsBuilder().
-		Issuer(i.id).
-		ClientID(i.id).
-		Audience(audience).
-		ExpiresIn(expiresIn).
-		Build(tokendef.NewClientAccessTokenBuilder())
-
-	pasetoToken, err := tokendef.Build(cat)
-	if err != nil {
-		return "", fmt.Errorf("build token: %w", err)
-	}
-
-	return i.sign(ctx, pasetoToken)
 }

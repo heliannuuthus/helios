@@ -67,86 +67,6 @@ func NewClient(token string, opts ...Option) *Client {
 	return c
 }
 
-// buildURL 构建 API 请求 URL
-func (c *Client) buildURL(method string) string {
-	return fmt.Sprintf("%s/bot%s/%s", c.apiURL, c.token, method)
-}
-
-// doRequest 执行 HTTP 请求
-func (c *Client) doRequest(ctx context.Context, method, apiMethod string, body io.Reader, contentType string) (*Response, error) {
-	url := c.buildURL(apiMethod)
-
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("请求 Telegram API 失败: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logger.Errorf("[Telegram] 关闭响应体失败: %v", err)
-		}
-	}()
-
-	var result Response
-	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
-		return nil, fmt.Errorf("解析响应失败: %w", err)
-	}
-
-	if !result.OK {
-		return &result, fmt.Errorf("telegram API 错误: %s (code: %d)", result.Description, result.ErrorCode)
-	}
-
-	return &result, nil
-}
-
-// postJSON 发送 JSON 请求
-func (c *Client) postJSON(ctx context.Context, method string, payload any) (*Response, error) {
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return nil, fmt.Errorf("序列化请求失败: %w", err)
-	}
-
-	return c.doRequest(ctx, http.MethodPost, method, bytes.NewReader(data), "application/json")
-}
-
-// postMultipart 发送 multipart 请求（用于文件上传）
-func (c *Client) postMultipart(ctx context.Context, method string, fields map[string]string, files map[string]FileUpload) (*Response, error) {
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-
-	// 添加普通字段
-	for key, value := range fields {
-		if err := writer.WriteField(key, value); err != nil {
-			return nil, fmt.Errorf("写入字段 %s 失败: %w", key, err)
-		}
-	}
-
-	// 添加文件
-	for key, file := range files {
-		part, err := writer.CreateFormFile(key, file.Filename)
-		if err != nil {
-			return nil, fmt.Errorf("创建文件字段 %s 失败: %w", key, err)
-		}
-		if _, err := io.Copy(part, file.Reader); err != nil {
-			return nil, fmt.Errorf("写入文件 %s 失败: %w", key, err)
-		}
-	}
-
-	if err := writer.Close(); err != nil {
-		return nil, fmt.Errorf("关闭 multipart writer 失败: %w", err)
-	}
-
-	return c.doRequest(ctx, http.MethodPost, method, &buf, writer.FormDataContentType())
-}
-
 // GetMe 获取 Bot 信息，可用于验证 token 是否有效
 func (c *Client) GetMe(ctx context.Context) (*User, error) {
 	resp, err := c.doRequest(ctx, http.MethodGet, "getMe", nil, "")
@@ -361,4 +281,84 @@ func (c *Client) GetWebhookInfo(ctx context.Context) (*WebhookInfo, error) {
 	}
 
 	return &info, nil
+}
+
+// buildURL 构建 API 请求 URL
+func (c *Client) buildURL(method string) string {
+	return fmt.Sprintf("%s/bot%s/%s", c.apiURL, c.token, method)
+}
+
+// doRequest 执行 HTTP 请求
+func (c *Client) doRequest(ctx context.Context, method, apiMethod string, body io.Reader, contentType string) (*Response, error) {
+	url := c.buildURL(apiMethod)
+
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("请求 Telegram API 失败: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.Errorf("[Telegram] 关闭响应体失败: %v", err)
+		}
+	}()
+
+	var result Response
+	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if !result.OK {
+		return &result, fmt.Errorf("telegram API 错误: %s (code: %d)", result.Description, result.ErrorCode)
+	}
+
+	return &result, nil
+}
+
+// postJSON 发送 JSON 请求
+func (c *Client) postJSON(ctx context.Context, method string, payload any) (*Response, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("序列化请求失败: %w", err)
+	}
+
+	return c.doRequest(ctx, http.MethodPost, method, bytes.NewReader(data), "application/json")
+}
+
+// postMultipart 发送 multipart 请求（用于文件上传）
+func (c *Client) postMultipart(ctx context.Context, method string, fields map[string]string, files map[string]FileUpload) (*Response, error) {
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	// 添加普通字段
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return nil, fmt.Errorf("写入字段 %s 失败: %w", key, err)
+		}
+	}
+
+	// 添加文件
+	for key, file := range files {
+		part, err := writer.CreateFormFile(key, file.Filename)
+		if err != nil {
+			return nil, fmt.Errorf("创建文件字段 %s 失败: %w", key, err)
+		}
+		if _, err := io.Copy(part, file.Reader); err != nil {
+			return nil, fmt.Errorf("写入文件 %s 失败: %w", key, err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("关闭 multipart writer 失败: %w", err)
+	}
+
+	return c.doRequest(ctx, http.MethodPost, method, &buf, writer.FormDataContentType())
 }

@@ -24,15 +24,6 @@ type Handler struct {
 	mfaSvc        *aegis.MFAService
 }
 
-// NewHandler 创建用户信息处理器
-func NewHandler(userSvc *hermes.UserService, credentialSvc *hermes.CredentialService, mfaSvc *aegis.MFAService) *Handler {
-	return &Handler{
-		userSvc:       userSvc,
-		credentialSvc: credentialSvc,
-		mfaSvc:        mfaSvc,
-	}
-}
-
 // getOpenID 从 Gin context 中获取用户标识
 func getOpenID(c *gin.Context) string {
 	return web.OpenIDFromGin(c)
@@ -42,6 +33,20 @@ func getOpenID(c *gin.Context) string {
 func errorResponse(c *gin.Context, err error) {
 	authErr := autherrors.ToAuthError(err)
 	c.JSON(authErr.HTTPStatus, authErr)
+}
+
+// encodeCredentialID 编码凭证 ID 为 Base64URL 字符串
+func encodeCredentialID(id []byte) string {
+	return base64.RawURLEncoding.EncodeToString(id)
+}
+
+// NewHandler 创建用户信息处理器
+func NewHandler(userSvc *hermes.UserService, credentialSvc *hermes.CredentialService, mfaSvc *aegis.MFAService) *Handler {
+	return &Handler{
+		userSvc:       userSvc,
+		credentialSvc: credentialSvc,
+		mfaSvc:        mfaSvc,
+	}
 }
 
 // ==================== 用户信息 ====================
@@ -365,66 +370,6 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 	}
 }
 
-// setupWebAuthn 处理 WebAuthn 设置流程
-func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challengeID string, credentialJSON jsontext.Value) {
-	if !h.mfaSvc.WebAuthnEnabled() {
-		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	switch action {
-	case "", "begin":
-		user, err := h.userSvc.GetUserWithDecrypted(ctx, openID)
-		if err != nil {
-			errorResponse(c, autherrors.NewNotFound("user not found"))
-			return
-		}
-
-		resp, err := h.mfaSvc.BeginWebAuthnRegistration(ctx, user)
-		if err != nil {
-			errorResponse(c, autherrors.NewServerError(err.Error()))
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"type":         credType,
-			"action":       "begin",
-			"options":      resp.Options,
-			"challenge_id": resp.ChallengeID,
-		})
-
-	case "finish":
-		if challengeID == "" {
-			errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required for finish"))
-			return
-		}
-
-		if len(credentialJSON) == 0 {
-			errorResponse(c, autherrors.NewInvalidRequest("credential data is required for finish"))
-			return
-		}
-		c.Request.Body = io.NopCloser(bytes.NewReader(credentialJSON))
-
-		credInfo, err := h.mfaSvc.FinishWebAuthnRegistration(ctx, openID, challengeID, c.Request)
-		if err != nil {
-			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"type":          credType,
-			"action":        "finish",
-			"success":       true,
-			"credential_id": encodeCredentialID(credInfo.ID),
-		})
-
-	default:
-		errorResponse(c, autherrors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
-	}
-}
-
 // VerifyMFARequest 验证 MFA 请求
 type VerifyMFARequest struct {
 	Type   string `json:"type" binding:"required,oneof=totp webauthn passkey"`
@@ -497,64 +442,6 @@ func (h *Handler) VerifyMFA(c *gin.Context) {
 
 	default:
 		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
-	}
-}
-
-// verifyWebAuthn 处理 WebAuthn 验证流程
-func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, challengeID string, credentialJSON jsontext.Value) {
-	if !h.mfaSvc.WebAuthnEnabled() {
-		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
-		return
-	}
-
-	ctx := c.Request.Context()
-
-	switch action {
-	case "", "begin":
-		user, err := h.userSvc.GetUserWithDecrypted(ctx, openID)
-		if err != nil {
-			errorResponse(c, autherrors.NewNotFound("user not found"))
-			return
-		}
-
-		resp, err := h.mfaSvc.BeginWebAuthnVerification(ctx, user)
-		if err != nil {
-			errorResponse(c, autherrors.NewServerError(err.Error()))
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"type":         credType,
-			"action":       "begin",
-			"options":      resp.Options,
-			"challenge_id": resp.ChallengeID,
-		})
-
-	case "finish":
-		if challengeID == "" {
-			errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required for finish"))
-			return
-		}
-
-		if len(credentialJSON) == 0 {
-			errorResponse(c, autherrors.NewInvalidRequest("credential data is required for finish"))
-			return
-		}
-		openid, _, err := h.mfaSvc.FinishWebAuthnVerification(ctx, challengeID, credentialJSON)
-		if err != nil {
-			errorResponse(c, autherrors.NewAccessDenied(err.Error()))
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"type":    credType,
-			"action":  "finish",
-			"success": true,
-			"openid":  openid,
-		})
-
-	default:
-		errorResponse(c, autherrors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
 	}
 }
 
@@ -664,7 +551,120 @@ func (h *Handler) DeleteMFA(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// encodeCredentialID 编码凭证 ID 为 Base64URL 字符串
-func encodeCredentialID(id []byte) string {
-	return base64.RawURLEncoding.EncodeToString(id)
+// setupWebAuthn 处理 WebAuthn 设置流程
+func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challengeID string, credentialJSON jsontext.Value) {
+	if !h.mfaSvc.WebAuthnEnabled() {
+		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	switch action {
+	case "", "begin":
+		user, err := h.userSvc.GetUserWithDecrypted(ctx, openID)
+		if err != nil {
+			errorResponse(c, autherrors.NewNotFound("user not found"))
+			return
+		}
+
+		resp, err := h.mfaSvc.BeginWebAuthnRegistration(ctx, user)
+		if err != nil {
+			errorResponse(c, autherrors.NewServerError(err.Error()))
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"type":         credType,
+			"action":       "begin",
+			"options":      resp.Options,
+			"challenge_id": resp.ChallengeID,
+		})
+
+	case "finish":
+		if challengeID == "" {
+			errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required for finish"))
+			return
+		}
+
+		if len(credentialJSON) == 0 {
+			errorResponse(c, autherrors.NewInvalidRequest("credential data is required for finish"))
+			return
+		}
+		c.Request.Body = io.NopCloser(bytes.NewReader(credentialJSON))
+
+		credInfo, err := h.mfaSvc.FinishWebAuthnRegistration(ctx, openID, challengeID, c.Request)
+		if err != nil {
+			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"type":          credType,
+			"action":        "finish",
+			"success":       true,
+			"credential_id": encodeCredentialID(credInfo.ID),
+		})
+
+	default:
+		errorResponse(c, autherrors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
+	}
+}
+
+// verifyWebAuthn 处理 WebAuthn 验证流程
+func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, challengeID string, credentialJSON jsontext.Value) {
+	if !h.mfaSvc.WebAuthnEnabled() {
+		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	switch action {
+	case "", "begin":
+		user, err := h.userSvc.GetUserWithDecrypted(ctx, openID)
+		if err != nil {
+			errorResponse(c, autherrors.NewNotFound("user not found"))
+			return
+		}
+
+		resp, err := h.mfaSvc.BeginWebAuthnVerification(ctx, user)
+		if err != nil {
+			errorResponse(c, autherrors.NewServerError(err.Error()))
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"type":         credType,
+			"action":       "begin",
+			"options":      resp.Options,
+			"challenge_id": resp.ChallengeID,
+		})
+
+	case "finish":
+		if challengeID == "" {
+			errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required for finish"))
+			return
+		}
+
+		if len(credentialJSON) == 0 {
+			errorResponse(c, autherrors.NewInvalidRequest("credential data is required for finish"))
+			return
+		}
+		openid, _, err := h.mfaSvc.FinishWebAuthnVerification(ctx, challengeID, credentialJSON)
+		if err != nil {
+			errorResponse(c, autherrors.NewAccessDenied(err.Error()))
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"type":    credType,
+			"action":  "finish",
+			"success": true,
+			"openid":  openid,
+		})
+
+	default:
+		errorResponse(c, autherrors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
+	}
 }

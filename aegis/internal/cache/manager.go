@@ -73,6 +73,40 @@ func NewManager(hermesSvc *hermes.Service, userSvc *hermes.UserService, redis pk
 	return cm
 }
 
+// Close 关闭缓存
+func (cm *Manager) Close() {
+	if cm.domainCache != nil {
+		cm.domainCache.Close()
+	}
+	if cm.applicationCache != nil {
+		cm.applicationCache.Close()
+	}
+	if cm.serviceCache != nil {
+		cm.serviceCache.Close()
+	}
+	if cm.relationCache != nil {
+		cm.relationCache.Close()
+	}
+	if cm.appServiceCache != nil {
+		cm.appServiceCache.Close()
+	}
+	if cm.userCache != nil {
+		cm.userCache.Close()
+	}
+	if cm.appOriginsCache != nil {
+		cm.appOriginsCache.Close()
+	}
+	if cm.appIDPConfigCache != nil {
+		cm.appIDPConfigCache.Close()
+	}
+	if cm.pubKeyCache != nil {
+		cm.pubKeyCache.Close()
+	}
+	if cm.challengeConfigCache != nil {
+		cm.challengeConfigCache.Close()
+	}
+}
+
 // initLocalCaches 初始化本地缓存
 func (cm *Manager) initLocalCaches() {
 	// Domain cache
@@ -181,39 +215,5 @@ func (cm *Manager) initLocalCaches() {
 		logger.Errorf("[Manager] 创建 Challenge Config 缓存失败: %v", err)
 	} else {
 		cm.challengeConfigCache = challengeConfigCache
-	}
-}
-
-// Close 关闭缓存
-func (cm *Manager) Close() {
-	if cm.domainCache != nil {
-		cm.domainCache.Close()
-	}
-	if cm.applicationCache != nil {
-		cm.applicationCache.Close()
-	}
-	if cm.serviceCache != nil {
-		cm.serviceCache.Close()
-	}
-	if cm.relationCache != nil {
-		cm.relationCache.Close()
-	}
-	if cm.appServiceCache != nil {
-		cm.appServiceCache.Close()
-	}
-	if cm.userCache != nil {
-		cm.userCache.Close()
-	}
-	if cm.appOriginsCache != nil {
-		cm.appOriginsCache.Close()
-	}
-	if cm.appIDPConfigCache != nil {
-		cm.appIDPConfigCache.Close()
-	}
-	if cm.pubKeyCache != nil {
-		cm.pubKeyCache.Close()
-	}
-	if cm.challengeConfigCache != nil {
-		cm.challengeConfigCache.Close()
 	}
 }

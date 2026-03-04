@@ -71,15 +71,20 @@ type FlowError struct {
 	Data        map[string]any `json:"data,omitempty"`
 }
 
+// RequestAudienceScope 授权请求中单个 audience 的 scope 配置
+type RequestAudienceScope struct {
+	Scope string `json:"scope"`
+}
+
 // AuthRequest 认证请求参数
 type AuthRequest struct {
 	// OAuth2 标准参数
-	ResponseType        string                 `json:"response_type" form:"response_type" binding:"required,oneof=code"`
+	ResponseType        string                 `json:"response_type" form:"response_type" binding:"required"`
 	ClientID            string                 `json:"client_id" form:"client_id" binding:"required"`
-	Audience            string                 `json:"audience" form:"audience" binding:"required"`
+	Audience            string                 `json:"audience,omitempty" form:"audience"`
 	RedirectURI         string                 `json:"redirect_uri" form:"redirect_uri" binding:"required"`
-	CodeChallenge       string                 `json:"code_challenge" form:"code_challenge" binding:"required"`
-	CodeChallengeMethod string                 `json:"code_challenge_method" form:"code_challenge_method" binding:"required,oneof=S256"`
+	CodeChallenge       string                 `json:"code_challenge" form:"code_challenge"`
+	CodeChallengeMethod string                 `json:"code_challenge_method" form:"code_challenge_method"`
 	State               string                 `json:"state,omitempty" form:"state"`
 	Scope               binding.SpaceDelimited `json:"scope,omitempty" form:"scope"`
 
@@ -87,6 +92,9 @@ type AuthRequest struct {
 	Prompt    binding.SpaceDelimited `json:"prompt,omitempty" form:"prompt"`         // none, login, consent
 	Nonce     string                 `json:"nonce,omitempty" form:"nonce"`           // 防重放攻击
 	LoginHint string                 `json:"login_hint,omitempty" form:"login_hint"` // 登录提示（邮箱/手机）
+
+	// 多 audience 扩展（授权阶段指定，token 交换时使用）
+	Audiences map[string]*RequestAudienceScope `json:"audiences,omitempty" form:"-"`
 
 	// 其他扩展参数 - 序列化时平铺到顶层
 	Params map[string]any `json:"-" form:"-"`
@@ -109,6 +117,8 @@ var authRequestKnownFields = map[string]bool{
 	"prompt":     true,
 	"nonce":      true,
 	"login_hint": true,
+	// 多 audience 扩展
+	"audiences": true,
 }
 
 // Prompt 常量
@@ -207,28 +217,6 @@ func (r *AuthRequest) Set(key string, value any) {
 		r.Params = make(map[string]any)
 	}
 	r.Params[key] = value
-}
-
-// Connection 前端公开的连接信息（不含密钥和运行时状态）
-type Connection struct {
-	Type       ConnectionType `json:"type"`                // 连接类型（idp / vchan / factor）
-	Connection string         `json:"connection"`          // 标识（github, google, wechat-mp, user, staff, email_otp, totp, captcha...）
-	Identifier string         `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
-	Strategy   []string       `json:"strategy,omitzero"`   // 认证方式（user/staff: password, webauthn; captcha: turnstile; 其余忽略）
-	Delegate   []string       `json:"delegate,omitzero"`   // 可替代主认证的独立验证方式（totp, email_otp）
-	Require    []string       `json:"require,omitzero"`    // 前置条件（captcha）
-}
-
-// NewConnection 从 ConnectionConfig 构造前端公开的 Connection
-func NewConnection(cfg *ConnectionConfig) *Connection {
-	return &Connection{
-		Type:       cfg.Type,
-		Connection: cfg.Connection,
-		Identifier: cfg.Identifier,
-		Strategy:   cfg.Strategy,
-		Delegate:   cfg.Delegate,
-		Require:    cfg.Require,
-	}
 }
 
 // ConnectionConfig 后端内部完整配置（含私有密钥和运行时状态）
@@ -449,4 +437,26 @@ func (f *AuthFlow) GetExtra(key string) string {
 		return ""
 	}
 	return f.Extra[key]
+}
+
+// Connection 前端公开的连接信息（不含密钥和运行时状态）
+type Connection struct {
+	Type       ConnectionType `json:"type"`                // 连接类型（idp / vchan / factor）
+	Connection string         `json:"connection"`          // 标识（github, google, wechat-mp, user, staff, email_otp, totp, captcha...）
+	Identifier string         `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
+	Strategy   []string       `json:"strategy,omitzero"`   // 认证方式（user/staff: password, webauthn; captcha: turnstile; 其余忽略）
+	Delegate   []string       `json:"delegate,omitzero"`   // 可替代主认证的独立验证方式（totp, email_otp）
+	Require    []string       `json:"require,omitzero"`    // 前置条件（captcha）
+}
+
+// NewConnection 从 ConnectionConfig 构造前端公开的 Connection
+func NewConnection(cfg *ConnectionConfig) *Connection {
+	return &Connection{
+		Type:       cfg.Type,
+		Connection: cfg.Connection,
+		Identifier: cfg.Identifier,
+		Strategy:   cfg.Strategy,
+		Delegate:   cfg.Delegate,
+		Require:    cfg.Require,
+	}
 }

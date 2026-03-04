@@ -63,6 +63,34 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*mod
 	return p.loginByPassword(ctx, identifier, proof)
 }
 
+// Resolve 通过 principal 查找用户信息（不验证凭证）
+func (p *Provider) Resolve(ctx context.Context, principal string) (*models.TUserInfo, error) {
+	cred, err := p.getCredential(ctx, principal)
+	if err != nil {
+		return nil, err
+	}
+	return &models.TUserInfo{
+		TOpenID:  cred.OpenID,
+		Nickname: cred.Nickname,
+		Email:    cred.Email,
+		Picture:  cred.Picture,
+	}, nil
+}
+
+// FetchAdditionalInfo 补充获取用户信息
+func (*Provider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...any) (*idp.AdditionalInfo, error) {
+	return nil, fmt.Errorf("staff provider does not support fetching %s", infoType)
+}
+
+// Prepare 准备前端所需的公开配置
+// Strategy（认证方式：password）由数据库 ApplicationIDPConfig 配置提供，
+// Prepare() 只返回 Provider 自身的基础配置。
+func (*Provider) Prepare() *types.ConnectionConfig {
+	return &types.ConnectionConfig{
+		Connection: idp.TypeStaff,
+	}
+}
+
 // loginByPassword 密码验证
 func (p *Provider) loginByPassword(ctx context.Context, identifier, password string) (*models.TUserInfo, error) {
 	cred, err := p.getCredential(ctx, identifier)
@@ -111,34 +139,6 @@ func (p *Provider) getCredential(ctx context.Context, identifier string) (*crede
 		Picture:      cred.Picture,
 		Status:       cred.Status,
 	}, nil
-}
-
-// Resolve 通过 principal 查找用户信息（不验证凭证）
-func (p *Provider) Resolve(ctx context.Context, principal string) (*models.TUserInfo, error) {
-	cred, err := p.getCredential(ctx, principal)
-	if err != nil {
-		return nil, err
-	}
-	return &models.TUserInfo{
-		TOpenID:  cred.OpenID,
-		Nickname: cred.Nickname,
-		Email:    cred.Email,
-		Picture:  cred.Picture,
-	}, nil
-}
-
-// FetchAdditionalInfo 补充获取用户信息
-func (*Provider) FetchAdditionalInfo(_ context.Context, infoType string, _ ...any) (*idp.AdditionalInfo, error) {
-	return nil, fmt.Errorf("staff provider does not support fetching %s", infoType)
-}
-
-// Prepare 准备前端所需的公开配置
-// Strategy（认证方式：password）由数据库 ApplicationIDPConfig 配置提供，
-// Prepare() 只返回 Provider 自身的基础配置。
-func (*Provider) Prepare() *types.ConnectionConfig {
-	return &types.ConnectionConfig{
-		Connection: idp.TypeStaff,
-	}
 }
 
 // maskIdentifier 脱敏标识符（用于日志）

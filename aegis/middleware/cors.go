@@ -34,22 +34,25 @@ func CORSWithConfig(cfg *config.Cfg, cacheManager *cache.Manager) gin.HandlerFun
 	return func(c *gin.Context) {
 		origin := c.GetHeader(headerOrigin)
 
-		// 设置 CORS 头（优先配置文件，其次应用配置）
-		setAllowOrigin(c, cfg, cacheManager, origin)
 		setAllowMethods(c, cfg)
 		setAllowHeaders(c, cfg)
 		setExposeHeaders(c)
 		setCredentials(c, cfg)
 		c.Header(headerMaxAge, defaultMaxAge)
-		// Vary: Origin 防止 CDN/代理缓存错误的 CORS 头
 		c.Header("Vary", "Origin")
 
-		// 处理预检请求
+		// OPTIONS preflight 不携带 body/query，无法提取 client_id 做精确校验
+		// 直接回显 Origin 放行，实际请求（POST 等）会带 client_id 做严格校验
 		if c.Request.Method == "OPTIONS" {
+			if origin != "" {
+				c.Header(headerAllowOrigin, origin)
+			}
 			c.AbortWithStatus(204)
 			return
 		}
 
+		// 实际请求：精确校验 origin
+		setAllowOrigin(c, cfg, cacheManager, origin)
 		c.Next()
 	}
 }
@@ -113,8 +116,9 @@ func getClientID(c *gin.Context, paramName string) string {
 
 // isOriginAllowed 检查 origin 是否在允许列表中
 func isOriginAllowed(origin string, origins []string) bool {
+	normalized := strings.TrimRight(origin, "/")
 	for _, o := range origins {
-		if o == wildcard || o == origin {
+		if o == wildcard || strings.TrimRight(o, "/") == normalized {
 			return true
 		}
 	}

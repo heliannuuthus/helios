@@ -64,15 +64,6 @@ func (s *UserService) GetIdentitiesByIdentity(ctx context.Context, identity *mod
 	return s.GetIdentities(ctx, matched.OpenID)
 }
 
-// getByEmail 根据邮箱查找用户（内部使用，返回基础 User）
-func (s *UserService) getByEmail(ctx context.Context, email string) (*models.User, error) {
-	var user models.User
-	if err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
-		return nil, err
-	}
-	return &user, nil
-}
-
 // GetByEmail 根据邮箱查找用户（返回解密后的完整用户信息）
 func (s *UserService) GetByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error) {
 	user, err := s.getByEmail(ctx, email)
@@ -294,35 +285,6 @@ func (s *UserService) CreateUser(ctx context.Context, identity *models.UserIdent
 	return &models.UserWithDecrypted{User: *newUser}, nil
 }
 
-// generateRandomName 生成随机昵称
-func generateRandomName() string {
-	adjectives := []string{"快乐的", "聪明的", "勇敢的", "温柔的", "活泼的", "安静的", "优雅的", "幽默的"}
-	nouns := []string{"小猫", "小狗", "小鸟", "小鱼", "小兔", "小熊", "小鹿", "小羊"}
-
-	adjIndex, err := rand.Int(rand.Reader, big.NewInt(int64(len(adjectives))))
-	if err != nil {
-		panic(fmt.Sprintf("generate random name failed: %v", err))
-	}
-	nounIndex, err := rand.Int(rand.Reader, big.NewInt(int64(len(nouns))))
-	if err != nil {
-		panic(fmt.Sprintf("generate random name failed: %v", err))
-	}
-
-	return adjectives[adjIndex.Int64()] + nouns[nounIndex.Int64()] + fmt.Sprintf("%04d", time.Now().Unix()%10000)
-}
-
-// generateRandomAvatar 生成随机头像
-func generateRandomAvatar(seed string) string {
-	hash := 0
-	for _, c := range seed {
-		hash = hash*31 + int(c)
-	}
-	if hash < 0 {
-		hash = -hash
-	}
-	return fmt.Sprintf("https://api.dicebear.com/7.x/avataaars/svg?seed=%s&size=200", fmt.Sprintf("user%d", hash%10))
-}
-
 // ==================== WebAuthn 凭证管理 ====================
 
 // CreateCredential 创建 WebAuthn 凭证
@@ -429,6 +391,15 @@ func (s *UserService) GetStaffByIdentifier(ctx context.Context, identifier strin
 	return s.getByIdentifierWithIDP(ctx, identifier, "staff")
 }
 
+// getByEmail 根据邮箱查找用户（内部使用，返回基础 User）
+func (s *UserService) getByEmail(ctx context.Context, email string) (*models.User, error) {
+	var user models.User
+	if err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
 // getByIdentifierWithIDP 根据标识符查找用户，并验证用户具有指定 IDP 的主身份
 func (s *UserService) getByIdentifierWithIDP(ctx context.Context, identifier, idpType string) (*PasswordStoreCredential, error) {
 	// 按优先级尝试不同的标识符类型
@@ -492,6 +463,35 @@ func (s *UserService) toPasswordStoreCredential(user *models.User) *PasswordStor
 	}
 
 	return cred
+}
+
+// generateRandomName 生成随机昵称
+func generateRandomName() string {
+	adjectives := []string{"快乐的", "聪明的", "勇敢的", "温柔的", "活泼的", "安静的", "优雅的", "幽默的"}
+	nouns := []string{"小猫", "小狗", "小鸟", "小鱼", "小兔", "小熊", "小鹿", "小羊"}
+
+	adjIndex, err := rand.Int(rand.Reader, big.NewInt(int64(len(adjectives))))
+	if err != nil {
+		panic(fmt.Sprintf("generate random name failed: %v", err))
+	}
+	nounIndex, err := rand.Int(rand.Reader, big.NewInt(int64(len(nouns))))
+	if err != nil {
+		panic(fmt.Sprintf("generate random name failed: %v", err))
+	}
+
+	return adjectives[adjIndex.Int64()] + nouns[nounIndex.Int64()] + fmt.Sprintf("%04d", time.Now().Unix()%10000)
+}
+
+// generateRandomAvatar 生成随机头像
+func generateRandomAvatar(seed string) string {
+	hash := 0
+	for _, c := range seed {
+		hash = hash*31 + int(c)
+	}
+	if hash < 0 {
+		hash = -hash
+	}
+	return fmt.Sprintf("https://api.dicebear.com/7.x/avataaars/svg?seed=%s&size=200", fmt.Sprintf("user%d", hash%10))
 }
 
 // isEmail 判断是否是邮箱格式

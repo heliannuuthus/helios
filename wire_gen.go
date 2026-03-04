@@ -80,6 +80,40 @@ func InitializeApp() (*App, error) {
 
 // wire.go:
 
+// ProviderSet 提供者集合
+var ProviderSet = wire.NewSet(recipe.NewService, favorite.NewService, history.NewService, preference.NewService, tag.NewService, recommend.NewService, provideRecipeHandler,
+	provideFavoriteHandler,
+	provideHistoryHandler,
+	providePreferenceHandler,
+	provideTagHandler,
+	provideRecommendHandler,
+	provideHomeHandler,
+	provideHermesService,
+	provideHermesHandler,
+	provideAegisHandler,
+	provideIrisHandler,
+	provideChaosHandler,
+	provideInterpreter,
+	provideGinMiddlewareFactory,
+)
+
+// App 应用依赖容器
+type App struct {
+	RecipeHandler     *recipe.Handler
+	AegisHandler      *aegis.Handler
+	IrisHandler       *iris.Handler
+	FavoriteHandler   *favorite.Handler
+	HistoryHandler    *history.Handler
+	HomeHandler       *home.Handler
+	TagHandler        *tag.Handler
+	RecommendHandler  *recommend.Handler
+	PreferenceHandler *preference.Handler
+	HermesHandler     *hermes.Handler
+	ChaosHandler      *chaos.Handler
+	MiddlewareFactory *web.GinFactory
+	Interpreter       *web.Interpreter
+}
+
 // 业务模块 Handler（使用 Zwei 数据库）
 func provideRecipeHandler() *recipe.Handler {
 	return recipe.NewHandler(config.InitDB())
@@ -169,43 +203,4 @@ func provideGinMiddlewareFactory() (*web.GinFactory, error) {
 		keyStore,
 		keyStore,
 	), nil
-}
-
-// ProviderSet 提供者集合
-var ProviderSet = wire.NewSet(recipe.NewService, favorite.NewService, history.NewService, preference.NewService, tag.NewService, recommend.NewService, provideRecipeHandler,
-	provideFavoriteHandler,
-	provideHistoryHandler,
-	providePreferenceHandler,
-	provideTagHandler,
-	provideRecommendHandler,
-	provideHomeHandler,
-
-	provideHermesService,
-	provideHermesHandler,
-
-	provideAegisHandler,
-
-	provideIrisHandler,
-
-	provideChaosHandler,
-
-	provideInterpreter,
-	provideGinMiddlewareFactory,
-)
-
-// App 应用依赖容器
-type App struct {
-	RecipeHandler     *recipe.Handler
-	AegisHandler      *aegis.Handler
-	IrisHandler       *iris.Handler
-	FavoriteHandler   *favorite.Handler
-	HistoryHandler    *history.Handler
-	HomeHandler       *home.Handler
-	TagHandler        *tag.Handler
-	RecommendHandler  *recommend.Handler
-	PreferenceHandler *preference.Handler
-	HermesHandler     *hermes.Handler
-	ChaosHandler      *chaos.Handler
-	MiddlewareFactory *web.GinFactory
-	Interpreter       *web.Interpreter
 }

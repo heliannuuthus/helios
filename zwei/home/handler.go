@@ -125,22 +125,6 @@ func (h *Handler) loadBannersFromConfig() []BannerItem {
 	return banners
 }
 
-func getString(m map[string]interface{}, key, defaultVal string) string {
-	if val, ok := m[key]; ok {
-		if str, ok := val.(string); ok {
-			return str
-		}
-	}
-	return defaultVal
-}
-
-func generateBannerID(index int) string {
-	if index < 0 || index > 25 {
-		return fmt.Sprintf("banner_%d", index)
-	}
-	return "banner_" + string(rune('a'+index))
-}
-
 func (h *Handler) getHotRecipes(count int) []zwei.RecipeListItem {
 	recipes, err := h.recipeService.GetHotRecipes(count, nil)
 	if err != nil || len(recipes) == 0 {
@@ -193,4 +177,20 @@ func (h *Handler) getRandomRecipes(count int) []zwei.RecipeListItem {
 	}
 
 	return items
+}
+
+func getString(m map[string]interface{}, key, defaultVal string) string {
+	if val, ok := m[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return defaultVal
+}
+
+func generateBannerID(index int) string {
+	if index < 0 || index > 25 {
+		return fmt.Sprintf("banner_%d", index)
+	}
+	return "banner_" + string(rune('a'+index))
 }

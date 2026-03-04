@@ -16,87 +16,6 @@ type AuthError struct {
 	Data        map[string]any `json:"data,omitempty"`
 }
 
-// Error 实现 error 接口
-func (e *AuthError) Error() string {
-	if e.Description != "" {
-		return fmt.Sprintf("%s: %s", e.Code, e.Description)
-	}
-	return e.Code
-}
-
-// GetHTTPStatus 获取 HTTP 状态码
-func (e *AuthError) GetHTTPStatus() int {
-	return e.HTTPStatus
-}
-
-// GetCode 获取错误码
-func (e *AuthError) GetCode() string {
-	return e.Code
-}
-
-// GetDescription 获取错误描述
-func (e *AuthError) GetDescription() string {
-	return e.Description
-}
-
-// GetData 获取附加数据
-func (e *AuthError) GetData() map[string]any {
-	return e.Data
-}
-
-// ==================== 错误码常量 ====================
-
-const (
-	// 400 Bad Request
-	CodeInvalidRequest     = "invalid_request"
-	CodeInvalidGrant       = "invalid_grant"
-	CodeInvalidCredentials = "invalid_credentials"
-	CodeClientNotFound     = "client_not_found"
-	CodeServiceNotFound    = "service_not_found"
-
-	// 401 Unauthorized
-	CodeInvalidToken  = "invalid_token"
-	CodeLoginRequired = "login_required"
-
-	// 403 Forbidden
-	CodeAccessDenied = "access_denied"
-
-	// 404 Not Found
-	CodeNotFound     = "not_found"
-	CodeUserNotFound = "user_not_found"
-
-	// 412 Precondition Failed
-	CodeFlowNotFound = "flow_not_found"
-	CodeFlowExpired  = "flow_expired"
-	CodeFlowInvalid  = "flow_invalid"
-
-	// 422 Unprocessable Entity
-	CodeChallengeExpired = "challenge_expired"
-
-	// 426 Upgrade Required
-	CodeNoConnectionAvailable = "no_connection_available"
-
-	// 428 Precondition Required
-	CodeIdentityRequired = "identity_required"
-
-	// 429 Too Many Requests
-	CodeRateLimited = "rate_limited"
-
-	// 500 Internal Server Error
-	CodeServerError = "server_error"
-)
-
-// ==================== 构造函数 ====================
-
-// New 创建一个新的 AuthError
-func New(status int, code, description string) *AuthError {
-	return &AuthError{
-		HTTPStatus:  status,
-		Code:        code,
-		Description: description,
-	}
-}
-
 // Newf 创建一个带格式化描述的 AuthError
 func Newf(status int, code, format string, args ...any) *AuthError {
 	return &AuthError{
@@ -259,6 +178,87 @@ func NewServerError(description string) *AuthError {
 
 func NewServerErrorf(format string, args ...any) *AuthError {
 	return Newf(http.StatusInternalServerError, CodeServerError, format, args...)
+}
+
+// Error 实现 error 接口
+func (e *AuthError) Error() string {
+	if e.Description != "" {
+		return fmt.Sprintf("%s: %s", e.Code, e.Description)
+	}
+	return e.Code
+}
+
+// GetHTTPStatus 获取 HTTP 状态码
+func (e *AuthError) GetHTTPStatus() int {
+	return e.HTTPStatus
+}
+
+// GetCode 获取错误码
+func (e *AuthError) GetCode() string {
+	return e.Code
+}
+
+// GetDescription 获取错误描述
+func (e *AuthError) GetDescription() string {
+	return e.Description
+}
+
+// GetData 获取附加数据
+func (e *AuthError) GetData() map[string]any {
+	return e.Data
+}
+
+// ==================== 错误码常量 ====================
+
+const (
+	// 400 Bad Request
+	CodeInvalidRequest     = "invalid_request"
+	CodeInvalidGrant       = "invalid_grant"
+	CodeInvalidCredentials = "invalid_credentials"
+	CodeClientNotFound     = "client_not_found"
+	CodeServiceNotFound    = "service_not_found"
+
+	// 401 Unauthorized
+	CodeInvalidToken  = "invalid_token"
+	CodeLoginRequired = "login_required"
+
+	// 403 Forbidden
+	CodeAccessDenied = "access_denied"
+
+	// 404 Not Found
+	CodeNotFound     = "not_found"
+	CodeUserNotFound = "user_not_found"
+
+	// 412 Precondition Failed
+	CodeFlowNotFound = "flow_not_found"
+	CodeFlowExpired  = "flow_expired"
+	CodeFlowInvalid  = "flow_invalid"
+
+	// 422 Unprocessable Entity
+	CodeChallengeExpired = "challenge_expired"
+
+	// 426 Upgrade Required
+	CodeNoConnectionAvailable = "no_connection_available"
+
+	// 428 Precondition Required
+	CodeIdentityRequired = "identity_required"
+
+	// 429 Too Many Requests
+	CodeRateLimited = "rate_limited"
+
+	// 500 Internal Server Error
+	CodeServerError = "server_error"
+)
+
+// ==================== 构造函数 ====================
+
+// New 创建一个新的 AuthError
+func New(status int, code, description string) *AuthError {
+	return &AuthError{
+		HTTPStatus:  status,
+		Code:        code,
+		Description: description,
+	}
 }
 
 // Wrap 将普通错误包装为 ServerError

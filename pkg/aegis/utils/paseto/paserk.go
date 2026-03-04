@@ -51,17 +51,6 @@ func ComputeSID(secretKey gopaseto.V4AsymmetricSecretKey) (string, error) {
 	return computeID(PASERKHeaderSID, paserk)
 }
 
-func computeID(header, paserk string) (string, error) {
-	h, err := blake2b.New(paserkIDHashLen, nil)
-	if err != nil {
-		return "", fmt.Errorf("blake2b init: %w", err)
-	}
-	h.Write([]byte(header))
-	h.Write([]byte(paserk))
-	d := h.Sum(nil)
-	return header + base64.RawURLEncoding.EncodeToString(d), nil
-}
-
 func ComputePIDFromSeed(seed Seed) (string, error) {
 	pk, err := seed.DerivePublicKey()
 	if err != nil {
@@ -76,4 +65,15 @@ func ComputeLIDFromSeed(seed Seed) (string, error) {
 		return "", fmt.Errorf("derive symmetric key: %w", err)
 	}
 	return ComputeLID(sk)
+}
+
+func computeID(header, paserk string) (string, error) {
+	h, err := blake2b.New(paserkIDHashLen, nil)
+	if err != nil {
+		return "", fmt.Errorf("blake2b init: %w", err)
+	}
+	h.Write([]byte(header))
+	h.Write([]byte(paserk))
+	d := h.Sum(nil)
+	return header + base64.RawURLEncoding.EncodeToString(d), nil
 }

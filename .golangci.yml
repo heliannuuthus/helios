@@ -25,6 +25,8 @@ linters:
     - errname
     # 安全
     - gosec
+    # 函数排序
+    - funcorder
     # 其他
     - unparam
     - nakedret

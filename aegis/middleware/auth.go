@@ -14,13 +14,6 @@ import (
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-func tokenPreview(tokenStr string, length int) string {
-	if len(tokenStr) <= length {
-		return tokenStr
-	}
-	return tokenStr[:length]
-}
-
 func RequireToken(v *web.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr := extractBearer(c.GetHeader("Authorization"))
@@ -67,13 +60,6 @@ func OptionalToken(v *web.Interpreter) gin.HandlerFunc {
 	}
 }
 
-func extractBearer(authorization string) string {
-	if len(authorization) > 7 && strings.EqualFold(authorization[:7], "Bearer ") {
-		return authorization[7:]
-	}
-	return ""
-}
-
 // NewHermesKeyStore 创建 Hermes 使用的 KeyStore
 func NewHermesKeyStore() (*key.Store, error) {
 	masterKey, err := hermesconfig.GetAegisSecretKeyBytes()
@@ -83,4 +69,18 @@ func NewHermesKeyStore() (*key.Store, error) {
 	return key.NewStore(key.FetcherFunc(func(ctx context.Context, id string) ([][]byte, error) {
 		return [][]byte{masterKey}, nil
 	}), nil), nil
+}
+
+func tokenPreview(tokenStr string, length int) string {
+	if len(tokenStr) <= length {
+		return tokenStr
+	}
+	return tokenStr[:length]
+}
+
+func extractBearer(authorization string) string {
+	if len(authorization) > 7 && strings.EqualFold(authorization[:7], "Bearer ") {
+		return authorization[7:]
+	}
+	return ""
 }

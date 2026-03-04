@@ -21,6 +21,18 @@ type Config struct {
 	Debug  bool   // 是否为调试模式
 }
 
+func init() {
+	// 确保即使没调用 Init 也能用（使用默认 logger）
+	if Log == nil {
+		var err error
+		Log, err = zap.NewDevelopment()
+		if err != nil {
+			panic(fmt.Sprintf("init logger failed: %v", err))
+		}
+		Sugar = Log.Sugar()
+	}
+}
+
 // InitWithConfig 使用配置初始化日志
 func InitWithConfig(cfg Config) {
 	var zapCfg zap.Config
@@ -142,25 +154,6 @@ func GormWriter() *GormLogWriter {
 	return &GormLogWriter{}
 }
 
-// GormLogWriter GORM 日志写入器
-type GormLogWriter struct{}
-
-func (w *GormLogWriter) Printf(format string, args ...interface{}) {
-	Sugar.Infof(format, args...)
-}
-
-func init() {
-	// 确保即使没调用 Init 也能用（使用默认 logger）
-	if Log == nil {
-		var err error
-		Log, err = zap.NewDevelopment()
-		if err != nil {
-			panic(fmt.Sprintf("init logger failed: %v", err))
-		}
-		Sugar = Log.Sugar()
-	}
-}
-
 // S 方便在没有 zap.Field 时使用
 func S() *zap.SugaredLogger {
 	return Sugar
@@ -175,4 +168,11 @@ func L() *zap.Logger {
 func Exit(code int) {
 	Sync()
 	os.Exit(code)
+}
+
+// GormLogWriter GORM 日志写入器
+type GormLogWriter struct{}
+
+func (w *GormLogWriter) Printf(format string, args ...interface{}) {
+	Sugar.Infof(format, args...)
 }
