@@ -186,20 +186,12 @@ func ExtractFooter(tokenString string) string {
 
 // ==================== Scope Helpers ====================
 
-// HasScope checks whether a space-separated scope string contains a specific scope.
-func HasScope(scopeStr, scope string) bool {
-	for _, s := range strings.Fields(scopeStr) {
-		if s == scope {
-			return true
-		}
-	}
-	return false
-}
-
-func parseScopeSet(scope string) map[string]bool {
-	set := make(map[string]bool)
-	for _, s := range strings.Fields(scope) {
-		set[s] = true
+// ParseScopes 将空格分隔的 scope 字符串解析为 set。
+func ParseScopes(scopeStr string) map[string]struct{} {
+	fields := strings.Fields(scopeStr)
+	set := make(map[string]struct{}, len(fields))
+	for _, s := range fields {
+		set[s] = struct{}{}
 	}
 	return set
 }
