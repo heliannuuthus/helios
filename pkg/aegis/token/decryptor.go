@@ -16,23 +16,30 @@ var ErrDecryptFailed = pasetokit.ErrDecryptFailed
 
 // Decryptor decrypts v4.local tokens using lid-based key matching.
 // 内部缓存 lid → symmetric key 映射，通过 watcher 通知 rebuild。
+// 嵌入 extractor 以管理关联的 Verifier 实例。
 type Decryptor struct {
+	extractor
+
 	provider key.Provider
-	id       string
 
 	mu   sync.RWMutex
 	keys map[string]paseto.V4SymmetricKey
 }
 
-func NewDecryptor(provider key.Provider, id string) *Decryptor {
-	d := &Decryptor{provider: provider, id: id}
+func NewDecryptor(encryptKeyProvider key.Provider, id string, signKeyProvider key.Provider) *Decryptor {
+	d := &Decryptor{
+		extractor: newExtractor(id, signKeyProvider),
+		provider:  encryptKeyProvider,
+	}
 
-	if sub, ok := provider.(key.Subscribable); ok {
-		sub.Subscribe(id, func(newKeys [][]byte) {
-			if err := d.rebuild(newKeys); err != nil {
-				logger.Warnf("[Decryptor] rebuild keys failed for %s: %v", id, err)
-			}
-		})
+	if encryptKeyProvider != nil {
+		if sub, ok := encryptKeyProvider.(key.Subscribable); ok {
+			sub.Subscribe(id, func(newKeys [][]byte) {
+				if err := d.rebuild(newKeys); err != nil {
+					logger.Warnf("[Decryptor] rebuild keys failed for %s: %v", id, err)
+				}
+			})
+		}
 	}
 
 	return d

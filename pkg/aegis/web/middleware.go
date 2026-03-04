@@ -2,7 +2,7 @@
 //
 // 使用示例：
 //
-//	factory := web.NewFactory("http://auth.example.com", signKeyStore, encryptKeyStore, catKeyStore)
+//	factory := web.NewFactory("http://auth.example.com", encryptKeyStore, catKeyStore)
 //	mw := factory.WithAudience("my-service-id")
 //
 //	r.Use(mw.RequireAuth())                      // 仅认证
@@ -28,6 +28,9 @@ const (
 	// ClaimsKey 用户身份信息在 context 中的 key
 	ClaimsKey ContextKey = "aegis:user"
 
+	// AuthorizationHeader Authorization 请求头
+	AuthorizationHeader = "Authorization"
+
 	// ChallengeTokenHeader X-Challenge-Token header 名称（参考 RFC 9449 DPoP 独立 header 模式）
 	ChallengeTokenHeader = "X-Challenge-Token"
 )
@@ -39,12 +42,13 @@ type Factory struct {
 }
 
 // NewFactory 创建中间件工厂
+// signKeyProvider 内部通过 endpoint 自动创建 PublicKeyFetcher。
 func NewFactory(
 	endpoint string,
-	signKeyProvider key.Provider,
 	encryptKeyProvider key.Provider,
 	catKeyProvider key.Provider,
 ) *Factory {
+	signKeyProvider := key.NewPublicKeyFetcher(endpoint)
 	return &Factory{
 		interpreter: NewInterpreter(signKeyProvider, encryptKeyProvider),
 		checker:     NewRelationChecker(endpoint, catKeyProvider),
@@ -160,27 +164,19 @@ func (m *Middleware) authenticate(r *http.Request) (*TokenContext, error) {
 		return nil, err
 	}
 
-	if m.audience != "" && t.GetAudience() != m.audience {
-		return nil, fmt.Errorf("%w: expected %s, got %s", ErrUnsupportedAudience, m.audience, t.GetAudience())
-	}
-
-	tc, err := NewTokenContext(t)
-	if err != nil {
-		return nil, err
-	}
-
-	if challengeStr := r.Header.Get(ChallengeTokenHeader); challengeStr != "" {
-		ct, err := m.interpreter.Verify(r.Context(), challengeStr)
+	var ct *tokendef.ChallengeToken
+	if challengeStr := extractChallengeToken(r); challengeStr != "" {
+		parsed, err := m.interpreter.Verify(r.Context(), challengeStr)
 		if err != nil {
 			logger.Warnf("[Auth] X-Challenge-Token 验证失败: %v", err)
-		} else if xt, ok := ct.(*tokendef.ChallengeToken); ok {
-			tc.SetChallengeToken(xt)
+		} else if xt, ok := parsed.(*tokendef.ChallengeToken); ok {
+			ct = xt
 		} else {
-			logger.Warnf("[Auth] X-Challenge-Token 类型断言失败: %T", ct)
+			logger.Warnf("[Auth] X-Challenge-Token 类型断言失败: %T", parsed)
 		}
 	}
 
-	return tc, nil
+	return NewTokenContext(t, ct)
 }
 
 // accessToken 从 TokenContext 中提取 access token（用于鉴权）
@@ -246,9 +242,17 @@ func writeJSONError(w http.ResponseWriter, statusCode int, errType, message stri
 }
 
 func extractBearerToken(r *http.Request) string {
-	authorization := r.Header.Get("Authorization")
-	if len(authorization) > 7 && strings.EqualFold(authorization[:7], "Bearer ") {
-		return authorization[7:]
+	return TrimBearer(r.Header.Get(AuthorizationHeader))
+}
+
+func extractChallengeToken(r *http.Request) string {
+	return TrimBearer(r.Header.Get(ChallengeTokenHeader))
+}
+
+// TrimBearer 去除 "Bearer " 前缀，返回 token 本体；无前缀则返回空串。
+func TrimBearer(s string) string {
+	if len(s) > 7 && strings.EqualFold(s[:7], "Bearer ") {
+		return s[7:]
 	}
 	return ""
 }

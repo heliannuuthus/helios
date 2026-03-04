@@ -24,9 +24,7 @@ import (
 	"github.com/heliannuuthus/helios/zwei/recipe"
 	"github.com/heliannuuthus/helios/zwei/recommend"
 	"github.com/heliannuuthus/helios/zwei/tag"
-)
 
-import (
 	_ "github.com/heliannuuthus/helios/docs"
 )
 
@@ -199,7 +197,6 @@ func provideGinMiddlewareFactory() (*web.GinFactory, error) {
 
 	return web.NewGinFactory(
 		endpoint,
-		provider,
 		provider,
 		provider,
 	), nil

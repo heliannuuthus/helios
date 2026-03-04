@@ -5,21 +5,17 @@ import (
 	"fmt"
 	"sync"
 
-	"aidanwoods.dev/go-paseto"
-
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
 	"github.com/heliannuuthus/helios/pkg/aegis/token"
 	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
-var ErrUnsupportedAudience = fmt.Errorf("unsupported audience")
-
 // Interpreter verifies tokens and decrypts encrypted sub fields for UAT tokens.
+// 按 audience 管理 Decryptor，Verifier 由 Decryptor 内嵌的 extractor 管理。
 type Interpreter struct {
 	signKeyProvider    key.Provider
 	encryptKeyProvider key.Provider
 
-	verifiers  map[string]*token.Verifier
 	decryptors map[string]*token.Decryptor
 	mu         sync.RWMutex
 }
@@ -28,7 +24,6 @@ func NewInterpreter(signKeyProvider key.Provider, encryptKeyProvider key.Provide
 	return &Interpreter{
 		signKeyProvider:    signKeyProvider,
 		encryptKeyProvider: encryptKeyProvider,
-		verifiers:          make(map[string]*token.Verifier),
 		decryptors:         make(map[string]*token.Decryptor),
 	}
 }
@@ -52,7 +47,8 @@ func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (tokend
 
 	tokenType := tokendef.DetectType(pasetoToken)
 
-	pasetoToken, err = i.Verifier(clientID).Verify(ctx, tokenString)
+	decryptor := i.Decryptor(audience)
+	pasetoToken, err = decryptor.Verifier(clientID).Verify(ctx, tokenString)
 	if err != nil {
 		return nil, err
 	}
@@ -65,9 +61,9 @@ func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (tokend
 	if uat, ok := t.(*tokendef.UserAccessToken); ok {
 		encryptedSub := uat.GetSubject()
 		if encryptedSub != "" {
-			subToken, err := i.decryptUserSub(ctx, encryptedSub, audience)
+			subToken, err := decryptor.Decrypt(ctx, encryptedSub)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("decrypt sub: %w", err)
 			}
 			uat.SetIdentity(subToken)
 		}
@@ -88,34 +84,18 @@ func (i *Interpreter) Verify(ctx context.Context, tokenString string) (tokendef.
 		return nil, err
 	}
 
+	audience, err := tokendef.GetAudience(pasetoToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", tokendef.ErrMissingClaims, err)
+	}
+
 	tokenType := tokendef.DetectType(pasetoToken)
 
-	pasetoToken, err = i.Verifier(clientID).Verify(ctx, tokenString)
+	pasetoToken, err = i.Decryptor(audience).Verifier(clientID).Verify(ctx, tokenString)
 	if err != nil {
 		return nil, err
 	}
 	return tokendef.ParseToken(pasetoToken, tokenType)
-}
-
-func (i *Interpreter) Verifier(clientID string) *token.Verifier {
-	i.mu.RLock()
-	v, ok := i.verifiers[clientID]
-	i.mu.RUnlock()
-
-	if ok {
-		return v
-	}
-
-	i.mu.Lock()
-	defer i.mu.Unlock()
-
-	if v, ok := i.verifiers[clientID]; ok {
-		return v
-	}
-
-	v = token.NewVerifier(i.signKeyProvider, clientID)
-	i.verifiers[clientID] = v
-	return v
 }
 
 func (i *Interpreter) Decryptor(audience string) *token.Decryptor {
@@ -134,18 +114,7 @@ func (i *Interpreter) Decryptor(audience string) *token.Decryptor {
 		return d
 	}
 
-	d = token.NewDecryptor(i.encryptKeyProvider, audience)
+	d = token.NewDecryptor(i.encryptKeyProvider, audience, i.signKeyProvider)
 	i.decryptors[audience] = d
 	return d
-}
-
-func (i *Interpreter) decryptUserSub(ctx context.Context, encryptedSub, audience string) (*paseto.Token, error) {
-	decryptor := i.Decryptor(audience)
-
-	t, err := decryptor.Decrypt(ctx, encryptedSub)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt sub: %w", err)
-	}
-
-	return t, nil
 }

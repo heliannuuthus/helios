@@ -17,13 +17,11 @@ type GinFactory struct {
 // NewGinFactory 创建 Gin 中间件工厂
 func NewGinFactory(
 	endpoint string,
-	signKeyProvider key.Provider,
 	encryptKeyProvider key.Provider,
 	catKeyProvider key.Provider,
 ) *GinFactory {
-	factory := NewFactory(endpoint, signKeyProvider, encryptKeyProvider, catKeyProvider)
 	return &GinFactory{
-		Factory: factory,
+		Factory: NewFactory(endpoint, encryptKeyProvider, catKeyProvider),
 	}
 }
 

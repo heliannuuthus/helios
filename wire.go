@@ -160,6 +160,5 @@ func provideGinMiddlewareFactory() (*web.GinFactory, error) {
 		endpoint,
 		provider,
 		provider,
-		provider,
 	), nil
 }
