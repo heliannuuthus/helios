@@ -362,8 +362,8 @@ func (f *AuthFlow) AllRequiredVerified() bool {
 	return true
 }
 
-// HasIdentifiedUser 是否存在待关联的已有用户（User 已设但 State 仍为 Initialized）
-func (f *AuthFlow) HasIdentifiedUser() bool {
+// IdentifiedUser 是否存在待关联的已有用户（User 已设但 State 仍为 Initialized）
+func (f *AuthFlow) IdentifiedUser() bool {
 	return f.User != nil && f.State == FlowStateInitialized
 }
 
@@ -416,8 +416,8 @@ func (f *AuthFlow) Fail(err AuthErrorInterface) {
 	}
 }
 
-// HasError 检查是否有错误
-func (f *AuthFlow) HasError() bool {
+// Failed 检查流程是否失败
+func (f *AuthFlow) Failed() bool {
 	return f.Error != nil || f.State == FlowStateFailed
 }
 

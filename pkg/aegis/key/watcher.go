@@ -1,61 +1,33 @@
 package key
 
-import (
-	"sync"
-)
+import "sync"
 
-// Subscribable 支持订阅密钥变更
-type Subscribable interface {
-	Subscribe(id string, callback func(keys [][]byte))
-}
-
-// Notifiable 支持通知密钥变更
-type Notifiable interface {
-	Notify(id string, keys [][]byte)
-}
-
-// Watcher 组合接口（同时支持订阅和通知）
-type Watcher interface {
-	Subscribable
-	Notifiable
-}
-
-// SimpleWatcher 简单的 Watcher 实现（异步通知）
-type SimpleWatcher struct {
+// watcher 订阅通知组件，密钥变更时触发回调
+type watcher struct {
 	mu        sync.RWMutex
 	callbacks map[string][]func(keys [][]byte)
 }
 
-// NewSimpleWatcher 创建 SimpleWatcher
-func NewSimpleWatcher() *SimpleWatcher {
-	return &SimpleWatcher{
+func newWatcher() watcher {
+	return watcher{
 		callbacks: make(map[string][]func(keys [][]byte)),
 	}
 }
 
 // Subscribe 订阅密钥变更
-func (w *SimpleWatcher) Subscribe(id string, callback func(keys [][]byte)) {
+func (w *watcher) Subscribe(id string, callback func(keys [][]byte)) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.callbacks[id] = append(w.callbacks[id], callback)
 }
 
-// Notify 异步通知密钥变更
-func (w *SimpleWatcher) Notify(id string, keys [][]byte) {
+func (w *watcher) notify(id string, keys [][]byte) {
 	w.mu.RLock()
-	callbacks := w.callbacks[id]
+	cbs := make([]func(keys [][]byte), len(w.callbacks[id]))
+	copy(cbs, w.callbacks[id])
 	w.mu.RUnlock()
 
-	for _, cb := range callbacks {
-		go cb(keys)
+	for _, cb := range cbs {
+		cb(keys)
 	}
 }
-
-// NopWatcher 空实现，不做任何事
-type NopWatcher struct{}
-
-// Subscribe 空实现
-func (NopWatcher) Subscribe(_ string, _ func(keys [][]byte)) {}
-
-// Notify 空实现
-func (NopWatcher) Notify(_ string, _ [][]byte) {}

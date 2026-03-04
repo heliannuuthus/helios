@@ -41,13 +41,13 @@ type Factory struct {
 // NewFactory 创建中间件工厂
 func NewFactory(
 	endpoint string,
-	signKeyStore *key.Store,
-	encryptKeyStore *key.Store,
-	catKeyStore *key.Store,
+	signKeyProvider key.Provider,
+	encryptKeyProvider key.Provider,
+	catKeyProvider key.Provider,
 ) *Factory {
 	return &Factory{
-		interpreter: NewInterpreter(signKeyStore, encryptKeyStore),
-		checker:     NewRelationChecker(endpoint, catKeyStore),
+		interpreter: NewInterpreter(signKeyProvider, encryptKeyProvider),
+		checker:     NewRelationChecker(endpoint, catKeyProvider),
 	}
 }
 

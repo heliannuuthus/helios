@@ -51,8 +51,6 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	cacheManager := cache.NewManager(hermesSvc, userSvc, redis)
 
 	// 3. 初始化 KeyStore
-	watcher := key.NewSimpleWatcher()
-
 	ssoMasterKeyFetcher := func() ([][]byte, error) {
 		masterKey, err := config.GetSSOMasterKey()
 		if err != nil {
@@ -65,7 +63,7 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	}
 
 	// 域密钥：clientID → domain.Main（id="aegis" 时返回 SSO master key）
-	domainKeyStore := key.NewNamedStore("domain", key.FetcherFunc(func(ctx context.Context, clientID string) ([][]byte, error) {
+	domainKeyProvider := key.LoadKeysFunc(func(ctx context.Context, clientID string) ([][]byte, error) {
 		if clientID == token.SSOIssuer {
 			return ssoMasterKeyFetcher()
 		}
@@ -78,10 +76,10 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 			return nil, fmt.Errorf("get domain: %w", err)
 		}
 		return [][]byte{domain.Main}, nil
-	}), watcher)
+	})
 
 	// 服务密钥：audience → service.Key（id="aegis" 时返回 SSO master key）
-	serviceKeyStore := key.NewNamedStore("service", key.FetcherFunc(func(ctx context.Context, audience string) ([][]byte, error) {
+	serviceKeyProvider := key.LoadKeysFunc(func(ctx context.Context, audience string) ([][]byte, error) {
 		if audience == token.SSOAudience {
 			return ssoMasterKeyFetcher()
 		}
@@ -90,19 +88,19 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 			return nil, fmt.Errorf("get service: %w", err)
 		}
 		return [][]byte{svc.Key}, nil
-	}), watcher)
+	})
 
 	// 应用密钥：clientID → app.Key
-	appKeyStore := key.NewNamedStore("app", key.FetcherFunc(func(ctx context.Context, clientID string) ([][]byte, error) {
+	appKeyProvider := key.LoadKeysFunc(func(ctx context.Context, clientID string) ([][]byte, error) {
 		app, err := cacheManager.GetApplication(ctx, clientID)
 		if err != nil {
 			return nil, fmt.Errorf("get application: %w", err)
 		}
 		return [][]byte{app.Key}, nil
-	}), watcher)
+	})
 
 	// 4. 初始化 Token Service
-	tokenSvc := token.NewService(cacheManager, domainKeyStore, serviceKeyStore, appKeyStore)
+	tokenSvc := token.NewService(cacheManager, domainKeyProvider, serviceKeyProvider, appKeyProvider)
 	logger.Info("[Auth] Token Service 初始化完成")
 
 	// 4. 初始化邮件发送器

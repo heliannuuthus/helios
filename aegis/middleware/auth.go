@@ -60,15 +60,15 @@ func OptionalToken(v *web.Interpreter) gin.HandlerFunc {
 	}
 }
 
-// NewHermesKeyStore 创建 Hermes 使用的 KeyStore
-func NewHermesKeyStore() (*key.Store, error) {
+// NewHermesKeyProvider 创建 Hermes 使用的密钥 Provider
+func NewHermesKeyProvider() (key.Provider, error) {
 	masterKey, err := hermesconfig.GetAegisSecretKeyBytes()
 	if err != nil {
 		return nil, fmt.Errorf("get hermes aegis secret key: %w", err)
 	}
-	return key.NewStore(key.FetcherFunc(func(ctx context.Context, id string) ([][]byte, error) {
-		return [][]byte{masterKey}, nil
-	}), nil), nil
+	return key.LoadKeyFunc(func(_ context.Context, _ string) ([]byte, error) {
+		return masterKey, nil
+	}), nil
 }
 
 func tokenPreview(tokenStr string, length int) string {

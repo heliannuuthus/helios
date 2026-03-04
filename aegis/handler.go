@@ -169,7 +169,7 @@ func (h *Handler) GetContext(c *gin.Context) {
 
 	// 获取 AuthFlow（内部会续期内存中的 ExpiresAt）
 	flow := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
-	if flow.HasError() {
+	if flow.Failed() {
 		h.flowErrorResponse(c, flow)
 		return
 	}
@@ -216,7 +216,7 @@ func (h *Handler) GetConnections(c *gin.Context) {
 
 	// 获取 AuthFlow（内部会续期内存中的 ExpiresAt）
 	flow := h.authenticateSvc.GetAndValidateFlow(c.Request.Context(), flowID)
-	if flow.HasError() {
+	if flow.Failed() {
 		h.flowErrorResponse(c, flow)
 		return
 	}
@@ -254,7 +254,7 @@ func (h *Handler) Login(c *gin.Context) {
 
 	// 1. 获取 AuthFlow
 	flow := h.authenticateSvc.GetAndValidateFlow(ctx, flowID)
-	if flow.HasError() {
+	if flow.Failed() {
 		h.flowErrorResponse(c, flow)
 		return
 	}
@@ -406,12 +406,12 @@ func (h *Handler) GetIdentifyContext(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	flow := h.authenticateSvc.GetAndValidateFlow(ctx, flowID)
-	if flow.HasError() {
+	if flow.Failed() {
 		h.flowErrorResponse(c, flow)
 		return
 	}
 
-	if !flow.HasIdentifiedUser() {
+	if !flow.IdentifiedUser() {
 		h.errorResponse(c, autherrors.NewInvalidRequest("no identified user"))
 		return
 	}
@@ -445,7 +445,7 @@ func (h *Handler) ConfirmIdentify(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	flow := h.authenticateSvc.GetAndValidateFlow(ctx, flowID)
-	if flow.HasError() {
+	if flow.Failed() {
 		h.flowErrorResponse(c, flow)
 		return
 	}
@@ -457,7 +457,7 @@ func (h *Handler) ConfirmIdentify(c *gin.Context) {
 		}
 	}()
 
-	if !flow.HasIdentifiedUser() {
+	if !flow.IdentifiedUser() {
 		h.errorResponse(c, autherrors.NewInvalidRequest("no identified user"))
 		return
 	}
@@ -645,7 +645,7 @@ func (h *Handler) UserInfo(c *gin.Context) {
 	}
 
 	uat := tc.UserAccessToken()
-	if uat == nil || !uat.HasUser() {
+	if uat == nil || !uat.Identified() {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error":             "invalid_token",
 			"error_description": "token does not contain user info",
@@ -653,13 +653,13 @@ func (h *Handler) UserInfo(c *gin.Context) {
 		return
 	}
 
-	email := uat.GetEmail()
-	phone := uat.GetPhone()
+	email := uat.Email()
+	phone := uat.Phone()
 
 	resp := &UserInfoResponse{
-		Sub:           uat.GetOpenID(),
-		Nickname:      uat.GetNickname(),
-		Picture:       uat.GetPicture(),
+		Sub:           uat.OpenID(),
+		Nickname:      uat.Nickname(),
+		Picture:       uat.Picture(),
 		Email:         helpers.MaskEmail(email),
 		EmailVerified: email != "",
 		Phone:         helpers.MaskPhone(phone),

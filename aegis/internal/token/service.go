@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 
+	"aidanwoods.dev/go-paseto"
+
 	"github.com/heliannuuthus/helios/aegis/config"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
@@ -19,9 +21,9 @@ type Service struct {
 	issuer string
 	cache  *cache.Manager
 
-	domainKeyStore  *key.Store // clientID → domain.Main (includes SSO with id="aegis")
-	serviceKeyStore *key.Store // audience → service.Key (includes SSO with id="aegis")
-	appKeyStore     *key.Store // clientID → app.Key
+	domainKeyProvider  key.Provider // clientID → domain.Main (includes SSO with id="aegis")
+	serviceKeyProvider key.Provider // audience → service.Key (includes SSO with id="aegis")
+	appKeyProvider     key.Provider // clientID → app.Key
 
 	domainSigners     map[string]*Signer
 	domainVerifiers   map[string]*pkgtoken.Verifier
@@ -33,21 +35,21 @@ type Service struct {
 
 func NewService(
 	cache *cache.Manager,
-	domainKeyStore *key.Store,
-	serviceKeyStore *key.Store,
-	appKeyStore *key.Store,
+	domainKeyProvider key.Provider,
+	serviceKeyProvider key.Provider,
+	appKeyProvider key.Provider,
 ) *Service {
 	return &Service{
-		issuer:            config.GetIssuer(),
-		cache:             cache,
-		domainKeyStore:    domainKeyStore,
-		serviceKeyStore:   serviceKeyStore,
-		appKeyStore:       appKeyStore,
-		domainSigners:     make(map[string]*Signer),
-		domainVerifiers:   make(map[string]*pkgtoken.Verifier),
-		serviceEncryptors: make(map[string]*Encryptor),
-		serviceDecryptors: make(map[string]*pkgtoken.Decryptor),
-		appVerifiers:      make(map[string]*pkgtoken.Verifier),
+		issuer:             config.GetIssuer(),
+		cache:              cache,
+		domainKeyProvider:  domainKeyProvider,
+		serviceKeyProvider: serviceKeyProvider,
+		appKeyProvider:     appKeyProvider,
+		domainSigners:      make(map[string]*Signer),
+		domainVerifiers:    make(map[string]*pkgtoken.Verifier),
+		serviceEncryptors:  make(map[string]*Encryptor),
+		serviceDecryptors:  make(map[string]*pkgtoken.Decryptor),
+		appVerifiers:       make(map[string]*pkgtoken.Verifier),
 	}
 }
 
@@ -131,14 +133,12 @@ func (s *Service) Verify(ctx context.Context, tokenString string) (Token, error)
 		if err != nil {
 			logger.Warnf("failed to get audience from token: %v", err)
 		}
-		claimsJSON, err := s.serviceDecryptor(audience).Decrypt(ctx, encryptedSub)
+		innerToken, err := s.serviceDecryptor(audience).Decrypt(ctx, encryptedSub)
 		if err != nil {
 			return nil, fmt.Errorf("decrypt sub: %w", err)
 		}
 
-		if err := s.unmarshalPayload(t, claimsJSON); err != nil {
-			return nil, fmt.Errorf("unmarshal payload: %w", err)
-		}
+		s.applyPayload(t, innerToken)
 	}
 
 	return t, nil
@@ -161,7 +161,7 @@ func (s *Service) domainSigner(clientID string) *Signer {
 		return signer
 	}
 
-	signer = NewSigner(s.domainKeyStore, clientID)
+	signer = NewSigner(s.domainKeyProvider, clientID)
 	s.domainSigners[clientID] = signer
 	return signer
 }
@@ -181,7 +181,7 @@ func (s *Service) domainVerifier(clientID string) *pkgtoken.Verifier {
 		return verifier
 	}
 
-	verifier = pkgtoken.NewVerifier(s.domainKeyStore, clientID)
+	verifier = pkgtoken.NewVerifier(s.domainKeyProvider, clientID)
 	s.domainVerifiers[clientID] = verifier
 	return verifier
 }
@@ -201,7 +201,7 @@ func (s *Service) serviceEncryptor(audience string) *Encryptor {
 		return encryptor
 	}
 
-	encryptor = NewEncryptor(s.serviceKeyStore, audience)
+	encryptor = NewEncryptor(s.serviceKeyProvider, audience)
 	s.serviceEncryptors[audience] = encryptor
 	return encryptor
 }
@@ -221,7 +221,7 @@ func (s *Service) serviceDecryptor(audience string) *pkgtoken.Decryptor {
 		return decryptor
 	}
 
-	decryptor = pkgtoken.NewDecryptor(s.serviceKeyStore, audience)
+	decryptor = pkgtoken.NewDecryptor(s.serviceKeyProvider, audience)
 	s.serviceDecryptors[audience] = decryptor
 	return decryptor
 }
@@ -241,7 +241,7 @@ func (s *Service) appVerifier(clientID string) *pkgtoken.Verifier {
 		return verifier
 	}
 
-	verifier = pkgtoken.NewVerifier(s.appKeyStore, clientID)
+	verifier = pkgtoken.NewVerifier(s.appKeyProvider, clientID)
 	s.appVerifiers[clientID] = verifier
 	return verifier
 }
@@ -252,16 +252,16 @@ func (s *Service) appVerifier(clientID string) *pkgtoken.Verifier {
 func (*Service) marshalPayload(t tokendef.Token) ([]byte, bool) {
 	switch v := t.(type) {
 	case *tokendef.UserAccessToken:
-		if !v.HasUser() {
+		if !v.Identified() {
 			return nil, false
 		}
-		data, err := v.MarshalUserPayload()
+		data, err := v.MarshalIdentity()
 		if err != nil {
 			return nil, false
 		}
 		return data, true
 	case *SSOToken:
-		if !v.HasUser() {
+		if v.GetIdentities() == nil {
 			return nil, false
 		}
 		data, err := v.MarshalIdentities()
@@ -278,24 +278,11 @@ func (*Service) needsDecryption(tokenType tokendef.TokenType) bool {
 	return tokenType == tokendef.TokenTypeUAT || tokenType == tokendef.TokenTypeSSO
 }
 
-// unmarshalPayload decrypts and sets the payload on UAT and SSO tokens.
-func (*Service) unmarshalPayload(t tokendef.Token, data []byte) error {
+func (*Service) applyPayload(t tokendef.Token, inner *paseto.Token) {
 	switch v := t.(type) {
 	case *tokendef.UserAccessToken:
-		info, err := tokendef.UnmarshalUserInfo(data)
-		if err != nil {
-			return err
-		}
-		v.SetUserInfo(info)
-		return nil
+		v.SetIdentity(inner)
 	case *SSOToken:
-		identities, err := UnmarshalIdentities(data)
-		if err != nil {
-			return err
-		}
-		v.SetIdentities(identities)
-		return nil
-	default:
-		return fmt.Errorf("token type %s does not support payload decryption", t.Type())
+		v.SetIdentities(inner)
 	}
 }

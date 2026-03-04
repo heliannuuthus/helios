@@ -87,12 +87,15 @@ func (s *SSOToken) MarshalIdentities() ([]byte, error) {
 	return json.Marshal(s.identities)
 }
 
-func (s *SSOToken) SetIdentities(identities map[string]string) {
+func (s *SSOToken) SetIdentities(t *paseto.Token) {
+	claims := t.Claims()
+	identities := make(map[string]string, len(claims))
+	for k, v := range claims {
+		if str, ok := v.(string); ok {
+			identities[k] = str
+		}
+	}
 	s.identities = identities
-}
-
-func (s *SSOToken) HasUser() bool {
-	return len(s.identities) > 0
 }
 
 func (s *SSOToken) GetOpenID(domain string) string {
@@ -124,13 +127,4 @@ func ParseSSOToken(pasetoToken *paseto.Token) (*SSOToken, error) {
 	return &SSOToken{
 		Claims: claims,
 	}, nil
-}
-
-// UnmarshalIdentities deserializes identity mapping from decrypted inner token claims.
-func UnmarshalIdentities(data []byte) (map[string]string, error) {
-	var identities map[string]string
-	if err := json.Unmarshal(data, &identities); err != nil {
-		return nil, fmt.Errorf("unmarshal identities: %w", err)
-	}
-	return identities, nil
 }

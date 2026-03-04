@@ -85,12 +85,7 @@ func (s *ServiceAccessToken) ExpiresIn() time.Duration {
 	return s.GetExpiresIn()
 }
 
-// GetScope 返回授权范围
-func (s *ServiceAccessToken) GetScope() string {
-	return s.scope
-}
-
-// HasScope 检查是否包含某个 scope
-func (s *ServiceAccessToken) HasScope(scope string) bool {
-	return HasScope(s.scope, scope)
+// Scopes 返回 scope 集合。
+func (s *ServiceAccessToken) Scopes() map[string]struct{} {
+	return ParseScopes(s.scope)
 }

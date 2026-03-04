@@ -17,11 +17,11 @@ type GinFactory struct {
 // NewGinFactory 创建 Gin 中间件工厂
 func NewGinFactory(
 	endpoint string,
-	signKeyStore *key.Store,
-	encryptKeyStore *key.Store,
-	catKeyStore *key.Store,
+	signKeyProvider key.Provider,
+	encryptKeyProvider key.Provider,
+	catKeyProvider key.Provider,
 ) *GinFactory {
-	factory := NewFactory(endpoint, signKeyStore, encryptKeyStore, catKeyStore)
+	factory := NewFactory(endpoint, signKeyProvider, encryptKeyProvider, catKeyProvider)
 	return &GinFactory{
 		Factory: factory,
 	}
@@ -150,7 +150,7 @@ func OpenIDFromGin(c *gin.Context) string {
 		return ""
 	}
 	if uat := tc.UserAccessToken(); uat != nil {
-		return uat.GetOpenID()
+		return uat.OpenID()
 	}
 	return ""
 }

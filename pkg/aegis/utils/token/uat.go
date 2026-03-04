@@ -8,9 +8,9 @@ import (
 	"github.com/go-json-experiment/json"
 )
 
-// UserInfo holds the user identity data that will be encrypted
+// userInfo holds the user identity data that will be encrypted
 // into the sub field as a nested v4.local token.
-type UserInfo struct {
+type userInfo struct {
 	Sub      string `json:"sub"`
 	Nickname string `json:"nickname,omitempty"`
 	Picture  string `json:"picture,omitempty"`
@@ -23,7 +23,7 @@ type UserInfo struct {
 type UserAccessToken struct {
 	Claims
 	scope    string
-	userInfo *UserInfo
+	identity *userInfo
 }
 
 // ==================== UAT Builder ====================
@@ -78,20 +78,20 @@ func (u *UAT) Build(claims Claims) Token {
 	}
 
 	if u.openID != "" {
-		info := &UserInfo{Sub: u.openID}
-		scopeSet := parseScopeSet(u.scope)
+		id := &userInfo{Sub: u.openID}
+		scopes := ParseScopes(u.scope)
 
-		if scopeSet[ScopeProfile] {
-			info.Nickname = u.nickname
-			info.Picture = u.picture
+		if _, ok := scopes[ScopeProfile]; ok {
+			id.Nickname = u.nickname
+			id.Picture = u.picture
 		}
-		if scopeSet[ScopeEmail] {
-			info.Email = u.email
+		if _, ok := scopes[ScopeEmail]; ok {
+			id.Email = u.email
 		}
-		if scopeSet[ScopePhone] {
-			info.Phone = u.phone
+		if _, ok := scopes[ScopePhone]; ok {
+			id.Phone = u.phone
 		}
-		uat.userInfo = info
+		uat.identity = id
 	}
 
 	return uat
@@ -116,13 +116,25 @@ func ParseUserAccessToken(pasetoToken *paseto.Token) (*UserAccessToken, error) {
 	}, nil
 }
 
-// UnmarshalUserInfo deserializes user info from decrypted inner token claims JSON.
-func UnmarshalUserInfo(data []byte) (*UserInfo, error) {
-	var info UserInfo
-	if err := json.Unmarshal(data, &info); err != nil {
-		return nil, fmt.Errorf("unmarshal user info: %w", err)
+func userInfoFromToken(t *paseto.Token) *userInfo {
+	info := &userInfo{}
+	claims := t.Claims()
+	if v, ok := claims["sub"].(string); ok {
+		info.Sub = v
 	}
-	return &info, nil
+	if v, ok := claims["nickname"].(string); ok {
+		info.Nickname = v
+	}
+	if v, ok := claims["picture"].(string); ok {
+		info.Picture = v
+	}
+	if v, ok := claims["email"].(string); ok {
+		info.Email = v
+	}
+	if v, ok := claims["phone"].(string); ok {
+		info.Phone = v
+	}
+	return info
 }
 
 // ==================== Token Interface ====================
@@ -148,69 +160,62 @@ func (u *UserAccessToken) ExpiresIn() time.Duration {
 	return u.GetExpiresIn()
 }
 
-func (u *UserAccessToken) GetScope() string {
-	return u.scope
+// Scopes 返回 scope 集合。
+func (u *UserAccessToken) Scopes() map[string]struct{} {
+	return ParseScopes(u.scope)
 }
 
-func (u *UserAccessToken) HasScope(scope string) bool {
-	return HasScope(u.scope, scope)
-}
+// ==================== Identity Accessors ====================
 
-// ==================== UserInfo Accessors ====================
-
-func (u *UserAccessToken) GetOpenID() string {
-	if u.userInfo == nil {
+func (u *UserAccessToken) OpenID() string {
+	if u.identity == nil {
 		return ""
 	}
-	return u.userInfo.Sub
+	return u.identity.Sub
 }
 
-func (u *UserAccessToken) GetNickname() string {
-	if u.userInfo == nil {
+func (u *UserAccessToken) Nickname() string {
+	if u.identity == nil {
 		return ""
 	}
-	return u.userInfo.Nickname
+	return u.identity.Nickname
 }
 
-func (u *UserAccessToken) GetPicture() string {
-	if u.userInfo == nil {
+func (u *UserAccessToken) Picture() string {
+	if u.identity == nil {
 		return ""
 	}
-	return u.userInfo.Picture
+	return u.identity.Picture
 }
 
-func (u *UserAccessToken) GetEmail() string {
-	if u.userInfo == nil {
+func (u *UserAccessToken) Email() string {
+	if u.identity == nil {
 		return ""
 	}
-	return u.userInfo.Email
+	return u.identity.Email
 }
 
-func (u *UserAccessToken) GetPhone() string {
-	if u.userInfo == nil {
+func (u *UserAccessToken) Phone() string {
+	if u.identity == nil {
 		return ""
 	}
-	return u.userInfo.Phone
+	return u.identity.Phone
 }
 
-func (u *UserAccessToken) HasUser() bool {
-	return u.userInfo != nil && u.userInfo.Sub != ""
+// Identified 返回 UAT 是否已关联用户身份。
+func (u *UserAccessToken) Identified() bool {
+	return u.identity != nil
 }
 
-// SetUserInfo sets user info (called after decrypting the sub field).
-func (u *UserAccessToken) SetUserInfo(info *UserInfo) {
-	u.userInfo = info
+// SetIdentity 设置用户身份信息（解密 sub 字段后调用）。
+func (u *UserAccessToken) SetIdentity(t *paseto.Token) {
+	u.identity = userInfoFromToken(t)
 }
 
-// GetUserInfo returns the user info struct.
-func (u *UserAccessToken) GetUserInfo() *UserInfo {
-	return u.userInfo
-}
-
-// MarshalUserPayload serializes the user info to JSON for inner token encryption.
-func (u *UserAccessToken) MarshalUserPayload() ([]byte, error) {
-	if u.userInfo == nil {
-		return nil, fmt.Errorf("%w: no user info", ErrMissingClaims)
+// MarshalIdentity 序列化用户身份信息用于内层 token 加密。
+func (u *UserAccessToken) MarshalIdentity() ([]byte, error) {
+	if u.identity == nil {
+		return nil, fmt.Errorf("%w: no user identity", ErrMissingClaims)
 	}
-	return json.Marshal(u.userInfo)
+	return json.Marshal(u.identity)
 }

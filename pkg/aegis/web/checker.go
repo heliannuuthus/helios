@@ -39,16 +39,16 @@ type checkResponse struct {
 
 // RelationChecker 远程关系鉴权客户端。
 type RelationChecker struct {
-	keyStore   *key.Store
-	endpoint   string
-	httpClient *http.Client
+	keyProvider key.Provider
+	endpoint    string
+	httpClient  *http.Client
 }
 
 // NewRelationChecker 创建关系鉴权客户端。
-func NewRelationChecker(endpoint string, keyStore *key.Store) *RelationChecker {
+func NewRelationChecker(endpoint string, keyProvider key.Provider) *RelationChecker {
 	return &RelationChecker{
-		keyStore: keyStore,
-		endpoint: strings.TrimSuffix(endpoint, "/"),
+		keyProvider: keyProvider,
+		endpoint:    strings.TrimSuffix(endpoint, "/"),
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -60,12 +60,12 @@ func (c *RelationChecker) Check(ctx context.Context, t tokendef.Token, relation,
 	subjectType := subjectTypeApp
 	subjectID := t.GetClientID()
 
-	if uat, ok := t.(*tokendef.UserAccessToken); ok && uat.HasUser() {
+	if uat, ok := t.(*tokendef.UserAccessToken); ok && uat.Identified() {
 		subjectType = subjectTypeUser
-		subjectID = uat.GetOpenID()
+		subjectID = uat.OpenID()
 	}
 
-	issuer := token.NewIssuer(c.keyStore, t.GetAudience())
+	issuer := token.NewIssuer(c.keyProvider, t.GetAudience())
 	cat, err := issuer.Issue(ctx)
 	if err != nil {
 		return false, fmt.Errorf("issue CAT: %w", err)
