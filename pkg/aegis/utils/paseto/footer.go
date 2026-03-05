@@ -1,10 +1,8 @@
 package paseto
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/go-json-experiment/json"
 )
@@ -21,39 +19,21 @@ type Footer struct {
 	KID string `json:"kid"`
 }
 
-func ParseFooter(data []byte) (Footer, error) {
-	if len(data) == 0 {
-		return Footer{}, fmt.Errorf("%w: empty footer", ErrInvalidFooter)
-	}
-	var f Footer
-	if err := json.Unmarshal(data, &f); err != nil {
-		return Footer{}, fmt.Errorf("%w: %w", ErrInvalidFooter, err)
-	}
-	if f.KID == "" {
-		return Footer{}, fmt.Errorf("%w: missing kid field", ErrInvalidFooter)
-	}
-	return f, nil
-}
-
-// ExtractKID extracts the kid from a raw PASETO token string's footer segment.
-func ExtractKID(tokenString string) (string, error) {
-	parts := strings.Split(tokenString, ".")
-	if len(parts) < 4 || parts[3] == "" {
-		return "", fmt.Errorf("%w: no footer segment", ErrKIDNotFound)
-	}
-	footerBytes, err := base64.RawURLEncoding.DecodeString(parts[3])
-	if err != nil {
-		return "", fmt.Errorf("%w: decode footer: %w", ErrInvalidFooter, err)
-	}
-	f, err := ParseFooter(footerBytes)
-	if err != nil {
-		return "", err
-	}
-	return f.KID, nil
-}
-
 func NewFooter(kid string) Footer {
 	return Footer{KID: kid}
+}
+
+func (f *Footer) Unmarshal(data []byte) error {
+	if len(data) == 0 {
+		return fmt.Errorf("%w: empty footer", ErrInvalidFooter)
+	}
+	if err := json.Unmarshal(data, f); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidFooter, err)
+	}
+	if f.KID == "" {
+		return fmt.Errorf("%w: missing kid field", ErrKIDNotFound)
+	}
+	return nil
 }
 
 func (f Footer) Marshal() ([]byte, error) {

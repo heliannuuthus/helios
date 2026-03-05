@@ -14,29 +14,31 @@ import (
 
 var ErrDecryptFailed = pasetokit.ErrDecryptFailed
 
-// Decryptor decrypts v4.local tokens using lid-based key matching.
-// 内部缓存 lid → symmetric key 映射，通过 watcher 通知 rebuild。
-// 嵌入 extractor 以管理关联的 Verifier 实例。
+// Decryptor 解密 v4.local token，持有 Extractor 引用并管理 per-clientID 的 Verifier。
+// 解密密钥的管理完全独立于 Extractor。
 type Decryptor struct {
-	*Extractor
+	extractor *extractor
 
 	provider key.Provider
 
-	mu   sync.RWMutex
-	keys map[string]paseto.V4SymmetricKey
+	mu        sync.RWMutex
+	keys      map[string]paseto.V4SymmetricKey
+	verifiers map[string]*Verifier
 }
 
-func NewDecryptor(extractor *Extractor, encryptKeyProvider key.Provider) *Decryptor {
+func NewDecryptor(audience string, encryptKeyProvider key.Provider, publicKeyProvider key.Provider) *Decryptor {
 	d := &Decryptor{
-		Extractor: extractor,
+		extractor: NewExtractor(audience, publicKeyProvider),
 		provider:  encryptKeyProvider,
+		keys:      make(map[string]paseto.V4SymmetricKey),
+		verifiers: make(map[string]*Verifier),
 	}
 
 	if encryptKeyProvider != nil {
 		if sub, ok := encryptKeyProvider.(key.Subscribable); ok {
-			sub.Subscribe(d.id, func(newKeys [][]byte) {
+			sub.Subscribe(d.extractor.audience, func(newKeys [][]byte) {
 				if err := d.rebuild(newKeys); err != nil {
-					logger.Warnf("[Decryptor] rebuild keys failed for %s: %v", d.id, err)
+					logger.Warnf("[Decryptor] rebuild keys failed for %s: %v", d.extractor.audience, err)
 				}
 			})
 		}
@@ -45,8 +47,29 @@ func NewDecryptor(extractor *Extractor, encryptKeyProvider key.Provider) *Decryp
 	return d
 }
 
+// Verifier 按 clientID 获取或创建 Verifier。
+func (d *Decryptor) Verifier(clientID string) *Verifier {
+	d.mu.RLock()
+	v, ok := d.verifiers[clientID]
+	d.mu.RUnlock()
+	if ok {
+		return v
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if v, ok := d.verifiers[clientID]; ok {
+		return v
+	}
+
+	v = newVerifier(d.extractor, clientID)
+	d.verifiers[clientID] = v
+	return v
+}
+
 func (d *Decryptor) Decrypt(ctx context.Context, encrypted string) (*paseto.Token, error) {
-	kid, err := pasetokit.ExtractKID(encrypted)
+	kid, err := d.extractor.ExtractKID(encrypted)
 	if err != nil {
 		return nil, fmt.Errorf("extract kid: %w", err)
 	}
@@ -79,7 +102,7 @@ func (d *Decryptor) ensure(ctx context.Context) error {
 		return nil
 	}
 
-	rawKeys, err := d.provider.AllOfKey(ctx, d.id)
+	rawKeys, err := d.provider.AllOfKey(ctx, d.extractor.audience)
 	if err != nil {
 		return fmt.Errorf("load keys: %w", err)
 	}

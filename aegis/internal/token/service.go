@@ -27,7 +27,7 @@ type Service struct {
 	domainSigners     map[string]*Signer
 	serviceEncryptors map[string]*Encryptor
 	domainDecryptors  map[string]*pkgtoken.Decryptor // audience → Decryptor (signKey=domain, encryptKey=service)
-	appExtractor      *pkgtoken.Extractor            // CAT 专用 Extractor (signKey=app, 只验签)
+	appDecryptor      *pkgtoken.Decryptor            // CAT 专用（signKey=app, 只验签, encryptKey=nil）
 	mu                sync.RWMutex
 }
 
@@ -46,7 +46,7 @@ func NewService(
 		domainSigners:      make(map[string]*Signer),
 		serviceEncryptors:  make(map[string]*Encryptor),
 		domainDecryptors:   make(map[string]*pkgtoken.Decryptor),
-		appExtractor:       pkgtoken.NewExtractor("", appKeyProvider),
+		appDecryptor:       pkgtoken.NewDecryptor("", nil, appKeyProvider),
 	}
 }
 
@@ -99,7 +99,7 @@ func (s *Service) Verify(ctx context.Context, tokenString string) (Token, error)
 	}
 
 	if tokenType == tokendef.TokenTypeCAT {
-		pasetoToken, err = s.appExtractor.Verifier(clientID).Verify(ctx, tokenString)
+		pasetoToken, err = s.appDecryptor.Verifier(clientID).Verify(ctx, tokenString)
 		if err != nil {
 			return nil, fmt.Errorf("verify signature: %w", err)
 		}
@@ -201,8 +201,7 @@ func (s *Service) domainDecryptor(audience string) *pkgtoken.Decryptor {
 		return decryptor
 	}
 
-	ext := pkgtoken.NewExtractor(audience, s.domainKeyProvider)
-	decryptor = pkgtoken.NewDecryptor(ext, s.serviceKeyProvider)
+	decryptor = pkgtoken.NewDecryptor(audience, s.serviceKeyProvider, s.domainKeyProvider)
 	s.domainDecryptors[audience] = decryptor
 	return decryptor
 }

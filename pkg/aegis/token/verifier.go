@@ -13,19 +13,19 @@ import (
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// Verifier verifies PASETO v4.public tokens using kid-based key matching.
-// 内部缓存 pid → public key 映射，通过 watcher 通知 rebuild。
-// audience 和密钥加载通过 extractor 获取。
+// Verifier 验签 PASETO v4.public token。
+// 嵌入 Extractor 获取 Provider、audience 和 ExtractKID 能力，
+// 自身管理 per-clientID 的 typed key 缓存。
 type Verifier struct {
-	*Extractor
+	*extractor
 	clientID string
 
 	mu   sync.RWMutex
 	keys map[string]paseto.V4AsymmetricPublicKey
 }
 
-func newVerifier(ext *Extractor, clientID string) *Verifier {
-	v := &Verifier{Extractor: ext, clientID: clientID}
+func newVerifier(ext *extractor, clientID string) *Verifier {
+	v := &Verifier{extractor: ext, clientID: clientID}
 
 	if sub, ok := ext.Provider.(key.Subscribable); ok {
 		sub.Subscribe(clientID, func(newKeys [][]byte) {
@@ -39,7 +39,7 @@ func newVerifier(ext *Extractor, clientID string) *Verifier {
 }
 
 func (v *Verifier) Verify(ctx context.Context, tokenString string) (*paseto.Token, error) {
-	kid, err := pasetokit.ExtractKID(tokenString)
+	kid, err := v.ExtractKID(tokenString)
 	if err != nil {
 		return nil, fmt.Errorf("extract kid: %w", err)
 	}
@@ -57,8 +57,8 @@ func (v *Verifier) Verify(ctx context.Context, tokenString string) (*paseto.Toke
 
 	parser := paseto.NewParser()
 	parser.AddRule(paseto.ValidAt(time.Now()))
-	if v.id != "" {
-		parser.AddRule(paseto.ForAudience(v.id))
+	if v.audience != "" {
+		parser.AddRule(paseto.ForAudience(v.audience))
 	}
 
 	pasetoToken, err := parser.ParseV4Public(pk, tokenString, nil)

@@ -11,7 +11,7 @@ import (
 )
 
 // Interpreter verifies tokens and decrypts encrypted sub fields for UAT tokens.
-// 按 audience 管理 Decryptor，Verifier 通过 PublicKeyFetcher 管理。
+// 按 audience 管理 Decryptor，Verifier 路由通过 Decryptor 持有的 Extractor 管理。
 type Interpreter struct {
 	encryptKeyProvider key.Provider
 	endpoint           string
@@ -44,15 +44,13 @@ func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (tokend
 		return nil, fmt.Errorf("%w: %w", tokendef.ErrMissingClaims, err)
 	}
 
-	tokenType := tokendef.DetectType(pasetoToken)
-
 	decryptor := i.decryptor(audience)
 	pasetoToken, err = decryptor.Verifier(clientID).Verify(ctx, tokenString)
 	if err != nil {
 		return nil, err
 	}
 
-	t, err := tokendef.ParseToken(pasetoToken, tokenType)
+	t, err := tokendef.ParseToken(pasetoToken, tokendef.DetectType(pasetoToken))
 	if err != nil {
 		return nil, err
 	}
@@ -88,13 +86,11 @@ func (i *Interpreter) Verify(ctx context.Context, tokenString string) (tokendef.
 		return nil, fmt.Errorf("%w: %w", tokendef.ErrMissingClaims, err)
 	}
 
-	tokenType := tokendef.DetectType(pasetoToken)
-
 	pasetoToken, err = i.decryptor(audience).Verifier(clientID).Verify(ctx, tokenString)
 	if err != nil {
 		return nil, err
 	}
-	return tokendef.ParseToken(pasetoToken, tokenType)
+	return tokendef.ParseToken(pasetoToken, tokendef.DetectType(pasetoToken))
 }
 
 func (i *Interpreter) decryptor(audience string) *token.Decryptor {
@@ -113,8 +109,7 @@ func (i *Interpreter) decryptor(audience string) *token.Decryptor {
 		return d
 	}
 
-	ext := token.NewExtractor(audience, key.NewPublicKeyFetcher(i.endpoint))
-	d = token.NewDecryptor(ext, i.encryptKeyProvider)
+	d = token.NewDecryptor(audience, i.encryptKeyProvider, key.NewPublicKeyFetcher(i.endpoint))
 	i.decryptors[audience] = d
 	return d
 }
