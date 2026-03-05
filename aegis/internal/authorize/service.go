@@ -443,6 +443,15 @@ func (s *Service) generateTokens(ctx context.Context, flow *types.AuthFlow) (*To
 		return nil, err
 	}
 
+	// scope 包含 openid 时签发 id_token
+	if helpers.ContainsScope(flow.GrantedScopes, ScopeOpenID) {
+		idTokenStr, err := s.generateIDToken(ctx, flow)
+		if err != nil {
+			return nil, err
+		}
+		tokenResp.IDToken = idTokenStr
+	}
+
 	// 如果 scope 包含 offline_access，生成 refresh token
 	if helpers.ContainsScope(flow.GrantedScopes, ScopeOfflineAccess) {
 		rt, err := s.createRefreshToken(ctx, flow, scope)
@@ -502,6 +511,30 @@ func (s *Service) generateAccessToken(
 		ExpiresIn:   int(accessExpiresIn.Seconds()),
 		Scope:       scope,
 	}, nil
+}
+
+// generateIDToken 签发 OIDC ID Token（v4.public，域密钥签名，不加密）
+// aud = client_id（OIDC Core §2: id_token 的 audience 是 relying party 的 client_id）
+func (s *Service) generateIDToken(ctx context.Context, flow *types.AuthFlow) (string, error) {
+	scopes := parseScopeSet(strings.Join(flow.GrantedScopes, " "))
+
+	idtBuilder := token.NewIDTokenBuilder().
+		OpenID(flow.User.OpenID)
+
+	if scopes[ScopeProfile] {
+		idtBuilder.Nickname(flow.User.GetNickname()).Picture(flow.User.GetPicture())
+	}
+	if flow.Request.Nonce != "" {
+		idtBuilder.Nonce(flow.Request.Nonce)
+	}
+
+	idt := token.NewClaimsBuilder().
+		Issuer(s.tokenSvc.GetIssuer()).
+		Audience(flow.Application.AppID).
+		ExpiresIn(time.Hour).
+		Build(idtBuilder)
+
+	return s.tokenSvc.Issue(ctx, idt)
 }
 
 func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, scope string) (*cache.RefreshToken, error) {
@@ -622,7 +655,18 @@ func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, re
 		return nil, err
 	}
 
-	// 8. 异步清理 flow
+	// 8. scope 包含 openid 时签发 id_token（per-client，所有 audience 共享）
+	if helpers.ContainsScope(flow.GrantedScopes, ScopeOpenID) {
+		idTokenStr, err := s.generateIDToken(ctx, &flow)
+		if err != nil {
+			return nil, err
+		}
+		for _, tokenResp := range resp {
+			tokenResp.IDToken = idTokenStr
+		}
+	}
+
+	// 9. 异步清理 flow
 	s.asyncCleanupFlow(ctx, authCode.FlowID)
 
 	return resp, nil
