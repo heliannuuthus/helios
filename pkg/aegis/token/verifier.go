@@ -17,17 +17,17 @@ import (
 // 内部缓存 pid → public key 映射，通过 watcher 通知 rebuild。
 // audience 和密钥加载通过 extractor 获取。
 type Verifier struct {
-	ext      *extractor
+	*Extractor
 	clientID string
 
 	mu   sync.RWMutex
 	keys map[string]paseto.V4AsymmetricPublicKey
 }
 
-func newVerifier(ext *extractor, clientID string) *Verifier {
-	v := &Verifier{ext: ext, clientID: clientID}
+func newVerifier(ext *Extractor, clientID string) *Verifier {
+	v := &Verifier{Extractor: ext, clientID: clientID}
 
-	if sub, ok := ext.signKeyProvider.(key.Subscribable); ok {
+	if sub, ok := ext.Provider.(key.Subscribable); ok {
 		sub.Subscribe(clientID, func(newKeys [][]byte) {
 			if err := v.rebuild(newKeys); err != nil {
 				logger.Warnf("[Verifier] rebuild keys failed for %s: %v", clientID, err)
@@ -57,8 +57,8 @@ func (v *Verifier) Verify(ctx context.Context, tokenString string) (*paseto.Toke
 
 	parser := paseto.NewParser()
 	parser.AddRule(paseto.ValidAt(time.Now()))
-	if v.ext.id != "" {
-		parser.AddRule(paseto.ForAudience(v.ext.id))
+	if v.id != "" {
+		parser.AddRule(paseto.ForAudience(v.id))
 	}
 
 	pasetoToken, err := parser.ParseV4Public(pk, tokenString, nil)
@@ -77,7 +77,7 @@ func (v *Verifier) ensure(ctx context.Context) error {
 		return nil
 	}
 
-	rawKeys, err := v.ext.signKeyProvider.AllOfKey(ctx, v.clientID)
+	rawKeys, err := v.AllOfKey(ctx, v.clientID)
 	if err != nil {
 		return fmt.Errorf("load keys: %w", err)
 	}

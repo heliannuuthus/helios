@@ -11,19 +11,18 @@ import (
 )
 
 // Interpreter verifies tokens and decrypts encrypted sub fields for UAT tokens.
-// 按 audience 管理 Decryptor，Verifier 由 Decryptor 内嵌的 extractor 管理。
+// 按 audience 管理 Decryptor，Verifier 通过 PublicKeyFetcher 管理。
 type Interpreter struct {
-	signKeyProvider    key.Provider
 	encryptKeyProvider key.Provider
-
-	decryptors map[string]*token.Decryptor
-	mu         sync.RWMutex
+	endpoint           string
+	decryptors         map[string]*token.Decryptor
+	mu                 sync.RWMutex
 }
 
-func NewInterpreter(signKeyProvider key.Provider, encryptKeyProvider key.Provider) *Interpreter {
+func NewInterpreter(endpoint string, encryptKeyProvider key.Provider) *Interpreter {
 	return &Interpreter{
-		signKeyProvider:    signKeyProvider,
 		encryptKeyProvider: encryptKeyProvider,
+		endpoint:           endpoint,
 		decryptors:         make(map[string]*token.Decryptor),
 	}
 }
@@ -47,7 +46,7 @@ func (i *Interpreter) Interpret(ctx context.Context, tokenString string) (tokend
 
 	tokenType := tokendef.DetectType(pasetoToken)
 
-	decryptor := i.Decryptor(audience)
+	decryptor := i.decryptor(audience)
 	pasetoToken, err = decryptor.Verifier(clientID).Verify(ctx, tokenString)
 	if err != nil {
 		return nil, err
@@ -91,14 +90,14 @@ func (i *Interpreter) Verify(ctx context.Context, tokenString string) (tokendef.
 
 	tokenType := tokendef.DetectType(pasetoToken)
 
-	pasetoToken, err = i.Decryptor(audience).Verifier(clientID).Verify(ctx, tokenString)
+	pasetoToken, err = i.decryptor(audience).Verifier(clientID).Verify(ctx, tokenString)
 	if err != nil {
 		return nil, err
 	}
 	return tokendef.ParseToken(pasetoToken, tokenType)
 }
 
-func (i *Interpreter) Decryptor(audience string) *token.Decryptor {
+func (i *Interpreter) decryptor(audience string) *token.Decryptor {
 	i.mu.RLock()
 	d, ok := i.decryptors[audience]
 	i.mu.RUnlock()
@@ -114,7 +113,8 @@ func (i *Interpreter) Decryptor(audience string) *token.Decryptor {
 		return d
 	}
 
-	d = token.NewDecryptor(i.encryptKeyProvider, audience, i.signKeyProvider)
+	ext := token.NewExtractor(audience, key.NewPublicKeyFetcher(i.endpoint))
+	d = token.NewDecryptor(ext, i.encryptKeyProvider)
 	i.decryptors[audience] = d
 	return d
 }

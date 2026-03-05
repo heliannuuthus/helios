@@ -139,26 +139,20 @@ func provideChaosHandler() (*chaos.Handler, error) {
 
 // provideInterpreter 创建 Token 解释器（用于 API 路由认证中间件）
 func provideInterpreter() (*web.Interpreter, error) {
-	provider, err := intMw.NewHermesKeyProvider()
+	seedProvider, err := intMw.NewHermesKeyProvider()
 	if err != nil {
 		return nil, err
 	}
-
-	return web.NewInterpreter(provider, provider), nil
+	endpoint := aegisconfig.GetIssuer()
+	return web.NewInterpreter(endpoint, seedProvider.Encrypt()), nil
 }
 
 // provideGinMiddlewareFactory 创建 Gin 中间件工厂
 func provideGinMiddlewareFactory() (*web.GinFactory, error) {
-	endpoint := aegisconfig.GetIssuer()
-
-	provider, err := intMw.NewHermesKeyProvider()
+	seedProvider, err := intMw.NewHermesKeyProvider()
 	if err != nil {
 		return nil, err
 	}
-
-	return web.NewGinFactory(
-		endpoint,
-		provider,
-		provider,
-	), nil
+	endpoint := aegisconfig.GetIssuer()
+	return web.NewGinFactory(endpoint, seedProvider.Encrypt(), seedProvider.Sign()), nil
 }

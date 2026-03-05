@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-json-experiment/json"
@@ -42,6 +43,9 @@ type RelationChecker struct {
 	keyProvider key.Provider
 	endpoint    string
 	httpClient  *http.Client
+
+	mu      sync.RWMutex
+	issuers map[string]*token.Issuer
 }
 
 // NewRelationChecker 创建关系鉴权客户端。
@@ -52,6 +56,7 @@ func NewRelationChecker(endpoint string, keyProvider key.Provider) *RelationChec
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
+		issuers: make(map[string]*token.Issuer),
 	}
 }
 
@@ -65,8 +70,7 @@ func (c *RelationChecker) Check(ctx context.Context, t tokendef.Token, relation,
 		subjectID = uat.OpenID()
 	}
 
-	issuer := token.NewIssuer(c.keyProvider, t.GetAudience())
-	cat, err := issuer.Issue(ctx)
+	cat, err := c.issuer(t.GetAudience()).Issue(ctx)
 	if err != nil {
 		return false, fmt.Errorf("issue CAT: %w", err)
 	}
@@ -118,4 +122,24 @@ func (c *RelationChecker) Check(ctx context.Context, t tokendef.Token, relation,
 	}
 
 	return checkResp.Permitted, nil
+}
+
+func (c *RelationChecker) issuer(audience string) *token.Issuer {
+	c.mu.RLock()
+	iss, ok := c.issuers[audience]
+	c.mu.RUnlock()
+	if ok {
+		return iss
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if iss, ok := c.issuers[audience]; ok {
+		return iss
+	}
+
+	iss = token.NewIssuer(c.keyProvider, audience)
+	c.issuers[audience] = iss
+	return iss
 }

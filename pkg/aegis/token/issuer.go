@@ -79,13 +79,9 @@ func (i *Issuer) IssueWithAudience(ctx context.Context, audience string, expires
 }
 
 func (i *Issuer) updateKey(rawKey []byte) error {
-	seed, err := pasetokit.ParseSeed(rawKey)
+	sk, err := paseto.NewV4AsymmetricSecretKeyFromBytes(rawKey)
 	if err != nil {
-		return fmt.Errorf("parse seed: %w", err)
-	}
-	sk, err := seed.DeriveSecretKey()
-	if err != nil {
-		return fmt.Errorf("derive secret key: %w", err)
+		return fmt.Errorf("parse secret key: %w", err)
 	}
 
 	pid, err := pasetokit.ComputePID(sk.Public())

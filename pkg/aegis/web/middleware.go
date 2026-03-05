@@ -2,7 +2,7 @@
 //
 // 使用示例：
 //
-//	factory := web.NewFactory("http://auth.example.com", encryptKeyStore, catKeyStore)
+//	factory := web.NewFactory("http://auth.example.com", encryptProvider, signProvider)
 //	mw := factory.WithAudience("my-service-id")
 //
 //	r.Use(mw.RequireAuth())                      // 仅认证
@@ -41,17 +41,13 @@ type Factory struct {
 	checker     *RelationChecker
 }
 
-// NewFactory 创建中间件工厂
-// signKeyProvider 内部通过 endpoint 自动创建 PublicKeyFetcher。
-func NewFactory(
-	endpoint string,
-	encryptKeyProvider key.Provider,
-	catKeyProvider key.Provider,
-) *Factory {
-	signKeyProvider := key.NewPublicKeyFetcher(endpoint)
+// NewFactory 创建中间件工厂。
+// encryptKeyProvider 提供解密密钥，signKeyProvider 提供签名密钥（用于 CAT 签发）。
+// 签名验证的公钥通过 endpoint 自动创建 PublicKeyFetcher 获取。
+func NewFactory(endpoint string, encryptKeyProvider, signKeyProvider key.Provider) *Factory {
 	return &Factory{
-		interpreter: NewInterpreter(signKeyProvider, encryptKeyProvider),
-		checker:     NewRelationChecker(endpoint, catKeyProvider),
+		interpreter: NewInterpreter(endpoint, encryptKeyProvider),
+		checker:     NewRelationChecker(endpoint, signKeyProvider),
 	}
 }
 

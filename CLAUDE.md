@@ -75,6 +75,7 @@ main.go + wire.go
 ```
 
 **关键约束**：
+
 - Aegis 不直接访问数据库，所有数据通过 Hermes 服务获取
 - Hermes 的 `models/` 是公开包（aegis 和 iris 依赖其数据类型）
 - Zwei 的 `internal/models/` 是内部包（仅 zwei 使用）
@@ -199,17 +200,17 @@ if req.ExpiresAt.IsPresent() {
 
 ### 必须使用 antd 组件替代原生 HTML 元素
 
-| 原生 HTML | antd 替代 | 说明 |
-| --- | --- | --- |
-| `<button>` | `Button` | 所有按钮必须使用 antd Button，根据场景选择 type（primary/default/text/link） |
-| `<input>` | `Input` / `Input.TextArea` / `InputNumber` | 表单输入统一用 antd Input 系列 |
-| `<select>` / `<option>` | `Select` | 下拉选择器 |
-| `<table>` | `Table` | 数据表格 |
-| `<form>` | `Form` + `Form.Item` | 表单容器 |
-| `<img>` | `Image` | 图片展示，支持预览、加载状态、错误处理 |
-| 加载占位 `<div>加载中...</div>` | `Spin` | 加载状态统一使用 Spin |
-| `<input type="checkbox">` | `Checkbox` | 复选框 |
-| `<input type="radio">` | `Radio` | 单选框 |
+| 原生 HTML                       | antd 替代                                  | 说明                                                                         |
+| ------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------- |
+| `<button>`                      | `Button`                                   | 所有按钮必须使用 antd Button，根据场景选择 type（primary/default/text/link） |
+| `<input>`                       | `Input` / `Input.TextArea` / `InputNumber` | 表单输入统一用 antd Input 系列                                               |
+| `<select>` / `<option>`         | `Select`                                   | 下拉选择器                                                                   |
+| `<table>`                       | `Table`                                    | 数据表格                                                                     |
+| `<form>`                        | `Form` + `Form.Item`                       | 表单容器                                                                     |
+| `<img>`                         | `Image`                                    | 图片展示，支持预览、加载状态、错误处理                                       |
+| 加载占位 `<div>加载中...</div>` | `Spin`                                     | 加载状态统一使用 Spin                                                        |
+| `<input type="checkbox">`       | `Checkbox`                                 | 复选框                                                                       |
+| `<input type="radio">`          | `Radio`                                    | 单选框                                                                       |
 
 ### 允许保留原生 HTML 的场景
 

@@ -27,7 +27,7 @@ type Service struct {
 	domainSigners     map[string]*Signer
 	serviceEncryptors map[string]*Encryptor
 	domainDecryptors  map[string]*pkgtoken.Decryptor // audience → Decryptor (signKey=domain, encryptKey=service)
-	appDecryptor      *pkgtoken.Decryptor            // CAT 专用 Decryptor (signKey=app, 不解密)
+	appExtractor      *pkgtoken.Extractor            // CAT 专用 Extractor (signKey=app, 只验签)
 	mu                sync.RWMutex
 }
 
@@ -46,7 +46,7 @@ func NewService(
 		domainSigners:      make(map[string]*Signer),
 		serviceEncryptors:  make(map[string]*Encryptor),
 		domainDecryptors:   make(map[string]*pkgtoken.Decryptor),
-		appDecryptor:       pkgtoken.NewDecryptor(nil, "", appKeyProvider),
+		appExtractor:       pkgtoken.NewExtractor("", appKeyProvider),
 	}
 }
 
@@ -98,17 +98,20 @@ func (s *Service) Verify(ctx context.Context, tokenString string) (Token, error)
 		return nil, fmt.Errorf("get client_id: %w", err)
 	}
 
-	var decryptor *pkgtoken.Decryptor
 	if tokenType == tokendef.TokenTypeCAT {
-		decryptor = s.appDecryptor
-	} else {
-		audience, err := tokendef.GetAudience(pasetoToken)
+		pasetoToken, err = s.appExtractor.Verifier(clientID).Verify(ctx, tokenString)
 		if err != nil {
-			return nil, fmt.Errorf("get audience: %w", err)
+			return nil, fmt.Errorf("verify signature: %w", err)
 		}
-		decryptor = s.domainDecryptor(audience)
+		return tokendef.ParseToken(pasetoToken, tokenType)
 	}
 
+	audience, err := tokendef.GetAudience(pasetoToken)
+	if err != nil {
+		return nil, fmt.Errorf("get audience: %w", err)
+	}
+
+	decryptor := s.domainDecryptor(audience)
 	pasetoToken, err = decryptor.Verifier(clientID).Verify(ctx, tokenString)
 	if err != nil {
 		return nil, fmt.Errorf("verify signature: %w", err)
@@ -198,7 +201,8 @@ func (s *Service) domainDecryptor(audience string) *pkgtoken.Decryptor {
 		return decryptor
 	}
 
-	decryptor = pkgtoken.NewDecryptor(s.serviceKeyProvider, audience, s.domainKeyProvider)
+	ext := pkgtoken.NewExtractor(audience, s.domainKeyProvider)
+	decryptor = pkgtoken.NewDecryptor(ext, s.serviceKeyProvider)
 	s.domainDecryptors[audience] = decryptor
 	return decryptor
 }

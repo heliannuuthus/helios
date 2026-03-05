@@ -59,13 +59,13 @@ func OptionalToken(v *web.Interpreter) gin.HandlerFunc {
 	}
 }
 
-// NewHermesKeyProvider 创建 Hermes 使用的密钥 Provider
-func NewHermesKeyProvider() (key.Provider, error) {
+// NewHermesKeyProvider 创建 Hermes 使用的 seed Provider
+func NewHermesKeyProvider() (*key.SeedProvider, error) {
 	masterKey, err := hermesconfig.GetAegisSecretKeyBytes()
 	if err != nil {
 		return nil, fmt.Errorf("get hermes aegis secret key: %w", err)
 	}
-	return key.LoadKeyFunc(func(_ context.Context, _ string) ([]byte, error) {
+	return key.SingleOf(func(_ context.Context, _ string) ([]byte, error) {
 		return masterKey, nil
 	}), nil
 }

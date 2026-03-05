@@ -18,7 +18,7 @@ var ErrDecryptFailed = pasetokit.ErrDecryptFailed
 // 内部缓存 lid → symmetric key 映射，通过 watcher 通知 rebuild。
 // 嵌入 extractor 以管理关联的 Verifier 实例。
 type Decryptor struct {
-	extractor
+	*Extractor
 
 	provider key.Provider
 
@@ -26,17 +26,17 @@ type Decryptor struct {
 	keys map[string]paseto.V4SymmetricKey
 }
 
-func NewDecryptor(encryptKeyProvider key.Provider, id string, signKeyProvider key.Provider) *Decryptor {
+func NewDecryptor(extractor *Extractor, encryptKeyProvider key.Provider) *Decryptor {
 	d := &Decryptor{
-		extractor: newExtractor(id, signKeyProvider),
+		Extractor: extractor,
 		provider:  encryptKeyProvider,
 	}
 
 	if encryptKeyProvider != nil {
 		if sub, ok := encryptKeyProvider.(key.Subscribable); ok {
-			sub.Subscribe(id, func(newKeys [][]byte) {
+			sub.Subscribe(d.id, func(newKeys [][]byte) {
 				if err := d.rebuild(newKeys); err != nil {
-					logger.Warnf("[Decryptor] rebuild keys failed for %s: %v", id, err)
+					logger.Warnf("[Decryptor] rebuild keys failed for %s: %v", d.id, err)
 				}
 			})
 		}
