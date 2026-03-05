@@ -15,6 +15,7 @@ type TokenRequest struct {
 // TokenResponse 标准 OAuth2 Token 响应（单 audience）
 type TokenResponse struct {
 	AccessToken  string `json:"access_token"`
+	IDToken      string `json:"id_token,omitempty"`      // scope 包含 openid 时返回
 	RefreshToken string `json:"refresh_token,omitempty"` // 只有 offline_access 时返回
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int    `json:"expires_in"`
