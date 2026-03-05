@@ -15,7 +15,6 @@ const (
 
 	paserkPublicPrefix = "k4.public."
 	paserkLocalPrefix  = "k4.local."
-	paserkSecretPrefix = "k4.secret."
 
 	paserkIDHashLen = 33 // BLAKE2b-264: 33 bytes → 44 chars base64url
 )
@@ -44,27 +43,6 @@ func ComputePID(publicKey gopaseto.V4AsymmetricPublicKey) (string, error) {
 func ComputeLID(symmetricKey gopaseto.V4SymmetricKey) (string, error) {
 	paserk := paserkLocalPrefix + base64.RawURLEncoding.EncodeToString(symmetricKey.ExportBytes())
 	return computeID(PASERKHeaderLID, paserk)
-}
-
-func ComputeSID(secretKey gopaseto.V4AsymmetricSecretKey) (string, error) {
-	paserk := paserkSecretPrefix + base64.RawURLEncoding.EncodeToString(secretKey.ExportBytes())
-	return computeID(PASERKHeaderSID, paserk)
-}
-
-func ComputePIDFromSeed(seed Seed) (string, error) {
-	pk, err := seed.DerivePublicKey()
-	if err != nil {
-		return "", fmt.Errorf("derive public key: %w", err)
-	}
-	return ComputePID(pk)
-}
-
-func ComputeLIDFromSeed(seed Seed) (string, error) {
-	sk, err := seed.DeriveSymmetricKey()
-	if err != nil {
-		return "", fmt.Errorf("derive symmetric key: %w", err)
-	}
-	return ComputeLID(sk)
 }
 
 func computeID(header, paserk string) (string, error) {
