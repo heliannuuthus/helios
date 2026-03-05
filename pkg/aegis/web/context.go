@@ -15,16 +15,15 @@ type TokenContext struct {
 }
 
 // NewTokenContext 从已解析的 token.Token 构造 TokenContext。
-// 仅接受 UAT / SAT / ChallengeToken，其他类型返回 error。
-func NewTokenContext(t tokendef.Token) (*TokenContext, error) {
-	tc := &TokenContext{}
+// 仅接受 UAT / SAT 作为 access token，其他类型返回 error。
+// challengeToken 可选，为 nil 时忽略。
+func NewTokenContext(t tokendef.Token, challengeToken *tokendef.ChallengeToken) (*TokenContext, error) {
+	tc := &TokenContext{challengeToken: challengeToken}
 	switch v := t.(type) {
 	case *tokendef.UserAccessToken:
 		tc.userAccessToken = v
 	case *tokendef.ServiceAccessToken:
 		tc.serviceAccessToken = v
-	case *tokendef.ChallengeToken:
-		tc.challengeToken = v
 	default:
 		return nil, fmt.Errorf("unsupported token type for TokenContext: %T", t)
 	}
@@ -44,9 +43,4 @@ func (tc *TokenContext) ServiceAccessToken() *tokendef.ServiceAccessToken {
 // ChallengeToken 返回验证凭证（来自 X-Challenge-Token header），无则返回 nil。
 func (tc *TokenContext) ChallengeToken() *tokendef.ChallengeToken {
 	return tc.challengeToken
-}
-
-// SetChallengeToken 追加 ChallengeToken 到已有 TokenContext。
-func (tc *TokenContext) SetChallengeToken(ct *tokendef.ChallengeToken) {
-	tc.challengeToken = ct
 }

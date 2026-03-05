@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -16,7 +15,7 @@ import (
 
 func RequireToken(v *web.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenStr := extractBearer(c.GetHeader("Authorization"))
+		tokenStr := web.TrimBearer(c.GetHeader(web.AuthorizationHeader))
 		if tokenStr == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "unauthorized"})
 			return
@@ -27,7 +26,7 @@ func RequireToken(v *web.Interpreter) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "unauthorized"})
 			return
 		}
-		tc, err := web.NewTokenContext(identity)
+		tc, err := web.NewTokenContext(identity, nil)
 		if err != nil {
 			logger.Warnf("[Auth] TokenContext failed - Path: %s, Error: %v", c.Request.URL.Path, err)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"detail": "unauthorized"})
@@ -40,7 +39,7 @@ func RequireToken(v *web.Interpreter) gin.HandlerFunc {
 
 func OptionalToken(v *web.Interpreter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenStr := extractBearer(c.GetHeader("Authorization"))
+		tokenStr := web.TrimBearer(c.GetHeader(web.AuthorizationHeader))
 		if tokenStr == "" {
 			c.Next()
 			return
@@ -50,7 +49,7 @@ func OptionalToken(v *web.Interpreter) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		tc, err := web.NewTokenContext(identity)
+		tc, err := web.NewTokenContext(identity, nil)
 		if err != nil {
 			c.Next()
 			return
@@ -60,13 +59,13 @@ func OptionalToken(v *web.Interpreter) gin.HandlerFunc {
 	}
 }
 
-// NewHermesKeyProvider 创建 Hermes 使用的密钥 Provider
-func NewHermesKeyProvider() (key.Provider, error) {
+// NewHermesKeyProvider 创建 Hermes 使用的 seed Provider
+func NewHermesKeyProvider() (*key.SeedProvider, error) {
 	masterKey, err := hermesconfig.GetAegisSecretKeyBytes()
 	if err != nil {
 		return nil, fmt.Errorf("get hermes aegis secret key: %w", err)
 	}
-	return key.LoadKeyFunc(func(_ context.Context, _ string) ([]byte, error) {
+	return key.SingleOf(func(_ context.Context, _ string) ([]byte, error) {
 		return masterKey, nil
 	}), nil
 }
@@ -76,11 +75,4 @@ func tokenPreview(tokenStr string, length int) string {
 		return tokenStr
 	}
 	return tokenStr[:length]
-}
-
-func extractBearer(authorization string) string {
-	if len(authorization) > 7 && strings.EqualFold(authorization[:7], "Bearer ") {
-		return authorization[7:]
-	}
-	return ""
 }

@@ -15,16 +15,8 @@ type GinFactory struct {
 }
 
 // NewGinFactory 创建 Gin 中间件工厂
-func NewGinFactory(
-	endpoint string,
-	signKeyProvider key.Provider,
-	encryptKeyProvider key.Provider,
-	catKeyProvider key.Provider,
-) *GinFactory {
-	factory := NewFactory(endpoint, signKeyProvider, encryptKeyProvider, catKeyProvider)
-	return &GinFactory{
-		Factory: factory,
-	}
+func NewGinFactory(endpoint string, encryptKeyProvider, signKeyProvider key.Provider) *GinFactory {
+	return &GinFactory{Factory: NewFactory(endpoint, encryptKeyProvider, signKeyProvider)}
 }
 
 // WithAudience 为特定 audience 创建 Gin 中间件

@@ -118,7 +118,7 @@ func GetAudience(t *paseto.Token) (string, error) {
 
 // ==================== Token Parsing ====================
 
-// ParseToken parses a PASETO token into a concrete Token type.
+// ParseToken parses a PASETO token into a concrete Token of the given type.
 func ParseToken(pasetoToken *paseto.Token, tokenType TokenType) (Token, error) {
 	switch tokenType {
 	case TokenTypeCAT:

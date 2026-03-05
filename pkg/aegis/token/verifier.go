@@ -13,23 +13,24 @@ import (
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// Verifier verifies PASETO v4.public tokens using kid-based key matching.
-// 内部缓存 pid → public key 映射，通过 watcher 通知 rebuild。
+// Verifier 验签 PASETO v4.public token。
+// 嵌入 Extractor 获取 Provider、audience 和 ExtractKID 能力，
+// 自身管理 per-clientID 的 typed key 缓存。
 type Verifier struct {
-	provider key.Provider
-	id       string
+	*extractor
+	clientID string
 
 	mu   sync.RWMutex
 	keys map[string]paseto.V4AsymmetricPublicKey
 }
 
-func NewVerifier(provider key.Provider, id string) *Verifier {
-	v := &Verifier{provider: provider, id: id}
+func newVerifier(ext *extractor, clientID string) *Verifier {
+	v := &Verifier{extractor: ext, clientID: clientID}
 
-	if sub, ok := provider.(key.Subscribable); ok {
-		sub.Subscribe(id, func(newKeys [][]byte) {
+	if sub, ok := ext.Provider.(key.Subscribable); ok {
+		sub.Subscribe(clientID, func(newKeys [][]byte) {
 			if err := v.rebuild(newKeys); err != nil {
-				logger.Warnf("[Verifier] rebuild keys failed for %s: %v", id, err)
+				logger.Warnf("[Verifier] rebuild keys failed for %s: %v", clientID, err)
 			}
 		})
 	}
@@ -38,7 +39,7 @@ func NewVerifier(provider key.Provider, id string) *Verifier {
 }
 
 func (v *Verifier) Verify(ctx context.Context, tokenString string) (*paseto.Token, error) {
-	kid, err := pasetokit.ExtractKID(tokenString)
+	kid, err := v.ExtractKID(tokenString)
 	if err != nil {
 		return nil, fmt.Errorf("extract kid: %w", err)
 	}
@@ -56,6 +57,9 @@ func (v *Verifier) Verify(ctx context.Context, tokenString string) (*paseto.Toke
 
 	parser := paseto.NewParser()
 	parser.AddRule(paseto.ValidAt(time.Now()))
+	if v.audience != "" {
+		parser.AddRule(paseto.ForAudience(v.audience))
+	}
 
 	pasetoToken, err := parser.ParseV4Public(pk, tokenString, nil)
 	if err != nil {
@@ -73,7 +77,7 @@ func (v *Verifier) ensure(ctx context.Context) error {
 		return nil
 	}
 
-	rawKeys, err := v.provider.AllOfKey(ctx, v.id)
+	rawKeys, err := v.AllOfKey(ctx, v.clientID)
 	if err != nil {
 		return fmt.Errorf("load keys: %w", err)
 	}
