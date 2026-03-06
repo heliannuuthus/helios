@@ -14,7 +14,7 @@ import (
 	config2 "github.com/heliannuuthus/helios/hermes/config"
 	"github.com/heliannuuthus/helios/iris"
 	"github.com/heliannuuthus/helios/zwei"
-	config4 "github.com/heliannuuthus/helios/zwei/config"
+	"github.com/heliannuuthus/helios/zwei/config"
 )
 
 import (
@@ -25,21 +25,21 @@ import (
 
 // InitializeApp 初始化应用（由 wire 生成）
 func InitializeApp() (*App, error) {
-	zweiZwei := provideZwei()
+	zwei := provideZwei()
 	service := provideHermesService()
-	aegisHandler, err := provideAegisHandler(service)
+	handler, err := provideAegisHandler(service)
 	if err != nil {
 		return nil, err
 	}
-	irisHandler := provideIrisHandler(aegisHandler)
+	irisHandler := provideIrisHandler(handler)
 	hermesHandler := provideHermesHandler(service)
 	chaosHandler, err := provideChaosHandler()
 	if err != nil {
 		return nil, err
 	}
 	app := &App{
-		Zwei:          zweiZwei,
-		AegisHandler:  aegisHandler,
+		Zwei:          zwei,
+		AegisHandler:  handler,
 		IrisHandler:   irisHandler,
 		HermesHandler: hermesHandler,
 		ChaosHandler:  chaosHandler,
@@ -50,7 +50,8 @@ func InitializeApp() (*App, error) {
 // wire.go:
 
 // ProviderSet 提供者集合
-var ProviderSet = wire.NewSet(provideZwei,
+var ProviderSet = wire.NewSet(
+	provideZwei,
 	provideHermesService,
 	provideHermesHandler,
 	provideAegisHandler,
@@ -69,7 +70,7 @@ type App struct {
 
 // Zwei 业务模块
 func provideZwei() *zwei.Zwei {
-	return zwei.New(config4.InitDB())
+	return zwei.New(config.InitDB())
 }
 
 // Hermes Service（供 aegis 模块复用）

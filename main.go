@@ -14,8 +14,10 @@ import (
 	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
 	irisconfig "github.com/heliannuuthus/helios/iris/config"
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
+	"github.com/heliannuuthus/helios/pkg/aegis/utils/relation"
 	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/aegis/web/guard"
+	reqr "github.com/heliannuuthus/helios/pkg/aegis/web/requirement"
 	"github.com/heliannuuthus/helios/pkg/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -116,8 +118,7 @@ func main() {
 	}
 
 	// Iris 用户信息路由
-	factory := web.NewFactory()
-	irisGuard := guard.NewGinGuard(factory.WithAudience(irisconfig.GetAegisAudience()))
+	irisGuard := guard.NewGinGuard(irisconfig.GetAegisAudience())
 	userGroup := r.Group("/user")
 	{
 		userRoutes := []struct {
@@ -152,8 +153,9 @@ func main() {
 	app.Zwei.RegisterRoutes(r)
 
 	// Hermes 身份与访问管理路由
-	hermesGuard := guard.NewGinGuard(factory.WithAudience(hermesconfig.GetAegisAudience()))
-	adminRelation := hermesGuard.Require(web.Relation("admin"))
+	hermesAud := hermesconfig.GetAegisAudience()
+	hermesGuard := guard.NewGinGuard(hermesAud)
+	adminRelation := hermesGuard.Require(reqr.Relation(relation.Qualify("admin", "service:"+hermesAud)))
 	hermes := r.Group("/hermes")
 	hermes.Use(hermesGuard.Require())
 	{
@@ -235,5 +237,5 @@ func initTokenManager() {
 	seed := key.SingleOf(func(_ context.Context, _ string) ([]byte, error) {
 		return masterKey, nil
 	})
-	web.InitManager(endpoint, seed)
+	web.NewTokenManager(endpoint, seed)
 }

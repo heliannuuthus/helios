@@ -26,7 +26,7 @@ definitions:
       created_at:
         type: string
       recipe:
-        $ref: '#/definitions/zwei.RecipeListItem'
+        $ref: '#/definitions/types.RecipeListItem'
       recipe_id:
         type: string
     type: object
@@ -56,7 +56,7 @@ definitions:
   history.HistoryListItem:
     properties:
       recipe:
-        $ref: '#/definitions/zwei.RecipeListItem'
+        $ref: '#/definitions/types.RecipeListItem'
       recipe_id:
         type: string
       viewed_at:
@@ -306,7 +306,7 @@ definitions:
           $ref: '#/definitions/recipe.StepResponse'
         type: array
       tags:
-        $ref: '#/definitions/zwei.TagsGrouped'
+        $ref: '#/definitions/types.TagsGrouped'
       total_time_minutes:
         type: integer
     type: object
@@ -400,10 +400,9 @@ definitions:
       name:
         type: string
       reason:
-        description: 该菜品的推荐理由
         type: string
       tags:
-        $ref: '#/definitions/zwei.TagsGrouped'
+        $ref: '#/definitions/types.TagsGrouped'
       total_time_minutes:
         type: integer
     type: object
@@ -494,7 +493,7 @@ definitions:
     required:
     - label
     type: object
-  zwei.RecipeListItem:
+  types.RecipeListItem:
     properties:
       category:
         type: string
@@ -509,11 +508,11 @@ definitions:
       name:
         type: string
       tags:
-        $ref: '#/definitions/zwei.TagsGrouped'
+        $ref: '#/definitions/types.TagsGrouped'
       total_time_minutes:
         type: integer
     type: object
-  zwei.TagsGrouped:
+  types.TagsGrouped:
     properties:
       cuisines:
         items:
@@ -564,7 +563,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/zwei.RecipeListItem'
+              $ref: '#/definitions/types.RecipeListItem'
             type: array
       summary: 获取热门菜谱（按收藏数排序）
       tags:
@@ -584,7 +583,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/zwei.RecipeListItem'
+              $ref: '#/definitions/types.RecipeListItem'
             type: array
       summary: 获取推荐菜谱（随机）
       tags:
@@ -636,7 +635,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/zwei.RecipeListItem'
+              $ref: '#/definitions/types.RecipeListItem'
             type: array
       summary: 获取菜谱列表
       tags:

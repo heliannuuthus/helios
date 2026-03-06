@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/web"
-	zweitypes "github.com/heliannuuthus/helios/zwei/internal/types"
+	"github.com/heliannuuthus/helios/zwei/internal/dto"
 )
 
 // Handler 收藏处理器
@@ -35,7 +35,7 @@ type FavoriteResponse struct {
 type FavoriteListItem struct {
 	RecipeID  string               `json:"recipe_id"`
 	CreatedAt string               `json:"created_at"`
-	Recipe    *zweitypes.RecipeListItem `json:"recipe,omitempty"`
+	Recipe    *dto.RecipeListItem `json:"recipe,omitempty"`
 }
 
 type FavoriteListResponse struct {
@@ -171,13 +171,13 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 		}
 
 		if f.Recipe != nil {
-			item.Recipe = &zweitypes.RecipeListItem{
+			item.Recipe = &dto.RecipeListItem{
 				ID:               f.Recipe.RecipeID,
 				Name:             f.Recipe.Name,
 				Description:      f.Recipe.Description,
 				Category:         f.Recipe.Category,
 				Difficulty:       f.Recipe.Difficulty,
-				Tags:             zweitypes.GroupTags(f.Recipe.Tags),
+				Tags:             dto.GroupTags(f.Recipe.Tags),
 				ImagePath:        f.Recipe.GetImagePath(),
 				TotalTimeMinutes: f.Recipe.TotalTimeMinutes,
 			}

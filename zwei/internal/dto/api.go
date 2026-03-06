@@ -1,4 +1,4 @@
-package types
+package dto
 
 import "github.com/heliannuuthus/helios/zwei/internal/models"
 

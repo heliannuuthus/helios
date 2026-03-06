@@ -10,7 +10,6 @@ import (
 	"github.com/heliannuuthus/helios/chaos/internal/storage"
 	"github.com/heliannuuthus/helios/chaos/internal/template"
 	"github.com/heliannuuthus/helios/chaos/models"
-	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/aegis/web/guard"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -46,8 +45,9 @@ func New(db *gorm.DB) (*Chaos, error) {
 		}
 	}
 
-	g := guard.NewGinGuard(web.NewFactory().WithAudience(config.GetAegisAudience()))
-	handler := NewHandler(g, mailSvc, templateSvc, storageSvc)
+	aud := config.GetAegisAudience()
+	g := guard.NewGinGuard(aud)
+	handler := NewHandler(g, aud, mailSvc, templateSvc, storageSvc)
 
 	return &Chaos{
 		handler:         handler,

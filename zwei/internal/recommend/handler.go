@@ -10,7 +10,7 @@ import (
 
 	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	zweitypes "github.com/heliannuuthus/helios/zwei/internal/types"
+	"github.com/heliannuuthus/helios/zwei/internal/dto"
 )
 
 // Handler 推荐处理器
@@ -36,7 +36,7 @@ type RecommendRequest struct {
 
 // RecommendRecipeItem 推荐菜品项（包含推荐理由）
 type RecommendRecipeItem struct {
-	zweitypes.RecipeListItem
+	dto.RecipeListItem
 	Reason string `json:"reason"`
 }
 
@@ -115,13 +115,13 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 
 	for i, r := range result.Recipes {
 		response.Recipes[i] = RecommendRecipeItem{
-			RecipeListItem: zweitypes.RecipeListItem{
+			RecipeListItem: dto.RecipeListItem{
 				ID:               r.Recipe.RecipeID,
 				Name:             r.Recipe.Name,
 				Description:      r.Recipe.Description,
 				Category:         r.Recipe.Category,
 				Difficulty:       r.Recipe.Difficulty,
-				Tags:             zweitypes.GroupTags(r.Recipe.Tags),
+				Tags:             dto.GroupTags(r.Recipe.Tags),
 				ImagePath:        r.Recipe.GetImagePath(),
 				TotalTimeMinutes: r.Recipe.TotalTimeMinutes,
 			},
