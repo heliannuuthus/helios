@@ -100,7 +100,7 @@ func (a *FactorAuthenticator) Authenticate(ctx context.Context, flow *types.Auth
 	}
 
 	// 通过 IDP Provider 查找用户信息并填充 identity
-	principal := ct.GetSubject()
+	principal := ct.Subject()
 	idpAuth, ok := authenticator.GlobalRegistry().Get(delegatingIDP)
 	if !ok {
 		return false, autherrors.NewServerErrorf("delegating IDP %q not registered", delegatingIDP)

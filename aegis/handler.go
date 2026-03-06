@@ -548,47 +548,41 @@ func (h *Handler) Token(c *gin.Context) {
 // --- 权限检查 ---
 
 // Check POST /auth/check
-// 关系检查接口（使用 CAT 认证）
+// 关系检查接口（使用 CT 认证）
 // 检查指定主体是否具有指定的关系权限
 // 返回：
 //   - 200: 检查完成（permitted: true/false）
-//   - 401: CAT 无效
+//   - 401: CT 无效
 func (h *Handler) Check(c *gin.Context) {
-	// 1. 验证 CAT
-	cat := c.GetHeader(HeaderAuthorization)
-	if cat == "" {
+	ctStr := c.GetHeader(HeaderAuthorization)
+	if ctStr == "" {
 		c.JSON(http.StatusUnauthorized, CheckResponse{
-			Permitted: false,
-			Error:     "unauthorized",
-			Message:   "missing CAT",
+			Error:   "unauthorized",
+			Message: "missing CT",
 		})
 		return
 	}
 
-	// 去掉 Bearer 前缀
-	if len(cat) > 7 && cat[:7] == "Bearer " {
-		cat = cat[7:]
+	if len(ctStr) > 7 && ctStr[:7] == "Bearer " {
+		ctStr = ctStr[7:]
 	}
 
 	ctx := c.Request.Context()
 
-	// 验证 CAT
-	t, err := h.tokenSvc.Verify(ctx, cat)
+	t, err := h.tokenSvc.Verify(ctx, ctStr)
 	if err != nil {
-		logger.Debugf("[Handler] verify CAT failed: %v", err)
+		logger.Debugf("[Handler] verify CT failed: %v", err)
 		c.JSON(http.StatusUnauthorized, CheckResponse{
-			Permitted: false,
-			Error:     "unauthorized",
-			Message:   "invalid CAT",
+			Error:   "unauthorized",
+			Message: "invalid CT",
 		})
 		return
 	}
-	catClaims, ok := t.(*token.ClientAccessToken)
+	catClaims, ok := t.(*token.ClientToken)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, CheckResponse{
-			Permitted: false,
-			Error:     "unauthorized",
-			Message:   "expected CAT token",
+			Error:   "unauthorized",
+			Message: "expected CT token",
 		})
 		return
 	}
@@ -600,10 +594,8 @@ func (h *Handler) Check(c *gin.Context) {
 		return
 	}
 
-	// 3. 获取 serviceID（使用 CAT 签发者的 clientID 查询其所属服务）
-	serviceID := catClaims.GetClientID()
+	serviceID := catClaims.ClientID()
 
-	// 4. 设置默认值
 	objectType := req.ObjectType
 	if objectType == "" {
 		objectType = "*"
@@ -613,20 +605,18 @@ func (h *Handler) Check(c *gin.Context) {
 		objectID = "*"
 	}
 
-	// 5. 检查关系
-	hasRelation, err := h.authorizeSvc.CheckRelation(ctx, serviceID, req.SubjectID, req.Relation, objectType, objectID)
+	results, err := h.authorizeSvc.CheckRelations(ctx, serviceID, req.SubjectID, req.Relations, objectType, objectID)
 	if err != nil {
 		logger.Warnf("[Handler] check relation failed: %v", err)
 		c.JSON(http.StatusInternalServerError, CheckResponse{
-			Permitted: false,
-			Error:     "internal_error",
-			Message:   "check relation failed",
+			Error:   "internal_error",
+			Message: "check relation failed",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, CheckResponse{
-		Permitted: hasRelation,
+		Results: results,
 	})
 }
 
@@ -635,7 +625,7 @@ func (h *Handler) Check(c *gin.Context) {
 // UserInfo GET /auth/userinfo
 // 从 UAT 中解密用户信息并返回脱敏结构
 func (h *Handler) UserInfo(c *gin.Context) {
-	tc := web.TokenContextFromGin(c)
+	tc := web.GetTokenContext(c.Request.Context())
 	if tc == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error":             "invalid_token",
@@ -644,8 +634,8 @@ func (h *Handler) UserInfo(c *gin.Context) {
 		return
 	}
 
-	uat := tc.UserAccessToken()
-	if uat == nil || !uat.Identified() {
+	at := tc.AccessToken
+	if !at.Identified() {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error":             "invalid_token",
 			"error_description": "token does not contain user info",
@@ -653,13 +643,13 @@ func (h *Handler) UserInfo(c *gin.Context) {
 		return
 	}
 
-	email := uat.Email()
-	phone := uat.Phone()
+	email := at.Email()
+	phone := at.Phone()
 
 	resp := &UserInfoResponse{
-		Sub:           uat.OpenID(),
-		Nickname:      uat.Nickname(),
-		Picture:       uat.Picture(),
+		Sub:           at.OpenID(),
+		Nickname:      at.Nickname(),
+		Picture:       at.Picture(),
 		Email:         helpers.MaskEmail(email),
 		EmailVerified: email != "",
 		Phone:         helpers.MaskPhone(phone),
@@ -690,7 +680,7 @@ func (h *Handler) Revoke(c *gin.Context) {
 // Logout POST /auth/logout
 // 登出（撤销 refresh token + 清除 SSO cookie）
 func (h *Handler) Logout(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 	if openID == "" {
 		clearSSOCookie(c)
 		c.Status(http.StatusOK)

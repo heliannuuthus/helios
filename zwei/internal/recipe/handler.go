@@ -9,8 +9,8 @@ import (
 
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/patch"
-	"github.com/heliannuuthus/helios/zwei"
 	"github.com/heliannuuthus/helios/zwei/internal/models"
+	"github.com/heliannuuthus/helios/zwei/internal/dto"
 )
 
 // Handler 菜谱处理器
@@ -91,7 +91,7 @@ type RecipeResponse struct {
 	ImagePath        *string              `json:"image_path"`
 	Category         string               `json:"category"`
 	Difficulty       int                  `json:"difficulty"`
-	Tags             zwei.TagsGrouped     `json:"tags"`
+	Tags             dto.TagsGrouped `json:"tags"`
 	Servings         int                  `json:"servings"`
 	PrepTimeMinutes  *int                 `json:"prep_time_minutes"`
 	CookTimeMinutes  *int                 `json:"cook_time_minutes"`
@@ -196,7 +196,7 @@ func (h *Handler) CreateRecipe(c *gin.Context) {
 // @Param search query string false "搜索关键词"
 // @Param limit query int false "限制数量" default(100)
 // @Param offset query int false "偏移量" default(0)
-// @Success 200 {array} zwei.RecipeListItem
+// @Success 200 {array} dto.RecipeListItem
 // @Router /api/recipes [get]
 func (h *Handler) GetRecipes(c *gin.Context) {
 	category := c.Query("category")
@@ -220,15 +220,15 @@ func (h *Handler) GetRecipes(c *gin.Context) {
 		return
 	}
 
-	items := make([]zwei.RecipeListItem, len(recipes))
+	items := make([]dto.RecipeListItem, len(recipes))
 	for i, r := range recipes {
-		items[i] = zwei.RecipeListItem{
+		items[i] = dto.RecipeListItem{
 			ID:               r.RecipeID,
 			Name:             r.Name,
 			Description:      r.Description,
 			Category:         r.Category,
 			Difficulty:       r.Difficulty,
-			Tags:             zwei.GroupTags(r.Tags),
+			Tags:             dto.GroupTags(r.Tags),
 			ImagePath:        r.GetImagePath(),
 			TotalTimeMinutes: r.TotalTimeMinutes,
 		}
@@ -522,7 +522,7 @@ func (h *Handler) toRecipeResponse(r *models.Recipe) *RecipeResponse {
 		images = []string{}
 	}
 
-	tags := zwei.GroupTags(r.Tags)
+	tags := dto.GroupTags(r.Tags)
 
 	return &RecipeResponse{
 		ID:               r.RecipeID,

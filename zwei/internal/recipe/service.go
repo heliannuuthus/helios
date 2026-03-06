@@ -12,7 +12,7 @@ import (
 
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/zwei/internal/models"
-	"github.com/heliannuuthus/helios/zwei/tag"
+	"github.com/heliannuuthus/helios/zwei/internal/tag"
 )
 
 const (

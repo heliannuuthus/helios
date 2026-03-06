@@ -2,7 +2,6 @@ package token
 
 import (
 	"fmt"
-	"time"
 
 	"aidanwoods.dev/go-paseto"
 	"github.com/go-json-experiment/json"
@@ -154,10 +153,6 @@ func (u *UserAccessToken) Build() (*paseto.Token, error) {
 		return nil, fmt.Errorf("set scope: %w", err)
 	}
 	return &t, nil
-}
-
-func (u *UserAccessToken) ExpiresIn() time.Duration {
-	return u.GetExpiresIn()
 }
 
 // Scopes 返回 scope 集合。

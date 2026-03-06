@@ -3,7 +3,6 @@ package key
 import (
 	"context"
 	"crypto/subtle"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -15,34 +14,22 @@ type derivedEntry struct {
 	derived []byte
 }
 
-// SeedProvider 从 seed 加载函数创建的 Provider，支持按 purpose 派生密钥。
-type SeedProvider struct {
-	single  func(ctx context.Context, id string) ([]byte, error)
-	multi   func(ctx context.Context, id string) ([][]byte, error)
+// derivedProvider 从原始 seed Provider 派生密钥的内部实现。
+type derivedProvider struct {
+	source  Provider
 	purpose string
-	derive  func(pasetokit.Seed) ([]byte, error)
+	inner   func(pasetokit.Seed) ([]byte, error)
 
 	mu    sync.RWMutex
 	cache []derivedEntry
 }
 
-// SingleOf 从单密钥加载函数创建 Provider。
-func SingleOf(fn func(ctx context.Context, id string) ([]byte, error)) *SeedProvider {
-	return &SeedProvider{single: fn}
-}
-
-// MultiOf 从多密钥加载函数创建 Provider。
-func MultiOf(fn func(ctx context.Context, id string) ([][]byte, error)) *SeedProvider {
-	return &SeedProvider{multi: fn}
-}
-
-// Encrypt 返回派生 symmetric key（用于加解密）的新 Provider。
-func (dp *SeedProvider) Encrypt() *SeedProvider {
-	return &SeedProvider{
-		single:  dp.single,
-		multi:   dp.multi,
+// EncryptKeyProvider 从 seed Provider 派生对称密钥（用于加解密），返回新的 Provider。
+func EncryptKeyProvider(source Provider) Provider {
+	return &derivedProvider{
+		source:  source,
 		purpose: pasetokit.PurposeEncrypt,
-		derive: func(s pasetokit.Seed) ([]byte, error) {
+		inner: func(s pasetokit.Seed) ([]byte, error) {
 			sk, err := s.DeriveSymmetricKey()
 			if err != nil {
 				return nil, err
@@ -52,13 +39,12 @@ func (dp *SeedProvider) Encrypt() *SeedProvider {
 	}
 }
 
-// Sign 返回派生 secret key（用于签名）的新 Provider。
-func (dp *SeedProvider) Sign() *SeedProvider {
-	return &SeedProvider{
-		single:  dp.single,
-		multi:   dp.multi,
+// SignKeyProvider 从 seed Provider 派生签名密钥（Ed25519 私钥），返回新的 Provider。
+func SignKeyProvider(source Provider) Provider {
+	return &derivedProvider{
+		source:  source,
 		purpose: pasetokit.PurposeSign,
-		derive: func(s pasetokit.Seed) ([]byte, error) {
+		inner: func(s pasetokit.Seed) ([]byte, error) {
 			sk, err := s.DeriveSecretKey()
 			if err != nil {
 				return nil, err
@@ -68,63 +54,31 @@ func (dp *SeedProvider) Sign() *SeedProvider {
 	}
 }
 
-var errNoKeySource = errors.New("key: no key source configured")
-
-func (dp *SeedProvider) OneOfKey(ctx context.Context, id string) ([]byte, error) {
-	if dp.single != nil {
-		raw, err := dp.single(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		return dp.maybeDerive(raw)
+func (dp *derivedProvider) OneOfKey(ctx context.Context, id string) ([]byte, error) {
+	raw, err := dp.source.OneOfKey(ctx, id)
+	if err != nil {
+		return nil, err
 	}
-	if dp.multi != nil {
-		keys, err := dp.AllOfKey(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if len(keys) == 0 {
-			return nil, ErrNotFound
-		}
-		return keys[0], nil
-	}
-	return nil, errNoKeySource
+	return dp.deriveKey(raw)
 }
 
-func (dp *SeedProvider) AllOfKey(ctx context.Context, id string) ([][]byte, error) {
-	if dp.multi != nil {
-		raws, err := dp.multi(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		result := make([][]byte, 0, len(raws))
-		for _, raw := range raws {
-			derived, err := dp.maybeDerive(raw)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, derived)
-		}
-		return result, nil
+func (dp *derivedProvider) AllOfKey(ctx context.Context, id string) ([][]byte, error) {
+	raws, err := dp.source.AllOfKey(ctx, id)
+	if err != nil {
+		return nil, err
 	}
-	if dp.single != nil {
-		raw, err := dp.single(ctx, id)
+	result := make([][]byte, 0, len(raws))
+	for _, raw := range raws {
+		derived, err := dp.deriveKey(raw)
 		if err != nil {
 			return nil, err
 		}
-		derived, err := dp.maybeDerive(raw)
-		if err != nil {
-			return nil, err
-		}
-		return [][]byte{derived}, nil
+		result = append(result, derived)
 	}
-	return nil, errNoKeySource
+	return result, nil
 }
 
-func (dp *SeedProvider) maybeDerive(raw []byte) ([]byte, error) {
-	if dp.derive == nil {
-		return raw, nil
-	}
+func (dp *derivedProvider) deriveKey(raw []byte) ([]byte, error) {
 	if cached := dp.lookup(raw); cached != nil {
 		return cached, nil
 	}
@@ -132,7 +86,7 @@ func (dp *SeedProvider) maybeDerive(raw []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse seed for %s: %w", dp.purpose, err)
 	}
-	derived, err := dp.derive(seed)
+	derived, err := dp.inner(seed)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +94,7 @@ func (dp *SeedProvider) maybeDerive(raw []byte) ([]byte, error) {
 	return derived, nil
 }
 
-func (dp *SeedProvider) lookup(raw []byte) []byte {
+func (dp *derivedProvider) lookup(raw []byte) []byte {
 	dp.mu.RLock()
 	defer dp.mu.RUnlock()
 	for _, e := range dp.cache {
@@ -151,7 +105,7 @@ func (dp *SeedProvider) lookup(raw []byte) []byte {
 	return nil
 }
 
-func (dp *SeedProvider) store(raw, derived []byte) {
+func (dp *derivedProvider) store(raw, derived []byte) {
 	rawCopy := make([]byte, len(raw))
 	copy(rawCopy, raw)
 

@@ -9,7 +9,7 @@ import (
 
 	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/zwei/tag"
+	"github.com/heliannuuthus/helios/zwei/internal/tag"
 )
 
 // Handler 用户偏好处理器
@@ -54,11 +54,7 @@ func (h *Handler) GetOptions(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/user/preference [get]
 func (h *Handler) GetUserPreferences(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	prefs, err := h.service.GetUserPreferences(openID)
 	if err != nil {
@@ -84,11 +80,7 @@ func (h *Handler) GetUserPreferences(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/user/preference [put]
 func (h *Handler) UpdateUserPreferences(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	var req UpdatePreferencesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

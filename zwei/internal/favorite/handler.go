@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/web"
-	"github.com/heliannuuthus/helios/zwei"
+	"github.com/heliannuuthus/helios/zwei/internal/dto"
 )
 
 // Handler 收藏处理器
@@ -35,7 +35,7 @@ type FavoriteResponse struct {
 type FavoriteListItem struct {
 	RecipeID  string               `json:"recipe_id"`
 	CreatedAt string               `json:"created_at"`
-	Recipe    *zwei.RecipeListItem `json:"recipe,omitempty"`
+	Recipe    *dto.RecipeListItem `json:"recipe,omitempty"`
 }
 
 type FavoriteListResponse struct {
@@ -66,11 +66,7 @@ type BatchCheckResponse struct {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites [post]
 func (h *Handler) AddFavorite(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	var req FavoriteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -98,11 +94,7 @@ func (h *Handler) AddFavorite(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites/{recipe_id} [delete]
 func (h *Handler) RemoveFavorite(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveFavorite(openID, recipeID); err != nil {
@@ -122,11 +114,7 @@ func (h *Handler) RemoveFavorite(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites/{recipe_id}/check [get]
 func (h *Handler) CheckFavorite(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 	recipeID := c.Param("recipe_id")
 
 	isFavorite, err := h.service.IsFavorite(openID, recipeID)
@@ -152,11 +140,7 @@ func (h *Handler) CheckFavorite(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites [get]
 func (h *Handler) GetFavorites(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	category := c.Query("category")
 	search := c.Query("search")
@@ -187,13 +171,13 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 		}
 
 		if f.Recipe != nil {
-			item.Recipe = &zwei.RecipeListItem{
+			item.Recipe = &dto.RecipeListItem{
 				ID:               f.Recipe.RecipeID,
 				Name:             f.Recipe.Name,
 				Description:      f.Recipe.Description,
 				Category:         f.Recipe.Category,
 				Difficulty:       f.Recipe.Difficulty,
-				Tags:             zwei.GroupTags(f.Recipe.Tags),
+				Tags:             dto.GroupTags(f.Recipe.Tags),
 				ImagePath:        f.Recipe.GetImagePath(),
 				TotalTimeMinutes: f.Recipe.TotalTimeMinutes,
 			}
@@ -218,11 +202,7 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites/batch-check [post]
 func (h *Handler) BatchCheckFavorites(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	var req BatchCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

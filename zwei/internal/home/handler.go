@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/zwei"
 	"github.com/heliannuuthus/helios/zwei/config"
-	"github.com/heliannuuthus/helios/zwei/recipe"
+	"github.com/heliannuuthus/helios/zwei/internal/dto"
+	"github.com/heliannuuthus/helios/zwei/internal/recipe"
 )
 
 // Handler 首页处理器
@@ -50,7 +50,7 @@ func (h *Handler) GetBanners(c *gin.Context) {
 // @Tags home
 // @Produce json
 // @Param limit query int false "数量限制" default(4)
-// @Success 200 {array} zwei.RecipeListItem
+// @Success 200 {array} dto.RecipeListItem
 // @Router /api/home/recommend [get]
 func (h *Handler) GetRecommendRecipes(c *gin.Context) {
 	limit, err := strconv.Atoi(c.DefaultQuery("limit", "4"))
@@ -69,7 +69,7 @@ func (h *Handler) GetRecommendRecipes(c *gin.Context) {
 // @Tags home
 // @Produce json
 // @Param limit query int false "数量限制" default(6)
-// @Success 200 {array} zwei.RecipeListItem
+// @Success 200 {array} dto.RecipeListItem
 // @Router /api/home/hot [get]
 func (h *Handler) GetHotRecipes(c *gin.Context) {
 	limit, err := strconv.Atoi(c.DefaultQuery("limit", "6"))
@@ -125,21 +125,21 @@ func (h *Handler) loadBannersFromConfig() []BannerItem {
 	return banners
 }
 
-func (h *Handler) getHotRecipes(count int) []zwei.RecipeListItem {
+func (h *Handler) getHotRecipes(count int) []dto.RecipeListItem {
 	recipes, err := h.recipeService.GetHotRecipes(count, nil)
 	if err != nil || len(recipes) == 0 {
-		return []zwei.RecipeListItem{}
+		return []dto.RecipeListItem{}
 	}
 
-	items := make([]zwei.RecipeListItem, len(recipes))
+	items := make([]dto.RecipeListItem, len(recipes))
 	for i, r := range recipes {
-		items[i] = zwei.RecipeListItem{
+		items[i] = dto.RecipeListItem{
 			ID:               r.RecipeID,
 			Name:             r.Name,
 			Description:      r.Description,
 			Category:         r.Category,
 			Difficulty:       r.Difficulty,
-			Tags:             zwei.GroupTags(r.Tags),
+			Tags:             dto.GroupTags(r.Tags),
 			ImagePath:        r.GetImagePath(),
 			TotalTimeMinutes: r.TotalTimeMinutes,
 		}
@@ -148,21 +148,21 @@ func (h *Handler) getHotRecipes(count int) []zwei.RecipeListItem {
 	return items
 }
 
-func (h *Handler) getRandomRecipes(count int) []zwei.RecipeListItem {
+func (h *Handler) getRandomRecipes(count int) []dto.RecipeListItem {
 	recipes, err := h.recipeService.GetRecipes("", "", 100, 0)
 	if err != nil || len(recipes) == 0 {
-		return []zwei.RecipeListItem{}
+		return []dto.RecipeListItem{}
 	}
 
-	var items []zwei.RecipeListItem
+	var items []dto.RecipeListItem
 	for _, r := range recipes {
-		items = append(items, zwei.RecipeListItem{
+		items = append(items, dto.RecipeListItem{
 			ID:               r.RecipeID,
 			Name:             r.Name,
 			Description:      r.Description,
 			Category:         r.Category,
 			Difficulty:       r.Difficulty,
-			Tags:             zwei.GroupTags(r.Tags),
+			Tags:             dto.GroupTags(r.Tags),
 			ImagePath:        r.GetImagePath(),
 			TotalTimeMinutes: r.TotalTimeMinutes,
 		})

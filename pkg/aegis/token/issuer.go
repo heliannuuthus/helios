@@ -15,7 +15,7 @@ import (
 )
 
 // Issuer signs PASETO v4.public tokens with kid in the footer.
-// Used by applications to issue CAT (Client Access Tokens).
+// Used by applications to issue CT (Client Tokens).
 type Issuer struct {
 	provider key.Provider
 	id       string
@@ -44,16 +44,16 @@ func NewIssuer(provider key.Provider, id string) *Issuer {
 	return i
 }
 
-// Issue issues a default CAT token.
+// Issue issues a default CT token.
 func (i *Issuer) Issue(ctx context.Context) (string, error) {
-	cat := tokendef.NewClaimsBuilder().
+	ct := tokendef.NewClaimsBuilder().
 		Issuer(i.id).
 		ClientID(i.id).
 		Audience("aegis").
 		ExpiresIn(5 * time.Minute).
-		Build(tokendef.NewClientAccessTokenBuilder())
+		Build(tokendef.NewClientTokenBuilder())
 
-	pasetoToken, err := tokendef.Build(cat)
+	pasetoToken, err := tokendef.Build(ct)
 	if err != nil {
 		return "", fmt.Errorf("build token: %w", err)
 	}
@@ -61,16 +61,16 @@ func (i *Issuer) Issue(ctx context.Context) (string, error) {
 	return i.sign(ctx, pasetoToken)
 }
 
-// IssueWithAudience issues a CAT token with a specific audience and expiry.
+// IssueWithAudience issues a CT token with a specific audience and expiry.
 func (i *Issuer) IssueWithAudience(ctx context.Context, audience string, expiresIn time.Duration) (string, error) {
-	cat := tokendef.NewClaimsBuilder().
+	ct := tokendef.NewClaimsBuilder().
 		Issuer(i.id).
 		ClientID(i.id).
 		Audience(audience).
 		ExpiresIn(expiresIn).
-		Build(tokendef.NewClientAccessTokenBuilder())
+		Build(tokendef.NewClientTokenBuilder())
 
-	pasetoToken, err := tokendef.Build(cat)
+	pasetoToken, err := tokendef.Build(ct)
 	if err != nil {
 		return "", fmt.Errorf("build token: %w", err)
 	}

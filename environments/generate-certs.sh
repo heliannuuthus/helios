@@ -12,6 +12,7 @@ DOMAINS=(
     "zwei.heliannuuthus.com"
     "atlas.heliannuuthus.com"
     "iris.heliannuuthus.com"
+    "chaos.heliannuuthus.com"
 )
 
 echo "🔐 生成 SSL 证书"

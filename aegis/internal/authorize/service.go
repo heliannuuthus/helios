@@ -235,34 +235,32 @@ func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudi
 // ==================== 关系检查 ====================
 
 // CheckRelation 检查用户是否具有指定的关系
-func (s *Service) CheckRelation(ctx context.Context, serviceID, subjectID, relation, objectType, objectID string) (bool, error) {
-	// 从 hermes 查询关系
+func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID string, relations []string, objectType, objectID string) (map[string]bool, error) {
 	relationships, err := s.cache.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	// 检查是否有匹配的关系
-	for _, rel := range relationships {
-		// 检查关系类型匹配
-		if rel.Relation != relation && rel.Relation != "*" {
-			continue
-		}
+	results := make(map[string]bool, len(relations))
+	for _, r := range relations {
+		results[r] = false
+	}
 
-		// 检查资源类型匹配
+	for _, rel := range relationships {
 		if objectType != "*" && rel.ObjectType != objectType && rel.ObjectType != "*" {
 			continue
 		}
-
-		// 检查资源 ID 匹配
 		if objectID != "*" && rel.ObjectID != objectID && rel.ObjectID != "*" {
 			continue
 		}
-
-		return true, nil
+		for _, r := range relations {
+			if rel.Relation == r || rel.Relation == "*" {
+				results[r] = true
+			}
+		}
 	}
 
-	return false, nil
+	return results, nil
 }
 
 // ==================== Public Keys ====================
@@ -443,6 +441,15 @@ func (s *Service) generateTokens(ctx context.Context, flow *types.AuthFlow) (*To
 		return nil, err
 	}
 
+	// scope 包含 openid 时签发 id_token
+	if helpers.ContainsScope(flow.GrantedScopes, ScopeOpenID) {
+		idTokenStr, err := s.generateIDToken(ctx, flow)
+		if err != nil {
+			return nil, err
+		}
+		tokenResp.IDToken = idTokenStr
+	}
+
 	// 如果 scope 包含 offline_access，生成 refresh token
 	if helpers.ContainsScope(flow.GrantedScopes, ScopeOfflineAccess) {
 		rt, err := s.createRefreshToken(ctx, flow, scope)
@@ -502,6 +509,30 @@ func (s *Service) generateAccessToken(
 		ExpiresIn:   int(accessExpiresIn.Seconds()),
 		Scope:       scope,
 	}, nil
+}
+
+// generateIDToken 签发 OIDC ID Token（v4.public，域密钥签名，不加密）
+// aud = client_id（OIDC Core §2: id_token 的 audience 是 relying party 的 client_id）
+func (s *Service) generateIDToken(ctx context.Context, flow *types.AuthFlow) (string, error) {
+	scopes := parseScopeSet(strings.Join(flow.GrantedScopes, " "))
+
+	idtBuilder := token.NewIDTokenBuilder()
+
+	if scopes[ScopeProfile] {
+		idtBuilder.Nickname(flow.User.GetNickname()).Picture(flow.User.GetPicture())
+	}
+	if flow.Request.Nonce != "" {
+		idtBuilder.Nonce(flow.Request.Nonce)
+	}
+
+	idt := token.NewClaimsBuilder().
+		Issuer(s.tokenSvc.GetIssuer()).
+		Subject(flow.User.OpenID).
+		Audience(flow.Application.AppID).
+		ExpiresIn(time.Hour).
+		Build(idtBuilder)
+
+	return s.tokenSvc.Issue(ctx, idt)
 }
 
 func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, scope string) (*cache.RefreshToken, error) {
@@ -622,7 +653,18 @@ func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, re
 		return nil, err
 	}
 
-	// 8. 异步清理 flow
+	// 8. scope 包含 openid 时签发 id_token（per-client，所有 audience 共享）
+	if helpers.ContainsScope(flow.GrantedScopes, ScopeOpenID) {
+		idTokenStr, err := s.generateIDToken(ctx, &flow)
+		if err != nil {
+			return nil, err
+		}
+		for _, tokenResp := range resp {
+			tokenResp.IDToken = idTokenStr
+		}
+	}
+
+	// 9. 异步清理 flow
 	s.asyncCleanupFlow(ctx, authCode.FlowID)
 
 	return resp, nil

@@ -6,62 +6,31 @@ import (
 	"github.com/google/wire"
 
 	"github.com/heliannuuthus/helios/aegis"
-	aegisconfig "github.com/heliannuuthus/helios/aegis/config"
-	intMw "github.com/heliannuuthus/helios/aegis/middleware"
 	"github.com/heliannuuthus/helios/chaos"
 	"github.com/heliannuuthus/helios/hermes"
 	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
 	"github.com/heliannuuthus/helios/iris"
-	"github.com/heliannuuthus/helios/pkg/aegis/web"
+	"github.com/heliannuuthus/helios/zwei"
 	zweiconfig "github.com/heliannuuthus/helios/zwei/config"
-	"github.com/heliannuuthus/helios/zwei/favorite"
-	"github.com/heliannuuthus/helios/zwei/history"
-	"github.com/heliannuuthus/helios/zwei/home"
-	"github.com/heliannuuthus/helios/zwei/preference"
-	"github.com/heliannuuthus/helios/zwei/recipe"
-	"github.com/heliannuuthus/helios/zwei/recommend"
-	"github.com/heliannuuthus/helios/zwei/tag"
 )
 
 // ProviderSet 提供者集合
 var ProviderSet = wire.NewSet(
-	recipe.NewService,
-	favorite.NewService,
-	history.NewService,
-	preference.NewService,
-	tag.NewService,
-	recommend.NewService,
-	provideRecipeHandler,
-	provideFavoriteHandler,
-	provideHistoryHandler,
-	providePreferenceHandler,
-	provideTagHandler,
-	provideRecommendHandler,
-	provideHomeHandler,
+	provideZwei,
 	provideHermesService,
 	provideHermesHandler,
 	provideAegisHandler,
 	provideIrisHandler,
 	provideChaosHandler,
-	provideInterpreter,
-	provideGinMiddlewareFactory,
 )
 
 // App 应用依赖容器
 type App struct {
-	RecipeHandler     *recipe.Handler
-	AegisHandler      *aegis.Handler
-	IrisHandler       *iris.Handler
-	FavoriteHandler   *favorite.Handler
-	HistoryHandler    *history.Handler
-	HomeHandler       *home.Handler
-	TagHandler        *tag.Handler
-	RecommendHandler  *recommend.Handler
-	PreferenceHandler *preference.Handler
-	HermesHandler     *hermes.Handler
-	ChaosHandler      *chaos.Handler
-	MiddlewareFactory *web.GinFactory
-	Interpreter       *web.Interpreter
+	Zwei          *zwei.Zwei
+	AegisHandler  *aegis.Handler
+	IrisHandler   *iris.Handler
+	HermesHandler *hermes.Handler
+	ChaosHandler  *chaos.Handler
 }
 
 // InitializeApp 初始化应用（由 wire 生成）
@@ -73,33 +42,9 @@ func InitializeApp() (*App, error) {
 	return nil, nil
 }
 
-// 业务模块 Handler（使用 Zwei 数据库）
-func provideRecipeHandler() *recipe.Handler {
-	return recipe.NewHandler(zweiconfig.InitDB())
-}
-
-func provideFavoriteHandler() *favorite.Handler {
-	return favorite.NewHandler(zweiconfig.InitDB())
-}
-
-func provideHistoryHandler() *history.Handler {
-	return history.NewHandler(zweiconfig.InitDB())
-}
-
-func providePreferenceHandler() *preference.Handler {
-	return preference.NewHandler(zweiconfig.InitDB())
-}
-
-func provideTagHandler() *tag.Handler {
-	return tag.NewHandler(zweiconfig.InitDB())
-}
-
-func provideRecommendHandler() *recommend.Handler {
-	return recommend.NewHandler(zweiconfig.InitDB())
-}
-
-func provideHomeHandler() *home.Handler {
-	return home.NewHandler(zweiconfig.InitDB())
+// Zwei 业务模块
+func provideZwei() *zwei.Zwei {
+	return zwei.New(zweiconfig.InitDB())
 }
 
 // Hermes Service（供 aegis 模块复用）
@@ -135,24 +80,4 @@ func provideChaosHandler() (*chaos.Handler, error) {
 		return nil, err
 	}
 	return chaosModule.Handler(), nil
-}
-
-// provideInterpreter 创建 Token 解释器（用于 API 路由认证中间件）
-func provideInterpreter() (*web.Interpreter, error) {
-	seedProvider, err := intMw.NewHermesKeyProvider()
-	if err != nil {
-		return nil, err
-	}
-	endpoint := aegisconfig.GetIssuer()
-	return web.NewInterpreter(endpoint, seedProvider.Encrypt()), nil
-}
-
-// provideGinMiddlewareFactory 创建 Gin 中间件工厂
-func provideGinMiddlewareFactory() (*web.GinFactory, error) {
-	seedProvider, err := intMw.NewHermesKeyProvider()
-	if err != nil {
-		return nil, err
-	}
-	endpoint := aegisconfig.GetIssuer()
-	return web.NewGinFactory(endpoint, seedProvider.Encrypt(), seedProvider.Sign()), nil
 }
