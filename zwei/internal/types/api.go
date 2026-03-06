@@ -1,8 +1,7 @@
-package zwei
+package types
 
 import "github.com/heliannuuthus/helios/zwei/internal/models"
 
-// RecipeListItem 菜谱列表项
 type RecipeListItem struct {
 	ID               string      `json:"id"`
 	Name             string      `json:"name"`
@@ -14,14 +13,12 @@ type RecipeListItem struct {
 	TotalTimeMinutes *int        `json:"total_time_minutes"`
 }
 
-// TagsGrouped 标签分组
 type TagsGrouped struct {
 	Cuisines []string `json:"cuisines"`
 	Flavors  []string `json:"flavors"`
 	Scenes   []string `json:"scenes"`
 }
 
-// GroupTags 将 []models.Tag 按类型分组
 func GroupTags(tags []models.Tag) TagsGrouped {
 	result := TagsGrouped{
 		Cuisines: []string{},

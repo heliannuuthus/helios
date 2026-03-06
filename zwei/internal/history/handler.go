@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/web"
-	"github.com/heliannuuthus/helios/zwei"
+	zweitypes "github.com/heliannuuthus/helios/zwei/internal/types"
 )
 
 // Handler 浏览历史处理器
@@ -35,7 +35,7 @@ type HistoryResponse struct {
 type HistoryListItem struct {
 	RecipeID string               `json:"recipe_id"`
 	ViewedAt string               `json:"viewed_at"`
-	Recipe   *zwei.RecipeListItem `json:"recipe,omitempty"`
+	Recipe   *zweitypes.RecipeListItem `json:"recipe,omitempty"`
 }
 
 type HistoryListResponse struct {
@@ -54,11 +54,7 @@ type HistoryListResponse struct {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history [post]
 func (h *Handler) AddViewHistory(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	var req HistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -86,11 +82,7 @@ func (h *Handler) AddViewHistory(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history/{recipe_id} [delete]
 func (h *Handler) RemoveViewHistory(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveViewHistory(openID, recipeID); err != nil {
@@ -108,11 +100,7 @@ func (h *Handler) RemoveViewHistory(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history [delete]
 func (h *Handler) ClearViewHistory(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	if err := h.service.ClearViewHistory(openID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -134,11 +122,7 @@ func (h *Handler) ClearViewHistory(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history [get]
 func (h *Handler) GetViewHistory(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
-	if openID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"message": "未登录"})
-		return
-	}
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	category := c.Query("category")
 	search := c.Query("search")
@@ -169,13 +153,13 @@ func (h *Handler) GetViewHistory(c *gin.Context) {
 		}
 
 		if h.Recipe != nil {
-			item.Recipe = &zwei.RecipeListItem{
+			item.Recipe = &zweitypes.RecipeListItem{
 				ID:               h.Recipe.RecipeID,
 				Name:             h.Recipe.Name,
 				Description:      h.Recipe.Description,
 				Category:         h.Recipe.Category,
 				Difficulty:       h.Recipe.Difficulty,
-				Tags:             zwei.GroupTags(h.Recipe.Tags),
+				Tags:             zweitypes.GroupTags(h.Recipe.Tags),
 				ImagePath:        h.Recipe.GetImagePath(),
 				TotalTimeMinutes: h.Recipe.TotalTimeMinutes,
 			}

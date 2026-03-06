@@ -9,8 +9,8 @@ import (
 
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/patch"
-	"github.com/heliannuuthus/helios/zwei"
 	"github.com/heliannuuthus/helios/zwei/internal/models"
+	zweitypes "github.com/heliannuuthus/helios/zwei/internal/types"
 )
 
 // Handler 菜谱处理器
@@ -91,7 +91,7 @@ type RecipeResponse struct {
 	ImagePath        *string              `json:"image_path"`
 	Category         string               `json:"category"`
 	Difficulty       int                  `json:"difficulty"`
-	Tags             zwei.TagsGrouped     `json:"tags"`
+	Tags             zweitypes.TagsGrouped `json:"tags"`
 	Servings         int                  `json:"servings"`
 	PrepTimeMinutes  *int                 `json:"prep_time_minutes"`
 	CookTimeMinutes  *int                 `json:"cook_time_minutes"`
@@ -220,15 +220,15 @@ func (h *Handler) GetRecipes(c *gin.Context) {
 		return
 	}
 
-	items := make([]zwei.RecipeListItem, len(recipes))
+	items := make([]zweitypes.RecipeListItem, len(recipes))
 	for i, r := range recipes {
-		items[i] = zwei.RecipeListItem{
+		items[i] = zweitypes.RecipeListItem{
 			ID:               r.RecipeID,
 			Name:             r.Name,
 			Description:      r.Description,
 			Category:         r.Category,
 			Difficulty:       r.Difficulty,
-			Tags:             zwei.GroupTags(r.Tags),
+			Tags:             zweitypes.GroupTags(r.Tags),
 			ImagePath:        r.GetImagePath(),
 			TotalTimeMinutes: r.TotalTimeMinutes,
 		}
@@ -522,7 +522,7 @@ func (h *Handler) toRecipeResponse(r *models.Recipe) *RecipeResponse {
 		images = []string{}
 	}
 
-	tags := zwei.GroupTags(r.Tags)
+	tags := zweitypes.GroupTags(r.Tags)
 
 	return &RecipeResponse{
 		ID:               r.RecipeID,

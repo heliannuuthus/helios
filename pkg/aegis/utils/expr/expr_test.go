@@ -118,6 +118,12 @@ func TestParse_Error(t *testing.T) {
 		"admin ||",
 		"(admin",
 		"admin)",
+		"admin||editor",
+		"admin&&editor",
+		"admin ||editor",
+		"admin|| editor",
+		"admin &&editor",
+		"admin&& editor",
 	}
 	for _, c := range cases {
 		if _, err := Parse(c); err == nil {

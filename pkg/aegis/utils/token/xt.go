@@ -2,7 +2,6 @@ package token
 
 import (
 	"fmt"
-	"time"
 
 	"aidanwoods.dev/go-paseto"
 )
@@ -145,13 +144,8 @@ func (c *ChallengeToken) Build() (*paseto.Token, error) {
 	return &t, nil
 }
 
-// ExpiresIn 返回过期时间
-func (c *ChallengeToken) ExpiresIn() time.Duration {
-	return c.GetExpiresIn()
-}
-
-// GetSubject 返回 principal
-func (c *ChallengeToken) GetSubject() string {
+// Subject 返回 principal（覆盖嵌入 Claims 的 Subject）。
+func (c *ChallengeToken) Subject() string {
 	return c.subject
 }
 

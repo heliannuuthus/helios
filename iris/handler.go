@@ -24,9 +24,9 @@ type Handler struct {
 	mfaSvc        *aegis.MFAService
 }
 
-// getOpenID 从 Gin context 中获取用户标识
+// getOpenID 从 context 中获取用户标识
 func getOpenID(c *gin.Context) string {
-	return web.OpenIDFromGin(c)
+	return web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 }
 
 // errorResponse 统一错误响应

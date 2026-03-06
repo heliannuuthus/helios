@@ -10,7 +10,7 @@ import (
 	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 )
 
-// Middleware 认证中间件（用于验证 CAT）
+// Middleware 认证中间件（用于验证 CT）
 type Middleware struct {
 	tokenSvc *token.Service
 }
@@ -22,7 +22,7 @@ func NewMiddleware(tokenSvc *token.Service) *Middleware {
 	}
 }
 
-// RequireClientAuth 要求客户端认证（验证 CAT）
+// RequireClientAuth 要求客户端认证（验证 CT）
 func (m *Middleware) RequireClientAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr := m.extractToken(c)
@@ -30,12 +30,11 @@ func (m *Middleware) RequireClientAuth() gin.HandlerFunc {
 			c.Header("WWW-Authenticate", pkgtoken.TokenTypeBearer)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":             "invalid_token",
-				"error_description": "missing client access token",
+				"error_description": "missing client token",
 			})
 			return
 		}
 
-		// 验证 CAT
 		t, err := m.tokenSvc.Verify(c.Request.Context(), tokenStr)
 		if err != nil {
 			c.Header("WWW-Authenticate", pkgtoken.TokenTypeBearer+` error="invalid_token"`)
@@ -45,12 +44,12 @@ func (m *Middleware) RequireClientAuth() gin.HandlerFunc {
 			})
 			return
 		}
-		claims, ok := t.(*pkgtoken.ClientAccessToken)
+		claims, ok := t.(*pkgtoken.ClientToken)
 		if !ok {
 			c.Header("WWW-Authenticate", pkgtoken.TokenTypeBearer+` error="invalid_token"`)
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":             "invalid_token",
-				"error_description": "expected CAT token",
+				"error_description": "expected CT token",
 			})
 			return
 		}
@@ -61,7 +60,6 @@ func (m *Middleware) RequireClientAuth() gin.HandlerFunc {
 }
 
 func (*Middleware) extractToken(c *gin.Context) string {
-	// 从 Authorization header
 	auth := c.GetHeader(HeaderAuthorization)
 	if strings.HasPrefix(auth, BearerPrefix) {
 		return auth[7:]
@@ -70,10 +68,10 @@ func (*Middleware) extractToken(c *gin.Context) string {
 }
 
 // GetClientClaims 从上下文获取客户端信息
-func GetClientClaims(c *gin.Context) *pkgtoken.ClientAccessToken {
+func GetClientClaims(c *gin.Context) *pkgtoken.ClientToken {
 	if claims, exists := c.Get("client_claims"); exists {
-		if cat, ok := claims.(*pkgtoken.ClientAccessToken); ok {
-			return cat
+		if ct, ok := claims.(*pkgtoken.ClientToken); ok {
+			return ct
 		}
 	}
 	return nil
