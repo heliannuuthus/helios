@@ -8,33 +8,28 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/go-json-experiment/json"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
+	"github.com/heliannuuthus/helios/pkg/aegis/utils/client"
 	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-const (
-	subjectTypeUser = "user"
-	subjectTypeApp  = "app"
-	maxResponseBody = 1 << 20
-)
+const maxResponseBody = 1 << 20
 
 type checkRequest struct {
-	SubjectType string   `json:"subject_type"`
-	SubjectID   string   `json:"subject_id"`
-	Relations   []string `json:"relations"`
-	ObjectType  string   `json:"object_type"`
-	ObjectID    string   `json:"object_id"`
+	SubjectType string `json:"subject_type"`
+	SubjectID   string `json:"subject_id"`
+	Relation    string `json:"relation"`
+	ObjectType  string `json:"object_type"`
+	ObjectID    string `json:"object_id"`
 }
 
 type checkResponse struct {
-	Results map[string]bool `json:"results"`
-	Error   string          `json:"error,omitempty"`
-	Message string          `json:"message,omitempty"`
+	Allowed bool   `json:"allowed"`
+	Error   string `json:"error,omitempty"`
 }
 
 // Manager 管理多 audience 的 Decryptor（token 解析）和 Issuer（CT 签发）。
@@ -43,7 +38,6 @@ type Manager struct {
 	endpoint           string
 	encryptKeyProvider key.Provider
 	signKeyProvider    key.Provider
-	httpClient         *http.Client
 
 	mu         sync.RWMutex
 	decryptors map[string]*Decryptor
@@ -56,11 +50,8 @@ func NewManager(endpoint string, seedProvider key.Provider) *Manager {
 		endpoint:           strings.TrimSuffix(endpoint, "/"),
 		encryptKeyProvider: key.EncryptKeyProvider(seedProvider),
 		signKeyProvider:    key.SignKeyProvider(seedProvider),
-		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
-		},
-		decryptors: make(map[string]*Decryptor),
-		issuers:    make(map[string]*Issuer),
+		decryptors:         make(map[string]*Decryptor),
+		issuers:            make(map[string]*Issuer),
 	}
 }
 
@@ -85,48 +76,40 @@ func (m *Manager) Decryptor(audience string) *Decryptor {
 	return d
 }
 
-// Check 批量检查主体是否具备指定关系。
-// subjectType/subjectID 为空时从 token 自动推断。
-func (m *Manager) Check(ctx context.Context, t tokendef.AccessToken, relations []string, objectType, objectID, subjectType, subjectID string) (map[string]bool, error) {
-	if subjectType == "" || subjectID == "" {
-		subjectType = subjectTypeApp
-		subjectID = t.ClientID()
-		if t.Identified() {
-			subjectType = subjectTypeUser
-			subjectID = t.OpenID()
-		}
-	}
-
-	ct, err := m.issuer(t.Audience()).Issue(ctx)
+// Check 检查主体是否对资源具备指定关系。
+// 所有字段由调用方填好，不做 subject 推断。
+// 内部用 audience 签发 CT 做服务间认证。
+func (m *Manager) Check(ctx context.Context, audience, subjectType, subjectID, rel, objectType, objectID string) (bool, error) {
+	ct, err := m.issuer(audience).Issue(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("issue CT: %w", err)
+		return false, fmt.Errorf("issue CT: %w", err)
 	}
 
 	req := checkRequest{
 		SubjectType: subjectType,
 		SubjectID:   subjectID,
-		Relations:   relations,
+		Relation:    rel,
 		ObjectType:  objectType,
 		ObjectID:    objectID,
 	}
 
 	bodyBytes, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return false, fmt.Errorf("marshal request: %w", err)
 	}
 
 	checkURL := m.endpoint + "/check"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, checkURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return false, fmt.Errorf("create request: %w", err)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", tokendef.TokenTypeBearer+" "+ct)
 
-	resp, err := m.httpClient.Do(httpReq)
+	resp, err := client.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
+		return false, fmt.Errorf("send request: %w", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -136,19 +119,19 @@ func (m *Manager) Check(ctx context.Context, t tokendef.AccessToken, relations [
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBody))
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return false, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("check failed with status %d: %s", resp.StatusCode, body)
+		return false, fmt.Errorf("check failed with status %d: %s", resp.StatusCode, body)
 	}
 
 	var checkResp checkResponse
 	if err := json.Unmarshal(body, &checkResp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+		return false, fmt.Errorf("unmarshal response: %w", err)
 	}
 
-	return checkResp.Results, nil
+	return checkResp.Allowed, nil
 }
 
 func (m *Manager) issuer(audience string) *Issuer {

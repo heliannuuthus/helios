@@ -7,8 +7,8 @@ import (
 
 var globalManager *token.Manager
 
-// InitManager 初始化全局 token Manager。应在服务启动时调用一次。
-func InitManager(endpoint string, seedProvider key.Provider) {
+// NewTokenManager 初始化全局 token Manager。应在服务启动时调用一次。
+func NewTokenManager(endpoint string, seedProvider key.Provider) {
 	globalManager = token.NewManager(endpoint, seedProvider)
 }
 

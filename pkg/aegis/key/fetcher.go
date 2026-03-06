@@ -15,6 +15,7 @@ import (
 	"github.com/go-json-experiment/json"
 	"golang.org/x/sync/singleflight"
 
+	"github.com/heliannuuthus/helios/pkg/aegis/utils/client"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -35,7 +36,6 @@ type publicKeysResponse struct {
 // PublicKeyFetcher 从 aegis /api/pubkeys 接口拉取公钥，实现 Provider 接口
 type PublicKeyFetcher struct {
 	endpoint string
-	client   *http.Client
 
 	mu    sync.RWMutex
 	cache map[string]*cacheEntry
@@ -47,7 +47,6 @@ type PublicKeyFetcher struct {
 func NewPublicKeyFetcher(endpoint string) *PublicKeyFetcher {
 	return &PublicKeyFetcher{
 		endpoint: strings.TrimSuffix(endpoint, "/"),
-		client:   &http.Client{Timeout: 10 * time.Second},
 		cache:    make(map[string]*cacheEntry),
 		watcher:  newWatcher(),
 	}
@@ -105,7 +104,7 @@ func (f *PublicKeyFetcher) doFetch(ctx context.Context, clientID string) ([][]by
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 
-	resp, err := f.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		logger.Warnf("[PublicKeyFetcher] fetch failed for %s: %v", clientID, err)
 		return nil, fmt.Errorf("fetch pubkeys: %w", err)

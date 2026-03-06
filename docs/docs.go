@@ -61,7 +61,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/zwei.RecipeListItem"
+                                "$ref": "#/definitions/types.RecipeListItem"
                             }
                         }
                     }
@@ -92,7 +92,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/zwei.RecipeListItem"
+                                "$ref": "#/definitions/types.RecipeListItem"
                             }
                         }
                     }
@@ -171,7 +171,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/zwei.RecipeListItem"
+                                "$ref": "#/definitions/types.RecipeListItem"
                             }
                         }
                     }
@@ -1229,7 +1229,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "recipe": {
-                    "$ref": "#/definitions/zwei.RecipeListItem"
+                    "$ref": "#/definitions/types.RecipeListItem"
                 },
                 "recipe_id": {
                     "type": "string"
@@ -1276,7 +1276,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "recipe": {
-                    "$ref": "#/definitions/zwei.RecipeListItem"
+                    "$ref": "#/definitions/types.RecipeListItem"
                 },
                 "recipe_id": {
                     "type": "string"
@@ -1649,7 +1649,7 @@ const docTemplate = `{
                     }
                 },
                 "tags": {
-                    "$ref": "#/definitions/zwei.TagsGrouped"
+                    "$ref": "#/definitions/types.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
@@ -1793,11 +1793,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "reason": {
-                    "description": "该菜品的推荐理由",
                     "type": "string"
                 },
                 "tags": {
-                    "$ref": "#/definitions/zwei.TagsGrouped"
+                    "$ref": "#/definitions/types.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
@@ -1933,7 +1932,7 @@ const docTemplate = `{
                 }
             }
         },
-        "zwei.RecipeListItem": {
+        "types.RecipeListItem": {
             "type": "object",
             "properties": {
                 "category": {
@@ -1955,14 +1954,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tags": {
-                    "$ref": "#/definitions/zwei.TagsGrouped"
+                    "$ref": "#/definitions/types.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
                 }
             }
         },
-        "zwei.TagsGrouped": {
+        "types.TagsGrouped": {
             "type": "object",
             "properties": {
                 "cuisines": {

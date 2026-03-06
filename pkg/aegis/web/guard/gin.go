@@ -1,34 +1,32 @@
 package guard
 
 import (
-	"context"
-	"errors"
-	"io"
+	stderrors "errors"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/go-json-experiment/json"
 
+	"github.com/heliannuuthus/helios/pkg/aegis/utils/errors"
+	"github.com/heliannuuthus/helios/pkg/aegis/utils/relation"
 	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// GinGuard Gin 框架适配器，将 Middleware 的纯逻辑映射为 gin.HandlerFunc。
+// GinGuard Gin 框架适配器。
 type GinGuard struct {
-	mw *web.Middleware
+	audience string
 }
 
 // NewGinGuard 创建 Gin Guard。
-func NewGinGuard(mw *web.Middleware) *GinGuard {
-	return &GinGuard{mw: mw}
+func NewGinGuard(audience string) *GinGuard {
+	return &GinGuard{audience: audience}
 }
 
 // Require 返回 Gin 中间件：认证 + 依次执行所有 Requirement。
 // 无 requirements 时等价于纯认证。
 func (g *GinGuard) Require(requirements ...web.Requirement) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tc, err := g.mw.Authenticate(c.Request)
+		tc, err := web.Authenticate(c.Request)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error":   "unauthorized",
@@ -37,19 +35,19 @@ func (g *GinGuard) Require(requirements ...web.Requirement) gin.HandlerFunc {
 			return
 		}
 
-		ctx := context.WithValue(c.Request.Context(), web.ClaimsKey, tc)
-		ctx = web.SetParams(ctx, extractParams(c))
+		ctx := web.WithRelationResolver(c.Request.Context(), extractResolver(c))
+		ctx = web.WithTokenContext(ctx, tc)
 		c.Request = c.Request.WithContext(ctx)
 
 		for _, req := range requirements {
 			if err := req.Enforce(ctx); err != nil {
 				switch {
-				case errors.Is(err, web.ErrUnauthorized):
+				case stderrors.Is(err, errors.ErrUnauthorized):
 					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 						"error":   "unauthorized",
 						"message": "未登录或登录已过期",
 					})
-				case errors.Is(err, web.ErrForbidden):
+				case stderrors.Is(err, errors.ErrForbidden):
 					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
 						"error":   "forbidden",
 						"message": "无权限访问",
@@ -69,63 +67,30 @@ func (g *GinGuard) Require(requirements ...web.Requirement) gin.HandlerFunc {
 	}
 }
 
-// extractParams 从 Gin context 一次性提取 path / query / body 参数，构建 Params。
-func extractParams(c *gin.Context) *web.Params {
-	var pathMap map[string]any
-	if params := c.Params; len(params) > 0 {
-		pathMap = make(map[string]any, len(params))
-		for _, p := range params {
-			pathMap[p.Key] = p.Value
+func extractResolver(c *gin.Context) *relation.Resolver {
+	data := make(map[string]any, 3)
+
+	if ginParams := c.Params; len(ginParams) > 0 {
+		pathMap := make(map[string]any, len(ginParams))
+		for _, kv := range ginParams {
+			pathMap[kv.Key] = kv.Value
 		}
+		data["path"] = pathMap
 	}
 
-	var queryMap map[string]any
 	if q := c.Request.URL.Query(); len(q) > 0 {
-		queryMap = make(map[string]any, len(q))
+		queryMap := make(map[string]any, len(q))
 		for k, v := range q {
 			if len(v) > 0 {
 				queryMap[k] = v[0]
 			}
 		}
+		data["query"] = queryMap
 	}
 
-	bodyMap := parseBody(c.Request)
-
-	return web.NewParams(pathMap, queryMap, bodyMap)
-}
-
-func parseBody(r *http.Request) map[string]any {
-	if r.Body == nil {
-		return nil
+	if bodyMap := web.ParseBody(c.Request); bodyMap != nil {
+		data["body"] = bodyMap
 	}
 
-	ct := r.Header.Get("Content-Type")
-	switch {
-	case strings.HasPrefix(ct, "application/json"):
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			return nil
-		}
-		r.Body = io.NopCloser(strings.NewReader(string(body)))
-		var m map[string]any
-		if err := json.Unmarshal(body, &m); err != nil {
-			return nil
-		}
-		return m
-
-	case strings.HasPrefix(ct, "application/x-www-form-urlencoded"),
-		strings.HasPrefix(ct, "multipart/form-data"):
-		if err := r.ParseForm(); err != nil {
-			return nil
-		}
-		m := make(map[string]any, len(r.PostForm))
-		for k, v := range r.PostForm {
-			if len(v) > 0 {
-				m[k] = v[0]
-			}
-		}
-		return m
-	}
-
-	return nil
+	return relation.NewResolver(data)
 }

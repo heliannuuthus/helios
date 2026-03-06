@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/web"
-	zweitypes "github.com/heliannuuthus/helios/zwei/internal/types"
+	"github.com/heliannuuthus/helios/zwei/internal/dto"
 )
 
 // Handler 浏览历史处理器
@@ -35,7 +35,7 @@ type HistoryResponse struct {
 type HistoryListItem struct {
 	RecipeID string               `json:"recipe_id"`
 	ViewedAt string               `json:"viewed_at"`
-	Recipe   *zweitypes.RecipeListItem `json:"recipe,omitempty"`
+	Recipe   *dto.RecipeListItem `json:"recipe,omitempty"`
 }
 
 type HistoryListResponse struct {
@@ -153,13 +153,13 @@ func (h *Handler) GetViewHistory(c *gin.Context) {
 		}
 
 		if h.Recipe != nil {
-			item.Recipe = &zweitypes.RecipeListItem{
+			item.Recipe = &dto.RecipeListItem{
 				ID:               h.Recipe.RecipeID,
 				Name:             h.Recipe.Name,
 				Description:      h.Recipe.Description,
 				Category:         h.Recipe.Category,
 				Difficulty:       h.Recipe.Difficulty,
-				Tags:             zweitypes.GroupTags(h.Recipe.Tags),
+				Tags:             dto.GroupTags(h.Recipe.Tags),
 				ImagePath:        h.Recipe.GetImagePath(),
 				TotalTimeMinutes: h.Recipe.TotalTimeMinutes,
 			}
