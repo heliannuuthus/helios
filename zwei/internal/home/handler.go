@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/zwei"
 	"github.com/heliannuuthus/helios/zwei/config"
-	"github.com/heliannuuthus/helios/zwei/recipe"
+	zweitypes "github.com/heliannuuthus/helios/zwei/internal/types"
+	"github.com/heliannuuthus/helios/zwei/internal/recipe"
 )
 
 // Handler 首页处理器
@@ -125,21 +125,21 @@ func (h *Handler) loadBannersFromConfig() []BannerItem {
 	return banners
 }
 
-func (h *Handler) getHotRecipes(count int) []zwei.RecipeListItem {
+func (h *Handler) getHotRecipes(count int) []zweitypes.RecipeListItem {
 	recipes, err := h.recipeService.GetHotRecipes(count, nil)
 	if err != nil || len(recipes) == 0 {
-		return []zwei.RecipeListItem{}
+		return []zweitypes.RecipeListItem{}
 	}
 
-	items := make([]zwei.RecipeListItem, len(recipes))
+	items := make([]zweitypes.RecipeListItem, len(recipes))
 	for i, r := range recipes {
-		items[i] = zwei.RecipeListItem{
+		items[i] = zweitypes.RecipeListItem{
 			ID:               r.RecipeID,
 			Name:             r.Name,
 			Description:      r.Description,
 			Category:         r.Category,
 			Difficulty:       r.Difficulty,
-			Tags:             zwei.GroupTags(r.Tags),
+			Tags:             zweitypes.GroupTags(r.Tags),
 			ImagePath:        r.GetImagePath(),
 			TotalTimeMinutes: r.TotalTimeMinutes,
 		}
@@ -148,21 +148,21 @@ func (h *Handler) getHotRecipes(count int) []zwei.RecipeListItem {
 	return items
 }
 
-func (h *Handler) getRandomRecipes(count int) []zwei.RecipeListItem {
+func (h *Handler) getRandomRecipes(count int) []zweitypes.RecipeListItem {
 	recipes, err := h.recipeService.GetRecipes("", "", 100, 0)
 	if err != nil || len(recipes) == 0 {
-		return []zwei.RecipeListItem{}
+		return []zweitypes.RecipeListItem{}
 	}
 
-	var items []zwei.RecipeListItem
+	var items []zweitypes.RecipeListItem
 	for _, r := range recipes {
-		items = append(items, zwei.RecipeListItem{
+		items = append(items, zweitypes.RecipeListItem{
 			ID:               r.RecipeID,
 			Name:             r.Name,
 			Description:      r.Description,
 			Category:         r.Category,
 			Difficulty:       r.Difficulty,
-			Tags:             zwei.GroupTags(r.Tags),
+			Tags:             zweitypes.GroupTags(r.Tags),
 			ImagePath:        r.GetImagePath(),
 			TotalTimeMinutes: r.TotalTimeMinutes,
 		})

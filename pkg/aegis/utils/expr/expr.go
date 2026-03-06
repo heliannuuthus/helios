@@ -165,7 +165,14 @@ func (p *parser) parseOr() (Node, error) {
 	for {
 		p.skipSpace()
 		if p.pos+1 < len(p.input) && p.input[p.pos] == '|' && p.input[p.pos+1] == '|' {
+			opPos := p.pos
+			if opPos > 0 && !unicode.IsSpace(rune(p.input[opPos-1])) {
+				return nil, fmt.Errorf("missing space before '||' at position %d", opPos)
+			}
 			p.pos += 2
+			if p.pos >= len(p.input) || !unicode.IsSpace(rune(p.input[p.pos])) {
+				return nil, fmt.Errorf("missing space after '||' at position %d", opPos)
+			}
 			right, err := p.parseAnd()
 			if err != nil {
 				return nil, err
@@ -192,7 +199,14 @@ func (p *parser) parseAnd() (Node, error) {
 	for {
 		p.skipSpace()
 		if p.pos+1 < len(p.input) && p.input[p.pos] == '&' && p.input[p.pos+1] == '&' {
+			opPos := p.pos
+			if opPos > 0 && !unicode.IsSpace(rune(p.input[opPos-1])) {
+				return nil, fmt.Errorf("missing space before '&&' at position %d", opPos)
+			}
 			p.pos += 2
+			if p.pos >= len(p.input) || !unicode.IsSpace(rune(p.input[p.pos])) {
+				return nil, fmt.Errorf("missing space after '&&' at position %d", opPos)
+			}
 			right, err := p.parseUnary()
 			if err != nil {
 				return nil, err

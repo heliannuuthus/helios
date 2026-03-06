@@ -13,19 +13,23 @@ import (
 	"github.com/heliannuuthus/helios/chaos/internal/storage"
 	"github.com/heliannuuthus/helios/chaos/internal/template"
 	"github.com/heliannuuthus/helios/chaos/models"
+	"github.com/heliannuuthus/helios/pkg/aegis/web"
+	"github.com/heliannuuthus/helios/pkg/aegis/web/guard"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // Handler Chaos API Handler
 type Handler struct {
+	guard           *guard.GinGuard
 	mailService     *mail.Service
 	templateService *template.Service
 	storageService  *storage.Service
 }
 
 // NewHandler 创建 Handler
-func NewHandler(mailSvc *mail.Service, templateSvc *template.Service, storageSvc *storage.Service) *Handler {
+func NewHandler(g *guard.GinGuard, mailSvc *mail.Service, templateSvc *template.Service, storageSvc *storage.Service) *Handler {
 	return &Handler{
+		guard:           g,
 		mailService:     mailSvc,
 		templateService: templateSvc,
 		storageService:  storageSvc,
@@ -230,10 +234,12 @@ func (h *Handler) UploadFile(c *gin.Context) {
 // RegisterRoutes 注册路由
 func (h *Handler) RegisterRoutes(r gin.IRouter) {
 	chaos := r.Group("/chaos")
+	chaos.Use(h.guard.Require())
 	{
 		chaos.POST("/mail", h.SendMail)
 
 		templates := chaos.Group("/templates")
+		templates.Use(h.guard.Require(web.Relation("admin")))
 		{
 			templates.POST("", h.CreateTemplate)
 			templates.GET("", h.ListTemplates)
@@ -243,8 +249,8 @@ func (h *Handler) RegisterRoutes(r gin.IRouter) {
 			templates.POST("/:id/render", h.RenderTemplate)
 		}
 
-		chaos.POST("/upload", h.UploadImage)
-		chaos.POST("/files", h.UploadFile)
+		chaos.POST("/upload", h.guard.Require(web.Relation("editor")), h.UploadImage)
+		chaos.POST("/files", h.guard.Require(web.Relation("viewer")), h.UploadFile)
 	}
 }
 

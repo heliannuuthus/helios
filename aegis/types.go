@@ -64,20 +64,20 @@ type RevokeRequest struct {
 }
 
 // CheckRequest 关系检查请求
-// 使用 CAT 认证，检查指定主体是否具有指定的关系权限
+// 使用 CT 认证，检查指定主体是否具有指定的关系权限
 type CheckRequest struct {
-	SubjectType string `json:"subject_type" binding:"required"` // 主体类型：user / client
-	SubjectID   string `json:"subject_id" binding:"required"`   // 主体 ID：OpenID / ClientID
-	Relation    string `json:"relation" binding:"required"`     // 关系类型（如 admin, editor, viewer）
-	ObjectType  string `json:"object_type"`                     // 资源类型（如 recipe, user, *）
-	ObjectID    string `json:"object_id"`                       // 资源 ID（如 recipe_123, *）
+	SubjectType string   `json:"subject_type" binding:"required"`  // 主体类型：user / client
+	SubjectID   string   `json:"subject_id" binding:"required"`    // 主体 ID：OpenID / ClientID
+	Relations   []string `json:"relations" binding:"required,gt=0"` // 关系类型列表（如 ["admin", "editor"]）
+	ObjectType  string   `json:"object_type"`                      // 资源类型（如 recipe, user, *）
+	ObjectID    string   `json:"object_id"`                        // 资源 ID（如 recipe_123, *）
 }
 
 // CheckResponse 关系检查响应
 type CheckResponse struct {
-	Permitted bool   `json:"permitted"`         // 是否有权限
-	Error     string `json:"error,omitempty"`   // 错误码
-	Message   string `json:"message,omitempty"` // 错误信息
+	Results map[string]bool `json:"results"`           // 每个 relation 的检查结果
+	Error   string          `json:"error,omitempty"`   // 错误码
+	Message string          `json:"message,omitempty"` // 错误信息
 }
 
 // IdentifyResponse 识别到已有用户的响应

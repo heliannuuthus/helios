@@ -27,15 +27,27 @@ var (
 type Token interface {
 	Type() TokenType
 
-	GetIssuer() string
-	GetClientID() string
-	GetAudience() string
-	GetSubject() string
-	GetIssuedAt() time.Time
-	GetExpiresAt() time.Time
-	GetJTI() string
+	Issuer() string
+	ClientID() string
+	Audience() string
+	Subject() string
+	IssuedAt() time.Time
+	ExpiresAt() time.Time
 
 	IsExpired() bool
+}
+
+// AccessToken 面向业务的访问令牌接口。
+// UAT 返回用户身份信息，SAT 所有 identity 方法返回零值。
+type AccessToken interface {
+	Token
+
+	Identified() bool
+	OpenID() string
+	Nickname() string
+	Picture() string
+	Email() string
+	Phone() string
 }
 
 // TokenBuilder is the interface for building PASETO tokens.
@@ -57,7 +69,7 @@ func Build(t Token) (*paseto.Token, error) {
 type TokenType string
 
 const (
-	TokenTypeCAT       TokenType = "cat"
+	TokenTypeCT        TokenType = "ct"
 	TokenTypeUAT       TokenType = "uat"
 	TokenTypeSAT       TokenType = "sat"
 	TokenTypeChallenge TokenType = "challenge"
@@ -65,7 +77,7 @@ const (
 )
 
 // DetectType infers the token type from claims.
-// Rules: iss==aud==cli → SSO, has typ → Challenge, has cli → UAT, otherwise → CAT
+// Rules: iss==aud==cli → SSO, has typ → Challenge, has cli → UAT, otherwise → CT
 func DetectType(t *paseto.Token) TokenType {
 	iss, err := t.GetIssuer()
 	if err != nil {
@@ -93,11 +105,11 @@ func DetectType(t *paseto.Token) TokenType {
 		return TokenTypeUAT
 	}
 
-	return TokenTypeCAT
+	return TokenTypeCT
 }
 
 // GetClientID extracts clientID from a paseto.Token.
-// UAT/Challenge use cli field, CAT uses sub field.
+// UAT/Challenge use cli field, CT uses sub field.
 func GetClientID(t *paseto.Token) (string, error) {
 	var cli string
 	if t.Get(ClaimCli, &cli) == nil && cli != "" {
@@ -121,8 +133,8 @@ func GetAudience(t *paseto.Token) (string, error) {
 // ParseToken parses a PASETO token into a concrete Token of the given type.
 func ParseToken(pasetoToken *paseto.Token, tokenType TokenType) (Token, error) {
 	switch tokenType {
-	case TokenTypeCAT:
-		return ParseClientAccessToken(pasetoToken)
+	case TokenTypeCT:
+		return ParseClientToken(pasetoToken)
 	case TokenTypeUAT:
 		return ParseUserAccessToken(pasetoToken)
 	case TokenTypeSAT:

@@ -2,7 +2,6 @@ package token
 
 import (
 	"fmt"
-	"time"
 
 	"aidanwoods.dev/go-paseto"
 
@@ -28,7 +27,6 @@ type IDToken struct {
 // ==================== Builder ====================
 
 type IDTokenBuilder struct {
-	openID   string
 	nickname string
 	picture  string
 	nonce    string
@@ -36,11 +34,6 @@ type IDTokenBuilder struct {
 
 func NewIDTokenBuilder() *IDTokenBuilder {
 	return &IDTokenBuilder{}
-}
-
-func (b *IDTokenBuilder) OpenID(openID string) *IDTokenBuilder {
-	b.openID = openID
-	return b
 }
 
 func (b *IDTokenBuilder) Nickname(nickname string) *IDTokenBuilder {
@@ -59,7 +52,6 @@ func (b *IDTokenBuilder) Nonce(nonce string) *IDTokenBuilder {
 }
 
 func (b *IDTokenBuilder) Build(claims pkgtoken.Claims) pkgtoken.Token {
-	claims.Subject = b.openID
 	return &IDToken{
 		Claims:   claims,
 		nickname: b.nickname,
@@ -97,11 +89,7 @@ func (t *IDToken) Build() (*paseto.Token, error) {
 	return &pt, nil
 }
 
-func (t *IDToken) ExpiresIn() time.Duration {
-	return t.GetExpiresIn()
-}
-
-func (t *IDToken) GetClientID() string { return t.Audience }
+func (t *IDToken) ClientID() string { return t.Claims.Audience() }
 
 func (t *IDToken) GetNickname() string { return t.nickname }
 

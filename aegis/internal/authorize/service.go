@@ -235,34 +235,32 @@ func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudi
 // ==================== 关系检查 ====================
 
 // CheckRelation 检查用户是否具有指定的关系
-func (s *Service) CheckRelation(ctx context.Context, serviceID, subjectID, relation, objectType, objectID string) (bool, error) {
-	// 从 hermes 查询关系
+func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID string, relations []string, objectType, objectID string) (map[string]bool, error) {
 	relationships, err := s.cache.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	// 检查是否有匹配的关系
-	for _, rel := range relationships {
-		// 检查关系类型匹配
-		if rel.Relation != relation && rel.Relation != "*" {
-			continue
-		}
+	results := make(map[string]bool, len(relations))
+	for _, r := range relations {
+		results[r] = false
+	}
 
-		// 检查资源类型匹配
+	for _, rel := range relationships {
 		if objectType != "*" && rel.ObjectType != objectType && rel.ObjectType != "*" {
 			continue
 		}
-
-		// 检查资源 ID 匹配
 		if objectID != "*" && rel.ObjectID != objectID && rel.ObjectID != "*" {
 			continue
 		}
-
-		return true, nil
+		for _, r := range relations {
+			if rel.Relation == r || rel.Relation == "*" {
+				results[r] = true
+			}
+		}
 	}
 
-	return false, nil
+	return results, nil
 }
 
 // ==================== Public Keys ====================
@@ -518,8 +516,7 @@ func (s *Service) generateAccessToken(
 func (s *Service) generateIDToken(ctx context.Context, flow *types.AuthFlow) (string, error) {
 	scopes := parseScopeSet(strings.Join(flow.GrantedScopes, " "))
 
-	idtBuilder := token.NewIDTokenBuilder().
-		OpenID(flow.User.OpenID)
+	idtBuilder := token.NewIDTokenBuilder()
 
 	if scopes[ScopeProfile] {
 		idtBuilder.Nickname(flow.User.GetNickname()).Picture(flow.User.GetPicture())
@@ -530,6 +527,7 @@ func (s *Service) generateIDToken(ctx context.Context, flow *types.AuthFlow) (st
 
 	idt := token.NewClaimsBuilder().
 		Issuer(s.tokenSvc.GetIssuer()).
+		Subject(flow.User.OpenID).
 		Audience(flow.Application.AppID).
 		ExpiresIn(time.Hour).
 		Build(idtBuilder)
