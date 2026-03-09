@@ -139,7 +139,7 @@ func (s *Service) CheckIdentityRequirements(ctx context.Context, flow *types.Aut
 }
 
 // ComputeGrantedScopes 计算授权的 scope 交集
-// 返回最终授予的 scope 列表（至少包含 openid）
+// openid 不再强制补入：客户端请求 openid 时签发 id_token，否则只签发 access_token
 func (s *Service) ComputeGrantedScopes(flow *types.AuthFlow) ([]string, error) {
 	connectionConfig := flow.ConnectionMap[flow.Connection]
 	if connectionConfig == nil {
@@ -147,34 +147,14 @@ func (s *Service) ComputeGrantedScopes(flow *types.AuthFlow) ([]string, error) {
 	}
 
 	requestedScopes := helpers.ParseScopes(strings.Join(flow.Request.Scope, " "))
-	hasOpenID := false
-	for _, scope := range requestedScopes {
-		if scope == ScopeOpenID {
-			hasOpenID = true
-			break
-		}
-	}
-	if !hasOpenID {
-		requestedScopes = append([]string{ScopeOpenID}, requestedScopes...)
-	}
 
 	allowedScopes := s.getAllowedScopes(flow)
-	if len(allowedScopes) == 0 {
-		allowedScopes = []string{ScopeOpenID}
-	}
 
 	grantedScopes := helpers.ScopeIntersection(requestedScopes, allowedScopes)
 
 	logger.Debugf("[Authorize] Scope 计算结果 - Requested: %q, Allowed: %q, Granted: %q", requestedScopes, allowedScopes, grantedScopes)
 
-	hasValidScope := false
-	for _, scope := range grantedScopes {
-		if scope != ScopeOpenID {
-			hasValidScope = true
-			break
-		}
-	}
-	if !hasValidScope && len(grantedScopes) == 1 {
+	if len(grantedScopes) == 0 {
 		logger.Warnf("[Authorize] 没有有效的 scope - Requested: %v, Allowed: %v", requestedScopes, allowedScopes)
 	}
 

@@ -276,7 +276,12 @@ func (h *Handler) Login(c *gin.Context) {
 	flow.SetExtra(types.ExtraKeyStrategy, req.Strategy)
 
 	// 3. 执行认证流程（已验证的 connection 跳过）
-	if done := h.executeAuthentication(c, ctx, flow, &req); done {
+	passed, err := h.authenticate(c, ctx, flow, &req)
+	if err != nil {
+		h.errorResponse(c, err)
+		return
+	}
+	if !passed {
 		return
 	}
 
@@ -620,45 +625,6 @@ func (h *Handler) Check(c *gin.Context) {
 	})
 }
 
-// --- 用户信息 ---
-
-// UserInfo GET /auth/userinfo
-// 从 UAT 中解密用户信息并返回脱敏结构
-func (h *Handler) UserInfo(c *gin.Context) {
-	tc := web.GetTokenContext(c.Request.Context())
-	if tc == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":             "invalid_token",
-			"error_description": "missing access token",
-		})
-		return
-	}
-
-	at := tc.AccessToken
-	if !at.Identified() {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":             "invalid_token",
-			"error_description": "token does not contain user info",
-		})
-		return
-	}
-
-	email := at.Email()
-	phone := at.Phone()
-
-	resp := &UserInfoResponse{
-		Sub:           at.OpenID(),
-		Nickname:      at.Nickname(),
-		Picture:       at.Picture(),
-		Email:         helpers.MaskEmail(email),
-		EmailVerified: email != "",
-		Phone:         helpers.MaskPhone(phone),
-		PhoneVerified: phone != "",
-	}
-
-	c.JSON(http.StatusOK, resp)
-}
-
 // --- 登出与撤销 ---
 
 // Revoke POST /auth/revoke
@@ -877,63 +843,48 @@ func (h *Handler) renewSSOCookie(c *gin.Context, ctx context.Context, oldSSO *to
 
 // --- Login 引用链 ---
 
-// executeAuthentication 执行认证流程。返回 true 表示已向客户端响应（需提前返回）。
-func (h *Handler) executeAuthentication(c *gin.Context, ctx context.Context, flow *types.AuthFlow, req *LoginRequest) bool {
-	connCfg := flow.GetCurrentConnConfig()
-	if connCfg == nil || connCfg.Verified {
-		logger.Infof("[Handler] Login 跳过认证（已验证） - FlowID: %s, Connection: %s", flow.ID, req.Connection)
-		return false
-	}
-
-	if actions := unmetRequirements(flow); len(actions) > 0 {
-		logger.Infof("[Login] 待满足的条件: %v", actions)
-		actionRedirect(c, buildActionURL(actions))
-		return true
-	}
-
-	success, err := h.authenticateSvc.Authenticate(ctx, flow, req.Proof, req.Principal, req.Strategy)
-	if err != nil {
-		logger.Errorf("[Handler] 认证失败 - FlowID: %s, Connection: %s, Error: %v", flow.ID, req.Connection, err)
-		h.errorResponse(c, err)
-		return true
-	}
-	if !success {
-		logger.Infof("[Handler] 认证未通过 - FlowID: %s, Connection: %s", flow.ID, req.Connection)
-		if actions := unmetRequirements(flow); len(actions) > 0 {
-			actionRedirect(c, buildActionURL(actions))
-			return true
-		}
-		h.errorResponse(c, autherrors.NewInvalidCredentials("authentication failed"))
-		return true
-	}
-	logger.Infof("[Handler] 认证通过 - FlowID: %s, Connection: %s", flow.ID, req.Connection)
-
-	return h.handlePostAuth(c, flow)
-}
-
-// handlePostAuth 处理认证成功后的辅助验证和前置条件检查
-// 返回 true 表示已处理响应（辅助验证完成 / 前置条件未满足），Login 应 return
-// flow 的持久化由 Login 的 defer 统一处理
-func (h *Handler) handlePostAuth(c *gin.Context, flow *types.AuthFlow) bool {
+// authenticate 执行认证流程
+// 返回 (true, nil) 表示 IDP 认证通过，可继续 resolveUser
+// 返回 (false, nil) 表示已通过 redirect 响应（vchan/factor 完成 或 前置条件未满足）
+// 返回 (false, error) 表示认证失败
+func (h *Handler) authenticate(c *gin.Context, ctx context.Context, flow *types.AuthFlow, req *LoginRequest) (bool, error) {
 	connCfg := flow.GetCurrentConnConfig()
 	if connCfg == nil {
-		return false
+		return false, autherrors.NewInvalidRequestf("unknown connection: %s", flow.Connection)
 	}
 
-	// 辅助验证（vchan / factor）：只标记 Verified，不产生 identity
-	// 通过 300 告知前端回到登录页继续下一步
+	if !connCfg.Verified {
+		if actions := unmetRequirements(flow); len(actions) > 0 {
+			logger.Infof("[Login] 待满足的条件: %v", actions)
+			actionRedirect(c, buildActionURL(actions))
+			return false, nil
+		}
+
+		success, err := h.authenticateSvc.Authenticate(ctx, flow, req.Proof, req.Principal, req.Strategy)
+		if err != nil {
+			return false, err
+		}
+		if !success {
+			return false, autherrors.NewInvalidCredentials("authentication failed")
+		}
+		logger.Infof("[Handler] 认证通过 - FlowID: %s, Connection: %s", flow.ID, req.Connection)
+	} else {
+		logger.Infof("[Handler] Login 跳过认证（已验证） - FlowID: %s, Connection: %s", flow.ID, req.Connection)
+	}
+
+	// vchan / factor：只标记 Verified，不产生 identity，redirect 回登录页
 	if connCfg.Type != types.ConnTypeIDP {
 		actionRedirect(c, config.GetEndpointLogin())
-		return true
+		return false, nil
 	}
 
-	// 前置验证未全部通过 → 300 action redirect
+	// IDP 前置验证未全部通过
 	if actions := unmetRequirements(flow); len(actions) > 0 {
 		actionRedirect(c, buildActionURL(actions))
-		return true
+		return false, nil
 	}
 
-	return false
+	return true, nil
 }
 
 // resolveUser 解析用户信息并回写到 flow

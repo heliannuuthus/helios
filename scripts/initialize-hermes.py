@@ -286,9 +286,11 @@ SERVICE_CHALLENGE_SETTINGS = [
     ServiceChallengeSetting("iris", "passkey:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
 ]
 
+_ADMIN_OPENID = secrets.token_hex(16)
+
 USERS = [
     User(
-        openid="heliannuuthus",
+        openid=_ADMIN_OPENID,
         email="heliannuuthus@gmail.com",
         username="heliannuuthus",
         password=generate_password(),
@@ -298,12 +300,12 @@ USERS = [
 ]
 
 USER_IDENTITIES = [
-    UserIdentity(domain="platform", openid="heliannuuthus", idp="global", t_openid=secrets.token_hex(16)),
-    UserIdentity(domain="platform", openid="heliannuuthus", idp="staff", t_openid="heliannuuthus"),
+    UserIdentity(domain="platform", openid=_ADMIN_OPENID, idp="global", t_openid=_ADMIN_OPENID),
+    UserIdentity(domain="platform", openid=_ADMIN_OPENID, idp="staff", t_openid="heliannuuthus"),
 ]
 
 RELATIONSHIPS = [
-    Relationship("hermes", "user", "heliannuuthus", "admin", "*", "*"),
+    Relationship("hermes", "user", _ADMIN_OPENID, "admin", "*", "*"),
 ]
 
 

@@ -3,6 +3,7 @@
 package types
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/go-json-experiment/json"
@@ -231,6 +232,10 @@ type ConnectionConfig struct {
 	Verified   bool           `json:"verified,omitempty"`  // 运行时：是否已通过验证
 }
 
+func (c *ConnectionConfig) String() string {
+	return fmt.Sprintf("Type: %s, Connection: %s, Identifier: %s, Strategy: %v, Delegate: %v, Require: %v, Verified: %v", c.Type, c.Connection, c.Identifier, c.Strategy, c.Delegate, c.Require, c.Verified)
+}
+
 // ContainsStrategy 判断给定 strategy 是否在当前 connection 的 strategy 列表中
 func (c *ConnectionConfig) ContainsStrategy(strategy string) bool {
 	if strategy == "" || len(c.Strategy) == 0 {
@@ -378,24 +383,6 @@ func (f *AuthFlow) SetCompleted() {
 	f.State = FlowStateCompleted
 }
 
-// RevokeVchanVerification 撤销当前 Connection 的 Require 中所有 vchan 类型 connection 的验证状态
-// 风控触发时调用：重置 vchan 的 Verified=false，强制用户重新完成人机验证
-// 返回 true 表示至少撤销了一个 vchan（风控生效），false 表示无 vchan 可撤销（降级为纯频率限制）
-func (f *AuthFlow) RevokeVchanVerification() bool {
-	connCfg := f.GetCurrentConnConfig()
-	if connCfg == nil {
-		return false
-	}
-	revoked := false
-	for _, reqConn := range connCfg.Require {
-		if cfg, ok := f.ConnectionMap[reqConn]; ok && cfg.Type == ConnTypeVChan {
-			cfg.Verified = false
-			revoked = true
-		}
-	}
-	return revoked
-}
-
 // AuthErrorInterface 定义 AuthError 的接口，用于解耦
 type AuthErrorInterface interface {
 	error
@@ -440,8 +427,9 @@ func (f *AuthFlow) GetExtra(key string) string {
 }
 
 // Connection 前端公开的连接信息（不含密钥和运行时状态）
+// type 通过 ConnectionsMap 的 key 隐含，不再序列化到每个 item
 type Connection struct {
-	Type       ConnectionType `json:"type"`                // 连接类型（idp / vchan / factor）
+	Type       ConnectionType `json:"-"`                   // 连接类型（idp / vchan / factor），仅内部分组用
 	Connection string         `json:"connection"`          // 标识（github, google, wechat-mp, user, staff, email_otp, totp, captcha...）
 	Identifier string         `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
 	Strategy   []string       `json:"strategy,omitzero"`   // 认证方式（user/staff: password, webauthn; captcha: turnstile; 其余忽略）

@@ -105,22 +105,17 @@ func (s *Service) SaveFlow(ctx context.Context, flow *types.AuthFlow) error {
 // params 约定顺序：proof, principal, strategy
 // remoteIP 通过 context 传递（ctxutil.WithRemoteIP）
 //
-// Strike 后置：仅在认证失败后计数，触发 ACCaptcha 时：
-//   - 若当前 connection 的 Require 中有 vchan → 撤销其 Verified，返回 (false, nil)
-//   - 若无 vchan → 降级为纯频率限制，仅返回失败
+// Strike 后置：仅在认证失败后计数，达阈值时返回 TooManyRequests error（429 + retry_after）
 func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, params ...any) (bool, error) {
-	// 1. 验证 flow 状态
 	if !flow.CanAuthenticate() {
 		return false, autherrors.NewFlowInvalid("flow state does not allow authentication")
 	}
 
-	// 2. 从注册表获取认证器
 	auth, ok := authenticator.GlobalRegistry().Get(flow.Connection)
 	if !ok {
 		return false, autherrors.NewInvalidRequestf("unsupported connection: %s", flow.Connection)
 	}
 
-	// 3. 执行认证
 	success, err := auth.Authenticate(ctx, flow, params...)
 	if err != nil {
 		return false, err
@@ -130,15 +125,11 @@ func (s *Service) Authenticate(ctx context.Context, flow *types.AuthFlow, params
 		return true, nil
 	}
 
-	// 4. 认证失败 → Strike 后置计数，决策是否需要 captcha
 	principal := extractStringParam(params, 1)
 	policy := buildACPolicy(flow, principal)
-	if action := s.ac.Strike(ctx, policy); action == accessctl.ACCaptcha {
-		if flow.RevokeVchanVerification() {
-			logger.Warnf("[Authenticate] 认证失败且频率达阈值，撤销 vchan 验证 - FlowID: %s", flow.ID)
-			return false, nil
-		}
-		// 无 vchan 可撤销，降级：仅返回失败
+	if action, retryAfter := s.ac.Strike(ctx, policy); action == accessctl.ACRateLimited {
+		logger.Warnf("[Authenticate] 认证失败且频率达阈值，限流 - FlowID: %s, RetryAfter: %ds", flow.ID, retryAfter)
+		return false, autherrors.NewTooManyRequests(retryAfter)
 	}
 
 	return false, nil
@@ -212,7 +203,7 @@ func buildACPolicy(flow *types.AuthFlow, principal string) *accessctl.Policy {
 	}
 	return accessctl.NewPolicy(types.RateLimitKeyPrefixLoginFail + audience + ":" + flow.Connection + ":" + principal).
 		FailWindow(config.GetLoginACFailWindow(flow.Connection)).
-		CaptchaAt(config.GetLoginACCaptchaThreshold(flow.Connection))
+		ThrottleAt(config.GetLoginACThreshold(flow.Connection))
 }
 
 // extractStringParam 安全地从 params 切片中提取 string 类型参数

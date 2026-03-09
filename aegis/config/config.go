@@ -349,15 +349,15 @@ func GetRetryAfterFromLimits(limits map[string]int) int {
 
 // AC 默认值
 const (
-	DefaultACCaptchaThreshold = 5 // 全局默认：验证 5 次要求 captcha
-	DefaultACFailWindow       = 30 * time.Minute
+	DefaultACThreshold  = 5 // 全局默认：验证失败 5 次触发限流
+	DefaultACFailWindow = 30 * time.Minute
 )
 
-// GetACCaptchaThreshold 获取指定 channelType 的 captcha 阈值
+// GetACThreshold 获取指定 channelType 的限流阈值
 // 优先读 aegis.challenge.access-control.{channelType}.captcha-threshold
 // 回退到 aegis.challenge.access-control.captcha-threshold
-// 再回退到默认值 5（0 = 始终需要 captcha）
-func GetACCaptchaThreshold(channelType string) int {
+// 再回退到默认值 5（0 = 始终限流）
+func GetACThreshold(channelType string) int {
 	cfg := Cfg()
 	perType := cfg.GetInt("aegis.challenge.access-control." + channelType + ".captcha-threshold")
 	if perType > 0 || cfg.IsSet("aegis.challenge.access-control."+channelType+".captcha-threshold") {
@@ -367,7 +367,7 @@ func GetACCaptchaThreshold(channelType string) int {
 	if global > 0 || cfg.IsSet("aegis.challenge.access-control.captcha-threshold") {
 		return global
 	}
-	return DefaultACCaptchaThreshold
+	return DefaultACThreshold
 }
 
 // GetACFailWindow 获取指定 channelType 的失败统计窗口
@@ -386,14 +386,14 @@ func GetACFailWindow(channelType string) time.Duration {
 
 // Login AC 默认值
 const (
-	DefaultLoginACCaptchaThreshold = 5                // 登录默认：验证 5 次要求 captcha
-	DefaultLoginACFailWindow       = 30 * time.Minute // 登录默认：30 分钟窗口
+	DefaultLoginACThreshold  = 5                // 登录默认：验证失败 5 次触发限流
+	DefaultLoginACFailWindow = 30 * time.Minute // 登录默认：30 分钟窗口
 )
 
-// GetLoginACCaptchaThreshold 获取登录的 captcha 阈值
+// GetLoginACThreshold 获取登录的限流阈值
 // 优先读 aegis.login.access-control.{connection}.captcha-threshold
 // 回退到 aegis.login.access-control.captcha-threshold
-func GetLoginACCaptchaThreshold(connection string) int {
+func GetLoginACThreshold(connection string) int {
 	cfg := Cfg()
 	perConn := cfg.GetInt("aegis.login.access-control." + connection + ".captcha-threshold")
 	if perConn > 0 || cfg.IsSet("aegis.login.access-control."+connection+".captcha-threshold") {
@@ -403,7 +403,7 @@ func GetLoginACCaptchaThreshold(connection string) int {
 	if global > 0 || cfg.IsSet("aegis.login.access-control.captcha-threshold") {
 		return global
 	}
-	return DefaultLoginACCaptchaThreshold
+	return DefaultLoginACThreshold
 }
 
 // GetLoginACFailWindow 获取登录的失败统计窗口

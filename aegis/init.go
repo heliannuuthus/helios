@@ -242,8 +242,7 @@ func initCaptchaVerifier() captcha.Verifier {
 	siteKey := cfg.GetString("vchan.captcha.turnstile.app_id")
 	secretKey := cfg.GetString("vchan.captcha.turnstile.secret")
 	if siteKey == "" || secretKey == "" {
-		logger.Warn("[Auth] Turnstile 配置不完整，跳过初始化")
-		return nil
+		panic("vchan.captcha.turnstile.app_id or vchan.captcha.turnstile.secret is not set")
 	}
 	return captcha.NewTurnstileVerifier(siteKey, secretKey)
 }

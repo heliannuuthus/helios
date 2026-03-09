@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 
 	"gorm.io/gorm"
 
@@ -13,40 +14,48 @@ import (
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
+var (
+	hermesDB     *gorm.DB
+	hermesDBOnce sync.Once
+)
+
 // Cfg 返回 Hermes 配置单例
 func Cfg() *baseconfig.Cfg {
 	return baseconfig.Hermes()
 }
 
-// InitDB 初始化 Hermes 数据库连接
+// InitDB 初始化 Hermes 数据库连接（单例）
 func InitDB() *gorm.DB {
-	cfg := Cfg()
-	dsn := parseDSNFromURL(cfg.GetString("db.url"))
+	hermesDBOnce.Do(func() {
+		cfg := Cfg()
+		dsn := parseDSNFromURL(cfg.GetString("db.url"))
 
-	var opts []pkgdb.Option
-	opts = append(opts, pkgdb.WithLogWriter(logger.GormWriter()))
-	if v := cfg.GetInt("db.pool.max-idle-conns"); v > 0 {
-		opts = append(opts, pkgdb.WithMaxIdleConns(v))
-	}
-	if v := cfg.GetInt("db.pool.max-open-conns"); v > 0 {
-		opts = append(opts, pkgdb.WithMaxOpenConns(v))
-	}
-	if v := cfg.GetDuration("db.pool.conn-max-lifetime"); v > 0 {
-		opts = append(opts, pkgdb.WithConnMaxLifetime(v))
-	}
-	if v := cfg.GetDuration("db.pool.conn-max-idle-time"); v > 0 {
-		opts = append(opts, pkgdb.WithConnMaxIdleTime(v))
-	}
-	if v := cfg.GetDuration("db.slow-threshold"); v > 0 {
-		opts = append(opts, pkgdb.WithSlowThreshold(v))
-	}
+		var opts []pkgdb.Option
+		opts = append(opts, pkgdb.WithLogWriter(logger.GormWriter()))
+		if v := cfg.GetInt("db.pool.max-idle-conns"); v > 0 {
+			opts = append(opts, pkgdb.WithMaxIdleConns(v))
+		}
+		if v := cfg.GetInt("db.pool.max-open-conns"); v > 0 {
+			opts = append(opts, pkgdb.WithMaxOpenConns(v))
+		}
+		if v := cfg.GetDuration("db.pool.conn-max-lifetime"); v > 0 {
+			opts = append(opts, pkgdb.WithConnMaxLifetime(v))
+		}
+		if v := cfg.GetDuration("db.pool.conn-max-idle-time"); v > 0 {
+			opts = append(opts, pkgdb.WithConnMaxIdleTime(v))
+		}
+		if v := cfg.GetDuration("db.slow-threshold"); v > 0 {
+			opts = append(opts, pkgdb.WithSlowThreshold(v))
+		}
 
-	db, err := pkgdb.Connect(dsn, opts...)
-	if err != nil {
-		logger.Fatalf("连接 Hermes 数据库失败: %v", err)
-	}
-	logger.Infof("数据库连接成功 (hermes): %s", cfg.GetString("db.url"))
-	return db
+		db, err := pkgdb.Connect(dsn, opts...)
+		if err != nil {
+			logger.Fatalf("连接 Hermes 数据库失败: %v", err)
+		}
+		logger.Infof("数据库连接成功 (hermes): %s", cfg.GetString("db.url"))
+		hermesDB = db
+	})
+	return hermesDB
 }
 
 // ==================== 域签名密钥 ====================
