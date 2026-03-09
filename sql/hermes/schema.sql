@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS t_application (
     app_id             VARCHAR(64)   NOT NULL COMMENT '应用唯一标识',
     name               VARCHAR(128)  NOT NULL COMMENT '应用名称',
     logo_url           VARCHAR(512)  DEFAULT NULL COMMENT '应用 Logo URL',
-    encrypted_key      VARCHAR(256)  DEFAULT NULL COMMENT '应用密钥（AES-GCM 加密），NULL=公开应用',
     redirect_uris      VARCHAR(2048) DEFAULT NULL COMMENT '重定向 URI 列表（JSON 数组）',
     allowed_origins    VARCHAR(1024) DEFAULT NULL COMMENT '允许的跨域源（JSON 数组）',
     -- 时间戳
@@ -70,7 +69,6 @@ CREATE TABLE IF NOT EXISTS t_service (
     service_id                VARCHAR(32)   NOT NULL COMMENT '服务标识：hermes/zwei/order',
     name                      VARCHAR(128)  NOT NULL COMMENT '服务名称',
     description               VARCHAR(512)  DEFAULT NULL COMMENT '服务描述',
-    encrypted_key             VARCHAR(256)  NOT NULL COMMENT '服务密钥（AES-GCM 加密，Base64 编码）',
     access_token_expires_in   INT UNSIGNED  NOT NULL DEFAULT 7200 COMMENT 'Access Token 有效期（秒）',
     refresh_token_expires_in  INT UNSIGNED  NOT NULL DEFAULT 604800 COMMENT 'Refresh Token 有效期（秒）',
     required_identities       VARCHAR(512)  DEFAULT NULL COMMENT '访问需要的身份类型（JSON 数组）',
@@ -81,6 +79,23 @@ CREATE TABLE IF NOT EXISTS t_service (
 -- 索引：主查询 WHERE service_id = ?
 UNIQUE KEY uk_service_id (service_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='业务服务';
+
+-- ==================== 密钥表 ====================
+-- Application / Service 的签名密钥，支持多密钥轮换
+
+CREATE TABLE IF NOT EXISTS t_key (
+    _id            INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
+    -- 业务字段
+    owner_type     VARCHAR(16)   NOT NULL COMMENT '所属类型：application / service',
+    owner_id       VARCHAR(64)   NOT NULL COMMENT '所属 ID：app_id / service_id',
+    encrypted_key  VARCHAR(256)  NOT NULL COMMENT '加密密钥（AES-GCM 加密的 48B seed，Base64 编码）',
+    expired_at     DATETIME      DEFAULT NULL COMMENT '过期时间，NULL=当前主密钥',
+    -- 时间戳
+    created_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+-- 索引：按 owner 查询有效密钥，最新的在前
+INDEX idx_owner (owner_type, owner_id, created_at DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='签名密钥';
 
 -- ==================== 服务 Challenge 配置表 ====================
 -- 服务级别的 Challenge 配置（限流等），覆盖全局默认
@@ -160,7 +175,7 @@ CREATE TABLE IF NOT EXISTS t_user_identity (
     _id          INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
     domain       VARCHAR(16)   NOT NULL COMMENT '身份所属域：consumer/platform',
-    openid       VARCHAR(64)   NOT NULL COMMENT '用户标识（关联 t_user.openid）',
+    uid          VARCHAR(64)   NOT NULL COMMENT '用户内部标识（关联 t_user.openid）',
     idp          VARCHAR(64)   NOT NULL COMMENT 'IDP 标识：global/user/staff/github/wechat-mp/google 等',
     t_openid     VARCHAR(256)  NOT NULL COMMENT 'IDP 侧用户标识（global 为域级对外标识，第三方为 IDP 返回的 openid）',
     raw_data     TEXT          DEFAULT NULL COMMENT 'IDP 返回的原始数据（JSON）',
@@ -171,12 +186,12 @@ CREATE TABLE IF NOT EXISTS t_user_identity (
 -- 索引
 -- 登录查询：WHERE domain = ? AND idp = ? AND t_openid = ?
 UNIQUE KEY uk_domain_idp_t_openid (domain, idp, t_openid),
-    -- 查询用户绑定的身份：WHERE openid = ?
-    INDEX idx_openid (openid),
-    -- 查询用户在指定域的 global 身份：WHERE domain = ? AND openid = ? AND idp = 'global'
-    INDEX idx_domain_openid_idp (domain, openid, idp),
+    -- 查询用户绑定的身份：WHERE uid = ?
+    INDEX idx_uid (uid),
+    -- 查询用户在指定域的 global 身份：WHERE domain = ? AND uid = ? AND idp = 'global'
+    INDEX idx_domain_uid_idp (domain, uid, idp),
     -- 外键
-    CONSTRAINT fk_identity_user FOREIGN KEY (openid) REFERENCES t_user(openid) ON DELETE CASCADE
+    CONSTRAINT fk_identity_user FOREIGN KEY (uid) REFERENCES t_user(openid) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户身份';
 
 -- ==================== 用户凭证表 ====================

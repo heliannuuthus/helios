@@ -98,7 +98,7 @@ func (f *PublicKeyFetcher) Fetch(ctx context.Context, clientID string) ([][]byte
 }
 
 func (f *PublicKeyFetcher) doFetch(ctx context.Context, clientID string) ([][]byte, error) {
-	reqURL := fmt.Sprintf("%s/api/pubkeys?%s", f.endpoint, url.Values{"client_id": {clientID}}.Encode())
+	reqURL := fmt.Sprintf("%s/pubkeys?%s", f.endpoint, url.Values{"client_id": {clientID}}.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)

@@ -45,7 +45,7 @@ func (s *UserService) GetByIdentity(ctx context.Context, identity *models.UserId
 		return nil, err
 	}
 
-	return s.GetByOpenID(ctx, matched.OpenID)
+	return s.GetByOpenID(ctx, matched.UID)
 }
 
 // GetIdentitiesByIdentity 根据身份模型查找该用户的全部身份
@@ -61,7 +61,7 @@ func (s *UserService) GetIdentitiesByIdentity(ctx context.Context, identity *mod
 		return nil, err
 	}
 
-	return s.GetIdentities(ctx, matched.OpenID)
+	return s.GetIdentities(ctx, matched.UID)
 }
 
 // GetByEmail 根据邮箱查找用户（返回解密后的完整用户信息）
@@ -76,7 +76,7 @@ func (s *UserService) GetByEmail(ctx context.Context, email string) (*models.Use
 // GetIdentityByType 获取用户指定域和 IDP 类型的身份
 func (s *UserService) GetIdentityByType(ctx context.Context, domain, openid, idpType string) (*models.UserIdentity, error) {
 	var identity models.UserIdentity
-	if err := s.db.WithContext(ctx).Where("domain = ? AND openid = ? AND idp = ?", domain, openid, idpType).First(&identity).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("domain = ? AND uid = ? AND idp = ?", domain, openid, idpType).First(&identity).Error; err != nil {
 		return nil, err
 	}
 	return &identity, nil
@@ -123,7 +123,7 @@ func (s *UserService) CreateWithIdentities(ctx context.Context, user *models.Use
 		}
 
 		for _, identity := range identities {
-			identity.OpenID = user.OpenID
+			identity.UID = user.OpenID
 			if err := tx.Create(identity).Error; err != nil {
 				return fmt.Errorf("创建身份关联失败: %w", err)
 			}
@@ -178,7 +178,7 @@ func (s *UserService) AddIdentity(ctx context.Context, identity *models.UserIden
 // GetIdentities 获取用户所有身份关联
 func (s *UserService) GetIdentities(ctx context.Context, openid string) (models.Identities, error) {
 	var identities models.Identities
-	if err := s.db.WithContext(ctx).Where("openid = ?", openid).Find(&identities).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("uid = ?", openid).Find(&identities).Error; err != nil {
 		return nil, err
 	}
 	return identities, nil
@@ -433,7 +433,7 @@ func (s *UserService) getByIdentifierWithIDP(ctx context.Context, identifier, id
 func (s *UserService) toPasswordStoreCredentialWithIDP(ctx context.Context, user *models.User, idpType string) (*PasswordStoreCredential, error) {
 	// 查找用户在该 IDP 类型下的身份（任意域均可）
 	var identity models.UserIdentity
-	if err := s.db.WithContext(ctx).Where("openid = ? AND idp = ?", user.OpenID, idpType).First(&identity).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("uid = ? AND idp = ?", user.OpenID, idpType).First(&identity).Error; err != nil {
 		return nil, errors.New("user not found")
 	}
 

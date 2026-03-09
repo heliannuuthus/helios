@@ -2,31 +2,35 @@ package cache
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/heliannuuthus/helios/aegis/config"
 	"github.com/heliannuuthus/helios/hermes/models"
+	pasetokit "github.com/heliannuuthus/helios/pkg/aegis/utils/paseto"
 )
 
 // ==================== Hermes 数据（本地缓存 + DB）====================
 
-// GetApplication 获取应用（带缓存）
-func (cm *Manager) GetApplication(ctx context.Context, appID string) (*models.ApplicationWithKey, error) {
+// GetApplication 获取应用（带缓存，密钥已派生）
+func (cm *Manager) GetApplication(ctx context.Context, appID string) (*ApplicationWithKey, error) {
 	cacheKey := config.GetCacheKeyPrefix("application") + appID
 
-	// 尝试从缓存获取
 	if cm.applicationCache != nil {
 		if cached, ok := cm.applicationCache.Get(cacheKey); ok {
 			return cached, nil
 		}
 	}
 
-	// 从 hermes 获取
-	result, err := cm.hermesSvc.GetApplicationWithKey(ctx, appID)
+	raw, err := cm.hermesSvc.GetApplicationWithKey(ctx, appID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 存入缓存
+	result, err := DeriveApplicationKeys(raw)
+	if err != nil {
+		return nil, fmt.Errorf("derive application keys: %w", err)
+	}
+
 	if cm.applicationCache != nil {
 		ttl := config.GetCacheTTL("application")
 		cm.applicationCache.SetWithTTL(cacheKey, result, 1, ttl)
@@ -35,24 +39,26 @@ func (cm *Manager) GetApplication(ctx context.Context, appID string) (*models.Ap
 	return result, nil
 }
 
-// GetService 获取服务（带缓存）
-func (cm *Manager) GetService(ctx context.Context, serviceID string) (*models.ServiceWithKey, error) {
+// GetService 获取服务（带缓存，密钥已派生）
+func (cm *Manager) GetService(ctx context.Context, serviceID string) (*ServiceWithKey, error) {
 	cacheKey := config.GetCacheKeyPrefix("service") + serviceID
 
-	// 尝试从缓存获取
 	if cm.serviceCache != nil {
 		if cached, ok := cm.serviceCache.Get(cacheKey); ok {
 			return cached, nil
 		}
 	}
 
-	// 从 hermes 获取
-	result, err := cm.hermesSvc.GetServiceWithKey(ctx, serviceID)
+	raw, err := cm.hermesSvc.GetServiceWithKey(ctx, serviceID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 存入缓存
+	result, err := DeriveServiceKeys(raw)
+	if err != nil {
+		return nil, fmt.Errorf("derive service keys: %w", err)
+	}
+
 	if cm.serviceCache != nil {
 		ttl := config.GetCacheTTL("service")
 		cm.serviceCache.SetWithTTL(cacheKey, result, 1, ttl)
@@ -61,64 +67,32 @@ func (cm *Manager) GetService(ctx context.Context, serviceID string) (*models.Se
 	return result, nil
 }
 
-// GetDomain 获取域（带缓存）
-func (cm *Manager) GetDomain(ctx context.Context, domainID string) (*models.DomainWithKey, error) {
+// GetDomain 获取域（带缓存，密钥已派生）
+func (cm *Manager) GetDomain(ctx context.Context, domainID string) (*DomainWithKey, error) {
 	cacheKey := config.GetCacheKeyPrefix("domain") + domainID
 
-	// 尝试从缓存获取
 	if cm.domainCache != nil {
 		if cached, ok := cm.domainCache.Get(cacheKey); ok {
 			return cached, nil
 		}
 	}
 
-	// 从 hermes 获取
-	result, err := cm.hermesSvc.GetDomainWithKey(ctx, domainID)
+	raw, err := cm.hermesSvc.GetDomainWithKey(ctx, domainID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 存入缓存
+	result, err := DeriveDomainKeys(raw)
+	if err != nil {
+		return nil, fmt.Errorf("derive domain keys: %w", err)
+	}
+
 	if cm.domainCache != nil {
 		ttl := config.GetCacheTTL("domain")
 		cm.domainCache.SetWithTTL(cacheKey, result, 1, ttl)
 	}
 
 	return result, nil
-}
-
-// CheckAppServiceRelation 检查应用是否有权访问服务（使用复合 key 缓存优化）
-func (cm *Manager) CheckAppServiceRelation(ctx context.Context, appID, serviceID string) (bool, error) {
-	// 1. 先查复合 key 缓存
-	cacheKey := appID + ":" + serviceID
-	if cm.appServiceCache != nil {
-		if cached, ok := cm.appServiceCache.Get(cacheKey); ok {
-			return cached, nil
-		}
-	}
-
-	// 2. 查数据库（通过 hermes 服务）
-	relations, err := cm.GetAppServiceRelations(ctx, appID)
-	if err != nil {
-		return false, err
-	}
-
-	// 3. 检查关系是否存在
-	exists := false
-	for _, rel := range relations {
-		if rel.ServiceID == serviceID {
-			exists = true
-			break
-		}
-	}
-
-	// 4. 存入复合 key 缓存
-	if cm.appServiceCache != nil {
-		ttl := config.GetCacheTTL("app-service")
-		cm.appServiceCache.SetWithTTL(cacheKey, exists, 1, ttl)
-	}
-
-	return exists, nil
 }
 
 // GetAppServiceRelations 获取应用可访问的服务关系
@@ -145,65 +119,6 @@ func (cm *Manager) GetAppServiceRelations(ctx context.Context, appID string) ([]
 	}
 
 	return relations, nil
-}
-
-// ListRelationships 列出关系（代理到 hermes 服务）
-func (cm *Manager) ListRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
-	return cm.hermesSvc.ListRelationships(ctx, serviceID, subjectType, subjectID)
-}
-
-// GetAppAllowedOrigins 获取应用的允许跨域源（带缓存）
-func (cm *Manager) GetAppAllowedOrigins(ctx context.Context, appID string) ([]string, error) {
-	cacheKey := config.GetCacheKeyPrefix("app-origins") + appID
-
-	// 尝试从缓存获取
-	if cm.appOriginsCache != nil {
-		if cached, ok := cm.appOriginsCache.Get(cacheKey); ok {
-			return cached, nil
-		}
-	}
-
-	// 从应用缓存获取（复用已有的应用缓存逻辑）
-	app, err := cm.GetApplication(ctx, appID)
-	if err != nil {
-		return nil, err
-	}
-
-	origins := app.GetAllowedOrigins()
-
-	// 存入缓存
-	if cm.appOriginsCache != nil {
-		ttl := config.GetCacheTTL("app-origins")
-		cm.appOriginsCache.SetWithTTL(cacheKey, origins, 1, ttl)
-	}
-
-	return origins, nil
-}
-
-// ValidateAppOrigin 验证请求来源是否在应用的允许列表中
-func (cm *Manager) ValidateAppOrigin(ctx context.Context, appID, origin string) (bool, error) {
-	origins, err := cm.GetAppAllowedOrigins(ctx, appID)
-	if err != nil {
-		return false, err
-	}
-
-	// 如果未配置，则不限制
-	if len(origins) == 0 {
-		return true, nil
-	}
-
-	normalizedOrigin := normalizeOrigin(origin)
-	for _, allowed := range origins {
-		if normalizeOrigin(allowed) == normalizedOrigin {
-			return true, nil
-		}
-		// 支持通配符 *
-		if allowed == "*" {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }
 
 // GetApplicationIDPConfigs 获取应用 IDP 配置（带缓存）
@@ -258,17 +173,162 @@ func (cm *Manager) GetServiceChallengeSetting(ctx context.Context, serviceID, ch
 	return result, nil
 }
 
-// normalizeOrigin 规范化 origin（移除末尾斜杠）
-func normalizeOrigin(origin string) string {
-	if len(origin) > 0 && origin[len(origin)-1] == '/' {
-		return origin[:len(origin)-1]
-	}
-	return origin
-}
-
-// ==================== ServiceChallengeSetting（本地缓存 + DB）====================
-
 // serviceChallengeCacheKey 构造 ServiceChallengeSetting 缓存 key
 func serviceChallengeCacheKey(serviceID, challengeType string) string {
 	return config.GetCacheKeyPrefix("service-challenge-setting") + serviceID + ":" + challengeType
+}
+
+const ssoKeyName = "sso"
+
+// GetSSOKeys 获取 SSO 密钥组（已派生，走 ristretto TTL 自动过期）
+func (cm *Manager) GetSSOKeys() (*Keys, error) {
+	if k, ok := cm.ssoKeyCache.Get(ssoKeyName); ok {
+		return k, nil
+	}
+
+	seeds, err := config.GetSSOMasterKeys()
+	if err != nil {
+		return nil, fmt.Errorf("fetch sso master keys: %w", err)
+	}
+	if len(seeds) == 0 {
+		return nil, fmt.Errorf("sso master key not configured")
+	}
+
+	keys, err := deriveKeys(seeds)
+	if err != nil {
+		return nil, fmt.Errorf("derive sso keys: %w", err)
+	}
+
+	cm.ssoKeyCache.SetWithTTL(ssoKeyName, keys, 1, config.GetCacheTTL("sso"))
+	return keys, nil
+}
+
+// ==================== Seed → Key 派生 ====================
+
+// deriveKeys 从多个 seed 派生密钥组（第一个为 Main，全部放入 Keys）
+func deriveKeys(seeds [][]byte) (*Keys, error) {
+	if len(seeds) == 0 {
+		return nil, nil
+	}
+	all := make([]Key, 0, len(seeds))
+	for i, s := range seeds {
+		k, err := deriveKey(s)
+		if err != nil {
+			return nil, fmt.Errorf("derive key[%d]: %w", i, err)
+		}
+		all = append(all, *k)
+	}
+	return &Keys{Main: all[0], Keys: all}, nil
+}
+
+// deriveKey 从 48 字节 seed 同时派生签名密钥和加密密钥（三个字段全填充）
+func deriveKey(seedBytes []byte) (*Key, error) {
+	sign, err := deriveSigningKey(seedBytes)
+	if err != nil {
+		return nil, err
+	}
+	encrypt, err := deriveEncryptionKey(seedBytes)
+	if err != nil {
+		return nil, err
+	}
+	return &Key{
+		SecretKey:  encrypt.SecretKey,
+		PrivateKey: sign.PrivateKey,
+		PublicKey:  sign.PublicKey,
+	}, nil
+}
+
+// deriveSigningKey 从 48 字节 seed 派生签名密钥（PrivateKey + PublicKey）
+func deriveSigningKey(seedBytes []byte) (Key, error) {
+	seed, err := pasetokit.ParseSeed(seedBytes)
+	if err != nil {
+		return Key{}, err
+	}
+	sk, err := seed.DeriveSecretKey()
+	if err != nil {
+		return Key{}, fmt.Errorf("derive secret key: %w", err)
+	}
+	return Key{
+		PrivateKey: sk.ExportBytes(),
+		PublicKey:  sk.Public().ExportBytes(),
+	}, nil
+}
+
+// deriveEncryptionKey 从 48 字节 seed 派生加密密钥（SecretKey）
+func deriveEncryptionKey(seedBytes []byte) (Key, error) {
+	seed, err := pasetokit.ParseSeed(seedBytes)
+	if err != nil {
+		return Key{}, err
+	}
+	symKey, err := seed.DeriveSymmetricKey()
+	if err != nil {
+		return Key{}, fmt.Errorf("derive symmetric key: %w", err)
+	}
+	return Key{SecretKey: symKey.ExportBytes()}, nil
+}
+
+func deriveSigningKeys(seeds [][]byte) (*Keys, error) {
+	if len(seeds) == 0 {
+		return nil, nil
+	}
+	all := make([]Key, 0, len(seeds))
+	for i, s := range seeds {
+		k, err := deriveSigningKey(s)
+		if err != nil {
+			return nil, fmt.Errorf("derive signing key[%d]: %w", i, err)
+		}
+		all = append(all, k)
+	}
+	return &Keys{Main: all[0], Keys: all}, nil
+}
+
+func deriveEncryptionKeys(seeds [][]byte) (*Keys, error) {
+	if len(seeds) == 0 {
+		return nil, nil
+	}
+	all := make([]Key, 0, len(seeds))
+	for i, s := range seeds {
+		k, err := deriveEncryptionKey(s)
+		if err != nil {
+			return nil, fmt.Errorf("derive encryption key[%d]: %w", i, err)
+		}
+		all = append(all, k)
+	}
+	return &Keys{Main: all[0], Keys: all}, nil
+}
+
+func DeriveDomainKeys(raw *models.DomainWithKey) (*DomainWithKey, error) {
+	keys, err := deriveSigningKeys(raw.Keys)
+	if err != nil {
+		return nil, err
+	}
+	result := &DomainWithKey{Domain: raw.Domain}
+	if keys != nil {
+		result.Keys = *keys
+	}
+	return result, nil
+}
+
+func DeriveServiceKeys(raw *models.ServiceWithKey) (*ServiceWithKey, error) {
+	keys, err := deriveEncryptionKeys(raw.Keys)
+	if err != nil {
+		return nil, err
+	}
+	result := &ServiceWithKey{Service: raw.Service}
+	if keys != nil {
+		result.Keys = *keys
+	}
+	return result, nil
+}
+
+func DeriveApplicationKeys(raw *models.ApplicationWithKey) (*ApplicationWithKey, error) {
+	keys, err := deriveSigningKeys(raw.Keys)
+	if err != nil {
+		return nil, err
+	}
+	result := &ApplicationWithKey{Application: raw.Application}
+	if keys != nil {
+		result.Keys = *keys
+	}
+	return result, nil
 }

@@ -1,4 +1,4 @@
-package cache
+package webauthn
 
 import (
 	"encoding/base64"

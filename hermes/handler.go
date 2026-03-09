@@ -58,8 +58,6 @@ func (h *Handler) CreateService(c *gin.Context) {
 		return
 	}
 
-	// 不返回加密密钥
-	service.EncryptedKey = ""
 	c.JSON(http.StatusOK, service)
 }
 
@@ -72,8 +70,6 @@ func (h *Handler) GetService(c *gin.Context) {
 		return
 	}
 
-	// 不返回加密密钥
-	service.EncryptedKey = ""
 	c.JSON(http.StatusOK, service)
 }
 
@@ -86,10 +82,6 @@ func (h *Handler) ListServices(c *gin.Context) {
 		return
 	}
 
-	// 不返回加密密钥
-	for i := range services {
-		services[i].EncryptedKey = ""
-	}
 	c.JSON(http.StatusOK, services)
 }
 
@@ -126,8 +118,6 @@ func (h *Handler) CreateApplication(c *gin.Context) {
 		return
 	}
 
-	// 不返回加密密钥
-	app.EncryptedKey = nil
 	c.JSON(http.StatusOK, app)
 }
 
@@ -140,8 +130,6 @@ func (h *Handler) GetApplication(c *gin.Context) {
 		return
 	}
 
-	// 不返回加密密钥
-	app.EncryptedKey = nil
 	c.JSON(http.StatusOK, app)
 }
 
@@ -154,10 +142,6 @@ func (h *Handler) ListApplications(c *gin.Context) {
 		return
 	}
 
-	// 不返回加密密钥
-	for i := range apps {
-		apps[i].EncryptedKey = nil
-	}
 	c.JSON(http.StatusOK, apps)
 }
 

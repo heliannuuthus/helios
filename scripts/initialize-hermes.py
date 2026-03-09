@@ -31,7 +31,7 @@ iris.toml:
   - [aegis] secret-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)，服务密钥
 
 sql/hermes/init.sql:
-  - t_service.encrypted_key: 服务密钥的密文（用 db.enc-key 加密）
+  - t_key: 服务密钥的密文（用 db.enc-key 加密），owner_type='service'
 
 使用方法:
   cd scripts
@@ -138,7 +138,7 @@ class User:
 @dataclass
 class UserIdentity:
     domain: str
-    openid: str
+    uid: str
     idp: str
     t_openid: str
 
@@ -245,6 +245,27 @@ APPLICATIONS = [
         allowed_origins=["https://atlas.heliannuuthus.com"],
     ),
     Application(
+        app_id="zwei",
+        domain_id="platform",
+        name="Zwei 菜谱管理",
+        redirect_uris=["https://zwei.heliannuuthus.com/auth/callback"],
+        allowed_origins=["https://zwei.heliannuuthus.com"],
+    ),
+    Application(
+        app_id="hermes",
+        domain_id="platform",
+        name="Hermes 身份管理",
+        redirect_uris=["https://hermes.heliannuuthus.com/auth/callback"],
+        allowed_origins=["https://hermes.heliannuuthus.com"],
+    ),
+    Application(
+        app_id="chaos",
+        domain_id="platform",
+        name="Chaos 聚合服务",
+        redirect_uris=["https://chaos.heliannuuthus.com/auth/callback"],
+        allowed_origins=["https://chaos.heliannuuthus.com"],
+    ),
+    Application(
         app_id="piris",
         domain_id="platform",
         name="平台个人中心",
@@ -264,6 +285,15 @@ APP_IDP_CONFIGS = [
     AppIdpConfig("atlas", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
     AppIdpConfig("atlas", "google", priority=5),
     AppIdpConfig("atlas", "github", priority=5),
+    AppIdpConfig("zwei", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("zwei", "google", priority=5),
+    AppIdpConfig("zwei", "github", priority=5),
+    AppIdpConfig("hermes", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("hermes", "google", priority=5),
+    AppIdpConfig("hermes", "github", priority=5),
+    AppIdpConfig("chaos", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("chaos", "google", priority=5),
+    AppIdpConfig("chaos", "github", priority=5),
     AppIdpConfig("piris", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
     AppIdpConfig("piris", "google", priority=5),
     AppIdpConfig("piris", "github", priority=5),
@@ -276,6 +306,9 @@ APP_SERVICE_RELATIONS = [
     AppServiceRelation("atlas", "hermes", "*"),
     AppServiceRelation("atlas", "zwei", "*"),
     AppServiceRelation("atlas", "chaos", "*"),
+    AppServiceRelation("zwei", "zwei", "*"),
+    AppServiceRelation("hermes", "hermes", "*"),
+    AppServiceRelation("chaos", "chaos", "*"),
     AppServiceRelation("piris", "iris", "*"),
     AppServiceRelation("ciris", "iris", "*"),
 ]
@@ -286,11 +319,11 @@ SERVICE_CHALLENGE_SETTINGS = [
     ServiceChallengeSetting("iris", "passkey:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
 ]
 
-_ADMIN_OPENID = secrets.token_hex(16)
+_admin_openid = secrets.token_hex(16)
 
 USERS = [
     User(
-        openid=_ADMIN_OPENID,
+        openid=_admin_openid,
         email="heliannuuthus@gmail.com",
         username="heliannuuthus",
         password=generate_password(),
@@ -300,20 +333,21 @@ USERS = [
 ]
 
 USER_IDENTITIES = [
-    UserIdentity(domain="platform", openid=_ADMIN_OPENID, idp="global", t_openid=_ADMIN_OPENID),
-    UserIdentity(domain="platform", openid=_ADMIN_OPENID, idp="staff", t_openid="heliannuuthus"),
+    UserIdentity(domain="platform", uid=_admin_openid, idp="global", t_openid=_admin_openid),
+    UserIdentity(domain="platform", uid=_admin_openid, idp="staff", t_openid="heliannuuthus"),
 ]
 
 RELATIONSHIPS = [
-    Relationship("hermes", "user", _ADMIN_OPENID, "admin", "*", "*"),
+    Relationship("hermes", "user", _admin_openid, "admin", "*", "*"),
 ]
 
 
 # ==================== 生成器 ====================
 
 @dataclass
-class ServiceData:
-    service: Service
+class KeyData:
+    owner_type: str
+    owner_id: str
     secret_key: bytes
     encrypted_key: str
 
@@ -323,7 +357,7 @@ class Initializer:
         self.db_enc_key: bytes = b""
         self.domain_sign_keys: dict[str, bytes] = {}
         self.sso_master_key: bytes = b""
-        self.services_data: list[ServiceData] = []
+        self.keys_data: list[KeyData] = []
 
     def generate_all(self):
         self.db_enc_key = generate_32byte_key()
@@ -336,8 +370,9 @@ class Initializer:
         for service in SERVICES:
             secret_key = generate_seed()
             encrypted = encrypt_aes_gcm(self.db_enc_key, secret_key, service.service_id)
-            self.services_data.append(ServiceData(
-                service=service,
+            self.keys_data.append(KeyData(
+                owner_type="service",
+                owner_id=service.service_id,
                 secret_key=secret_key,
                 encrypted_key=b64_encode(encrypted),
             ))
@@ -356,7 +391,7 @@ class Initializer:
             dt["description"] = domain.description
             dt["sign-keys"] = b64url_encode(sign_key)
 
-        hermes_data = next((sd for sd in self.services_data if sd.service.service_id == "hermes"), None)
+        hermes_data = next((kd for kd in self.keys_data if kd.owner_type == "service" and kd.owner_id == "hermes"), None)
         if hermes_data:
             ensure_table(doc, "aegis")["secret-key"] = b64url_encode(hermes_data.secret_key)
 
@@ -375,7 +410,7 @@ class Initializer:
     def update_iris_toml(self):
         doc = load_toml(IRIS_TOML)
 
-        iris_data = next((sd for sd in self.services_data if sd.service.service_id == "iris"), None)
+        iris_data = next((kd for kd in self.keys_data if kd.owner_type == "service" and kd.owner_id == "iris"), None)
         if iris_data:
             aegis = ensure_table(doc, "aegis")
             aegis["audience"] = "iris"
@@ -392,14 +427,23 @@ class Initializer:
         lines.append("")
 
         lines.append("-- ==================== 服务 ====================")
-        lines.append("INSERT INTO t_service (service_id, domain_id, name, description, encrypted_key, access_token_expires_in, refresh_token_expires_in) VALUES")
+        lines.append("INSERT INTO t_service (service_id, domain_id, name, description, access_token_expires_in, refresh_token_expires_in) VALUES")
         service_values = []
-        for sd in self.services_data:
-            svc = sd.service
+        for svc in SERVICES:
             desc = svc.description.replace("'", "''")
-            service_values.append(f"('{svc.service_id}', '{svc.domain_id}', '{svc.name}', '{desc}', '{sd.encrypted_key}', {svc.access_token_expires_in}, {svc.refresh_token_expires_in})")
+            service_values.append(f"('{svc.service_id}', '{svc.domain_id}', '{svc.name}', '{desc}', {svc.access_token_expires_in}, {svc.refresh_token_expires_in})")
         lines.append(",\n".join(service_values))
-        lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), encrypted_key = VALUES(encrypted_key), domain_id = VALUES(domain_id);")
+        lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), domain_id = VALUES(domain_id);")
+        lines.append("")
+
+        lines.append("-- ==================== 服务密钥 ====================")
+        lines.append("DELETE FROM t_key WHERE owner_type = 'service';")
+        lines.append("INSERT INTO t_key (owner_type, owner_id, encrypted_key) VALUES")
+        key_values = []
+        for kd in self.keys_data:
+            key_values.append(f"('{kd.owner_type}', '{kd.owner_id}', '{kd.encrypted_key}')")
+        lines.append(",\n".join(key_values))
+        lines.append(";")
         lines.append("")
 
         if APPLICATIONS:
@@ -465,10 +509,10 @@ class Initializer:
 
         if USER_IDENTITIES:
             lines.append("-- ==================== 用户身份 ====================")
-            lines.append("INSERT INTO t_user_identity (domain, openid, idp, t_openid) VALUES")
+            lines.append("INSERT INTO t_user_identity (domain, uid, idp, t_openid) VALUES")
             identity_values = []
             for identity in USER_IDENTITIES:
-                identity_values.append(f"('{identity.domain}', '{identity.openid}', '{identity.idp}', '{identity.t_openid}')")
+                identity_values.append(f"('{identity.domain}', '{identity.uid}', '{identity.idp}', '{identity.t_openid}')")
             lines.append(",\n".join(identity_values))
             lines.append("ON DUPLICATE KEY UPDATE t_openid = VALUES(t_openid);")
             lines.append("")

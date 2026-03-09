@@ -76,13 +76,9 @@ func (e *Encryptor) GetLID(ctx context.Context) (string, error) {
 }
 
 func (e *Encryptor) updateKey(rawKey []byte) error {
-	seed, err := pasetokit.ParseSeed(rawKey)
+	sk, err := paseto.V4SymmetricKeyFromBytes(rawKey)
 	if err != nil {
-		return fmt.Errorf("parse seed: %w", err)
-	}
-	sk, err := seed.DeriveSymmetricKey()
-	if err != nil {
-		return fmt.Errorf("derive symmetric key: %w", err)
+		return fmt.Errorf("parse symmetric key: %w", err)
 	}
 
 	lid, err := pasetokit.ComputeLID(sk)

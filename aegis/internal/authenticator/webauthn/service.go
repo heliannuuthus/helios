@@ -15,6 +15,7 @@ import (
 	"github.com/heliannuuthus/helios/aegis/config"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
+	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -28,10 +29,11 @@ type Service struct {
 	webauthn *webauthn.WebAuthn
 	rpID     string
 	cache    *cache.Manager
+	userSvc  *hermes.UserService
 }
 
 // NewService 创建 WebAuthn 服务
-func NewService(cm *cache.Manager) (*Service, error) {
+func NewService(cm *cache.Manager, userSvc *hermes.UserService) (*Service, error) {
 	cfg := config.Cfg()
 
 	rpID := cfg.GetString("mfa.webauthn.rp-id")
@@ -62,6 +64,7 @@ func NewService(cm *cache.Manager) (*Service, error) {
 		webauthn: wa,
 		rpID:     rpID,
 		cache:    cm,
+		userSvc:  userSvc,
 	}, nil
 }
 
@@ -73,7 +76,7 @@ func (s *Service) GetRPID() string {
 // ==================== 注册流程 ====================
 
 // BeginRegistration 开始注册
-func (s *Service) BeginRegistration(ctx context.Context, user *models.UserWithDecrypted, existingCredentials []*cache.StoredWebAuthnCredential) (*RegistrationBeginResponse, error) {
+func (s *Service) BeginRegistration(ctx context.Context, user *models.UserWithDecrypted, existingCredentials []*StoredWebAuthnCredential) (*RegistrationBeginResponse, error) {
 	credentials := make([]webauthn.Credential, 0, len(existingCredentials))
 	for _, cred := range existingCredentials {
 		credentials = append(credentials, cred.ToWebAuthnCredential())
@@ -153,14 +156,14 @@ func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r 
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
 
-	existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.OpenID)
+	existingCreds, err := s.getUserWebAuthnCredentials(ctx, user.OpenID)
 	if err != nil {
 		logger.Warnf("[WebAuthn] get existing credentials failed: %v", err)
-		existingCredentials = nil
+		existingCreds = nil
 	}
 
-	credentials := make([]webauthn.Credential, 0, len(existingCredentials))
-	for _, cred := range existingCredentials {
+	credentials := make([]webauthn.Credential, 0, len(existingCreds))
+	for _, cred := range existingCreds {
 		credentials = append(credentials, cred.ToWebAuthnCredential())
 	}
 
@@ -185,7 +188,7 @@ func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r 
 // ==================== 登录流程 ====================
 
 // BeginLogin 开始登录
-func (s *Service) BeginLogin(ctx context.Context, user *models.UserWithDecrypted, existingCredentials []*cache.StoredWebAuthnCredential) (*LoginBeginResponse, error) {
+func (s *Service) BeginLogin(ctx context.Context, user *models.UserWithDecrypted, existingCredentials []*StoredWebAuthnCredential) (*LoginBeginResponse, error) {
 	credentials := make([]webauthn.Credential, 0, len(existingCredentials))
 	for _, cred := range existingCredentials {
 		credentials = append(credentials, cred.ToWebAuthnCredential())
@@ -305,7 +308,7 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertion
 		if err != nil {
 			return "", nil, err
 		}
-		openid, err = s.cache.GetOpenIDByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credential.ID))
+		openid, err = s.GetOpenIDByCredentialID(ctx, base64.RawURLEncoding.EncodeToString(credential.ID))
 		if err != nil {
 			return "", nil, fmt.Errorf("user not found for credential: %w", err)
 		}
@@ -320,13 +323,13 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertion
 			return "", nil, fmt.Errorf("user not found: %w", err)
 		}
 
-		existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.OpenID)
+		existingCreds, err := s.getUserWebAuthnCredentials(ctx, user.OpenID)
 		if err != nil {
 			return "", nil, fmt.Errorf("get credentials failed: %w", err)
 		}
 
-		credentials := make([]webauthn.Credential, 0, len(existingCredentials))
-		for _, cred := range existingCredentials {
+		credentials := make([]webauthn.Credential, 0, len(existingCreds))
+		for _, cred := range existingCreds {
 			credentials = append(credentials, cred.ToWebAuthnCredential())
 		}
 
@@ -352,29 +355,67 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertion
 
 // SaveCredential 保存凭证
 func (s *Service) SaveCredential(ctx context.Context, openid string, credential *webauthn.Credential) error {
-	stored := cache.FromWebAuthnCredential(credential)
-	return s.cache.SaveUserWebAuthnCredential(ctx, openid, stored)
+	stored := FromWebAuthnCredential(credential)
+	secretJSON, err := SerializeWebAuthnCredential(stored)
+	if err != nil {
+		return err
+	}
+
+	credentialID := EncodeCredentialID(stored.ID)
+	dbCred := &models.UserCredential{
+		OpenID:       openid,
+		CredentialID: &credentialID,
+		Type:         string(models.CredentialTypeWebAuthn),
+		Secret:       secretJSON,
+		Enabled:      true,
+	}
+
+	return s.userSvc.CreateCredential(ctx, dbCred)
 }
 
 // UpdateCredentialSignCount 更新凭证签名计数
 func (s *Service) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
-	return s.cache.UpdateWebAuthnCredentialSignCount(ctx, credentialID, signCount)
+	return s.userSvc.UpdateCredentialSignCount(ctx, credentialID, signCount)
 }
 
 // DeleteCredential 删除凭证
 func (s *Service) DeleteCredential(ctx context.Context, openid, credentialID string) error {
-	return s.cache.DeleteUserWebAuthnCredential(ctx, openid, credentialID)
+	return s.userSvc.DeleteCredential(ctx, openid, credentialID)
 }
 
 // ListCredentials 列出用户的所有 WebAuthn 凭证
-func (s *Service) ListCredentials(ctx context.Context, openid string) ([]*cache.StoredWebAuthnCredential, error) {
-	return s.cache.GetUserWebAuthnCredentials(ctx, openid)
+func (s *Service) ListCredentials(ctx context.Context, openid string) ([]*StoredWebAuthnCredential, error) {
+	return s.getUserWebAuthnCredentials(ctx, openid)
+}
+
+// GetOpenIDByCredentialID 根据凭证 ID 获取用户 OpenID
+func (s *Service) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
+	return s.userSvc.GetOpenIDByCredentialID(ctx, credentialID)
+}
+
+// getUserWebAuthnCredentials 获取用户的 WebAuthn 凭证列表
+func (s *Service) getUserWebAuthnCredentials(ctx context.Context, openid string) ([]*StoredWebAuthnCredential, error) {
+	credentials, err := s.userSvc.GetEnabledUserCredentialsByType(ctx, openid, string(models.CredentialTypeWebAuthn))
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*StoredWebAuthnCredential, 0, len(credentials))
+	for _, cred := range credentials {
+		stored, err := ParseStoredWebAuthnCredential(&cred)
+		if err != nil {
+			continue
+		}
+		result = append(result, stored)
+	}
+
+	return result, nil
 }
 
 // finishDiscoverableLogin 完成可发现凭证登录
 func (s *Service) finishDiscoverableLogin(ctx context.Context, session *webauthn.SessionData, parsedResponse *protocol.ParsedCredentialAssertionData) (*webauthn.Credential, error) {
 	credentialID := base64.RawURLEncoding.EncodeToString(parsedResponse.RawID)
-	openid, err := s.cache.GetOpenIDByCredentialID(ctx, credentialID)
+	openid, err := s.GetOpenIDByCredentialID(ctx, credentialID)
 	if err != nil {
 		return nil, fmt.Errorf("credential not found: %w", err)
 	}
@@ -384,13 +425,13 @@ func (s *Service) finishDiscoverableLogin(ctx context.Context, session *webauthn
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
 
-	existingCredentials, err := s.cache.GetUserWebAuthnCredentials(ctx, user.OpenID)
+	existingCreds, err := s.getUserWebAuthnCredentials(ctx, user.OpenID)
 	if err != nil {
 		return nil, fmt.Errorf("get credentials failed: %w", err)
 	}
 
-	credentials := make([]webauthn.Credential, 0, len(existingCredentials))
-	for _, cred := range existingCredentials {
+	credentials := make([]webauthn.Credential, 0, len(existingCreds))
+	for _, cred := range existingCreds {
 		credentials = append(credentials, cred.ToWebAuthnCredential())
 	}
 

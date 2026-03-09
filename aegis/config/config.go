@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	baseconfig "github.com/heliannuuthus/helios/pkg/config"
@@ -56,6 +57,11 @@ func GetEndpoint() string {
 // GetIssuer 获取 Issuer（endpoint + /api）
 func GetIssuer() string {
 	return GetEndpoint() + "/api"
+}
+
+// GetCORSOrigins 获取静态 CORS 允许的 origin 列表
+func GetCORSOrigins() []string {
+	return Cfg().GetStringSlice("cors.origins")
 }
 
 // ==================== Cookie 配置 ====================
@@ -426,21 +432,33 @@ const (
 	DefaultAegisSSOCookieName = "aegis-sso"        // SSO Cookie 默认名称
 )
 
-// GetSSOMasterKey 获取 SSO master key（Base64URL 编码的 48 字节 seed: 16-byte salt + 32-byte key）
-// 未配置时返回 nil, nil；配置了但格式错误时返回 nil, error
-func GetSSOMasterKey() ([]byte, error) {
+// GetSSOMasterKeys 获取 SSO master key 列表（逗号分割，每个为 Base64URL 编码的 48 字节 seed）
+// 第一个为当前主密钥，后续为轮换中的旧密钥。未配置时返回 nil, nil。
+func GetSSOMasterKeys() ([][]byte, error) {
 	secretStr := Cfg().GetString("sso.master-key")
 	if secretStr == "" {
 		return nil, nil
 	}
-	secretBytes, err := base64.RawURLEncoding.DecodeString(secretStr)
-	if err != nil {
-		return nil, fmt.Errorf("decode sso master key: %w", err)
+	parts := strings.Split(secretStr, ",")
+	seeds := make([][]byte, 0, len(parts))
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		b, err := base64.RawURLEncoding.DecodeString(part)
+		if err != nil {
+			return nil, fmt.Errorf("decode sso master key[%d]: %w", i, err)
+		}
+		if len(b) != 48 {
+			return nil, fmt.Errorf("sso master key[%d] must be 48 bytes, got %d", i, len(b))
+		}
+		seeds = append(seeds, b)
 	}
-	if len(secretBytes) != 48 {
-		return nil, fmt.Errorf("sso master key must be 48 bytes, got %d", len(secretBytes))
+	if len(seeds) == 0 {
+		return nil, nil
 	}
-	return secretBytes, nil
+	return seeds, nil
 }
 
 // GetSSOTTL 获取 SSO Token 有效期

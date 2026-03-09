@@ -18,8 +18,8 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/token"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/aegis/internal/user"
+	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
-	pasetokit "github.com/heliannuuthus/helios/pkg/aegis/utils/paseto"
 	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helpers"
@@ -28,10 +28,11 @@ import (
 
 // Service 授权服务
 type Service struct {
-	cache    *cache.Manager
-	userSvc  *user.Service
-	tokenSvc *token.Service
-	pool     *async.Pool
+	cache     *cache.Manager
+	hermesSvc *hermes.Service
+	userSvc   *user.Service
+	tokenSvc  *token.Service
+	pool      *async.Pool
 
 	// 配置
 	authCodeExpiresIn time.Duration
@@ -83,6 +84,7 @@ func generateRefreshTokenValue() (string, error) {
 // NewService 创建授权服务
 func NewService(
 	cache *cache.Manager,
+	hermesSvc *hermes.Service,
 	userSvc *user.Service,
 	tokenSvc *token.Service,
 	pool *async.Pool,
@@ -90,6 +92,7 @@ func NewService(
 ) *Service {
 	return &Service{
 		cache:             cache,
+		hermesSvc:         hermesSvc,
 		userSvc:           userSvc,
 		tokenSvc:          tokenSvc,
 		pool:              pool,
@@ -139,7 +142,7 @@ func (s *Service) CheckIdentityRequirements(ctx context.Context, flow *types.Aut
 }
 
 // ComputeGrantedScopes 计算授权的 scope 交集
-// openid 不再强制补入：客户端请求 openid 时签发 id_token，否则只签发 access_token
+// openid scope 遵循 OIDC 规范：客户端请求时才授予，不强制注入
 func (s *Service) ComputeGrantedScopes(flow *types.AuthFlow) ([]string, error) {
 	connectionConfig := flow.ConnectionMap[flow.Connection]
 	if connectionConfig == nil {
@@ -173,7 +176,7 @@ func (s *Service) GenerateAuthCode(ctx context.Context, flow *types.AuthFlow) (*
 		ExpiresAt: now.Add(s.authCodeExpiresIn),
 	}
 
-	if err := s.cache.SaveAuthCode(ctx, code); err != nil {
+	if err := s.cache.SetAuthCode(ctx, code); err != nil {
 		return nil, fmt.Errorf("save auth code failed: %w", err)
 	}
 
@@ -216,7 +219,7 @@ func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudi
 
 // CheckRelation 检查用户是否具有指定的关系
 func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID string, relations []string, objectType, objectID string) (map[string]bool, error) {
-	relationships, err := s.cache.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
+	relationships, err := s.hermesSvc.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -259,55 +262,32 @@ type PublicKeysResponse struct {
 }
 
 // GetPublicKey 获取公钥（根据 client_id 返回其所属域的所有有效公钥）
-// 返回的公钥列表包含主密钥和轮换期间的旧密钥，用于验证不同时期签发的 token
 func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKeysResponse, error) {
-	// 1. 获取 Application
 	app, err := s.cache.GetApplication(ctx, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("client not found: %w", err)
 	}
 
-	// 2. 获取域信息和公钥
 	domain, err := s.cache.GetDomain(ctx, app.DomainID)
 	if err != nil {
 		return nil, fmt.Errorf("domain not found: %w", err)
 	}
 
-	// 3. 从域主密钥（48 字节 seed）派生公钥
-	mainSeed, err := pasetokit.ParseSeed(domain.Main)
-	if err != nil {
-		return nil, fmt.Errorf("parse main seed: %w", err)
-	}
-	mainPublicKey, err := mainSeed.DerivePublicKey()
-	if err != nil {
-		return nil, fmt.Errorf("derive main public key: %w", err)
-	}
 	main := PublicKeyInfo{
 		Version:   tokendef.PasetoVersion,
 		Purpose:   tokendef.PasetoPurpose,
-		PublicKey: pasetokit.ExportPublicKeyBase64(mainPublicKey),
+		PublicKey: base64.StdEncoding.EncodeToString(domain.Keys.Main.PublicKey),
 	}
 
-	// 4. 从所有域密钥（48 字节 seed）派生公钥
-	keyInfos := make([]PublicKeyInfo, 0, len(domain.Keys))
-	for _, signKey := range domain.Keys {
-		seed, err := pasetokit.ParseSeed(signKey)
-		if err != nil {
-			return nil, fmt.Errorf("parse seed: %w", err)
-		}
-		publicKey, err := seed.DerivePublicKey()
-		if err != nil {
-			return nil, fmt.Errorf("derive public key: %w", err)
-		}
-
+	keyInfos := make([]PublicKeyInfo, 0, len(domain.Keys.Keys))
+	for _, k := range domain.Keys.Keys {
 		keyInfos = append(keyInfos, PublicKeyInfo{
 			Version:   tokendef.PasetoVersion,
 			Purpose:   tokendef.PasetoPurpose,
-			PublicKey: pasetokit.ExportPublicKeyBase64(publicKey),
+			PublicKey: base64.StdEncoding.EncodeToString(k.PublicKey),
 		})
 	}
 
-	// 5. 构建响应
 	return &PublicKeysResponse{
 		Main: main,
 		Keys: keyInfos,
@@ -316,7 +296,7 @@ func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKey
 
 func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
 	// 1. 原子消费授权码（读取并删除，防止重放）
-	authCode, err := s.cache.ConsumeAuthCode(ctx, req.Code)
+	authCode, err := s.cache.GetAuthCode(ctx, req.Code)
 	if err != nil {
 		return nil, autherrors.NewInvalidGrant("invalid authorization code")
 	}
@@ -396,7 +376,7 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 	}
 
 	// 4. 生成新的 access token（使用 refresh token 中保存的 openid 作为 sub）
-	tokenResp, err := s.generateAccessToken(ctx, app, svc, user, rt.OpenID, rt.Scope)
+	tokenResp, err := s.generateAccessToken(ctx, &app.Application, &svc.Service, user, rt.OpenID, rt.Scope)
 	if err != nil {
 		return nil, err
 	}
@@ -423,11 +403,14 @@ func (s *Service) generateTokens(ctx context.Context, flow *types.AuthFlow) (*To
 
 	// scope 包含 openid 时签发 id_token
 	if helpers.ContainsScope(flow.GrantedScopes, ScopeOpenID) {
+		logger.Infof("[Authorize] 签发 id_token - FlowID: %s, Sub: %s, GrantedScopes: %v", flow.ID, flow.User.OpenID, flow.GrantedScopes)
 		idTokenStr, err := s.generateIDToken(ctx, flow)
 		if err != nil {
 			return nil, err
 		}
 		tokenResp.IDToken = idTokenStr
+	} else {
+		logger.Infof("[Authorize] 跳过 id_token 签发（scope 不含 openid） - FlowID: %s, GrantedScopes: %v", flow.ID, flow.GrantedScopes)
 	}
 
 	// 如果 scope 包含 offline_access，生成 refresh token
@@ -444,8 +427,8 @@ func (s *Service) generateTokens(ctx context.Context, flow *types.AuthFlow) (*To
 
 func (s *Service) generateAccessToken(
 	ctx context.Context,
-	app *models.ApplicationWithKey,
-	svc *models.ServiceWithKey,
+	app *models.Application,
+	svc *models.Service,
 	user *models.UserWithDecrypted,
 	sub string,
 	scope string,
@@ -545,7 +528,7 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 		CreatedAt: now,
 	}
 
-	if err := s.cache.SaveRefreshToken(ctx, rt); err != nil {
+	if err := s.cache.SetRefreshToken(ctx, rt); err != nil {
 		return nil, fmt.Errorf("save refresh token failed: %w", err)
 	}
 
@@ -558,14 +541,14 @@ func (s *Service) cleanupOldRefreshTokens(ctx context.Context, openid, clientID 
 		maxTokens = 10
 	}
 
-	tokens, err := s.cache.ListUserRefreshTokens(ctx, openid, clientID)
+	tokens, err := s.cache.ListRefreshTokens(ctx, openid, clientID)
 	if err != nil {
 		return
 	}
 
 	if len(tokens) >= maxTokens {
 		for i := maxTokens - 1; i < len(tokens); i++ {
-			if err := s.cache.RevokeRefreshToken(ctx, tokens[i].Token); err != nil {
+			if err := s.cache.DelRefreshToken(ctx, tokens[i].Token); err != nil {
 				// 记录错误但不中断流程
 				logger.Warnf("revoke refresh token failed: %v", err)
 			}
@@ -575,7 +558,7 @@ func (s *Service) cleanupOldRefreshTokens(ctx context.Context, openid, clientID 
 
 func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, req *MultiAudienceTokenRequest) (MultiAudienceTokenResponse, error) {
 	// 1. 原子消费授权码
-	authCode, err := s.cache.ConsumeAuthCode(ctx, req.Code)
+	authCode, err := s.cache.GetAuthCode(ctx, req.Code)
 	if err != nil {
 		return nil, autherrors.NewInvalidGrant("invalid authorization code")
 	}
@@ -656,13 +639,17 @@ func (s *Service) generateMultiAudienceTokens(
 ) (MultiAudienceTokenResponse, error) {
 	resp := make(MultiAudienceTokenResponse, len(audiences))
 
+	relations, err := s.cache.GetAppServiceRelations(ctx, flow.Application.AppID)
+	if err != nil {
+		return nil, autherrors.NewServerError("check relation failed")
+	}
+	allowedSet := make(map[string]bool, len(relations))
+	for _, rel := range relations {
+		allowedSet[rel.ServiceID] = true
+	}
+
 	for audience, audienceScope := range audiences {
-		// 验证 Application-Service 关系
-		hasRelation, err := s.cache.CheckAppServiceRelation(ctx, flow.Application.AppID, audience)
-		if err != nil {
-			return nil, autherrors.NewServerError("check relation failed")
-		}
-		if !hasRelation {
+		if !allowedSet[audience] {
 			return nil, autherrors.NewAccessDeniedf("application %s has no access to service %s", flow.Application.AppID, audience)
 		}
 
@@ -674,7 +661,7 @@ func (s *Service) generateMultiAudienceTokens(
 		scope := audienceScope.GetScope()
 
 		// 签发 access token
-		tokenResp, err := s.generateAccessToken(ctx, flow.Application, svc, flow.User, flow.User.OpenID, scope)
+		tokenResp, err := s.generateAccessToken(ctx, flow.Application, &svc.Service, flow.User, flow.User.OpenID, scope)
 		if err != nil {
 			return nil, fmt.Errorf("generate token for audience %s: %w", audience, err)
 		}
@@ -682,7 +669,7 @@ func (s *Service) generateMultiAudienceTokens(
 		// 如果 scope 包含 offline_access，签发独立的 refresh token
 		scopes := strings.Fields(scope)
 		if helpers.ContainsScope(scopes, ScopeOfflineAccess) {
-			rtValue, err := s.createRefreshTokenForAudience(ctx, flow.User.OpenID, flow.Application.AppID, svc, scope)
+			rtValue, err := s.createRefreshTokenForAudience(ctx, flow.User.OpenID, flow.Application.AppID, &svc.Service, scope)
 			if err != nil {
 				return nil, fmt.Errorf("create refresh token for audience %s: %w", audience, err)
 			}
@@ -697,7 +684,7 @@ func (s *Service) generateMultiAudienceTokens(
 
 // createRefreshTokenForAudience 为指定 audience 创建 refresh token
 func (s *Service) createRefreshTokenForAudience(
-	ctx context.Context, openID, clientID string, svc *models.ServiceWithKey, scope string,
+	ctx context.Context, openID, clientID string, svc *models.Service, scope string,
 ) (string, error) {
 	if svc.RefreshTokenExpiresIn == 0 {
 		return "", autherrors.NewInvalidRequestf("refresh_token_expires_in not configured for service %s", svc.ServiceID)
@@ -725,7 +712,7 @@ func (s *Service) createRefreshTokenForAudience(
 		CreatedAt: now,
 	}
 
-	if err := s.cache.SaveRefreshToken(ctx, rt); err != nil {
+	if err := s.cache.SetRefreshToken(ctx, rt); err != nil {
 		return "", fmt.Errorf("save refresh token failed: %w", err)
 	}
 

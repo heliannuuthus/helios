@@ -81,7 +81,7 @@ func main() {
 	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Aegis CORS 中间件（支持应用配置的 allowed_origins，SPA 跨域调用需要）
-	aegisCORS := middleware.CORSWithConfig(aegisconfig.Cfg(), app.AegisHandler.CacheManager())
+	aegisCORS := middleware.CORS(app.AegisHandler.CacheManager())
 
 	// Aegis 认证路由（OAuth2.1/OIDC 风格）
 	authGroup := r.Group("/auth")
@@ -102,6 +102,7 @@ func main() {
 			{"POST", "/token", app.AegisHandler.Token},
 			{"POST", "/revoke", app.AegisHandler.Revoke},
 			{"POST", "/logout", app.AegisHandler.Logout},
+			{"GET", "/pubkeys", app.AegisHandler.PublicKeys},
 		}
 		registered := make(map[string]bool)
 		for _, route := range corsRoutes {
@@ -114,7 +115,6 @@ func main() {
 
 		// 服务端调用的接口（不需要 CORS）
 		authGroup.POST("/check", app.AegisHandler.Check)
-		authGroup.GET("/pubkeys", app.AegisHandler.PublicKeys)
 	}
 
 	// Iris 用户信息路由

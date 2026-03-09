@@ -20,9 +20,10 @@ type Service struct {
 	issuer string
 	cache  *cache.Manager
 
-	domainKeyProvider  key.Provider // clientID → domain.Main (includes SSO with id="aegis")
-	serviceKeyProvider key.Provider // audience → service.Key (includes SSO with id="aegis")
-	appKeyProvider     key.Provider // clientID → app.Key
+	domainSignProvider   key.Provider // clientID → domain PrivateKey (signing)
+	domainVerifyProvider key.Provider // clientID → domain PublicKey[] (verification)
+	serviceKeyProvider   key.Provider // audience → service SecretKey[] (encrypt/decrypt)
+	appVerifyProvider    key.Provider // clientID → app PublicKey[] (CT verification)
 
 	domainSigners     map[string]*Signer
 	serviceEncryptors map[string]*Encryptor
@@ -33,20 +34,22 @@ type Service struct {
 
 func NewService(
 	cache *cache.Manager,
-	domainKeyProvider key.Provider,
+	domainSignProvider key.Provider,
+	domainVerifyProvider key.Provider,
 	serviceKeyProvider key.Provider,
-	appKeyProvider key.Provider,
+	appVerifyProvider key.Provider,
 ) *Service {
 	return &Service{
-		issuer:             config.GetIssuer(),
-		cache:              cache,
-		domainKeyProvider:  domainKeyProvider,
-		serviceKeyProvider: serviceKeyProvider,
-		appKeyProvider:     appKeyProvider,
-		domainSigners:      make(map[string]*Signer),
-		serviceEncryptors:  make(map[string]*Encryptor),
-		domainDecryptors:   make(map[string]*pkgtoken.Decryptor),
-		appDecryptor:       pkgtoken.NewDecryptor("", nil, appKeyProvider),
+		issuer:               config.GetIssuer(),
+		cache:                cache,
+		domainSignProvider:   domainSignProvider,
+		domainVerifyProvider: domainVerifyProvider,
+		serviceKeyProvider:   serviceKeyProvider,
+		appVerifyProvider:    appVerifyProvider,
+		domainSigners:        make(map[string]*Signer),
+		serviceEncryptors:    make(map[string]*Encryptor),
+		domainDecryptors:     make(map[string]*pkgtoken.Decryptor),
+		appDecryptor:         pkgtoken.NewDecryptor("", nil, appVerifyProvider),
 	}
 }
 
@@ -161,7 +164,7 @@ func (s *Service) domainSigner(clientID string) *Signer {
 		return signer
 	}
 
-	signer = NewSigner(s.domainKeyProvider, clientID)
+	signer = NewSigner(s.domainSignProvider, clientID)
 	s.domainSigners[clientID] = signer
 	return signer
 }
@@ -201,7 +204,7 @@ func (s *Service) domainDecryptor(audience string) *pkgtoken.Decryptor {
 		return decryptor
 	}
 
-	decryptor = pkgtoken.NewDecryptor(audience, s.serviceKeyProvider, s.domainKeyProvider)
+	decryptor = pkgtoken.NewDecryptor(audience, s.serviceKeyProvider, s.domainVerifyProvider)
 	s.domainDecryptors[audience] = decryptor
 	return decryptor
 }

@@ -131,8 +131,8 @@ func (h *Handler) Authorize(c *gin.Context) {
 	}
 
 	flow := types.NewAuthFlow(&req, time.Duration(config.GetCookieMaxAge())*time.Second, config.GetAuthFlowMaxLifetime())
-	flow.Application = app
-	flow.Service = svc
+	flow.Application = &app.Application
+	flow.Service = &svc.Service
 	flow.SetConnectionMap(h.authenticateSvc.SetConnections(idpConfigs))
 
 	if !req.Prompt.Contains(types.PromptLogin) {
@@ -489,7 +489,7 @@ func (h *Handler) ConfirmIdentify(c *gin.Context) {
 		Domain:    identity.Domain,
 		IDP:       identity.IDP,
 		TOpenID:   identity.TOpenID,
-		OpenID:    identifiedUser.OpenID,
+		UID:       identifiedUser.OpenID,
 		RawData:   identity.RawData,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -637,7 +637,7 @@ func (h *Handler) Revoke(c *gin.Context) {
 	}
 
 	// RFC 7009: 即使 token 无效，也应返回 200
-	if err := h.cache.RevokeRefreshToken(c.Request.Context(), req.Token); err != nil {
+	if err := h.cache.DelRefreshToken(c.Request.Context(), req.Token); err != nil {
 		logger.Warnf("[Handler] revoke token failed: %v", err)
 	}
 	c.Status(http.StatusOK)
@@ -653,7 +653,7 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
-	if err := h.cache.RevokeUserRefreshTokens(c.Request.Context(), openID); err != nil {
+	if err := h.cache.DelUserRefreshTokens(c.Request.Context(), openID); err != nil {
 		h.errorResponse(c, autherrors.NewServerError("failed to revoke tokens"))
 		return
 	}
@@ -720,8 +720,17 @@ func collectAudiences(req *types.AuthRequest) ([]string, *autherrors.AuthError) 
 	return audiences, nil
 }
 
-func (h *Handler) validateAudiences(ctx context.Context, clientID string, audiences []string) (*models.ServiceWithKey, *autherrors.AuthError) {
-	var svc *models.ServiceWithKey
+func (h *Handler) validateAudiences(ctx context.Context, clientID string, audiences []string) (*cache.ServiceWithKey, *autherrors.AuthError) {
+	relations, err := h.cache.GetAppServiceRelations(ctx, clientID)
+	if err != nil {
+		return nil, autherrors.NewServerError("check relation failed")
+	}
+	allowedSet := make(map[string]bool, len(relations))
+	for _, rel := range relations {
+		allowedSet[rel.ServiceID] = true
+	}
+
+	var svc *cache.ServiceWithKey
 	for i, aud := range audiences {
 		s, err := h.cache.GetService(ctx, aud)
 		if err != nil {
@@ -730,11 +739,7 @@ func (h *Handler) validateAudiences(ctx context.Context, clientID string, audien
 		if i == 0 {
 			svc = s
 		}
-		ok, err := h.cache.CheckAppServiceRelation(ctx, clientID, aud)
-		if err != nil {
-			return nil, autherrors.NewServerError("check relation failed")
-		}
-		if !ok {
+		if !allowedSet[aud] {
 			return nil, autherrors.NewAccessDeniedf("application %s has no access to service %s", clientID, aud)
 		}
 	}
@@ -779,7 +784,7 @@ func (h *Handler) trySSOFastPath(c *gin.Context, ctx context.Context, flow *type
 // resolveSSO 验证 SSO cookie 并恢复用户
 // 返回 ssoToken 和 user，任一为 nil 表示 SSO 不可用
 func (h *Handler) resolveSSO(c *gin.Context, ctx context.Context,
-	app *models.ApplicationWithKey,
+	app *models.Application,
 ) (*token.SSOToken, *models.UserWithDecrypted) {
 	ssoTokenString, err := getSSOCookie(c)
 	if err != nil || ssoTokenString == "" {
@@ -934,7 +939,7 @@ func (h *Handler) resolveUser(ctx context.Context, flow *types.AuthFlow) error {
 		return autherrors.NewServerError("global identity not found for domain")
 	}
 
-	u, err := h.userSvc.GetUser(ctx, globalIdentity.OpenID)
+	u, err := h.userSvc.GetUser(ctx, globalIdentity.UID)
 	if err != nil {
 		return autherrors.NewServerError("user not found after identity resolved")
 	}

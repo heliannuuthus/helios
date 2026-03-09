@@ -41,9 +41,9 @@ type AuthFlow struct {
 	// 请求参数
 	Request *AuthRequest `json:"request"`
 
-	// 实体信息（认证过程中填充）
-	Application *models.ApplicationWithKey `json:"application,omitempty"`
-	Service     *models.ServiceWithKey     `json:"service,omitempty"`
+	// 实体信息（认证过程中填充，不含密钥）
+	Application *models.Application `json:"application,omitempty"`
+	Service     *models.Service     `json:"service,omitempty"`
 	User        *models.UserWithDecrypted  `json:"user,omitempty"`     // 系统中的已有用户（identify 匹配到的 / 认证完成后的）
 	Identify    *models.TUserInfo          `json:"identify,omitempty"` // 当前 IDP 认证返回的身份信息（未绑定，用于 Account Linking 匹配）
 

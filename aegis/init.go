@@ -50,22 +50,20 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	// 2. 初始化 Cache Manager
 	cacheManager := cache.NewManager(hermesSvc, userSvc, redis)
 
-	// 3. 初始化 KeyStore
-	ssoMasterKeyFetcher := func() ([][]byte, error) {
-		masterKey, err := config.GetSSOMasterKey()
-		if err != nil {
-			return nil, fmt.Errorf("get sso master key: %w", err)
-		}
-		if masterKey == nil {
-			return nil, fmt.Errorf("sso master key not configured")
-		}
-		return [][]byte{masterKey}, nil
-	}
+	// 3. 初始化密钥 Providers（cache 层已完成 seed → 派生密钥转换）
 
-	// 域密钥：clientID → domain.Main（id="aegis" 时返回 SSO master key）
-	domainKeyProvider := key.MultiOf(func(ctx context.Context, clientID string) ([][]byte, error) {
+	// 域签名 provider：clientID → PrivateKey（Signer 用）
+	domainSignProvider := key.MultiOf(func(ctx context.Context, clientID string) ([][]byte, error) {
 		if clientID == token.SSOIssuer {
-			return ssoMasterKeyFetcher()
+			k, err := cacheManager.GetSSOKeys()
+			if err != nil {
+				return nil, err
+			}
+			result := make([][]byte, len(k.Keys))
+			for i, key := range k.Keys {
+				result[i] = key.PrivateKey
+			}
+			return result, nil
 		}
 		app, err := cacheManager.GetApplication(ctx, clientID)
 		if err != nil {
@@ -75,32 +73,80 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 		if err != nil {
 			return nil, fmt.Errorf("get domain: %w", err)
 		}
-		return [][]byte{domain.Main}, nil
+		result := make([][]byte, len(domain.Keys.Keys))
+		for i, k := range domain.Keys.Keys {
+			result[i] = k.PrivateKey
+		}
+		return result, nil
 	})
 
-	// 服务密钥：audience → service.Key（id="aegis" 时返回 SSO master key）
+	// 域验签 provider：clientID → PublicKey[]（Verifier 用）
+	domainVerifyProvider := key.MultiOf(func(ctx context.Context, clientID string) ([][]byte, error) {
+		if clientID == token.SSOIssuer {
+			k, err := cacheManager.GetSSOKeys()
+			if err != nil {
+				return nil, err
+			}
+			result := make([][]byte, len(k.Keys))
+			for i, key := range k.Keys {
+				result[i] = key.PublicKey
+			}
+			return result, nil
+		}
+		app, err := cacheManager.GetApplication(ctx, clientID)
+		if err != nil {
+			return nil, fmt.Errorf("get application: %w", err)
+		}
+		domain, err := cacheManager.GetDomain(ctx, app.DomainID)
+		if err != nil {
+			return nil, fmt.Errorf("get domain: %w", err)
+		}
+		result := make([][]byte, len(domain.Keys.Keys))
+		for i, k := range domain.Keys.Keys {
+			result[i] = k.PublicKey
+		}
+		return result, nil
+	})
+
+	// 服务密钥 provider：audience → SecretKey[]（Encryptor/Decryptor 用）
 	serviceKeyProvider := key.MultiOf(func(ctx context.Context, audience string) ([][]byte, error) {
 		if audience == token.SSOAudience {
-			return ssoMasterKeyFetcher()
+			k, err := cacheManager.GetSSOKeys()
+			if err != nil {
+				return nil, err
+			}
+			result := make([][]byte, len(k.Keys))
+			for i, key := range k.Keys {
+				result[i] = key.SecretKey
+			}
+			return result, nil
 		}
 		svc, err := cacheManager.GetService(ctx, audience)
 		if err != nil {
 			return nil, fmt.Errorf("get service: %w", err)
 		}
-		return [][]byte{svc.Key}, nil
+		result := make([][]byte, len(svc.Keys.Keys))
+		for i, k := range svc.Keys.Keys {
+			result[i] = k.SecretKey
+		}
+		return result, nil
 	})
 
-	// 应用密钥：clientID → app.Key
-	appKeyProvider := key.MultiOf(func(ctx context.Context, clientID string) ([][]byte, error) {
+	// 应用验签 provider：clientID → PublicKey[]（CT Verifier 用）
+	appVerifyProvider := key.MultiOf(func(ctx context.Context, clientID string) ([][]byte, error) {
 		app, err := cacheManager.GetApplication(ctx, clientID)
 		if err != nil {
 			return nil, fmt.Errorf("get application: %w", err)
 		}
-		return [][]byte{app.Key}, nil
+		result := make([][]byte, len(app.Keys.Keys))
+		for i, k := range app.Keys.Keys {
+			result[i] = k.PublicKey
+		}
+		return result, nil
 	})
 
 	// 4. 初始化 Token Service
-	tokenSvc := token.NewService(cacheManager, domainKeyProvider, serviceKeyProvider, appKeyProvider)
+	tokenSvc := token.NewService(cacheManager, domainSignProvider, domainVerifyProvider, serviceKeyProvider, appVerifyProvider)
 	logger.Info("[Auth] Token Service 初始化完成")
 
 	// 4. 初始化邮件发送器
@@ -110,7 +156,7 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	}
 
 	// 5. 初始化底层 Provider
-	webauthnSvc, captchaVerifier, totpVerifier := initProviders(credentialSvc, cacheManager)
+	webauthnSvc, captchaVerifier, totpVerifier := initProviders(credentialSvc, cacheManager, userSvc)
 
 	// 6. 初始化访问控制管理器
 	throttler := throttle.NewThrottler(redis)
@@ -133,7 +179,7 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	authenticateSvc := authenticate.NewService(cacheManager, ac)
 
 	// 11. 初始化 Authorize Service
-	authorizeSvc := authorize.NewService(cacheManager, userService, tokenSvc, pool, 5*time.Minute)
+	authorizeSvc := authorize.NewService(cacheManager, hermesSvc, userService, tokenSvc, pool, 5*time.Minute)
 
 	// 12. 初始化 Challenge Service（直接复用 Registry，不再重复构建 Provider）
 	challengeSvc := challenge.NewService(cacheManager, registry)
@@ -149,10 +195,10 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 }
 
 // initProviders 初始化底层 Provider（WebAuthn、Captcha、TOTP）
-func initProviders(credentialSvc *hermes.CredentialService, cacheManager *cache.Manager) (*webauthn.Service, captcha.Verifier, factor.TOTPVerifier) {
+func initProviders(credentialSvc *hermes.CredentialService, cacheManager *cache.Manager, userSvc *hermes.UserService) (*webauthn.Service, captcha.Verifier, factor.TOTPVerifier) {
 	// WebAuthn
 	var webauthnSvc *webauthn.Service
-	if svc, err := webauthn.NewService(cacheManager); err != nil {
+	if svc, err := webauthn.NewService(cacheManager, userSvc); err != nil {
 		logger.Warnf("[Auth] WebAuthn 初始化失败: %v", err)
 	} else {
 		webauthnSvc = svc
