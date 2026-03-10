@@ -164,33 +164,40 @@ func main() {
 		{
 			domains.GET("", app.HermesHandler.ListDomains)
 			domains.GET("/:domain_id", app.HermesHandler.GetDomain)
-		}
 
-		// 服务管理
-		services := hermes.Group("/services")
-		{
-			services.GET("", app.HermesHandler.ListServices)
-			services.GET("/:service_id", app.HermesHandler.GetService)
-			services.POST("", adminRelation, app.HermesHandler.CreateService)
-			services.PATCH("/:service_id", adminRelation, app.HermesHandler.UpdateService)
-		}
-
-		// 应用管理
-		applications := hermes.Group("/applications")
-		{
-			applications.GET("", app.HermesHandler.ListApplications)
-			applications.GET("/:app_id", app.HermesHandler.GetApplication)
-			applications.GET("/:app_id/applicable", app.HermesHandler.GetApplicationServiceRelations)
-			applications.POST("", adminRelation, app.HermesHandler.CreateApplication)
-			applications.PATCH("/:app_id", adminRelation, app.HermesHandler.UpdateApplication)
-			applications.POST("/:app_id/services/:service_id/applicable", adminRelation, app.HermesHandler.SetApplicationServiceRelations)
-
-			appServices := applications.Group("/:app_id/services/:service_id")
+			// 域下服务：domains/:domain_id/services
+			domainServices := domains.Group("/:domain_id/services")
 			{
-				appServices.GET("/relationships", app.HermesHandler.ListAppServiceRelationships)
-				appServices.POST("/relationships", adminRelation, app.HermesHandler.CreateAppServiceRelationship)
-				appServices.PATCH("/relationships/:relationship_id", adminRelation, app.HermesHandler.UpdateAppServiceRelationship)
-				appServices.DELETE("/relationships/:relationship_id", adminRelation, app.HermesHandler.DeleteAppServiceRelationship)
+				domainServices.GET("", app.HermesHandler.ListServices)
+				domainServices.GET("/:service_id", app.HermesHandler.GetService)
+				domainServices.GET("/:service_id/applications", app.HermesHandler.GetServiceApplicationRelations)
+				domainServices.GET("/:service_id/applications/:app_id/relations", app.HermesHandler.GetServiceAppRelations)
+				domainServices.PUT("/:service_id/applications/:app_id/relations", adminRelation, app.HermesHandler.SetServiceAppRelations)
+				domainServices.POST("", adminRelation, app.HermesHandler.CreateService)
+				domainServices.PATCH("/:service_id", adminRelation, app.HermesHandler.UpdateService)
+				domainServices.DELETE("/:service_id", adminRelation, app.HermesHandler.DeleteService)
+			}
+
+			// 域下应用：domains/:domain_id/applications
+			domainApps := domains.Group("/:domain_id/applications")
+			{
+				domainApps.GET("", app.HermesHandler.ListApplications)
+				domainApps.GET("/:app_id", app.HermesHandler.GetApplication)
+				domainApps.GET("/:app_id/relations", app.HermesHandler.GetApplicationServiceRelations)
+				domainApps.GET("/:app_id/idp-configs", app.HermesHandler.ListApplicationIDPConfigs)
+				domainApps.POST("", adminRelation, app.HermesHandler.CreateApplication)
+				domainApps.PATCH("/:app_id", adminRelation, app.HermesHandler.UpdateApplication)
+				domainApps.POST("/:app_id/idp-configs", adminRelation, app.HermesHandler.CreateApplicationIDPConfig)
+				domainApps.PATCH("/:app_id/idp-configs/:idp_type", adminRelation, app.HermesHandler.UpdateApplicationIDPConfig)
+				domainApps.DELETE("/:app_id/idp-configs/:idp_type", adminRelation, app.HermesHandler.DeleteApplicationIDPConfig)
+
+				appServices := domainApps.Group("/:app_id/services/:service_id")
+				{
+					appServices.GET("/relationships", app.HermesHandler.ListAppServiceRelationships)
+					appServices.POST("/relationships", adminRelation, app.HermesHandler.CreateAppServiceRelationship)
+					appServices.PATCH("/relationships/:relationship_id", adminRelation, app.HermesHandler.UpdateAppServiceRelationship)
+					appServices.DELETE("/relationships/:relationship_id", adminRelation, app.HermesHandler.DeleteAppServiceRelationship)
+				}
 			}
 		}
 

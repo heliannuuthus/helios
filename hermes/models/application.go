@@ -8,17 +8,17 @@ import (
 // Application 应用
 type Application struct {
 	// 主键
-	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
 	// 业务字段
-	DomainID       string  `gorm:"column:domain_id;size:32;not null"`
-	AppID          string  `gorm:"column:app_id;size:64;not null;uniqueIndex"`
-	Name           string  `gorm:"column:name;size:128;not null"`
-	LogoURL        *string `gorm:"column:logo_url;size:512"`
-	RedirectURIs   *string `gorm:"column:redirect_uris;size:2048"`
-	AllowedOrigins *string `gorm:"column:allowed_origins;size:1024"`
+	DomainID       string  `gorm:"column:domain_id;size:32;not null" json:"domain_id"`
+	AppID          string  `gorm:"column:app_id;size:64;not null;uniqueIndex" json:"app_id"`
+	Name           string  `gorm:"column:name;size:128;not null" json:"name"`
+	LogoURL        *string `gorm:"column:logo_url;size:512" json:"logo_url,omitempty"`
+	RedirectURIs   *string `gorm:"column:redirect_uris;size:2048" json:"redirect_uris,omitempty"`
+	AllowedOrigins *string `gorm:"column:allowed_origins;size:1024" json:"allowed_origins,omitempty"`
 	// 时间戳
-	CreatedAt time.Time `gorm:"column:created_at;not null"`
-	UpdatedAt time.Time `gorm:"column:updated_at;not null"`
+	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null" json:"updated_at"`
 }
 
 func (Application) TableName() string {
@@ -28,18 +28,18 @@ func (Application) TableName() string {
 // ApplicationIDPConfig 应用 IDP 配置
 type ApplicationIDPConfig struct {
 	// 主键
-	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
 	// 固定长度字段
-	AppID    string `gorm:"column:app_id;size:64;not null"`
-	Type     string `gorm:"column:type;size:32;not null"` // github/google/wechat-mp/user/staff
-	Priority int    `gorm:"column:priority;not null;default:0"`
+	AppID    string `gorm:"column:app_id;size:64;not null" json:"app_id"`
+	Type     string `gorm:"column:type;size:32;not null" json:"type"` // github/google/wechat-mp/user/staff
+	Priority int    `gorm:"column:priority;not null;default:0" json:"priority"`
 	// 时间戳
-	CreatedAt time.Time `gorm:"column:created_at;not null"`
-	UpdatedAt time.Time `gorm:"column:updated_at;not null"`
+	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null" json:"updated_at"`
 	// 变长字段（逗号分隔）
-	Strategy *string `gorm:"column:strategy;size:256"` // password,webauthn（仅 user/staff 需要）
-	Delegate *string `gorm:"column:delegate;size:256"` // email_otp,totp,webauthn
-	Require  *string `gorm:"column:require;size:256"`  // captcha
+	Strategy *string `gorm:"column:strategy;size:256" json:"strategy,omitempty"` // password,webauthn（仅 user/staff 需要）
+	Delegate *string `gorm:"column:delegate;size:256" json:"delegate,omitempty"` // email_otp,totp,webauthn
+	Require  *string `gorm:"column:require;size:256" json:"require,omitempty"`    // captcha
 }
 
 func (ApplicationIDPConfig) TableName() string {
@@ -73,13 +73,12 @@ func (a *ApplicationIDPConfig) GetRequireList() []string {
 // ApplicationServiceRelation 应用服务关系
 type ApplicationServiceRelation struct {
 	// 主键
-	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
 	// 固定长度字段
-	AppID     string `gorm:"column:app_id;size:64;not null"`
-	ServiceID string `gorm:"column:service_id;size:32;not null;index"`
-	Relation  string `gorm:"column:relation;size:32;not null;default:*"`
-	// 时间戳
-	CreatedAt time.Time `gorm:"column:created_at;not null"`
+	AppID     string    `gorm:"column:app_id;size:64;not null" json:"app_id"`
+	ServiceID string    `gorm:"column:service_id;size:32;not null;index" json:"service_id"`
+	Relation  string    `gorm:"column:relation;size:32;not null;default:*" json:"relation"`
+	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
 }
 
 func (ApplicationServiceRelation) TableName() string {

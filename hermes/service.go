@@ -54,81 +54,93 @@ func NewService(db *gorm.DB) *Service {
 
 // ==================== Domain 相关 ====================
 
-// GetDomain 获取域（从配置读取，不含密钥）
-func (*Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
-	// 检查域配置是否存在
-	signKeys := config.GetDomainSignKeys(domainID)
-	if len(signKeys) == 0 {
-		return nil, fmt.Errorf("域 %s 配置不存在", domainID)
+// getDomainFromDB 从数据库读取域元数据及允许的 IDP 列表
+func (s *Service) getDomainFromDB(ctx context.Context, domainID string) (*models.Domain, error) {
+	var rec models.DomainRecord
+	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).First(&rec).Error; err != nil {
+		return nil, fmt.Errorf("域 %s 不存在: %w", domainID, err)
 	}
-
-	name := config.Cfg().GetString("aegis.domains" + "." + domainID + ".name")
-	if name == "" {
-		name = domainID
+	allowedIDPs, err := s.getDomainAllowedIDPs(ctx, domainID)
+	if err != nil {
+		return nil, err
 	}
+	return &models.Domain{
+		DomainID:    rec.DomainID,
+		Name:        rec.Name,
+		Description: rec.Description,
+		AllowedIDPs: allowedIDPs,
+	}, nil
+}
 
-	var description *string
-	if desc := config.Cfg().GetString("aegis.domains" + "." + domainID + ".description"); desc != "" {
-		description = &desc
+// getDomainAllowedIDPs 查询域允许的 IDP 类型列表
+func (s *Service) getDomainAllowedIDPs(ctx context.Context, domainID string) ([]string, error) {
+	var rows []models.DomainIDPRecord
+	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("查询域 IDP 列表失败: %w", err)
 	}
-
-	domain := &models.Domain{
-		DomainID:    domainID,
-		Name:        name,
-		Description: description,
+	out := make([]string, 0, len(rows))
+	for i := range rows {
+		out = append(out, rows[i].IDPType)
 	}
+	return out, nil
+}
 
+// GetDomain 获取域（元数据与 allowed_idps 从 DB 读，签名密钥仍从配置读）
+func (s *Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
+	// 域必须存在于 DB
+	domain, err := s.getDomainFromDB(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+	// 签名密钥仍从配置读取（用于签发/验签，此处仅返回元数据，aegis 侧 GetDomainWithKey 才需要密钥）
 	return domain, nil
 }
 
-// GetDomainWithKey 获取域（含签名密钥）
+// GetDomainWithKey 获取域（含签名密钥，供 aegis 签发/验签；AllowedIDPs 来自 DB；密钥优先从 t_key 读，否则回退到配置）
 func (s *Service) GetDomainWithKey(ctx context.Context, domainID string) (*models.DomainWithKey, error) {
-	domain, err := s.GetDomain(ctx, domainID)
+	domain, err := s.getDomainFromDB(ctx, domainID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 获取所有签名密钥（第一把是主密钥，其余是旧密钥）
-	signKeys, err := config.GetDomainSignKeysBytes(domainID)
+	signKeys, err := s.getKeys(ctx, models.KeyOwnerDomain, domainID)
 	if err != nil {
-		return nil, fmt.Errorf("获取域签名密钥失败: %w", err)
+		return nil, fmt.Errorf("获取域密钥失败: %w", err)
+	}
+	if len(signKeys) == 0 {
+		// 回退到配置文件（兼容未把域密钥写入 t_key 的旧部署）
+		signKeys, err = config.GetDomainSignKeysBytes(domainID)
+		if err != nil {
+			return nil, fmt.Errorf("获取域签名密钥失败: %w", err)
+		}
 	}
 
 	return &models.DomainWithKey{
 		Domain: *domain,
-		Main:   signKeys[0], // 第一把是主密钥
-		Keys:   signKeys,    // 所有密钥（用于验证）
+		Main:   signKeys[0],
+		Keys:   signKeys,
 	}, nil
 }
 
-// ListDomains 列出所有域（从配置读取）
-func (*Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
-	// 从配置读取 auth.domains 下的所有域
-	domainsMap := config.Cfg().GetStringMap("aegis.domains")
-	if len(domainsMap) == 0 {
-		return nil, fmt.Errorf("aegis.domains 配置为空")
+// ListDomains 列出所有域（从 DB 读）
+func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
+	var recs []models.DomainRecord
+	if err := s.db.WithContext(ctx).Find(&recs).Error; err != nil {
+		return nil, fmt.Errorf("列出域失败: %w", err)
 	}
-
-	domains := make([]models.Domain, 0, len(domainsMap))
-	for domainID := range domainsMap {
-		name := config.Cfg().GetString("aegis.domains" + "." + domainID + ".name")
-		if name == "" {
-			name = domainID
+	domains := make([]models.Domain, 0, len(recs))
+	for i := range recs {
+		allowedIDPs, err := s.getDomainAllowedIDPs(ctx, recs[i].DomainID)
+		if err != nil {
+			return nil, err
 		}
-
-		var description *string
-		if desc := config.Cfg().GetString("aegis.domains" + "." + domainID + ".description"); desc != "" {
-			description = &desc
-		}
-
-		domain := models.Domain{
-			DomainID:    domainID,
-			Name:        name,
-			Description: description,
-		}
-		domains = append(domains, domain)
+		domains = append(domains, models.Domain{
+			DomainID:    recs[i].DomainID,
+			Name:        recs[i].Name,
+			Description: recs[i].Description,
+			AllowedIDPs: allowedIDPs,
+		})
 	}
-
 	return domains, nil
 }
 
@@ -193,12 +205,16 @@ func (s *Service) GetServiceWithKey(ctx context.Context, serviceID string) (*mod
 	return result, nil
 }
 
-// ListServices 列出所有服务
-func (s *Service) ListServices(ctx context.Context, domainID string) ([]models.Service, error) {
+// ListServices 列出服务，支持 service_id 精确、name 左模糊（均走索引）
+func (s *Service) ListServices(ctx context.Context, domainID, serviceIDExact, namePrefix string) ([]models.Service, error) {
 	var services []models.Service
-	query := s.db.WithContext(ctx)
-	if domainID != "" {
-		query = query.Where("domain_id = ?", domainID)
+	query := s.db.WithContext(ctx).Where("domain_id = ?", domainID)
+	if serviceIDExact != "" && namePrefix != "" {
+		query = query.Where("(service_id = ? OR name LIKE ?)", serviceIDExact, namePrefix+"%")
+	} else if serviceIDExact != "" {
+		query = query.Where("service_id = ?", serviceIDExact)
+	} else if namePrefix != "" {
+		query = query.Where("name LIKE ?", namePrefix+"%")
 	}
 	if err := query.Find(&services).Error; err != nil {
 		return nil, fmt.Errorf("列出服务失败: %w", err)
@@ -225,6 +241,35 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, req *Serv
 	}
 
 	return nil
+}
+
+// DeleteService 删除服务（级联删除关联数据）
+func (s *Service) DeleteService(ctx context.Context, serviceID string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var svc models.Service
+		if err := tx.Where("service_id = ?", serviceID).First(&svc).Error; err != nil {
+			return fmt.Errorf("服务不存在: %w", err)
+		}
+		if err := tx.Where("service_id = ?", serviceID).Delete(&models.ApplicationServiceRelation{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("service_id = ?", serviceID).Delete(&models.Relationship{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("service_id = ?", serviceID).Delete(&models.Group{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("service_id = ?", serviceID).Delete(&models.ServiceChallengeSetting{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("owner_type = ? AND owner_id = ?", models.KeyOwnerService, serviceID).Delete(&models.Key{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("service_id = ?", serviceID).Delete(&models.Service{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 // ==================== Application 相关 ====================
@@ -368,6 +413,28 @@ func (s *Service) GetApplicationServiceRelations(ctx context.Context, appID stri
 		return nil, fmt.Errorf("获取应用服务关系失败: %w", err)
 	}
 	return relations, nil
+}
+
+// GetServiceApplicationRelations 获取服务已授权给哪些应用及授予的权限（ReBAC 服务侧视角）
+func (s *Service) GetServiceApplicationRelations(ctx context.Context, serviceID string) ([]models.ApplicationServiceRelation, error) {
+	var relations []models.ApplicationServiceRelation
+	if err := s.db.WithContext(ctx).Where("service_id = ?", serviceID).Find(&relations).Error; err != nil {
+		return nil, fmt.Errorf("获取服务已授权应用失败: %w", err)
+	}
+	return relations, nil
+}
+
+// GetServiceAppRelations 获取某服务授予某应用的关系列表
+func (s *Service) GetServiceAppRelations(ctx context.Context, serviceID, appID string) ([]string, error) {
+	var relations []models.ApplicationServiceRelation
+	if err := s.db.WithContext(ctx).Where("service_id = ? AND app_id = ?", serviceID, appID).Find(&relations).Error; err != nil {
+		return nil, fmt.Errorf("获取服务应用关系失败: %w", err)
+	}
+	rels := make([]string, 0, len(relations))
+	for i := range relations {
+		rels = append(rels, relations[i].Relation)
+	}
+	return rels, nil
 }
 
 // ==================== Relationship 相关 ====================
@@ -748,6 +815,24 @@ func (s *Service) GetGroupMembers(ctx context.Context, groupID string) ([]string
 
 // ==================== Application IDP Config 相关 ====================
 
+// ensureIDPAllowedForApplication 校验 idpType 是否在应用所属域的 allowed_idps 中
+func (s *Service) ensureIDPAllowedForApplication(ctx context.Context, appID, idpType string) error {
+	app, err := s.GetApplication(ctx, appID)
+	if err != nil {
+		return err
+	}
+	allowed, err := s.getDomainAllowedIDPs(ctx, app.DomainID)
+	if err != nil {
+		return err
+	}
+	for _, t := range allowed {
+		if t == idpType {
+			return nil
+		}
+	}
+	return fmt.Errorf("IDP %s 不在域 %s 的允许列表中", idpType, app.DomainID)
+}
+
 // GetApplicationIDPConfigs 获取应用 IDP 配置列表（按 priority 降序）
 func (s *Service) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
 	var configs []*models.ApplicationIDPConfig
@@ -758,6 +843,59 @@ func (s *Service) GetApplicationIDPConfigs(ctx context.Context, appID string) ([
 		return nil, fmt.Errorf("获取应用 IDP 配置失败: %w", err)
 	}
 	return configs, nil
+}
+
+// CreateApplicationIDPConfig 创建应用 IDP 配置（仅允许添加该应用所属域下的 IDP）
+func (s *Service) CreateApplicationIDPConfig(ctx context.Context, appID string, req *ApplicationIDPConfigCreateRequest) (*models.ApplicationIDPConfig, error) {
+	if err := s.ensureIDPAllowedForApplication(ctx, appID, req.Type); err != nil {
+		return nil, err
+	}
+	cfg := &models.ApplicationIDPConfig{
+		AppID:    appID,
+		Type:     req.Type,
+		Priority: req.Priority,
+		Strategy: req.Strategy,
+		Delegate: req.Delegate,
+		Require:  req.Require,
+	}
+	if err := s.db.WithContext(ctx).Create(cfg).Error; err != nil {
+		return nil, fmt.Errorf("创建应用 IDP 配置失败: %w", err)
+	}
+	return cfg, nil
+}
+
+// UpdateApplicationIDPConfig 更新应用 IDP 配置（不修改 type 时不校验域；若请求中带新 type 则需在域允许列表中）
+func (s *Service) UpdateApplicationIDPConfig(ctx context.Context, appID, idpType string, req *ApplicationIDPConfigUpdateRequest) error {
+	updates := patch.Collect(
+		patch.Field("priority", req.Priority),
+		patch.Field("strategy", req.Strategy),
+		patch.Field("delegate", req.Delegate),
+		patch.Field("require", req.Require),
+	)
+	if len(updates) == 0 {
+		return nil
+	}
+	result := s.db.WithContext(ctx).Model(&models.ApplicationIDPConfig{}).
+		Where("app_id = ? AND `type` = ?", appID, idpType).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("更新应用 IDP 配置失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("应用 IDP 配置不存在: app_id=%s, type=%s", appID, idpType)
+	}
+	return nil
+}
+
+// DeleteApplicationIDPConfig 删除应用 IDP 配置
+func (s *Service) DeleteApplicationIDPConfig(ctx context.Context, appID, idpType string) error {
+	result := s.db.WithContext(ctx).Where("app_id = ? AND `type` = ?", appID, idpType).Delete(&models.ApplicationIDPConfig{})
+	if result.Error != nil {
+		return fmt.Errorf("删除应用 IDP 配置失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("应用 IDP 配置不存在: app_id=%s, type=%s", appID, idpType)
+	}
+	return nil
 }
 
 // ==================== Service Challenge Config 相关 ====================

@@ -3,6 +3,27 @@
 
 USE `hermes`;
 
+-- ==================== 域 ====================
+INSERT INTO t_domain (domain_id, name, description) VALUES
+('consumer', 'Consumer Identity', 'C端用户身份域'),
+('platform', 'Platform Identity', 'B端平台身份域')
+ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description);
+
+-- ==================== 域允许的 IDP ====================
+INSERT INTO t_domain_idp (domain_id, idp_type) VALUES
+('consumer', 'wechat-mp'),
+('consumer', 'tt-mp'),
+('consumer', 'alipay-mp'),
+('consumer', 'wechat-web'),
+('consumer', 'alipay-web'),
+('consumer', 'tt-web'),
+('consumer', 'user'),
+('platform', 'github'),
+('platform', 'google'),
+('platform', 'staff'),
+('platform', 'oper')
+ON DUPLICATE KEY UPDATE domain_id = VALUES(domain_id);
+
 -- ==================== 服务 ====================
 INSERT INTO t_service (service_id, domain_id, name, description, access_token_expires_in, refresh_token_expires_in) VALUES
 ('hermes', '-', 'Hermes 管理服务', '身份与访问管理服务', 7200, 604800),

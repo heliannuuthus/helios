@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -921,8 +922,12 @@ func (h *Handler) resolveUser(ctx context.Context, flow *types.AuthFlow) error {
 			return errIdentifiedUser
 		}
 
-		// 未找到已有用户，检查是否允许注册
-		if !idp.IsIDPAllowedForDomain(connection, idp.Domain(domain)) {
+		// 未找到已有用户，检查该 IDP 是否在应用所属域的允许列表中（来自 DB）
+		domainWithKey, err := h.cache.GetDomain(ctx, domain)
+		if err != nil {
+			return fmt.Errorf("get domain: %w", err)
+		}
+		if !slices.Contains(domainWithKey.AllowedIDPs, connection) {
 			return autherrors.NewAccessDenied("registration not allowed for this IDP")
 		}
 

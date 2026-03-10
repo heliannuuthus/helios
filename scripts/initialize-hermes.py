@@ -228,6 +228,12 @@ DOMAINS = [
     Domain("platform", "Platform Identity", "B端平台身份域"),
 ]
 
+# 每个域允许的 IDP 类型（应用添加 IDP 时只能从此列表选）
+DOMAIN_IDPS: dict[str, list[str]] = {
+    "consumer": ["wechat-mp", "tt-mp", "alipay-mp", "wechat-web", "alipay-web", "tt-web", "user"],
+    "platform": ["github", "google", "staff", "oper"],
+}
+
 SERVICES = [
     Service("hermes", "-", "Hermes 管理服务", "身份与访问管理服务"),
     Service("iris", "-", "Iris 用户服务", "用户信息管理服务"),
@@ -367,6 +373,17 @@ class Initializer:
 
         self.sso_master_key = generate_seed()
 
+        for domain in DOMAINS:
+            sign_key = self.domain_sign_keys.get(domain.domain_id)
+            if sign_key is not None:
+                encrypted = encrypt_aes_gcm(self.db_enc_key, sign_key, domain.domain_id)
+                self.keys_data.append(KeyData(
+                    owner_type="domain",
+                    owner_id=domain.domain_id,
+                    secret_key=sign_key,
+                    encrypted_key=b64_encode(encrypted),
+                ))
+
         for service in SERVICES:
             secret_key = generate_seed()
             encrypted = encrypt_aes_gcm(self.db_enc_key, secret_key, service.service_id)
@@ -426,6 +443,26 @@ class Initializer:
         lines.append("USE `hermes`;")
         lines.append("")
 
+        lines.append("-- ==================== 域 ====================")
+        lines.append("INSERT INTO t_domain (domain_id, name, description) VALUES")
+        domain_values = []
+        for d in DOMAINS:
+            desc = d.description.replace("'", "''")
+            domain_values.append(f"('{d.domain_id}', '{d.name}', '{desc}')")
+        lines.append(",\n".join(domain_values))
+        lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description);")
+        lines.append("")
+
+        lines.append("-- ==================== 域允许的 IDP ====================")
+        lines.append("INSERT INTO t_domain_idp (domain_id, idp_type) VALUES")
+        domain_idp_values = []
+        for domain_id, idp_list in DOMAIN_IDPS.items():
+            for idp_type in idp_list:
+                domain_idp_values.append(f"('{domain_id}', '{idp_type}')")
+        lines.append(",\n".join(domain_idp_values))
+        lines.append("ON DUPLICATE KEY UPDATE domain_id = VALUES(domain_id);")
+        lines.append("")
+
         lines.append("-- ==================== 服务 ====================")
         lines.append("INSERT INTO t_service (service_id, domain_id, name, description, access_token_expires_in, refresh_token_expires_in) VALUES")
         service_values = []
@@ -436,8 +473,8 @@ class Initializer:
         lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), domain_id = VALUES(domain_id);")
         lines.append("")
 
-        lines.append("-- ==================== 服务密钥 ====================")
-        lines.append("DELETE FROM t_key WHERE owner_type = 'service';")
+        lines.append("-- ==================== 域密钥 & 服务密钥 ====================")
+        lines.append("DELETE FROM t_key WHERE owner_type IN ('domain', 'service');")
         lines.append("INSERT INTO t_key (owner_type, owner_id, encrypted_key) VALUES")
         key_values = []
         for kd in self.keys_data:

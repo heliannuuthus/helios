@@ -13,7 +13,7 @@ import (
 // 一个物理用户在不同域下有不同的 OpenID，对应不同的 t_user 记录
 type User struct {
 	// 主键
-	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
 	// 业务字段
 	OpenID        string  `json:"openid" gorm:"column:openid;size:64;not null;uniqueIndex"` // 用户标识（= global identity 的 t_openid）
 	Status        int8    `json:"status" gorm:"column:status;not null;default:0"`           // 0=active, 1=disabled
@@ -43,16 +43,15 @@ func (u *User) IsActive() bool {
 // UserIdentity 用户身份（IDP 绑定），每个身份归属一个域
 type UserIdentity struct {
 	// 主键
-	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
 	// 业务字段
-	Domain  string `gorm:"column:domain;size:16;not null;uniqueIndex:uk_domain_idp_t_openid,priority:1"`
-	UID     string `gorm:"column:uid;size:64;not null;index"`
-	IDP     string `gorm:"column:idp;size:64;not null;uniqueIndex:uk_domain_idp_t_openid,priority:2"`
-	TOpenID string `gorm:"column:t_openid;size:256;not null;uniqueIndex:uk_domain_idp_t_openid,priority:3"`
-	RawData string `gorm:"column:raw_data;type:text"`
-	// 时间戳
-	CreatedAt time.Time `gorm:"column:created_at;not null"`
-	UpdatedAt time.Time `gorm:"column:updated_at;not null"`
+	Domain    string    `gorm:"column:domain;size:16;not null;uniqueIndex:uk_domain_idp_t_openid,priority:1" json:"domain"`
+	UID       string    `gorm:"column:uid;size:64;not null;index" json:"uid"`
+	IDP       string    `gorm:"column:idp;size:64;not null;uniqueIndex:uk_domain_idp_t_openid,priority:2" json:"idp"`
+	TOpenID   string    `gorm:"column:t_openid;size:256;not null;uniqueIndex:uk_domain_idp_t_openid,priority:3" json:"t_openid"`
+	RawData   string    `gorm:"column:raw_data;type:text" json:"raw_data,omitempty"`
+	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null" json:"updated_at"`
 }
 
 func (UserIdentity) TableName() string {

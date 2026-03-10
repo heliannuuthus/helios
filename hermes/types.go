@@ -37,11 +37,33 @@ type ApplicationUpdateRequest struct {
 	RedirectURIs patch.Optional[[]string] `json:"redirect_uris"`
 }
 
-// ApplicationServiceRelationRequest 应用服务关系请求
+// ApplicationIDPConfigCreateRequest 创建应用 IDP 配置请求（idp 类型必须在应用所属域的 allowed_idps 内）
+type ApplicationIDPConfigCreateRequest struct {
+	Type     string  `json:"type" binding:"required"` // idp 类型：github/google/user/staff 等
+	Priority int     `json:"priority"`
+	Strategy *string `json:"strategy,omitempty"` // password,webauthn
+	Delegate *string `json:"delegate,omitempty"` // email_otp,totp,webauthn
+	Require  *string `json:"require,omitempty"`  // captcha
+}
+
+// ApplicationIDPConfigUpdateRequest 更新应用 IDP 配置请求（若修改 type 则必须在域 allowed_idps 内）
+type ApplicationIDPConfigUpdateRequest struct {
+	Priority patch.Optional[int]    `json:"priority"`
+	Strategy patch.Optional[string] `json:"strategy"`
+	Delegate patch.Optional[string] `json:"delegate"`
+	Require  patch.Optional[string] `json:"require"`
+}
+
+// ApplicationServiceRelationRequest 应用服务关系请求（内部用，path 提供 app_id/service_id）
 type ApplicationServiceRelationRequest struct {
 	AppID     string   `json:"app_id" binding:"required"`
 	ServiceID string   `json:"service_id" binding:"required"`
 	Relations []string `json:"relations" binding:"required"` // 关系列表，["*"] 表示全部
+}
+
+// ServiceAppRelationsRequest 服务-应用关系请求 PUT /services/:service_id/applications/:app_id/relations
+type ServiceAppRelationsRequest struct {
+	Relations []string `json:"relations" binding:"required"`
 }
 
 // RelationshipCreateRequest 创建关系请求

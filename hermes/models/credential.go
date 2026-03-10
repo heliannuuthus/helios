@@ -13,21 +13,19 @@ const (
 	CredentialTypePasskey  CredentialType = "passkey"
 )
 
-// UserCredential 用户安全凭证
+// UserCredential 用户安全凭证（Secret 不序列化到 API）
 type UserCredential struct {
 	// 主键
-	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
 	// 固定长度字段（高频访问）
-	OpenID       string  `gorm:"column:openid;size:64;not null;index"`
-	CredentialID *string `gorm:"column:credential_id;size:256;uniqueIndex"`
-	Type         string  `gorm:"column:type;size:32;not null"`
-	Enabled      bool    `gorm:"column:enabled;not null;default:0"`
-	// 时间戳
-	LastUsedAt *time.Time `gorm:"column:last_used_at"`
-	CreatedAt  time.Time  `gorm:"column:created_at;not null"`
-	UpdatedAt  time.Time  `gorm:"column:updated_at;not null"`
-	// 变长字段
-	Secret string `gorm:"column:secret;size:2048;not null"`
+	OpenID       string     `gorm:"column:openid;size:64;not null;index" json:"openid"`
+	CredentialID *string    `gorm:"column:credential_id;size:256;uniqueIndex" json:"credential_id,omitempty"`
+	Type         string     `gorm:"column:type;size:32;not null" json:"type"`
+	Enabled      bool       `gorm:"column:enabled;not null;default:0" json:"enabled"`
+	LastUsedAt   *time.Time `gorm:"column:last_used_at" json:"last_used_at,omitempty"`
+	CreatedAt    time.Time  `gorm:"column:created_at;not null" json:"created_at"`
+	UpdatedAt    time.Time  `gorm:"column:updated_at;not null" json:"updated_at"`
+	Secret       string     `gorm:"column:secret;size:2048;not null" json:"-"` // 不序列化到 API
 }
 
 func (UserCredential) TableName() string {
