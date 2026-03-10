@@ -71,7 +71,7 @@ func (f *PublicKeyFetcher) AllOfKey(ctx context.Context, id string) ([][]byte, e
 	if ok {
 		if time.Now().After(entry.refreshAt) {
 			go func() {
-				if _, err := f.Fetch(context.Background(), id); err != nil {
+				if _, err := f.Fetch(context.WithoutCancel(ctx), id); err != nil {
 					logger.Warnf("[PublicKeyFetcher] background refresh failed for %s: %v", id, err)
 				}
 			}()
