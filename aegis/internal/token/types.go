@@ -11,20 +11,20 @@ type (
 	UserAccessToken    = pkgtoken.UserAccessToken
 	ServiceAccessToken = pkgtoken.ServiceAccessToken
 	ChallengeToken     = pkgtoken.ChallengeToken
-	ClientAccessToken  = pkgtoken.ClientAccessToken
+	ClientToken        = pkgtoken.ClientToken
 	// Builder 类型别名
 	ClaimsBuilder    = pkgtoken.ClaimsBuilder
 	TokenTypeBuilder = pkgtoken.TokenTypeBuilder
 	// TokenType Builder 别名
 	UAT = pkgtoken.UAT
 	SAT = pkgtoken.SAT
-	CAT = pkgtoken.CAT
+	CT  = pkgtoken.CT
 	XT  = pkgtoken.XT
 )
 
 // 常量别名
 const (
-	TokenTypeCAT       = pkgtoken.TokenTypeCAT
+	TokenTypeCT        = pkgtoken.TokenTypeCT
 	TokenTypeUAT       = pkgtoken.TokenTypeUAT
 	TokenTypeSAT       = pkgtoken.TokenTypeSAT
 	TokenTypeChallenge = pkgtoken.TokenTypeChallenge
@@ -38,6 +38,6 @@ var (
 	NewClaimsBuilder             = pkgtoken.NewClaimsBuilder
 	NewUserAccessTokenBuilder    = pkgtoken.NewUserAccessTokenBuilder
 	NewServiceAccessTokenBuilder = pkgtoken.NewServiceAccessTokenBuilder
-	NewClientAccessTokenBuilder  = pkgtoken.NewClientAccessTokenBuilder
+	NewClientTokenBuilder        = pkgtoken.NewClientTokenBuilder
 	NewChallengeTokenBuilder     = pkgtoken.NewChallengeTokenBuilder
 )

@@ -136,18 +136,11 @@ func (*Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 
 // CreateService 创建服务
 func (s *Service) CreateService(ctx context.Context, req *ServiceCreateRequest) (*models.Service, error) {
-	// 生成并加密服务密钥
-	encryptedKey, err := generateEncryptedKey(req.ServiceID)
-	if err != nil {
-		return nil, err
-	}
-
 	service := &models.Service{
 		ServiceID:             req.ServiceID,
 		DomainID:              req.DomainID,
 		Name:                  req.Name,
 		Description:           req.Description,
-		EncryptedKey:          encryptedKey,
 		AccessTokenExpiresIn:  7200,
 		RefreshTokenExpiresIn: 604800,
 	}
@@ -159,8 +152,14 @@ func (s *Service) CreateService(ctx context.Context, req *ServiceCreateRequest) 
 		service.RefreshTokenExpiresIn = *req.RefreshTokenExpiresIn
 	}
 
-	if err := s.db.WithContext(ctx).Create(service).Error; err != nil {
-		return nil, fmt.Errorf("创建服务失败: %w", err)
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(service).Error; err != nil {
+			return fmt.Errorf("创建服务失败: %w", err)
+		}
+		return s.createKey(tx, models.KeyOwnerService, req.ServiceID)
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return service, nil
@@ -182,13 +181,16 @@ func (s *Service) GetServiceWithKey(ctx context.Context, serviceID string) (*mod
 		return nil, err
 	}
 
-	// 解密密钥
-	key, err := s.decryptServiceKey(service)
+	keys, err := s.GetServiceKeys(ctx, serviceID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &models.ServiceWithKey{Service: *service, Key: key}, nil
+	result := &models.ServiceWithKey{Service: *service, Keys: keys}
+	if len(keys) > 0 {
+		result.Main = keys[0]
+	}
+	return result, nil
 }
 
 // ListServices 列出所有服务
@@ -239,25 +241,26 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 		redirectURIs = &urisStr
 	}
 
-	var encryptedKey *string
-	if req.NeedKey {
-		key, err := generateEncryptedKey(req.AppID)
-		if err != nil {
-			return nil, err
-		}
-		encryptedKey = &key
-	}
-
 	app := &models.Application{
 		DomainID:     req.DomainID,
 		AppID:        req.AppID,
 		Name:         req.Name,
 		RedirectURIs: redirectURIs,
-		EncryptedKey: encryptedKey,
 	}
 
-	if err := s.db.WithContext(ctx).Create(app).Error; err != nil {
-		return nil, fmt.Errorf("创建应用失败: %w", err)
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(app).Error; err != nil {
+			return fmt.Errorf("创建应用失败: %w", err)
+		}
+		if req.NeedKey {
+			if err := s.createKey(tx, models.KeyOwnerApplication, req.AppID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return app, nil
@@ -279,16 +282,16 @@ func (s *Service) GetApplicationWithKey(ctx context.Context, appID string) (*mod
 		return nil, err
 	}
 
-	// 解密密钥（如果存在）
-	var key []byte
-	if app.EncryptedKey != nil && *app.EncryptedKey != "" {
-		key, err = s.decryptApplicationKey(app)
-		if err != nil {
-			return nil, err
-		}
+	keys, err := s.GetApplicationKeys(ctx, appID)
+	if err != nil {
+		return nil, err
 	}
 
-	return &models.ApplicationWithKey{Application: *app, Key: key}, nil
+	result := &models.ApplicationWithKey{Application: *app, Keys: keys}
+	if len(keys) > 0 {
+		result.Main = keys[0]
+	}
+	return result, nil
 }
 
 // ListApplications 列出所有应用
@@ -770,48 +773,81 @@ func (s *Service) GetServiceChallengeSetting(ctx context.Context, serviceID, cha
 	return &cfg, nil
 }
 
-// decryptServiceKey 解密服务密钥
-func (s *Service) decryptServiceKey(svc *models.Service) ([]byte, error) {
-	// 获取数据库加密密钥（原始字节）
-	domainKey, err := config.GetDBEncKeyRaw()
-	if err != nil {
-		return nil, fmt.Errorf("获取数据库加密密钥失败: %w", err)
-	}
+// ==================== 密钥管理 ====================
 
-	encrypted, err := base64.StdEncoding.DecodeString(svc.EncryptedKey)
-	if err != nil {
-		return nil, fmt.Errorf("解码服务密钥失败: %w", err)
-	}
-
-	key, err := cryptoutil.DecryptAESGCM(domainKey, encrypted, svc.ServiceID)
-	if err != nil {
-		return nil, fmt.Errorf("解密服务密钥失败: %w", err)
-	}
-
-	return key, nil
+// GetApplicationKeys 获取应用的所有有效密钥（已解密）
+func (s *Service) GetApplicationKeys(ctx context.Context, appID string) ([][]byte, error) {
+	return s.getKeys(ctx, models.KeyOwnerApplication, appID)
 }
 
-// decryptApplicationKey 解密应用密钥
-func (s *Service) decryptApplicationKey(app *models.Application) ([]byte, error) {
-	if app.EncryptedKey == nil || *app.EncryptedKey == "" {
+// GetServiceKeys 获取服务的所有有效密钥（已解密）
+func (s *Service) GetServiceKeys(ctx context.Context, serviceID string) ([][]byte, error) {
+	return s.getKeys(ctx, models.KeyOwnerService, serviceID)
+}
+
+// RotateKey 轮换密钥：给旧主密钥设 expired_at，插入新密钥
+func (s *Service) RotateKey(ctx context.Context, ownerType, ownerID string, window time.Duration) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		expiredAt := time.Now().Add(window)
+		if err := tx.Model(&models.Key{}).
+			Where("owner_type = ? AND owner_id = ? AND expired_at IS NULL", ownerType, ownerID).
+			Update("expired_at", expiredAt).Error; err != nil {
+			return fmt.Errorf("标记旧密钥过期失败: %w", err)
+		}
+		return s.createKey(tx, ownerType, ownerID)
+	})
+}
+
+// getKeys 获取指定 owner 的所有有效密钥（已解密），按 created_at DESC 排序
+func (s *Service) getKeys(ctx context.Context, ownerType, ownerID string) ([][]byte, error) {
+	var keys []models.Key
+	if err := s.db.WithContext(ctx).
+		Where("owner_type = ? AND owner_id = ? AND (expired_at IS NULL OR expired_at > NOW())", ownerType, ownerID).
+		Order("created_at DESC").
+		Find(&keys).Error; err != nil {
+		return nil, fmt.Errorf("获取密钥失败: %w", err)
+	}
+
+	if len(keys) == 0 {
 		return nil, nil
 	}
 
-	// 获取数据库加密密钥（原始字节）
-	domainKey, err := config.GetDBEncKeyRaw()
+	dbEncKey, err := config.GetDBEncKeyRaw()
 	if err != nil {
 		return nil, fmt.Errorf("获取数据库加密密钥失败: %w", err)
 	}
 
-	encrypted, err := base64.StdEncoding.DecodeString(*app.EncryptedKey)
-	if err != nil {
-		return nil, fmt.Errorf("解码应用密钥失败: %w", err)
+	result := make([][]byte, 0, len(keys))
+	for _, k := range keys {
+		encrypted, err := base64.StdEncoding.DecodeString(k.EncryptedKey)
+		if err != nil {
+			return nil, fmt.Errorf("解码密钥失败: %w", err)
+		}
+		decrypted, err := cryptoutil.DecryptAESGCM(dbEncKey, encrypted, ownerID)
+		if err != nil {
+			return nil, fmt.Errorf("解密密钥失败: %w", err)
+		}
+		result = append(result, decrypted)
 	}
 
-	key, err := cryptoutil.DecryptAESGCM(domainKey, encrypted, app.AppID)
+	return result, nil
+}
+
+// createKey 为 owner 创建新密钥（在事务中调用）
+func (s *Service) createKey(tx *gorm.DB, ownerType, ownerID string) error {
+	encryptedKey, err := generateEncryptedKey(ownerID)
 	if err != nil {
-		return nil, fmt.Errorf("解密应用密钥失败: %w", err)
+		return err
 	}
 
-	return key, nil
+	key := &models.Key{
+		OwnerType:    ownerType,
+		OwnerID:      ownerID,
+		EncryptedKey: encryptedKey,
+	}
+
+	if err := tx.Create(key).Error; err != nil {
+		return fmt.Errorf("创建密钥失败: %w", err)
+	}
+	return nil
 }

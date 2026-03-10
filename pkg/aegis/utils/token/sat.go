@@ -2,7 +2,6 @@ package token
 
 import (
 	"fmt"
-	"time"
 
 	"aidanwoods.dev/go-paseto"
 )
@@ -80,12 +79,16 @@ func (s *ServiceAccessToken) Build() (*paseto.Token, error) {
 	return &t, nil
 }
 
-// ExpiresIn 实现 AccessToken 接口
-func (s *ServiceAccessToken) ExpiresIn() time.Duration {
-	return s.GetExpiresIn()
-}
-
 // Scopes 返回 scope 集合。
 func (s *ServiceAccessToken) Scopes() map[string]struct{} {
 	return ParseScopes(s.scope)
 }
+
+// ==================== AccessToken 接口实现（SAT 无用户身份） ====================
+
+func (s *ServiceAccessToken) Identified() bool { return false }
+func (s *ServiceAccessToken) OpenID() string   { return "" }
+func (s *ServiceAccessToken) Nickname() string { return "" }
+func (s *ServiceAccessToken) Picture() string  { return "" }
+func (s *ServiceAccessToken) Email() string    { return "" }
+func (s *ServiceAccessToken) Phone() string    { return "" }

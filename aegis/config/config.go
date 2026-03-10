@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	baseconfig "github.com/heliannuuthus/helios/pkg/config"
@@ -56,6 +57,11 @@ func GetEndpoint() string {
 // GetIssuer 获取 Issuer（endpoint + /api）
 func GetIssuer() string {
 	return GetEndpoint() + "/api"
+}
+
+// GetCORSOrigins 获取静态 CORS 允许的 origin 列表
+func GetCORSOrigins() []string {
+	return Cfg().GetStringSlice("cors.origins")
 }
 
 // ==================== Cookie 配置 ====================
@@ -349,15 +355,15 @@ func GetRetryAfterFromLimits(limits map[string]int) int {
 
 // AC 默认值
 const (
-	DefaultACCaptchaThreshold = 5 // 全局默认：验证 5 次要求 captcha
-	DefaultACFailWindow       = 30 * time.Minute
+	DefaultACThreshold  = 5 // 全局默认：验证失败 5 次触发限流
+	DefaultACFailWindow = 30 * time.Minute
 )
 
-// GetACCaptchaThreshold 获取指定 channelType 的 captcha 阈值
+// GetACThreshold 获取指定 channelType 的限流阈值
 // 优先读 aegis.challenge.access-control.{channelType}.captcha-threshold
 // 回退到 aegis.challenge.access-control.captcha-threshold
-// 再回退到默认值 5（0 = 始终需要 captcha）
-func GetACCaptchaThreshold(channelType string) int {
+// 再回退到默认值 5（0 = 始终限流）
+func GetACThreshold(channelType string) int {
 	cfg := Cfg()
 	perType := cfg.GetInt("aegis.challenge.access-control." + channelType + ".captcha-threshold")
 	if perType > 0 || cfg.IsSet("aegis.challenge.access-control."+channelType+".captcha-threshold") {
@@ -367,7 +373,7 @@ func GetACCaptchaThreshold(channelType string) int {
 	if global > 0 || cfg.IsSet("aegis.challenge.access-control.captcha-threshold") {
 		return global
 	}
-	return DefaultACCaptchaThreshold
+	return DefaultACThreshold
 }
 
 // GetACFailWindow 获取指定 channelType 的失败统计窗口
@@ -386,14 +392,14 @@ func GetACFailWindow(channelType string) time.Duration {
 
 // Login AC 默认值
 const (
-	DefaultLoginACCaptchaThreshold = 5                // 登录默认：验证 5 次要求 captcha
-	DefaultLoginACFailWindow       = 30 * time.Minute // 登录默认：30 分钟窗口
+	DefaultLoginACThreshold  = 5                // 登录默认：验证失败 5 次触发限流
+	DefaultLoginACFailWindow = 30 * time.Minute // 登录默认：30 分钟窗口
 )
 
-// GetLoginACCaptchaThreshold 获取登录的 captcha 阈值
+// GetLoginACThreshold 获取登录的限流阈值
 // 优先读 aegis.login.access-control.{connection}.captcha-threshold
 // 回退到 aegis.login.access-control.captcha-threshold
-func GetLoginACCaptchaThreshold(connection string) int {
+func GetLoginACThreshold(connection string) int {
 	cfg := Cfg()
 	perConn := cfg.GetInt("aegis.login.access-control." + connection + ".captcha-threshold")
 	if perConn > 0 || cfg.IsSet("aegis.login.access-control."+connection+".captcha-threshold") {
@@ -403,7 +409,7 @@ func GetLoginACCaptchaThreshold(connection string) int {
 	if global > 0 || cfg.IsSet("aegis.login.access-control.captcha-threshold") {
 		return global
 	}
-	return DefaultLoginACCaptchaThreshold
+	return DefaultLoginACThreshold
 }
 
 // GetLoginACFailWindow 获取登录的失败统计窗口
@@ -426,21 +432,33 @@ const (
 	DefaultAegisSSOCookieName = "aegis-sso"        // SSO Cookie 默认名称
 )
 
-// GetSSOMasterKey 获取 SSO master key（Base64URL 编码的 48 字节 seed: 16-byte salt + 32-byte key）
-// 未配置时返回 nil, nil；配置了但格式错误时返回 nil, error
-func GetSSOMasterKey() ([]byte, error) {
+// GetSSOMasterKeys 获取 SSO master key 列表（逗号分割，每个为 Base64URL 编码的 48 字节 seed）
+// 第一个为当前主密钥，后续为轮换中的旧密钥。未配置时返回 nil, nil。
+func GetSSOMasterKeys() ([][]byte, error) {
 	secretStr := Cfg().GetString("sso.master-key")
 	if secretStr == "" {
 		return nil, nil
 	}
-	secretBytes, err := base64.RawURLEncoding.DecodeString(secretStr)
-	if err != nil {
-		return nil, fmt.Errorf("decode sso master key: %w", err)
+	parts := strings.Split(secretStr, ",")
+	seeds := make([][]byte, 0, len(parts))
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		b, err := base64.RawURLEncoding.DecodeString(part)
+		if err != nil {
+			return nil, fmt.Errorf("decode sso master key[%d]: %w", i, err)
+		}
+		if len(b) != 48 {
+			return nil, fmt.Errorf("sso master key[%d] must be 48 bytes, got %d", i, len(b))
+		}
+		seeds = append(seeds, b)
 	}
-	if len(secretBytes) != 48 {
-		return nil, fmt.Errorf("sso master key must be 48 bytes, got %d", len(secretBytes))
+	if len(seeds) == 0 {
+		return nil, nil
 	}
-	return secretBytes, nil
+	return seeds, nil
 }
 
 // GetSSOTTL 获取 SSO Token 有效期

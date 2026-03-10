@@ -2,7 +2,7 @@
 //
 // 两种能力：
 //   - 频率限流（ProbeRate）：控制请求速率，使用 Policy.Limits
-//   - 验证计数（Strike）：记录一次验证尝试并根据计数返回决策
+//   - 验证计数（Strike）：记录一次验证失败并根据计数决定是否限流
 package accessctl
 
 import (
@@ -17,17 +17,17 @@ import (
 type ACAction int
 
 const (
-	ACAllowed ACAction = iota // 放行
-	ACCaptcha                 // 需要 captcha（触发人机验证）
+	ACAllowed     ACAction = iota // 放行
+	ACRateLimited                 // 触发限流
 )
 
 // Policy 访问控制策略
-// ProbeRate 使用 Key + Limits；Strike 使用 Key + Window + CaptchaThreshold
+// ProbeRate 使用 Key + Limits；Strike 使用 Key + Window + Threshold
 type Policy struct {
-	Key              string         // 维度 key
-	Limits           map[string]int // 频率限流：窗口 → 上限，如 {"1m": 1, "24h": 10}
-	Window           time.Duration  // 验证计数：统计窗口
-	CaptchaThreshold int            // 验证计数：达到此次数要求 captcha（0 = 始终需要）
+	Key       string         // 维度 key
+	Limits    map[string]int // 频率限流：窗口 → 上限，如 {"1m": 1, "24h": 10}
+	Window    time.Duration  // 验证计数：统计窗口
+	Threshold int            // 验证计数：达到此次数触发限流（0 = 始终限流）
 }
 
 // NewPolicy 创建 Policy 并设置维度 key
@@ -47,9 +47,9 @@ func (p *Policy) FailWindow(window time.Duration) *Policy {
 	return p
 }
 
-// CaptchaAt 设置触发 captcha 的验证次数阈值（0 = 始终需要）
-func (p *Policy) CaptchaAt(threshold int) *Policy {
-	p.CaptchaThreshold = threshold
+// ThrottleAt 设置触发限流的验证失败次数阈值（0 = 始终限流）
+func (p *Policy) ThrottleAt(threshold int) *Policy {
+	p.Threshold = threshold
 	return p
 }
 
@@ -111,26 +111,28 @@ func (m *Manager) ProbeRate(ctx context.Context, policies ...*Policy) int {
 	return 0
 }
 
-// Strike 记录一次验证尝试并根据当前计数返回决策
-// 每次调用 Authenticate 时前置执行，无论认证结果如何（频率限制语义）
-// 使用 Policy.Key + Policy.Window + Policy.CaptchaThreshold
-func (m *Manager) Strike(ctx context.Context, policy *Policy) ACAction {
+// Strike 记录一次验证失败并根据当前计数返回限流决策
+// 认证失败后调用，达到阈值时返回 ACRateLimited + retryAfter 秒数
+// 使用 Policy.Key + Policy.Window + Policy.Threshold
+func (m *Manager) Strike(ctx context.Context, policy *Policy) (ACAction, int) {
 	if m == nil || m.throttler == nil || policy == nil {
-		return ACAllowed
+		return ACAllowed, 0
 	}
 
-	if policy.CaptchaThreshold == 0 {
-		return ACCaptcha
+	retryAfter := int(policy.Window.Seconds())
+
+	if policy.Threshold == 0 {
+		return ACRateLimited, retryAfter
 	}
 
 	count, err := m.throttler.Record(ctx, policy.Key, policy.Window)
 	if err != nil {
 		logger.Warnf("[AccessCtl] Strike Record error for key %s: %v", policy.Key, err)
-		return ACAllowed
+		return ACAllowed, 0
 	}
 
-	if policy.CaptchaThreshold > 0 && count >= int64(policy.CaptchaThreshold) {
-		return ACCaptcha
+	if policy.Threshold > 0 && count >= int64(policy.Threshold) {
+		return ACRateLimited, retryAfter
 	}
-	return ACAllowed
+	return ACAllowed, 0
 }

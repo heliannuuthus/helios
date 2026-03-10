@@ -131,8 +131,8 @@ func (h *Handler) Authorize(c *gin.Context) {
 	}
 
 	flow := types.NewAuthFlow(&req, time.Duration(config.GetCookieMaxAge())*time.Second, config.GetAuthFlowMaxLifetime())
-	flow.Application = app
-	flow.Service = svc
+	flow.Application = &app.Application
+	flow.Service = &svc.Service
 	flow.SetConnectionMap(h.authenticateSvc.SetConnections(idpConfigs))
 
 	if !req.Prompt.Contains(types.PromptLogin) {
@@ -276,7 +276,12 @@ func (h *Handler) Login(c *gin.Context) {
 	flow.SetExtra(types.ExtraKeyStrategy, req.Strategy)
 
 	// 3. 执行认证流程（已验证的 connection 跳过）
-	if done := h.executeAuthentication(c, ctx, flow, &req); done {
+	passed, err := h.authenticate(c, ctx, flow, &req)
+	if err != nil {
+		h.errorResponse(c, err)
+		return
+	}
+	if !passed {
 		return
 	}
 
@@ -484,7 +489,7 @@ func (h *Handler) ConfirmIdentify(c *gin.Context) {
 		Domain:    identity.Domain,
 		IDP:       identity.IDP,
 		TOpenID:   identity.TOpenID,
-		OpenID:    identifiedUser.OpenID,
+		UID:       identifiedUser.OpenID,
 		RawData:   identity.RawData,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -548,47 +553,41 @@ func (h *Handler) Token(c *gin.Context) {
 // --- 权限检查 ---
 
 // Check POST /auth/check
-// 关系检查接口（使用 CAT 认证）
+// 关系检查接口（使用 CT 认证）
 // 检查指定主体是否具有指定的关系权限
 // 返回：
 //   - 200: 检查完成（permitted: true/false）
-//   - 401: CAT 无效
+//   - 401: CT 无效
 func (h *Handler) Check(c *gin.Context) {
-	// 1. 验证 CAT
-	cat := c.GetHeader(HeaderAuthorization)
-	if cat == "" {
+	ctStr := c.GetHeader(HeaderAuthorization)
+	if ctStr == "" {
 		c.JSON(http.StatusUnauthorized, CheckResponse{
-			Permitted: false,
-			Error:     "unauthorized",
-			Message:   "missing CAT",
+			Error:   "unauthorized",
+			Message: "missing CT",
 		})
 		return
 	}
 
-	// 去掉 Bearer 前缀
-	if len(cat) > 7 && cat[:7] == "Bearer " {
-		cat = cat[7:]
+	if len(ctStr) > 7 && ctStr[:7] == "Bearer " {
+		ctStr = ctStr[7:]
 	}
 
 	ctx := c.Request.Context()
 
-	// 验证 CAT
-	t, err := h.tokenSvc.Verify(ctx, cat)
+	t, err := h.tokenSvc.Verify(ctx, ctStr)
 	if err != nil {
-		logger.Debugf("[Handler] verify CAT failed: %v", err)
+		logger.Debugf("[Handler] verify CT failed: %v", err)
 		c.JSON(http.StatusUnauthorized, CheckResponse{
-			Permitted: false,
-			Error:     "unauthorized",
-			Message:   "invalid CAT",
+			Error:   "unauthorized",
+			Message: "invalid CT",
 		})
 		return
 	}
-	catClaims, ok := t.(*token.ClientAccessToken)
+	catClaims, ok := t.(*token.ClientToken)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, CheckResponse{
-			Permitted: false,
-			Error:     "unauthorized",
-			Message:   "expected CAT token",
+			Error:   "unauthorized",
+			Message: "expected CT token",
 		})
 		return
 	}
@@ -600,10 +599,8 @@ func (h *Handler) Check(c *gin.Context) {
 		return
 	}
 
-	// 3. 获取 serviceID（使用 CAT 签发者的 clientID 查询其所属服务）
-	serviceID := catClaims.GetClientID()
+	serviceID := catClaims.ClientID()
 
-	// 4. 设置默认值
 	objectType := req.ObjectType
 	if objectType == "" {
 		objectType = "*"
@@ -613,60 +610,19 @@ func (h *Handler) Check(c *gin.Context) {
 		objectID = "*"
 	}
 
-	// 5. 检查关系
-	hasRelation, err := h.authorizeSvc.CheckRelation(ctx, serviceID, req.SubjectID, req.Relation, objectType, objectID)
+	results, err := h.authorizeSvc.CheckRelations(ctx, serviceID, req.SubjectID, req.Relations, objectType, objectID)
 	if err != nil {
 		logger.Warnf("[Handler] check relation failed: %v", err)
 		c.JSON(http.StatusInternalServerError, CheckResponse{
-			Permitted: false,
-			Error:     "internal_error",
-			Message:   "check relation failed",
+			Error:   "internal_error",
+			Message: "check relation failed",
 		})
 		return
 	}
 
 	c.JSON(http.StatusOK, CheckResponse{
-		Permitted: hasRelation,
+		Results: results,
 	})
-}
-
-// --- 用户信息 ---
-
-// UserInfo GET /auth/userinfo
-// 从 UAT 中解密用户信息并返回脱敏结构
-func (h *Handler) UserInfo(c *gin.Context) {
-	tc := web.TokenContextFromGin(c)
-	if tc == nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":             "invalid_token",
-			"error_description": "missing access token",
-		})
-		return
-	}
-
-	uat := tc.UserAccessToken()
-	if uat == nil || !uat.Identified() {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error":             "invalid_token",
-			"error_description": "token does not contain user info",
-		})
-		return
-	}
-
-	email := uat.Email()
-	phone := uat.Phone()
-
-	resp := &UserInfoResponse{
-		Sub:           uat.OpenID(),
-		Nickname:      uat.Nickname(),
-		Picture:       uat.Picture(),
-		Email:         helpers.MaskEmail(email),
-		EmailVerified: email != "",
-		Phone:         helpers.MaskPhone(phone),
-		PhoneVerified: phone != "",
-	}
-
-	c.JSON(http.StatusOK, resp)
 }
 
 // --- 登出与撤销 ---
@@ -681,7 +637,7 @@ func (h *Handler) Revoke(c *gin.Context) {
 	}
 
 	// RFC 7009: 即使 token 无效，也应返回 200
-	if err := h.cache.RevokeRefreshToken(c.Request.Context(), req.Token); err != nil {
+	if err := h.cache.DelRefreshToken(c.Request.Context(), req.Token); err != nil {
 		logger.Warnf("[Handler] revoke token failed: %v", err)
 	}
 	c.Status(http.StatusOK)
@@ -690,14 +646,14 @@ func (h *Handler) Revoke(c *gin.Context) {
 // Logout POST /auth/logout
 // 登出（撤销 refresh token + 清除 SSO cookie）
 func (h *Handler) Logout(c *gin.Context) {
-	openID := web.OpenIDFromGin(c)
+	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 	if openID == "" {
 		clearSSOCookie(c)
 		c.Status(http.StatusOK)
 		return
 	}
 
-	if err := h.cache.RevokeUserRefreshTokens(c.Request.Context(), openID); err != nil {
+	if err := h.cache.DelUserRefreshTokens(c.Request.Context(), openID); err != nil {
 		h.errorResponse(c, autherrors.NewServerError("failed to revoke tokens"))
 		return
 	}
@@ -764,8 +720,17 @@ func collectAudiences(req *types.AuthRequest) ([]string, *autherrors.AuthError) 
 	return audiences, nil
 }
 
-func (h *Handler) validateAudiences(ctx context.Context, clientID string, audiences []string) (*models.ServiceWithKey, *autherrors.AuthError) {
-	var svc *models.ServiceWithKey
+func (h *Handler) validateAudiences(ctx context.Context, clientID string, audiences []string) (*cache.ServiceWithKey, *autherrors.AuthError) {
+	relations, err := h.cache.GetAppServiceRelations(ctx, clientID)
+	if err != nil {
+		return nil, autherrors.NewServerError("check relation failed")
+	}
+	allowedSet := make(map[string]bool, len(relations))
+	for _, rel := range relations {
+		allowedSet[rel.ServiceID] = true
+	}
+
+	var svc *cache.ServiceWithKey
 	for i, aud := range audiences {
 		s, err := h.cache.GetService(ctx, aud)
 		if err != nil {
@@ -774,11 +739,7 @@ func (h *Handler) validateAudiences(ctx context.Context, clientID string, audien
 		if i == 0 {
 			svc = s
 		}
-		ok, err := h.cache.CheckAppServiceRelation(ctx, clientID, aud)
-		if err != nil {
-			return nil, autherrors.NewServerError("check relation failed")
-		}
-		if !ok {
+		if !allowedSet[aud] {
 			return nil, autherrors.NewAccessDeniedf("application %s has no access to service %s", clientID, aud)
 		}
 	}
@@ -823,7 +784,7 @@ func (h *Handler) trySSOFastPath(c *gin.Context, ctx context.Context, flow *type
 // resolveSSO 验证 SSO cookie 并恢复用户
 // 返回 ssoToken 和 user，任一为 nil 表示 SSO 不可用
 func (h *Handler) resolveSSO(c *gin.Context, ctx context.Context,
-	app *models.ApplicationWithKey,
+	app *models.Application,
 ) (*token.SSOToken, *models.UserWithDecrypted) {
 	ssoTokenString, err := getSSOCookie(c)
 	if err != nil || ssoTokenString == "" {
@@ -887,63 +848,48 @@ func (h *Handler) renewSSOCookie(c *gin.Context, ctx context.Context, oldSSO *to
 
 // --- Login 引用链 ---
 
-// executeAuthentication 执行认证流程。返回 true 表示已向客户端响应（需提前返回）。
-func (h *Handler) executeAuthentication(c *gin.Context, ctx context.Context, flow *types.AuthFlow, req *LoginRequest) bool {
-	connCfg := flow.GetCurrentConnConfig()
-	if connCfg == nil || connCfg.Verified {
-		logger.Infof("[Handler] Login 跳过认证（已验证） - FlowID: %s, Connection: %s", flow.ID, req.Connection)
-		return false
-	}
-
-	if actions := unmetRequirements(flow); len(actions) > 0 {
-		logger.Infof("[Login] 待满足的条件: %v", actions)
-		actionRedirect(c, buildActionURL(actions))
-		return true
-	}
-
-	success, err := h.authenticateSvc.Authenticate(ctx, flow, req.Proof, req.Principal, req.Strategy)
-	if err != nil {
-		logger.Errorf("[Handler] 认证失败 - FlowID: %s, Connection: %s, Error: %v", flow.ID, req.Connection, err)
-		h.errorResponse(c, err)
-		return true
-	}
-	if !success {
-		logger.Infof("[Handler] 认证未通过 - FlowID: %s, Connection: %s", flow.ID, req.Connection)
-		if actions := unmetRequirements(flow); len(actions) > 0 {
-			actionRedirect(c, buildActionURL(actions))
-			return true
-		}
-		h.errorResponse(c, autherrors.NewInvalidCredentials("authentication failed"))
-		return true
-	}
-	logger.Infof("[Handler] 认证通过 - FlowID: %s, Connection: %s", flow.ID, req.Connection)
-
-	return h.handlePostAuth(c, flow)
-}
-
-// handlePostAuth 处理认证成功后的辅助验证和前置条件检查
-// 返回 true 表示已处理响应（辅助验证完成 / 前置条件未满足），Login 应 return
-// flow 的持久化由 Login 的 defer 统一处理
-func (h *Handler) handlePostAuth(c *gin.Context, flow *types.AuthFlow) bool {
+// authenticate 执行认证流程
+// 返回 (true, nil) 表示 IDP 认证通过，可继续 resolveUser
+// 返回 (false, nil) 表示已通过 redirect 响应（vchan/factor 完成 或 前置条件未满足）
+// 返回 (false, error) 表示认证失败
+func (h *Handler) authenticate(c *gin.Context, ctx context.Context, flow *types.AuthFlow, req *LoginRequest) (bool, error) {
 	connCfg := flow.GetCurrentConnConfig()
 	if connCfg == nil {
-		return false
+		return false, autherrors.NewInvalidRequestf("unknown connection: %s", flow.Connection)
 	}
 
-	// 辅助验证（vchan / factor）：只标记 Verified，不产生 identity
-	// 通过 300 告知前端回到登录页继续下一步
+	if !connCfg.Verified {
+		if actions := unmetRequirements(flow); len(actions) > 0 {
+			logger.Infof("[Login] 待满足的条件: %v", actions)
+			actionRedirect(c, buildActionURL(actions))
+			return false, nil
+		}
+
+		success, err := h.authenticateSvc.Authenticate(ctx, flow, req.Proof, req.Principal, req.Strategy)
+		if err != nil {
+			return false, err
+		}
+		if !success {
+			return false, autherrors.NewInvalidCredentials("authentication failed")
+		}
+		logger.Infof("[Handler] 认证通过 - FlowID: %s, Connection: %s", flow.ID, req.Connection)
+	} else {
+		logger.Infof("[Handler] Login 跳过认证（已验证） - FlowID: %s, Connection: %s", flow.ID, req.Connection)
+	}
+
+	// vchan / factor：只标记 Verified，不产生 identity，redirect 回登录页
 	if connCfg.Type != types.ConnTypeIDP {
 		actionRedirect(c, config.GetEndpointLogin())
-		return true
+		return false, nil
 	}
 
-	// 前置验证未全部通过 → 300 action redirect
+	// IDP 前置验证未全部通过
 	if actions := unmetRequirements(flow); len(actions) > 0 {
 		actionRedirect(c, buildActionURL(actions))
-		return true
+		return false, nil
 	}
 
-	return false
+	return true, nil
 }
 
 // resolveUser 解析用户信息并回写到 flow
@@ -993,7 +939,7 @@ func (h *Handler) resolveUser(ctx context.Context, flow *types.AuthFlow) error {
 		return autherrors.NewServerError("global identity not found for domain")
 	}
 
-	u, err := h.userSvc.GetUser(ctx, globalIdentity.OpenID)
+	u, err := h.userSvc.GetUser(ctx, globalIdentity.UID)
 	if err != nil {
 		return autherrors.NewServerError("user not found after identity resolved")
 	}

@@ -55,7 +55,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/zwei.RecipeListItem"
+                                "$ref": "#/definitions/dto.RecipeListItem"
                             }
                         }
                     }
@@ -86,7 +86,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/zwei.RecipeListItem"
+                                "$ref": "#/definitions/dto.RecipeListItem"
                             }
                         }
                     }
@@ -165,7 +165,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/zwei.RecipeListItem"
+                                "$ref": "#/definitions/dto.RecipeListItem"
                             }
                         }
                     }
@@ -1183,6 +1183,58 @@
         }
     },
     "definitions": {
+        "dto.RecipeListItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "difficulty": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_path": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tags": {
+                    "$ref": "#/definitions/dto.TagsGrouped"
+                },
+                "total_time_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.TagsGrouped": {
+            "type": "object",
+            "properties": {
+                "cuisines": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "flavors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scenes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "favorite.BatchCheckRequest": {
             "type": "object",
             "required": [
@@ -1223,7 +1275,7 @@
                     "type": "string"
                 },
                 "recipe": {
-                    "$ref": "#/definitions/zwei.RecipeListItem"
+                    "$ref": "#/definitions/dto.RecipeListItem"
                 },
                 "recipe_id": {
                     "type": "string"
@@ -1270,7 +1322,7 @@
             "type": "object",
             "properties": {
                 "recipe": {
-                    "$ref": "#/definitions/zwei.RecipeListItem"
+                    "$ref": "#/definitions/dto.RecipeListItem"
                 },
                 "recipe_id": {
                     "type": "string"
@@ -1643,7 +1695,7 @@
                     }
                 },
                 "tags": {
-                    "$ref": "#/definitions/zwei.TagsGrouped"
+                    "$ref": "#/definitions/dto.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
@@ -1787,11 +1839,10 @@
                     "type": "string"
                 },
                 "reason": {
-                    "description": "该菜品的推荐理由",
                     "type": "string"
                 },
                 "tags": {
-                    "$ref": "#/definitions/zwei.TagsGrouped"
+                    "$ref": "#/definitions/dto.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
@@ -1924,58 +1975,6 @@
             "properties": {
                 "label": {
                     "type": "string"
-                }
-            }
-        },
-        "zwei.RecipeListItem": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "difficulty": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "image_path": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tags": {
-                    "$ref": "#/definitions/zwei.TagsGrouped"
-                },
-                "total_time_minutes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "zwei.TagsGrouped": {
-            "type": "object",
-            "properties": {
-                "cuisines": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "flavors": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scenes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         }

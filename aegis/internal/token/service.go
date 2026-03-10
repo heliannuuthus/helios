@@ -20,33 +20,36 @@ type Service struct {
 	issuer string
 	cache  *cache.Manager
 
-	domainKeyProvider  key.Provider // clientID → domain.Main (includes SSO with id="aegis")
-	serviceKeyProvider key.Provider // audience → service.Key (includes SSO with id="aegis")
-	appKeyProvider     key.Provider // clientID → app.Key
+	domainSignProvider   key.Provider // clientID → domain PrivateKey (signing)
+	domainVerifyProvider key.Provider // clientID → domain PublicKey[] (verification)
+	serviceKeyProvider   key.Provider // audience → service SecretKey[] (encrypt/decrypt)
+	appVerifyProvider    key.Provider // clientID → app PublicKey[] (CT verification)
 
 	domainSigners     map[string]*Signer
 	serviceEncryptors map[string]*Encryptor
 	domainDecryptors  map[string]*pkgtoken.Decryptor // audience → Decryptor (signKey=domain, encryptKey=service)
-	appDecryptor      *pkgtoken.Decryptor            // CAT 专用（signKey=app, 只验签, encryptKey=nil）
+	appDecryptor      *pkgtoken.Decryptor            // CT 专用（signKey=app, 只验签, encryptKey=nil）
 	mu                sync.RWMutex
 }
 
 func NewService(
 	cache *cache.Manager,
-	domainKeyProvider key.Provider,
+	domainSignProvider key.Provider,
+	domainVerifyProvider key.Provider,
 	serviceKeyProvider key.Provider,
-	appKeyProvider key.Provider,
+	appVerifyProvider key.Provider,
 ) *Service {
 	return &Service{
-		issuer:             config.GetIssuer(),
-		cache:              cache,
-		domainKeyProvider:  domainKeyProvider,
-		serviceKeyProvider: serviceKeyProvider,
-		appKeyProvider:     appKeyProvider,
-		domainSigners:      make(map[string]*Signer),
-		serviceEncryptors:  make(map[string]*Encryptor),
-		domainDecryptors:   make(map[string]*pkgtoken.Decryptor),
-		appDecryptor:       pkgtoken.NewDecryptor("", nil, appKeyProvider),
+		issuer:               config.GetIssuer(),
+		cache:                cache,
+		domainSignProvider:   domainSignProvider,
+		domainVerifyProvider: domainVerifyProvider,
+		serviceKeyProvider:   serviceKeyProvider,
+		appVerifyProvider:    appVerifyProvider,
+		domainSigners:        make(map[string]*Signer),
+		serviceEncryptors:    make(map[string]*Encryptor),
+		domainDecryptors:     make(map[string]*pkgtoken.Decryptor),
+		appDecryptor:         pkgtoken.NewDecryptor("", nil, appVerifyProvider),
 	}
 }
 
@@ -60,8 +63,8 @@ func (s *Service) GetIssuer() string {
 // For EncryptableToken (UAT, SSO), payload is encrypted into sub as a nested v4.local token.
 // For plain tokens (SAT, Challenge), the token is signed directly.
 func (s *Service) Issue(ctx context.Context, t tokendef.Token) (string, error) {
-	if t.Type() == tokendef.TokenTypeCAT {
-		return "", fmt.Errorf("%w: CAT should be issued by client using pkg/aegis/token.Issuer", tokendef.ErrUnsupportedToken)
+	if t.Type() == tokendef.TokenTypeCT {
+		return "", fmt.Errorf("%w: CT should be issued by client using pkg/aegis/token.Issuer", tokendef.ErrUnsupportedToken)
 	}
 
 	pasetoToken, err := tokendef.Build(t)
@@ -70,14 +73,14 @@ func (s *Service) Issue(ctx context.Context, t tokendef.Token) (string, error) {
 	}
 
 	if payload, ok := s.marshalPayload(t); ok {
-		encryptedSub, err := s.serviceEncryptor(t.GetAudience()).Encrypt(ctx, payload)
+		encryptedSub, err := s.serviceEncryptor(t.Audience()).Encrypt(ctx, payload)
 		if err != nil {
 			return "", fmt.Errorf("encrypt sub: %w", err)
 		}
 		pasetoToken.SetSubject(encryptedSub)
 	}
 
-	signer := s.domainSigner(t.GetClientID())
+	signer := s.domainSigner(t.ClientID())
 	return signer.Sign(ctx, pasetoToken)
 }
 
@@ -98,7 +101,7 @@ func (s *Service) Verify(ctx context.Context, tokenString string) (Token, error)
 		return nil, fmt.Errorf("get client_id: %w", err)
 	}
 
-	if tokenType == tokendef.TokenTypeCAT {
+	if tokenType == tokendef.TokenTypeCT {
 		pasetoToken, err = s.appDecryptor.Verifier(clientID).Verify(ctx, tokenString)
 		if err != nil {
 			return nil, fmt.Errorf("verify signature: %w", err)
@@ -128,7 +131,7 @@ func (s *Service) Verify(ctx context.Context, tokenString string) (Token, error)
 	}
 
 	if s.needsDecryption(tokenType) {
-		encryptedSub := t.GetSubject()
+		encryptedSub := t.Subject()
 		if encryptedSub == "" {
 			return nil, errors.New("missing encrypted sub")
 		}
@@ -161,7 +164,7 @@ func (s *Service) domainSigner(clientID string) *Signer {
 		return signer
 	}
 
-	signer = NewSigner(s.domainKeyProvider, clientID)
+	signer = NewSigner(s.domainSignProvider, clientID)
 	s.domainSigners[clientID] = signer
 	return signer
 }
@@ -201,7 +204,7 @@ func (s *Service) domainDecryptor(audience string) *pkgtoken.Decryptor {
 		return decryptor
 	}
 
-	decryptor = pkgtoken.NewDecryptor(audience, s.serviceKeyProvider, s.domainKeyProvider)
+	decryptor = pkgtoken.NewDecryptor(audience, s.serviceKeyProvider, s.domainVerifyProvider)
 	s.domainDecryptors[audience] = decryptor
 	return decryptor
 }

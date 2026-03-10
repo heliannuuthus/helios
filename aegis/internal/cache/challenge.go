@@ -74,15 +74,3 @@ func (cm *Manager) DeleteOTP(ctx context.Context, key string) error {
 	prefix := config.GetCacheKeyPrefix("otp")
 	return cm.redis.Del(ctx, prefix+key)
 }
-
-// VerifyOTP 验证并删除验证码
-func (cm *Manager) VerifyOTP(ctx context.Context, key, code string) error {
-	stored, err := cm.GetOTP(ctx, key)
-	if err != nil {
-		return err
-	}
-	if stored != code {
-		return fmt.Errorf("invalid otp")
-	}
-	return cm.DeleteOTP(ctx, key)
-}

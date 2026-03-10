@@ -14,7 +14,6 @@ type Application struct {
 	AppID          string  `gorm:"column:app_id;size:64;not null;uniqueIndex"`
 	Name           string  `gorm:"column:name;size:128;not null"`
 	LogoURL        *string `gorm:"column:logo_url;size:512"`
-	EncryptedKey   *string `gorm:"column:encrypted_key;size:256"`
 	RedirectURIs   *string `gorm:"column:redirect_uris;size:2048"`
 	AllowedOrigins *string `gorm:"column:allowed_origins;size:1024"`
 	// 时间戳

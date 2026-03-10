@@ -46,7 +46,7 @@ type UserIdentity struct {
 	ID uint `gorm:"primaryKey;autoIncrement;column:_id"`
 	// 业务字段
 	Domain  string `gorm:"column:domain;size:16;not null;uniqueIndex:uk_domain_idp_t_openid,priority:1"`
-	OpenID  string `gorm:"column:openid;size:64;not null;index"`
+	UID     string `gorm:"column:uid;size:64;not null;index"`
 	IDP     string `gorm:"column:idp;size:64;not null;uniqueIndex:uk_domain_idp_t_openid,priority:2"`
 	TOpenID string `gorm:"column:t_openid;size:256;not null;uniqueIndex:uk_domain_idp_t_openid,priority:3"`
 	RawData string `gorm:"column:raw_data;type:text"`

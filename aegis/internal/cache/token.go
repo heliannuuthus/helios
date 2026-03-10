@@ -24,8 +24,8 @@ type AuthorizationCode struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// SaveAuthCode 保存授权码
-func (cm *Manager) SaveAuthCode(ctx context.Context, code *AuthorizationCode) error {
+// SetAuthCode 保存授权码
+func (cm *Manager) SetAuthCode(ctx context.Context, code *AuthorizationCode) error {
 	prefix := config.GetCacheKeyPrefix("auth_code")
 
 	ttl := time.Until(code.ExpiresAt)
@@ -40,9 +40,9 @@ func (cm *Manager) SaveAuthCode(ctx context.Context, code *AuthorizationCode) er
 	return cm.redis.Set(ctx, prefix+code.Code, string(data), ttl)
 }
 
-// ConsumeAuthCode 原子消费授权码（读取并删除，防止重放攻击）
+// GetAuthCode 原子消费授权码（读取并删除，防止重放攻击）
 // 使用 Lua 脚本保证 get-and-delete 的原子性，授权码只能被消费一次
-func (cm *Manager) ConsumeAuthCode(ctx context.Context, code string) (*AuthorizationCode, error) {
+func (cm *Manager) GetAuthCode(ctx context.Context, code string) (*AuthorizationCode, error) {
 	prefix := config.GetCacheKeyPrefix("auth_code")
 	key := prefix + code
 	// Lua 脚本: 读取 -> 删除 -> 返回数据；不存在则返回 nil
@@ -88,8 +88,8 @@ type RefreshToken struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// SaveRefreshToken 保存刷新令牌
-func (cm *Manager) SaveRefreshToken(ctx context.Context, token *RefreshToken) error {
+// SetRefreshToken 保存刷新令牌
+func (cm *Manager) SetRefreshToken(ctx context.Context, token *RefreshToken) error {
 	rtPrefix := config.GetCacheKeyPrefix("refresh_token")
 	userPrefix := config.GetCacheKeyPrefix("user_token")
 
@@ -136,8 +136,8 @@ func (cm *Manager) GetRefreshToken(ctx context.Context, token string) (*RefreshT
 	return &rt, nil
 }
 
-// RevokeRefreshToken 撤销刷新令牌
-func (cm *Manager) RevokeRefreshToken(ctx context.Context, token string) error {
+// DelRefreshToken 撤销刷新令牌
+func (cm *Manager) DelRefreshToken(ctx context.Context, token string) error {
 	prefix := config.GetCacheKeyPrefix("refresh_token")
 	data, err := cm.redis.Get(ctx, prefix+token)
 	if err != nil {
@@ -165,8 +165,8 @@ func (cm *Manager) RevokeRefreshToken(ctx context.Context, token string) error {
 	return cm.redis.Set(ctx, prefix+token, string(newData), remaining)
 }
 
-// RevokeUserRefreshTokens 撤销用户所有刷新令牌
-func (cm *Manager) RevokeUserRefreshTokens(ctx context.Context, openid string) error {
+// DelUserRefreshTokens 撤销用户所有刷新令牌
+func (cm *Manager) DelUserRefreshTokens(ctx context.Context, openid string) error {
 	prefix := config.GetCacheKeyPrefix("user_token")
 	tokens, err := cm.redis.SMembers(ctx, prefix+openid)
 	if err != nil {
@@ -176,7 +176,7 @@ func (cm *Manager) RevokeUserRefreshTokens(ctx context.Context, openid string) e
 
 	var errs []error
 	for _, token := range tokens {
-		if err := cm.RevokeRefreshToken(ctx, token); err != nil {
+		if err := cm.DelRefreshToken(ctx, token); err != nil {
 			logger.Warnf("[Manager] revoke refresh token failed: %v", err)
 			errs = append(errs, err)
 		}
@@ -188,8 +188,8 @@ func (cm *Manager) RevokeUserRefreshTokens(ctx context.Context, openid string) e
 	return nil
 }
 
-// ListUserRefreshTokens 列出用户的刷新令牌
-func (cm *Manager) ListUserRefreshTokens(ctx context.Context, openid, clientID string) ([]*RefreshToken, error) {
+// ListRefreshTokens 列出用户的刷新令牌
+func (cm *Manager) ListRefreshTokens(ctx context.Context, openid, clientID string) ([]*RefreshToken, error) {
 	prefix := config.GetCacheKeyPrefix("user_token")
 	tokens, err := cm.redis.SMembers(ctx, prefix+openid)
 	if err != nil {

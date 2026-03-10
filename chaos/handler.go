@@ -13,19 +13,26 @@ import (
 	"github.com/heliannuuthus/helios/chaos/internal/storage"
 	"github.com/heliannuuthus/helios/chaos/internal/template"
 	"github.com/heliannuuthus/helios/chaos/models"
+	"github.com/heliannuuthus/helios/pkg/aegis/utils/relation"
+	"github.com/heliannuuthus/helios/pkg/aegis/web/guard"
+	reqr "github.com/heliannuuthus/helios/pkg/aegis/web/requirement"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // Handler Chaos API Handler
 type Handler struct {
+	guard           *guard.GinGuard
+	audience        string
 	mailService     *mail.Service
 	templateService *template.Service
 	storageService  *storage.Service
 }
 
 // NewHandler 创建 Handler
-func NewHandler(mailSvc *mail.Service, templateSvc *template.Service, storageSvc *storage.Service) *Handler {
+func NewHandler(g *guard.GinGuard, audience string, mailSvc *mail.Service, templateSvc *template.Service, storageSvc *storage.Service) *Handler {
 	return &Handler{
+		guard:           g,
+		audience:        audience,
 		mailService:     mailSvc,
 		templateService: templateSvc,
 		storageService:  storageSvc,
@@ -229,11 +236,15 @@ func (h *Handler) UploadFile(c *gin.Context) {
 
 // RegisterRoutes 注册路由
 func (h *Handler) RegisterRoutes(r gin.IRouter) {
+	svc := "service:" + h.audience
+
 	chaos := r.Group("/chaos")
+	chaos.Use(h.guard.Require())
 	{
 		chaos.POST("/mail", h.SendMail)
 
 		templates := chaos.Group("/templates")
+		templates.Use(h.guard.Require(reqr.Relation(relation.Qualify("admin", svc))))
 		{
 			templates.POST("", h.CreateTemplate)
 			templates.GET("", h.ListTemplates)
@@ -243,8 +254,8 @@ func (h *Handler) RegisterRoutes(r gin.IRouter) {
 			templates.POST("/:id/render", h.RenderTemplate)
 		}
 
-		chaos.POST("/upload", h.UploadImage)
-		chaos.POST("/files", h.UploadFile)
+		chaos.POST("/upload", h.guard.Require(reqr.Relation(relation.Qualify("editor", svc))), h.UploadImage)
+		chaos.POST("/files", h.guard.Require(reqr.Relation(relation.Qualify("viewer", svc))), h.UploadFile)
 	}
 }
 

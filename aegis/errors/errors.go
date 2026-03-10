@@ -163,13 +163,6 @@ func NewTooManyRequests(retryAfter int) *AuthError {
 	return err
 }
 
-// NewTooManyRequestsWithChallenge 创建限流错误，附带已创建的 Challenge ID
-func NewTooManyRequestsWithChallenge(retryAfter int, challengeID string) *AuthError {
-	err := NewTooManyRequests(retryAfter)
-	err.Data["challenge_id"] = challengeID
-	return err
-}
-
 // ==================== 500 Internal Server Error ====================
 
 func NewServerError(description string) *AuthError {

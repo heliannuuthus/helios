@@ -85,13 +85,9 @@ func (s *Signer) PublicKey(ctx context.Context) (paseto.V4AsymmetricPublicKey, e
 }
 
 func (s *Signer) updateKey(rawKey []byte) error {
-	seed, err := pasetokit.ParseSeed(rawKey)
+	sk, err := paseto.NewV4AsymmetricSecretKeyFromBytes(rawKey)
 	if err != nil {
-		return fmt.Errorf("parse seed: %w", err)
-	}
-	sk, err := seed.DeriveSecretKey()
-	if err != nil {
-		return fmt.Errorf("derive secret key: %w", err)
+		return fmt.Errorf("parse secret key: %w", err)
 	}
 
 	pid, err := pasetokit.ComputePID(sk.Public())
@@ -99,7 +95,7 @@ func (s *Signer) updateKey(rawKey []byte) error {
 		return fmt.Errorf("compute pid: %w", err)
 	}
 
-	logger.Debugf("[Signer] updateKey id=%s, key len=%d, salt_hex=%x, derived pid=%s", s.id, len(rawKey), rawKey[:16], pid)
+	logger.Debugf("[Signer] updateKey id=%s, key len=%d, pid=%s", s.id, len(rawKey), pid)
 
 	s.mu.Lock()
 	s.secretKey = sk

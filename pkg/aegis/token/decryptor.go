@@ -9,6 +9,7 @@ import (
 
 	"github.com/heliannuuthus/helios/pkg/aegis/key"
 	pasetokit "github.com/heliannuuthus/helios/pkg/aegis/utils/paseto"
+	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -66,6 +67,42 @@ func (d *Decryptor) Verifier(clientID string) *Verifier {
 	v = newVerifier(d.extractor, clientID)
 	d.verifiers[clientID] = v
 	return v
+}
+
+// Interpret 完整的 token 解析：UnsafeParse 提取 clientID -> 验签 -> 类型检测 -> ParseToken -> UAT sub 解密。
+func (d *Decryptor) Interpret(ctx context.Context, tokenString string) (tokendef.Token, error) {
+	pasetoToken, err := tokendef.UnsafeParseToken(tokenString)
+	if err != nil {
+		return nil, err
+	}
+
+	clientID, err := tokendef.GetClientID(pasetoToken)
+	if err != nil {
+		return nil, err
+	}
+
+	pasetoToken, err = d.Verifier(clientID).Verify(ctx, tokenString)
+	if err != nil {
+		return nil, err
+	}
+
+	t, err := tokendef.ParseToken(pasetoToken, tokendef.DetectType(pasetoToken))
+	if err != nil {
+		return nil, err
+	}
+
+	if uat, ok := t.(*tokendef.UserAccessToken); ok {
+		encryptedSub := uat.Subject()
+		if encryptedSub != "" {
+			subToken, err := d.Decrypt(ctx, encryptedSub)
+			if err != nil {
+				return nil, fmt.Errorf("decrypt sub: %w", err)
+			}
+			uat.SetIdentity(subToken)
+		}
+	}
+
+	return t, nil
 }
 
 func (d *Decryptor) Decrypt(ctx context.Context, encrypted string) (*paseto.Token, error) {

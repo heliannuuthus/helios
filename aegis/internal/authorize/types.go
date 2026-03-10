@@ -15,6 +15,7 @@ type TokenRequest struct {
 // TokenResponse 标准 OAuth2 Token 响应（单 audience）
 type TokenResponse struct {
 	AccessToken  string `json:"access_token"`
+	IDToken      string `json:"id_token,omitempty"`      // scope 包含 openid 时返回
 	RefreshToken string `json:"refresh_token,omitempty"` // 只有 offline_access 时返回
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int    `json:"expires_in"`
@@ -25,7 +26,7 @@ type TokenResponse struct {
 
 // AudienceScope 单个 audience 的 scope 配置
 type AudienceScope struct {
-	Scope string `json:"scope"` // 不指定时默认 "openid"
+	Scope string `json:"scope"`
 }
 
 // MultiAudienceTokenRequest 多 audience Token 请求（application/json，仅 authorization_code）
@@ -39,10 +40,10 @@ type MultiAudienceTokenRequest struct {
 	Audiences    map[string]*AudienceScope `json:"audiences,omitempty"` // 可选，优先使用授权阶段存储在 flow 中的 audiences
 }
 
-// GetScope 获取 audience 的 scope，未指定时默认 "openid"
+// GetScope 获取 audience 的 scope
 func (a *AudienceScope) GetScope() string {
-	if a == nil || a.Scope == "" {
-		return ScopeOpenID
+	if a == nil {
+		return ""
 	}
 	return a.Scope
 }

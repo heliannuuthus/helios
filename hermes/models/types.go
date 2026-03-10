@@ -9,14 +9,15 @@ import (
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// ApplicationWithKey 带解密密钥的 Application
+// ApplicationWithKey 带密钥的 Application
 type ApplicationWithKey struct {
 	Application
-	Key []byte // 解密后的密钥（如果存在）
+	Main []byte   // 当前主密钥（48 字节 seed）
+	Keys [][]byte // 所有有效密钥（包括主密钥和轮换中的旧密钥）
 }
 
 // GetRedirectURIs 解析重定向 URI 列表
-func (a *ApplicationWithKey) GetRedirectURIs() []string {
+func (a *Application) GetRedirectURIs() []string {
 	if a.RedirectURIs == nil || *a.RedirectURIs == "" {
 		return nil
 	}
@@ -29,7 +30,7 @@ func (a *ApplicationWithKey) GetRedirectURIs() []string {
 }
 
 // ValidateRedirectURI 验证重定向 URI（规范化后比较）
-func (a *ApplicationWithKey) ValidateRedirectURI(uri string) bool {
+func (a *Application) ValidateRedirectURI(uri string) bool {
 	normalizedURI := normalizeURI(uri)
 
 	for _, allowed := range a.GetRedirectURIs() {
@@ -41,7 +42,7 @@ func (a *ApplicationWithKey) ValidateRedirectURI(uri string) bool {
 }
 
 // GetAllowedOrigins 解析允许的跨域源列表
-func (a *ApplicationWithKey) GetAllowedOrigins() []string {
+func (a *Application) GetAllowedOrigins() []string {
 	if a.AllowedOrigins == nil || *a.AllowedOrigins == "" {
 		return nil
 	}
@@ -54,7 +55,7 @@ func (a *ApplicationWithKey) GetAllowedOrigins() []string {
 }
 
 // ValidateOrigin 验证请求来源是否允许
-func (a *ApplicationWithKey) ValidateOrigin(origin string) bool {
+func (a *Application) ValidateOrigin(origin string) bool {
 	allowedOrigins := a.GetAllowedOrigins()
 	// 如果未配置，则不限制
 	if len(allowedOrigins) == 0 {
@@ -74,14 +75,15 @@ func (a *ApplicationWithKey) ValidateOrigin(origin string) bool {
 	return false
 }
 
-// ServiceWithKey 带解密密钥的 Service
+// ServiceWithKey 带密钥的 Service
 type ServiceWithKey struct {
 	Service
-	Key []byte // 解密后的密钥
+	Main []byte   // 当前主密钥（48 字节 seed）
+	Keys [][]byte // 所有有效密钥（包括主密钥和轮换中的旧密钥）
 }
 
 // GetRequiredIdentities 解析访问该服务需要绑定的身份类型
-func (s *ServiceWithKey) GetRequiredIdentities() []string {
+func (s *Service) GetRequiredIdentities() []string {
 	if s.RequiredIdentities == nil || *s.RequiredIdentities == "" {
 		return nil
 	}
@@ -103,7 +105,7 @@ type Domain struct {
 // DomainWithKey 带签名密钥的 Domain
 type DomainWithKey struct {
 	Domain
-	Main []byte   // 当前主密钥（32 字节 Ed25519 seed，用于签发新 token）
+	Main []byte   // 当前主密钥（48 字节 seed，用于签发新 token）
 	Keys [][]byte // 所有有效密钥（包括主密钥和轮换中的旧密钥，用于验证）
 }
 
