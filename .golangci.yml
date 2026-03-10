@@ -82,9 +82,6 @@ linters:
     staticcheck:
       checks: ["all"]
 
-    unused:
-      check-exported: false
-
   exclusions:
     generated: lax
 
@@ -157,7 +154,6 @@ formatters:
         - standard
         - default
         - prefix(github.com/heliannuuthus/helios)
-      skip-generated: true
       custom-order: true
 
   exclusions:
@@ -171,7 +167,6 @@ formatters:
 
 output:
   show-stats: true
-  sort-results: true
   sort-order:
     - file
     - linter

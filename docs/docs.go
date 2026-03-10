@@ -61,7 +61,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/types.RecipeListItem"
+                                "$ref": "#/definitions/dto.RecipeListItem"
                             }
                         }
                     }
@@ -92,7 +92,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/types.RecipeListItem"
+                                "$ref": "#/definitions/dto.RecipeListItem"
                             }
                         }
                     }
@@ -171,7 +171,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/types.RecipeListItem"
+                                "$ref": "#/definitions/dto.RecipeListItem"
                             }
                         }
                     }
@@ -1189,6 +1189,58 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "dto.RecipeListItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "difficulty": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "image_path": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tags": {
+                    "$ref": "#/definitions/dto.TagsGrouped"
+                },
+                "total_time_minutes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.TagsGrouped": {
+            "type": "object",
+            "properties": {
+                "cuisines": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "flavors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "scenes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "favorite.BatchCheckRequest": {
             "type": "object",
             "required": [
@@ -1229,7 +1281,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "recipe": {
-                    "$ref": "#/definitions/types.RecipeListItem"
+                    "$ref": "#/definitions/dto.RecipeListItem"
                 },
                 "recipe_id": {
                     "type": "string"
@@ -1276,7 +1328,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "recipe": {
-                    "$ref": "#/definitions/types.RecipeListItem"
+                    "$ref": "#/definitions/dto.RecipeListItem"
                 },
                 "recipe_id": {
                     "type": "string"
@@ -1649,7 +1701,7 @@ const docTemplate = `{
                     }
                 },
                 "tags": {
-                    "$ref": "#/definitions/types.TagsGrouped"
+                    "$ref": "#/definitions/dto.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
@@ -1796,7 +1848,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tags": {
-                    "$ref": "#/definitions/types.TagsGrouped"
+                    "$ref": "#/definitions/dto.TagsGrouped"
                 },
                 "total_time_minutes": {
                     "type": "integer"
@@ -1929,58 +1981,6 @@ const docTemplate = `{
             "properties": {
                 "label": {
                     "type": "string"
-                }
-            }
-        },
-        "types.RecipeListItem": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "difficulty": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "image_path": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "tags": {
-                    "$ref": "#/definitions/types.TagsGrouped"
-                },
-                "total_time_minutes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "types.TagsGrouped": {
-            "type": "object",
-            "properties": {
-                "cuisines": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "flavors": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "scenes": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         }
