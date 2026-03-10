@@ -74,4 +74,3 @@ func (cm *Manager) DeleteOTP(ctx context.Context, key string) error {
 	prefix := config.GetCacheKeyPrefix("otp")
 	return cm.redis.Del(ctx, prefix+key)
 }
-

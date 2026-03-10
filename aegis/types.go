@@ -66,11 +66,11 @@ type RevokeRequest struct {
 // CheckRequest 关系检查请求
 // 使用 CT 认证，检查指定主体是否具有指定的关系权限
 type CheckRequest struct {
-	SubjectType string   `json:"subject_type" binding:"required"`  // 主体类型：user / client
-	SubjectID   string   `json:"subject_id" binding:"required"`    // 主体 ID：OpenID / ClientID
+	SubjectType string   `json:"subject_type" binding:"required"`   // 主体类型：user / client
+	SubjectID   string   `json:"subject_id" binding:"required"`     // 主体 ID：OpenID / ClientID
 	Relations   []string `json:"relations" binding:"required,gt=0"` // 关系类型列表（如 ["admin", "editor"]）
-	ObjectType  string   `json:"object_type"`                      // 资源类型（如 recipe, user, *）
-	ObjectID    string   `json:"object_id"`                        // 资源 ID（如 recipe_123, *）
+	ObjectType  string   `json:"object_type"`                       // 资源类型（如 recipe, user, *）
+	ObjectID    string   `json:"object_id"`                         // 资源 ID（如 recipe_123, *）
 }
 
 // CheckResponse 关系检查响应

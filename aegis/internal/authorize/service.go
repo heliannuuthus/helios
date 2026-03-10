@@ -593,21 +593,9 @@ func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, re
 		return nil, autherrors.NewServerError("failed to resolve user subject")
 	}
 
-	// 6. audiences 优先从 flow 获取（授权阶段已校验），请求参数作为 fallback
-	audiences := req.Audiences
-	if len(flow.Request.Audiences) > 0 {
-		audiences = make(map[string]*AudienceScope, len(flow.Request.Audiences))
-		for aud, ras := range flow.Request.Audiences {
-			scope := ""
-			if ras != nil {
-				scope = ras.Scope
-			}
-			audiences[aud] = &AudienceScope{Scope: scope}
-		}
-	}
-
-	if len(audiences) == 0 {
-		return nil, autherrors.NewInvalidRequest("no audiences specified")
+	audiences, err := resolveAudiences(req.Audiences, flow.Request.Audiences)
+	if err != nil {
+		return nil, err
 	}
 
 	// 7. 为每个 audience 签发独立的 token
@@ -631,6 +619,25 @@ func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, re
 	s.asyncCleanupFlow(ctx, authCode.FlowID)
 
 	return resp, nil
+}
+
+// resolveAudiences 从 flow 或请求中解析 audiences（flow 优先）
+func resolveAudiences(reqAudiences map[string]*AudienceScope, flowAudiences map[string]*types.RequestAudienceScope) (map[string]*AudienceScope, error) {
+	audiences := reqAudiences
+	if len(flowAudiences) > 0 {
+		audiences = make(map[string]*AudienceScope, len(flowAudiences))
+		for aud, ras := range flowAudiences {
+			scope := ""
+			if ras != nil {
+				scope = ras.Scope
+			}
+			audiences[aud] = &AudienceScope{Scope: scope}
+		}
+	}
+	if len(audiences) == 0 {
+		return nil, autherrors.NewInvalidRequest("no audiences specified")
+	}
+	return audiences, nil
 }
 
 // generateMultiAudienceTokens 为多个 audience 生成独立的 token

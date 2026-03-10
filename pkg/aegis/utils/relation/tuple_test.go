@@ -27,10 +27,10 @@ func TestParseTuple(t *testing.T) {
 			want:  Tuple{Relation: "control", ObjectType: "zone", ObjectID: "{path.zid}", SubjectType: "device", SubjectID: "{path.did}"},
 		},
 		{input: "", wantErr: true},
-		{input: "admin", wantErr: true},           // no # → error
-		{input: "staff:admin", wantErr: true},      // no # → error
-		{input: "#admin", wantErr: true},            // empty object
-		{input: "service:#admin", wantErr: true},    // empty object id
+		{input: "admin", wantErr: true},          // no # → error
+		{input: "staff:admin", wantErr: true},    // no # → error
+		{input: "#admin", wantErr: true},         // empty object
+		{input: "service:#admin", wantErr: true}, // empty object id
 		{input: "service:zwei#admin@", wantErr: true},
 		{input: "service:zwei#admin@badsubject", wantErr: true},
 		{input: "service:zwei#", wantErr: true},
@@ -54,7 +54,6 @@ func TestParseTuple(t *testing.T) {
 		}
 	}
 }
-
 
 func TestParseEntity(t *testing.T) {
 	tests := []struct {

@@ -87,8 +87,8 @@ func (s *ServiceAccessToken) Scopes() map[string]struct{} {
 // ==================== AccessToken 接口实现（SAT 无用户身份） ====================
 
 func (s *ServiceAccessToken) Identified() bool { return false }
-func (s *ServiceAccessToken) OpenID() string    { return "" }
-func (s *ServiceAccessToken) Nickname() string  { return "" }
-func (s *ServiceAccessToken) Picture() string   { return "" }
-func (s *ServiceAccessToken) Email() string     { return "" }
-func (s *ServiceAccessToken) Phone() string     { return "" }
+func (s *ServiceAccessToken) OpenID() string   { return "" }
+func (s *ServiceAccessToken) Nickname() string { return "" }
+func (s *ServiceAccessToken) Picture() string  { return "" }
+func (s *ServiceAccessToken) Email() string    { return "" }
+func (s *ServiceAccessToken) Phone() string    { return "" }

@@ -42,10 +42,10 @@ type AuthFlow struct {
 	Request *AuthRequest `json:"request"`
 
 	// 实体信息（认证过程中填充，不含密钥）
-	Application *models.Application `json:"application,omitempty"`
-	Service     *models.Service     `json:"service,omitempty"`
-	User        *models.UserWithDecrypted  `json:"user,omitempty"`     // 系统中的已有用户（identify 匹配到的 / 认证完成后的）
-	Identify    *models.TUserInfo          `json:"identify,omitempty"` // 当前 IDP 认证返回的身份信息（未绑定，用于 Account Linking 匹配）
+	Application *models.Application       `json:"application,omitempty"`
+	Service     *models.Service           `json:"service,omitempty"`
+	User        *models.UserWithDecrypted `json:"user,omitempty"`     // 系统中的已有用户（identify 匹配到的 / 认证完成后的）
+	Identify    *models.TUserInfo         `json:"identify,omitempty"` // 当前 IDP 认证返回的身份信息（未绑定，用于 Account Linking 匹配）
 
 	// Connection 配置
 	ConnectionMap map[string]*ConnectionConfig `json:"connection_map,omitempty"` // 所有可用的 Connection 配置

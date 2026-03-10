@@ -121,4 +121,3 @@ func ParseEntity(s string) (typ, id string, err error) {
 
 	return typ, id, nil
 }
-

@@ -1,9 +1,8 @@
 package zwei
 
 import (
-	"gorm.io/gorm"
-
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/pkg/aegis/utils/relation"
 	"github.com/heliannuuthus/helios/pkg/aegis/web/guard"

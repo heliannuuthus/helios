@@ -9,8 +9,8 @@ import (
 
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/patch"
-	"github.com/heliannuuthus/helios/zwei/internal/models"
 	"github.com/heliannuuthus/helios/zwei/internal/dto"
+	"github.com/heliannuuthus/helios/zwei/internal/models"
 )
 
 // Handler 菜谱处理器
@@ -91,7 +91,7 @@ type RecipeResponse struct {
 	ImagePath        *string              `json:"image_path"`
 	Category         string               `json:"category"`
 	Difficulty       int                  `json:"difficulty"`
-	Tags             dto.TagsGrouped `json:"tags"`
+	Tags             dto.TagsGrouped      `json:"tags"`
 	Servings         int                  `json:"servings"`
 	PrepTimeMinutes  *int                 `json:"prep_time_minutes"`
 	CookTimeMinutes  *int                 `json:"cook_time_minutes"`

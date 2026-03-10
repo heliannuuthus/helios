@@ -46,4 +46,3 @@ func (cm *Manager) InvalidateUser(ctx context.Context, openid string) {
 		cm.userCache.Del(cacheKey)
 	}
 }
-

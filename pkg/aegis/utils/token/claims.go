@@ -168,11 +168,11 @@ func (c *Claims) SetStandardClaims(token *paseto.Token) error {
 
 // ==================== Token 接口实现 ====================
 
-func (c *Claims) Issuer() string       { return c.issuer }
-func (c *Claims) ClientID() string      { return c.clientID }
-func (c *Claims) Audience() string      { return c.audience }
-func (c *Claims) Subject() string       { return c.subject }
-func (c *Claims) IssuedAt() time.Time   { return c.issuedAt }
-func (c *Claims) ExpiresAt() time.Time  { return c.expiresAt }
+func (c *Claims) Issuer() string           { return c.issuer }
+func (c *Claims) ClientID() string         { return c.clientID }
+func (c *Claims) Audience() string         { return c.audience }
+func (c *Claims) Subject() string          { return c.subject }
+func (c *Claims) IssuedAt() time.Time      { return c.issuedAt }
+func (c *Claims) ExpiresAt() time.Time     { return c.expiresAt }
 func (c *Claims) ExpiresIn() time.Duration { return c.expiresIn }
-func (c *Claims) IsExpired() bool       { return time.Now().After(c.expiresAt) }
+func (c *Claims) IsExpired() bool          { return time.Now().After(c.expiresAt) }

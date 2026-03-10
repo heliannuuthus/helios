@@ -89,7 +89,7 @@ func (t *IDToken) Build() (*paseto.Token, error) {
 	return &pt, nil
 }
 
-func (t *IDToken) ClientID() string { return t.Claims.Audience() }
+func (t *IDToken) ClientID() string { return t.Audience() }
 
 func (t *IDToken) GetNickname() string { return t.nickname }
 

@@ -156,10 +156,7 @@ func (s *Service) CreateService(ctx context.Context, req *ServiceCreateRequest) 
 		if err := tx.Create(service).Error; err != nil {
 			return fmt.Errorf("创建服务失败: %w", err)
 		}
-		if err := s.createKey(tx, models.KeyOwnerService, req.ServiceID); err != nil {
-			return err
-		}
-		return nil
+		return s.createKey(tx, models.KeyOwnerService, req.ServiceID)
 	})
 	if err != nil {
 		return nil, err
@@ -788,6 +785,19 @@ func (s *Service) GetServiceKeys(ctx context.Context, serviceID string) ([][]byt
 	return s.getKeys(ctx, models.KeyOwnerService, serviceID)
 }
 
+// RotateKey 轮换密钥：给旧主密钥设 expired_at，插入新密钥
+func (s *Service) RotateKey(ctx context.Context, ownerType, ownerID string, window time.Duration) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		expiredAt := time.Now().Add(window)
+		if err := tx.Model(&models.Key{}).
+			Where("owner_type = ? AND owner_id = ? AND expired_at IS NULL", ownerType, ownerID).
+			Update("expired_at", expiredAt).Error; err != nil {
+			return fmt.Errorf("标记旧密钥过期失败: %w", err)
+		}
+		return s.createKey(tx, ownerType, ownerID)
+	})
+}
+
 // getKeys 获取指定 owner 的所有有效密钥（已解密），按 created_at DESC 排序
 func (s *Service) getKeys(ctx context.Context, ownerType, ownerID string) ([][]byte, error) {
 	var keys []models.Key
@@ -840,17 +850,4 @@ func (s *Service) createKey(tx *gorm.DB, ownerType, ownerID string) error {
 		return fmt.Errorf("创建密钥失败: %w", err)
 	}
 	return nil
-}
-
-// RotateKey 轮换密钥：给旧主密钥设 expired_at，插入新密钥
-func (s *Service) RotateKey(ctx context.Context, ownerType, ownerID string, window time.Duration) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		expiredAt := time.Now().Add(window)
-		if err := tx.Model(&models.Key{}).
-			Where("owner_type = ? AND owner_id = ? AND expired_at IS NULL", ownerType, ownerID).
-			Update("expired_at", expiredAt).Error; err != nil {
-			return fmt.Errorf("标记旧密钥过期失败: %w", err)
-		}
-		return s.createKey(tx, ownerType, ownerID)
-	})
 }
