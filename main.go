@@ -164,6 +164,7 @@ func main() {
 		{
 			domains.GET("", app.HermesHandler.ListDomains)
 			domains.GET("/:domain_id", app.HermesHandler.GetDomain)
+			domains.GET("/:domain_id/idps", app.HermesHandler.GetDomainAllowedIDPs)
 
 			// 域下服务：domains/:domain_id/services
 			domainServices := domains.Group("/:domain_id/services")

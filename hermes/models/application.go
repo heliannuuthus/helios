@@ -5,17 +5,21 @@ import (
 	"time"
 )
 
-// Application 应用
+// Application 应用（控制 id_token、refresh_token 有效期；access_token 由服务控制）
 type Application struct {
 	// 主键
 	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
 	// 业务字段
-	DomainID       string  `gorm:"column:domain_id;size:32;not null" json:"domain_id"`
-	AppID          string  `gorm:"column:app_id;size:64;not null;uniqueIndex" json:"app_id"`
-	Name           string  `gorm:"column:name;size:128;not null" json:"name"`
-	LogoURL        *string `gorm:"column:logo_url;size:512" json:"logo_url,omitempty"`
-	RedirectURIs   *string `gorm:"column:redirect_uris;size:2048" json:"redirect_uris,omitempty"`
-	AllowedOrigins *string `gorm:"column:allowed_origins;size:1024" json:"allowed_origins,omitempty"`
+	DomainID                       string  `gorm:"column:domain_id;size:32;not null" json:"domain_id"`
+	AppID                          string  `gorm:"column:app_id;size:64;not null;uniqueIndex" json:"app_id"`
+	Name                           string  `gorm:"column:name;size:128;not null" json:"name"`
+	Description                    *string `gorm:"column:description;size:512" json:"description,omitempty"`
+	LogoURL                        *string `gorm:"column:logo_url;size:512" json:"logo_url,omitempty"`
+	RedirectURIs                   *string `gorm:"column:redirect_uris;size:2048" json:"redirect_uris,omitempty"`
+	AllowedOrigins                 *string `gorm:"column:allowed_origins;size:1024" json:"allowed_origins,omitempty"`
+	IdTokenExpiresIn               uint   `gorm:"column:id_token_expires_in;not null;default:3600" json:"id_token_expires_in"`                      // ID Token 有效期（秒）
+	RefreshTokenExpiresIn          uint   `gorm:"column:refresh_token_expires_in;not null;default:604800" json:"refresh_token_expires_in"`             // Refresh Token 沉寂有效期（秒）
+	RefreshTokenAbsoluteExpiresIn  uint   `gorm:"column:refresh_token_absolute_expires_in;not null;default:0" json:"refresh_token_absolute_expires_in"` // 绝对有效期（秒），0=不限制
 	// 时间戳
 	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at;not null" json:"updated_at"`

@@ -36,8 +36,18 @@ func (h *Handler) GetDomain(c *gin.Context) {
 		DomainID:    domain.DomainID,
 		Name:        domain.Name,
 		Description: domain.Description,
-		AllowedIDPs: domain.AllowedIDPs,
 	})
+}
+
+// GetDomainAllowedIDPs GET /hermes/domains/:domain_id/idps（供配置应用 IDP 时按需拉取）
+func (h *Handler) GetDomainAllowedIDPs(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	idps, err := h.service.GetDomainAllowedIDPs(c.Request.Context(), domainID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"allowed_idps": idps})
 }
 
 // ListDomains GET /hermes/domains
@@ -53,7 +63,6 @@ func (h *Handler) ListDomains(c *gin.Context) {
 			DomainID:    domains[i].DomainID,
 			Name:        domains[i].Name,
 			Description: domains[i].Description,
-			AllowedIDPs: domains[i].AllowedIDPs,
 		})
 	}
 	c.JSON(http.StatusOK, resp)
@@ -74,15 +83,19 @@ func (h *Handler) ListServices(c *gin.Context) {
 	resp := make([]dto.ServiceResponse, 0, len(services))
 	for i := range services {
 		s := &services[i]
+		effectiveDomainID := s.DomainID
+		if effectiveDomainID == models.CrossDomainID {
+			effectiveDomainID = domainID
+		}
 		resp = append(resp, dto.ServiceResponse{
-			ServiceID:             s.ServiceID,
-			DomainID:              s.DomainID,
-			Name:                  s.Name,
-			Description:           s.Description,
-			AccessTokenExpiresIn:  s.AccessTokenExpiresIn,
-			RefreshTokenExpiresIn: s.RefreshTokenExpiresIn,
-			CreatedAt:             dto.FormatTime(s.CreatedAt),
-			UpdatedAt:             dto.FormatTime(s.UpdatedAt),
+			ServiceID:            s.ServiceID,
+			DomainID:             effectiveDomainID,
+			Name:                 s.Name,
+			Description:          s.Description,
+			LogoURL:              s.LogoURL,
+			AccessTokenExpiresIn: s.AccessTokenExpiresIn,
+			CreatedAt:            dto.FormatTime(s.CreatedAt),
+			UpdatedAt:            dto.FormatTime(s.UpdatedAt),
 		})
 	}
 	c.JSON(http.StatusOK, resp)
@@ -97,19 +110,23 @@ func (h *Handler) GetService(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID {
+	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
+	effectiveDomainID := service.DomainID
+	if effectiveDomainID == models.CrossDomainID {
+		effectiveDomainID = domainID
+	}
 	c.JSON(http.StatusOK, dto.ServiceResponse{
-		ServiceID:             service.ServiceID,
-		DomainID:              service.DomainID,
-		Name:                  service.Name,
-		Description:           service.Description,
-		AccessTokenExpiresIn:  service.AccessTokenExpiresIn,
-		RefreshTokenExpiresIn: service.RefreshTokenExpiresIn,
-		CreatedAt:             dto.FormatTime(service.CreatedAt),
-		UpdatedAt:             dto.FormatTime(service.UpdatedAt),
+		ServiceID:            service.ServiceID,
+		DomainID:             effectiveDomainID,
+		Name:                 service.Name,
+		Description:          service.Description,
+		LogoURL:              service.LogoURL,
+		AccessTokenExpiresIn: service.AccessTokenExpiresIn,
+		CreatedAt:            dto.FormatTime(service.CreatedAt),
+		UpdatedAt:            dto.FormatTime(service.UpdatedAt),
 	})
 }
 
@@ -128,14 +145,14 @@ func (h *Handler) CreateService(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, dto.ServiceResponse{
-		ServiceID:             service.ServiceID,
-		DomainID:              service.DomainID,
-		Name:                  service.Name,
-		Description:           service.Description,
-		AccessTokenExpiresIn:  service.AccessTokenExpiresIn,
-		RefreshTokenExpiresIn: service.RefreshTokenExpiresIn,
-		CreatedAt:             dto.FormatTime(service.CreatedAt),
-		UpdatedAt:             dto.FormatTime(service.UpdatedAt),
+		ServiceID:            service.ServiceID,
+		DomainID:             service.DomainID,
+		Name:                 service.Name,
+		Description:          service.Description,
+		LogoURL:              service.LogoURL,
+		AccessTokenExpiresIn: service.AccessTokenExpiresIn,
+		CreatedAt:            dto.FormatTime(service.CreatedAt),
+		UpdatedAt:            dto.FormatTime(service.UpdatedAt),
 	})
 }
 
@@ -148,7 +165,7 @@ func (h *Handler) UpdateService(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID {
+	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
@@ -173,7 +190,7 @@ func (h *Handler) DeleteService(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID {
+	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
@@ -193,7 +210,7 @@ func (h *Handler) GetServiceApplicationRelations(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID {
+	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
@@ -224,7 +241,7 @@ func (h *Handler) GetServiceAppRelations(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID {
+	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
@@ -246,7 +263,7 @@ func (h *Handler) SetServiceAppRelations(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID {
+	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
@@ -278,14 +295,18 @@ func (h *Handler) ListApplications(c *gin.Context) {
 	for i := range apps {
 		a := &apps[i]
 		resp = append(resp, dto.ApplicationResponse{
-			DomainID:       a.DomainID,
-			AppID:          a.AppID,
-			Name:           a.Name,
-			LogoURL:        a.LogoURL,
-			RedirectURIs:   dto.ParseJSONStringSlice(a.RedirectURIs),
-			AllowedOrigins: dto.ParseJSONStringSlice(a.AllowedOrigins),
-			CreatedAt:      dto.FormatTime(a.CreatedAt),
-			UpdatedAt:      dto.FormatTime(a.UpdatedAt),
+			DomainID:                      a.DomainID,
+			AppID:                         a.AppID,
+			Name:                          a.Name,
+			Description:                   a.Description,
+			LogoURL:                       a.LogoURL,
+			RedirectURIs:                  dto.ParseJSONStringSlice(a.RedirectURIs),
+			AllowedOrigins:                dto.ParseJSONStringSlice(a.AllowedOrigins),
+			IdTokenExpiresIn:              a.IdTokenExpiresIn,
+			RefreshTokenExpiresIn:         a.RefreshTokenExpiresIn,
+			RefreshTokenAbsoluteExpiresIn: a.RefreshTokenAbsoluteExpiresIn,
+			CreatedAt:                     dto.FormatTime(a.CreatedAt),
+			UpdatedAt:                     dto.FormatTime(a.UpdatedAt),
 		})
 	}
 	c.JSON(http.StatusOK, resp)
@@ -305,14 +326,18 @@ func (h *Handler) GetApplication(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, dto.ApplicationResponse{
-		DomainID:       app.DomainID,
-		AppID:          app.AppID,
-		Name:           app.Name,
-		LogoURL:        app.LogoURL,
-		RedirectURIs:   dto.ParseJSONStringSlice(app.RedirectURIs),
-		AllowedOrigins: dto.ParseJSONStringSlice(app.AllowedOrigins),
-		CreatedAt:      dto.FormatTime(app.CreatedAt),
-		UpdatedAt:      dto.FormatTime(app.UpdatedAt),
+		DomainID:                      app.DomainID,
+		AppID:                         app.AppID,
+		Name:                          app.Name,
+		Description:                   app.Description,
+		LogoURL:                       app.LogoURL,
+		RedirectURIs:                  dto.ParseJSONStringSlice(app.RedirectURIs),
+		AllowedOrigins:                dto.ParseJSONStringSlice(app.AllowedOrigins),
+		IdTokenExpiresIn:              app.IdTokenExpiresIn,
+		RefreshTokenExpiresIn:         app.RefreshTokenExpiresIn,
+		RefreshTokenAbsoluteExpiresIn: app.RefreshTokenAbsoluteExpiresIn,
+		CreatedAt:                     dto.FormatTime(app.CreatedAt),
+		UpdatedAt:                     dto.FormatTime(app.UpdatedAt),
 	})
 }
 
@@ -331,14 +356,18 @@ func (h *Handler) CreateApplication(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, dto.ApplicationResponse{
-		DomainID:       app.DomainID,
-		AppID:          app.AppID,
-		Name:           app.Name,
-		LogoURL:        app.LogoURL,
-		RedirectURIs:   dto.ParseJSONStringSlice(app.RedirectURIs),
-		AllowedOrigins: dto.ParseJSONStringSlice(app.AllowedOrigins),
-		CreatedAt:      dto.FormatTime(app.CreatedAt),
-		UpdatedAt:      dto.FormatTime(app.UpdatedAt),
+		DomainID:                      app.DomainID,
+		AppID:                         app.AppID,
+		Name:                          app.Name,
+		Description:                   app.Description,
+		LogoURL:                       app.LogoURL,
+		RedirectURIs:                  dto.ParseJSONStringSlice(app.RedirectURIs),
+		AllowedOrigins:                dto.ParseJSONStringSlice(app.AllowedOrigins),
+		IdTokenExpiresIn:              app.IdTokenExpiresIn,
+		RefreshTokenExpiresIn:         app.RefreshTokenExpiresIn,
+		RefreshTokenAbsoluteExpiresIn: app.RefreshTokenAbsoluteExpiresIn,
+		CreatedAt:                     dto.FormatTime(app.CreatedAt),
+		UpdatedAt:                     dto.FormatTime(app.UpdatedAt),
 	})
 }
 

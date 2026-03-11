@@ -54,11 +54,20 @@ func NewService(db *gorm.DB) *Service {
 
 // ==================== Domain 相关 ====================
 
-// getDomainFromDB 从数据库读取域元数据及允许的 IDP 列表
-func (s *Service) getDomainFromDB(ctx context.Context, domainID string) (*models.Domain, error) {
+// getDomainRecordOnly 仅查 t_domain，不查 allowed_idps（用于 GetDomain 等只需基础信息时）
+func (s *Service) getDomainRecordOnly(ctx context.Context, domainID string) (*models.DomainRecord, error) {
 	var rec models.DomainRecord
 	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).First(&rec).Error; err != nil {
 		return nil, fmt.Errorf("域 %s 不存在: %w", domainID, err)
+	}
+	return &rec, nil
+}
+
+// getDomainFromDB 从数据库读取域元数据及允许的 IDP 列表（供 GetDomainWithKey 等需要完整域信息时用）
+func (s *Service) getDomainFromDB(ctx context.Context, domainID string) (*models.Domain, error) {
+	rec, err := s.getDomainRecordOnly(ctx, domainID)
+	if err != nil {
+		return nil, err
 	}
 	allowedIDPs, err := s.getDomainAllowedIDPs(ctx, domainID)
 	if err != nil {
@@ -85,15 +94,26 @@ func (s *Service) getDomainAllowedIDPs(ctx context.Context, domainID string) ([]
 	return out, nil
 }
 
-// GetDomain 获取域（元数据与 allowed_idps 从 DB 读，签名密钥仍从配置读）
+// GetDomain 获取域基础信息（仅 t_domain，不查 t_domain_idp；需时调 GetDomainAllowedIDPs）
 func (s *Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
-	// 域必须存在于 DB
-	domain, err := s.getDomainFromDB(ctx, domainID)
+	rec, err := s.getDomainRecordOnly(ctx, domainID)
 	if err != nil {
 		return nil, err
 	}
-	// 签名密钥仍从配置读取（用于签发/验签，此处仅返回元数据，aegis 侧 GetDomainWithKey 才需要密钥）
-	return domain, nil
+	return &models.Domain{
+		DomainID:    rec.DomainID,
+		Name:        rec.Name,
+		Description: rec.Description,
+		AllowedIDPs: nil,
+	}, nil
+}
+
+// GetDomainAllowedIDPs 获取域允许的 IDP 类型列表（供应用配置 IDP 时按需拉取）
+func (s *Service) GetDomainAllowedIDPs(ctx context.Context, domainID string) ([]string, error) {
+	if _, err := s.getDomainRecordOnly(ctx, domainID); err != nil {
+		return nil, err
+	}
+	return s.getDomainAllowedIDPs(ctx, domainID)
 }
 
 // GetDomainWithKey 获取域（含签名密钥，供 aegis 签发/验签；AllowedIDPs 来自 DB；密钥优先从 t_key 读，否则回退到配置）
@@ -122,7 +142,7 @@ func (s *Service) GetDomainWithKey(ctx context.Context, domainID string) (*model
 	}, nil
 }
 
-// ListDomains 列出所有域（从 DB 读）
+// ListDomains 列出所有域（仅基础信息，不含 allowed_idps；需时用 GetDomainAllowedIDPs）
 func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 	var recs []models.DomainRecord
 	if err := s.db.WithContext(ctx).Find(&recs).Error; err != nil {
@@ -130,15 +150,11 @@ func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 	}
 	domains := make([]models.Domain, 0, len(recs))
 	for i := range recs {
-		allowedIDPs, err := s.getDomainAllowedIDPs(ctx, recs[i].DomainID)
-		if err != nil {
-			return nil, err
-		}
 		domains = append(domains, models.Domain{
 			DomainID:    recs[i].DomainID,
 			Name:        recs[i].Name,
 			Description: recs[i].Description,
-			AllowedIDPs: allowedIDPs,
+			AllowedIDPs: nil,
 		})
 	}
 	return domains, nil
@@ -153,15 +169,11 @@ func (s *Service) CreateService(ctx context.Context, req *ServiceCreateRequest) 
 		DomainID:              req.DomainID,
 		Name:                  req.Name,
 		Description:           req.Description,
+		LogoURL:               req.LogoURL,
 		AccessTokenExpiresIn:  7200,
-		RefreshTokenExpiresIn: 604800,
 	}
-
 	if req.AccessTokenExpiresIn != nil {
 		service.AccessTokenExpiresIn = *req.AccessTokenExpiresIn
-	}
-	if req.RefreshTokenExpiresIn != nil {
-		service.RefreshTokenExpiresIn = *req.RefreshTokenExpiresIn
 	}
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -205,10 +217,10 @@ func (s *Service) GetServiceWithKey(ctx context.Context, serviceID string) (*mod
 	return result, nil
 }
 
-// ListServices 列出服务，支持 service_id 精确、name 左模糊（均走索引）
+// ListServices 列出服务，支持 service_id 精确、name 左模糊。包含该域下的服务及跨域服务（domain_id = DomainIDCrossDomain），跨域不在上层暴露由 handler 用请求 domain 表示。
 func (s *Service) ListServices(ctx context.Context, domainID, serviceIDExact, namePrefix string) ([]models.Service, error) {
 	var services []models.Service
-	query := s.db.WithContext(ctx).Where("domain_id = ?", domainID)
+	query := s.db.WithContext(ctx).Where("domain_id = ? OR domain_id = ?", domainID, models.CrossDomainID)
 	if serviceIDExact != "" && namePrefix != "" {
 		query = query.Where("(service_id = ? OR name LIKE ?)", serviceIDExact, namePrefix+"%")
 	} else if serviceIDExact != "" {
@@ -227,8 +239,8 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, req *Serv
 	updates := patch.Collect(
 		patch.Field("name", req.Name),
 		patch.Field("description", req.Description),
+		patch.Field("logo_url", req.LogoURL),
 		patch.Field("access_token_expires_in", req.AccessTokenExpiresIn),
-		patch.Field("refresh_token_expires_in", req.RefreshTokenExpiresIn),
 	)
 
 	if len(updates) == 0 {
@@ -287,10 +299,23 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 	}
 
 	app := &models.Application{
-		DomainID:     req.DomainID,
-		AppID:        req.AppID,
-		Name:         req.Name,
-		RedirectURIs: redirectURIs,
+		DomainID:                      req.DomainID,
+		AppID:                         req.AppID,
+		Name:                          req.Name,
+		Description:                   req.Description,
+		RedirectURIs:                  redirectURIs,
+		IdTokenExpiresIn:              3600,
+		RefreshTokenExpiresIn:         604800,
+		RefreshTokenAbsoluteExpiresIn: 0,
+	}
+	if req.IdTokenExpiresIn != nil {
+		app.IdTokenExpiresIn = *req.IdTokenExpiresIn
+	}
+	if req.RefreshTokenExpiresIn != nil {
+		app.RefreshTokenExpiresIn = *req.RefreshTokenExpiresIn
+	}
+	if req.RefreshTokenAbsoluteExpiresIn != nil {
+		app.RefreshTokenAbsoluteExpiresIn = *req.RefreshTokenAbsoluteExpiresIn
 	}
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -356,6 +381,10 @@ func (s *Service) ListApplications(ctx context.Context, domainID string) ([]mode
 func (s *Service) UpdateApplication(ctx context.Context, appID string, req *ApplicationUpdateRequest) error {
 	updates := patch.Collect(
 		patch.Field("name", req.Name),
+		patch.Field("description", req.Description),
+		patch.Field("id_token_expires_in", req.IdTokenExpiresIn),
+		patch.Field("refresh_token_expires_in", req.RefreshTokenExpiresIn),
+		patch.Field("refresh_token_absolute_expires_in", req.RefreshTokenAbsoluteExpiresIn),
 	)
 
 	// redirect_uris 需要序列化为 JSON 字符串

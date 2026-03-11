@@ -78,14 +78,15 @@ func (cm *Manager) GetAuthCode(ctx context.Context, code string) (*Authorization
 
 // RefreshToken 刷新令牌
 type RefreshToken struct {
-	Token     string    `json:"token"`
-	OpenID    string    `json:"openid"` // 用户标识（t_user.openid = global identity 的 t_openid）
-	ClientID  string    `json:"client_id"`
-	Audience  string    `json:"audience"`
-	Scope     string    `json:"scope"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Revoked   bool      `json:"revoked"`
-	CreatedAt time.Time `json:"created_at"`
+	Token       string     `json:"token"`
+	OpenID      string     `json:"openid"`
+	ClientID    string     `json:"client_id"`
+	Audience    string     `json:"audience"`
+	Scope       string     `json:"scope"`
+	ExpiresAt   time.Time  `json:"expires_at"`   // 沉寂过期（每次使用可延长）
+	MaxExpiresAt *time.Time `json:"max_expires_at,omitempty"` // 绝对过期（从创建起，不可延长），nil=不限制
+	Revoked     bool       `json:"revoked"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 // SetRefreshToken 保存刷新令牌

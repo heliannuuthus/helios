@@ -359,6 +359,14 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 		return nil, autherrors.NewInvalidGrant("client_id mismatch")
 	}
 
+	now := time.Now()
+	if rt.MaxExpiresAt != nil && now.After(*rt.MaxExpiresAt) {
+		return nil, autherrors.NewInvalidGrant("refresh token expired (absolute)")
+	}
+	if now.After(rt.ExpiresAt) {
+		return nil, autherrors.NewInvalidGrant("refresh token expired (sliding)")
+	}
+
 	// 3. 获取用户、应用、服务信息
 	user, err := s.userSvc.GetUser(ctx, rt.OpenID)
 	if err != nil {
@@ -375,15 +383,25 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 		return nil, fmt.Errorf("service not found: %w", err)
 	}
 
-	// 4. 生成新的 access token（使用 refresh token 中保存的 openid 作为 sub）
+	// 4. 沉寂延长：更新 rt.ExpiresAt，不超过绝对过期
+	sliding := time.Duration(app.Application.RefreshTokenExpiresIn) * time.Second
+	if sliding > 0 {
+		newExpiresAt := now.Add(sliding)
+		if rt.MaxExpiresAt != nil && newExpiresAt.After(*rt.MaxExpiresAt) {
+			newExpiresAt = *rt.MaxExpiresAt
+		}
+		rt.ExpiresAt = newExpiresAt
+		if err := s.cache.SetRefreshToken(ctx, rt); err != nil {
+			return nil, fmt.Errorf("extend refresh token: %w", err)
+		}
+	}
+
+	// 5. 生成新的 access token
 	tokenResp, err := s.generateAccessToken(ctx, &app.Application, &svc.Service, user, rt.OpenID, rt.Scope)
 	if err != nil {
 		return nil, err
 	}
-
-	// 保持 refresh token 不变
 	tokenResp.RefreshToken = rt.Token
-
 	return tokenResp, nil
 }
 
@@ -488,21 +506,26 @@ func (s *Service) generateIDToken(ctx context.Context, flow *types.AuthFlow) (st
 		idtBuilder.Nonce(flow.Request.Nonce)
 	}
 
+	idTokenExpiresIn := time.Duration(flow.Application.IdTokenExpiresIn) * time.Second
+	if idTokenExpiresIn == 0 {
+		idTokenExpiresIn = time.Hour
+	}
 	idt := token.NewClaimsBuilder().
 		Issuer(s.tokenSvc.GetIssuer()).
 		Subject(flow.User.OpenID).
 		Audience(flow.Application.AppID).
-		ExpiresIn(time.Hour).
+		ExpiresIn(idTokenExpiresIn).
 		Build(idtBuilder)
 
 	return s.tokenSvc.Issue(ctx, idt)
 }
 
 func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, scope string) (*cache.RefreshToken, error) {
-	if flow.Service.RefreshTokenExpiresIn == 0 {
-		return nil, autherrors.NewInvalidRequestf("refresh_token_expires_in not configured for service %s", flow.Service.ServiceID)
+	if flow.Application.RefreshTokenExpiresIn == 0 {
+		return nil, autherrors.NewInvalidRequestf("refresh_token_expires_in not configured for application %s", flow.Application.AppID)
 	}
-	refreshExpiresIn := time.Duration(flow.Service.RefreshTokenExpiresIn) * time.Second //nolint:gosec // RefreshTokenExpiresIn 是配置的小整数，不会溢出
+	refreshExpiresIn := time.Duration(flow.Application.RefreshTokenExpiresIn) * time.Second //nolint:gosec // 应用配置的沉寂有效期
+	absoluteExpiresIn := time.Duration(flow.Application.RefreshTokenAbsoluteExpiresIn) * time.Second
 
 	// 异步清理旧的 refresh token
 	openid, clientID := flow.User.OpenID, flow.Application.AppID
@@ -510,13 +533,11 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 		s.cleanupOldRefreshTokens(ctx, openid, clientID)
 	})
 
-	// 生成 refresh token 值
 	tokenValue, err := generateRefreshTokenValue()
 	if err != nil {
 		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
 
-	// 创建新的 refresh token
 	now := time.Now()
 	rt := &cache.RefreshToken{
 		Token:     tokenValue,
@@ -526,6 +547,10 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 		Scope:     scope,
 		ExpiresAt: now.Add(refreshExpiresIn),
 		CreatedAt: now,
+	}
+	if absoluteExpiresIn > 0 {
+		maxAt := now.Add(absoluteExpiresIn)
+		rt.MaxExpiresAt = &maxAt
 	}
 
 	if err := s.cache.SetRefreshToken(ctx, rt); err != nil {
@@ -676,7 +701,7 @@ func (s *Service) generateMultiAudienceTokens(
 		// 如果 scope 包含 offline_access，签发独立的 refresh token
 		scopes := strings.Fields(scope)
 		if helpers.ContainsScope(scopes, ScopeOfflineAccess) {
-			rtValue, err := s.createRefreshTokenForAudience(ctx, flow.User.OpenID, flow.Application.AppID, &svc.Service, scope)
+			rtValue, err := s.createRefreshTokenForAudience(ctx, flow.User.OpenID, flow.Application, &svc.Service, scope)
 			if err != nil {
 				return nil, fmt.Errorf("create refresh token for audience %s: %w", audience, err)
 			}
@@ -689,18 +714,18 @@ func (s *Service) generateMultiAudienceTokens(
 	return resp, nil
 }
 
-// createRefreshTokenForAudience 为指定 audience 创建 refresh token
+// createRefreshTokenForAudience 为指定 audience 创建 refresh token（应用控制 refresh_token 有效期）
 func (s *Service) createRefreshTokenForAudience(
-	ctx context.Context, openID, clientID string, svc *models.Service, scope string,
+	ctx context.Context, openID string, app *models.Application, svc *models.Service, scope string,
 ) (string, error) {
-	if svc.RefreshTokenExpiresIn == 0 {
-		return "", autherrors.NewInvalidRequestf("refresh_token_expires_in not configured for service %s", svc.ServiceID)
+	if app.RefreshTokenExpiresIn == 0 {
+		return "", autherrors.NewInvalidRequestf("refresh_token_expires_in not configured for application %s", app.AppID)
 	}
-	refreshExpiresIn := time.Duration(svc.RefreshTokenExpiresIn) * time.Second //nolint:gosec // RefreshTokenExpiresIn 是配置的小整数，不会溢出
+	refreshExpiresIn := time.Duration(app.RefreshTokenExpiresIn) * time.Second
+	absoluteExpiresIn := time.Duration(app.RefreshTokenAbsoluteExpiresIn) * time.Second
 
-	// 异步清理旧的 refresh token
 	s.pool.GoWithContext(ctx, func(ctx context.Context) {
-		s.cleanupOldRefreshTokens(ctx, openID, clientID)
+		s.cleanupOldRefreshTokens(ctx, openID, app.AppID)
 	})
 
 	tokenValue, err := generateRefreshTokenValue()
@@ -712,11 +737,15 @@ func (s *Service) createRefreshTokenForAudience(
 	rt := &cache.RefreshToken{
 		Token:     tokenValue,
 		OpenID:    openID,
-		ClientID:  clientID,
+		ClientID:  app.AppID,
 		Audience:  svc.ServiceID,
 		Scope:     scope,
 		ExpiresAt: now.Add(refreshExpiresIn),
 		CreatedAt: now,
+	}
+	if absoluteExpiresIn > 0 {
+		maxAt := now.Add(absoluteExpiresIn)
+		rt.MaxExpiresAt = &maxAt
 	}
 
 	if err := s.cache.SetRefreshToken(ctx, rt); err != nil {

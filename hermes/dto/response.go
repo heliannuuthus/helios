@@ -7,22 +7,21 @@ import (
 
 // 响应 DTO：仅包含需要暴露给前端的字段，不包含内部 _id；由 handler 直接构建。
 
-// DomainResponse 域（含该域允许的 IDP 列表，供应用配置时选择）
+// DomainResponse 域基础信息（名称、描述等）；allowed_idps 不在此暴露，需时调 GET /domains/:id/idps）
 type DomainResponse struct {
-	DomainID    string   `json:"domain_id"`
-	Name        string   `json:"name"`
-	Description *string  `json:"description,omitempty"`
-	AllowedIDPs []string `json:"allowed_idps"`
+	DomainID    string  `json:"domain_id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description,omitempty"`
 }
 
-// ServiceResponse 服务（无 _id）
+// ServiceResponse 服务（无 _id，仅 access_token 有效期由服务控制）
 type ServiceResponse struct {
 	ServiceID             string  `json:"service_id"`
 	DomainID              string  `json:"domain_id"`
 	Name                  string  `json:"name"`
 	Description           *string `json:"description,omitempty"`
+	LogoURL               *string `json:"logo_url,omitempty"`
 	AccessTokenExpiresIn  uint    `json:"access_token_expires_in"`
-	RefreshTokenExpiresIn uint    `json:"refresh_token_expires_in"`
 	CreatedAt             string  `json:"created_at"`
 	UpdatedAt             string  `json:"updated_at"`
 }
@@ -41,14 +40,18 @@ type ApplicationIDPConfigResponse struct {
 
 // ApplicationResponse 应用（无 _id，redirect_uris/allowed_origins 为数组）
 type ApplicationResponse struct {
-	DomainID       string   `json:"domain_id"`
-	AppID          string   `json:"app_id"`
-	Name           string   `json:"name"`
-	LogoURL        *string  `json:"logo_url,omitempty"`
-	RedirectURIs   []string `json:"redirect_uris,omitempty"`
-	AllowedOrigins []string `json:"allowed_origins,omitempty"`
-	CreatedAt      string   `json:"created_at"`
-	UpdatedAt      string   `json:"updated_at"`
+	DomainID                      string   `json:"domain_id"`
+	AppID                         string   `json:"app_id"`
+	Name                          string   `json:"name"`
+	Description                   *string  `json:"description,omitempty"`
+	LogoURL                       *string  `json:"logo_url,omitempty"`
+	RedirectURIs                  []string `json:"redirect_uris,omitempty"`
+	AllowedOrigins                []string `json:"allowed_origins,omitempty"`
+	IdTokenExpiresIn              uint     `json:"id_token_expires_in"`
+	RefreshTokenExpiresIn         uint     `json:"refresh_token_expires_in"`
+	RefreshTokenAbsoluteExpiresIn uint     `json:"refresh_token_absolute_expires_in"`
+	CreatedAt                     string   `json:"created_at"`
+	UpdatedAt                     string   `json:"updated_at"`
 }
 
 // RelationshipResponse 关系（无 _id，expires_at 为 ISO 字符串）

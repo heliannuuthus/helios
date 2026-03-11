@@ -4,37 +4,45 @@ import (
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
-// ServiceCreateRequest 创建服务请求
+// ServiceCreateRequest 创建服务请求（服务仅控制 access_token 有效期）
 type ServiceCreateRequest struct {
 	ServiceID             string  `json:"service_id" binding:"required"`
 	DomainID              string  `json:"domain_id" binding:"required"`
 	Name                  string  `json:"name" binding:"required"`
 	Description           *string `json:"description"`
+	LogoURL               *string `json:"logo_url"`
 	AccessTokenExpiresIn  *uint   `json:"access_token_expires_in"`
-	RefreshTokenExpiresIn *uint   `json:"refresh_token_expires_in"`
 }
 
 // ServiceUpdateRequest 更新服务请求（JSON Merge Patch 语义）
 type ServiceUpdateRequest struct {
 	Name                  patch.Optional[string] `json:"name"`
 	Description           patch.Optional[string] `json:"description"`
+	LogoURL               patch.Optional[string] `json:"logo_url"`
 	AccessTokenExpiresIn  patch.Optional[uint]   `json:"access_token_expires_in"`
-	RefreshTokenExpiresIn patch.Optional[uint]   `json:"refresh_token_expires_in"`
 }
 
-// ApplicationCreateRequest 创建应用请求
+// ApplicationCreateRequest 创建应用请求（应用控制 id_token、refresh_token 有效期）
 type ApplicationCreateRequest struct {
-	DomainID     string   `json:"domain_id" binding:"required"`
-	AppID        string   `json:"app_id" binding:"required"`
-	Name         string   `json:"name" binding:"required"`
-	RedirectURIs []string `json:"redirect_uris"`
-	NeedKey      bool     `json:"need_key"` // 是否需要密钥
+	DomainID                      string   `json:"domain_id" binding:"required"`
+	AppID                         string   `json:"app_id" binding:"required"`
+	Name                          string   `json:"name" binding:"required"`
+	Description                   *string  `json:"description"`
+	RedirectURIs                  []string `json:"redirect_uris"`
+	NeedKey                       bool     `json:"need_key"` // 是否需要密钥
+	IdTokenExpiresIn              *uint    `json:"id_token_expires_in"`
+	RefreshTokenExpiresIn         *uint    `json:"refresh_token_expires_in"`
+	RefreshTokenAbsoluteExpiresIn *uint    `json:"refresh_token_absolute_expires_in"`
 }
 
 // ApplicationUpdateRequest 更新应用请求（JSON Merge Patch 语义）
 type ApplicationUpdateRequest struct {
-	Name         patch.Optional[string]   `json:"name"`
-	RedirectURIs patch.Optional[[]string] `json:"redirect_uris"`
+	Name                          patch.Optional[string]   `json:"name"`
+	Description                   patch.Optional[string]   `json:"description"`
+	RedirectURIs                  patch.Optional[[]string] `json:"redirect_uris"`
+	IdTokenExpiresIn              patch.Optional[uint]     `json:"id_token_expires_in"`
+	RefreshTokenExpiresIn         patch.Optional[uint]     `json:"refresh_token_expires_in"`
+	RefreshTokenAbsoluteExpiresIn patch.Optional[uint]     `json:"refresh_token_absolute_expires_in"`
 }
 
 // ApplicationIDPConfigCreateRequest 创建应用 IDP 配置请求（idp 类型必须在应用所属域的 allowed_idps 内）
