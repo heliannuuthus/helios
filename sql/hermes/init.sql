@@ -35,12 +35,12 @@ ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), 
 -- ==================== 域密钥 & 服务密钥 ====================
 DELETE FROM t_key WHERE owner_type IN ('domain', 'service');
 INSERT INTO t_key (owner_type, owner_id, encrypted_key) VALUES
-('domain', 'consumer', 'a4NqgAm7q8/B5qsrx5xz2JxJBWZtaC02+0CIjzu1GHrI5LVRBUdIsASkpjIVzOaYO2Om7/DVxjo7wpznyOK4zk2kTpzL4Fva6w+pyw=='),
-('domain', 'platform', '37J5LQrYndbsmM+e4avG1sB4DcdgQ6rML8/2L3R0ICmvHHJIXGw9TrYiK1LV7wtGbPwEMUg+DFo8jVC697mvAzPvUfUWiybWcdB5mA=='),
-('service', 'hermes', 'JLikg1HxtUWsRQp2F8muoAwe/xBAu+vLS4ywFY6IU3+lU4C/rmcP3OeH86R2vTqnhIVWayIijRNTf8JfyZjDXvvhnu8G3un6iOVBQA=='),
-('service', 'iris', '287sdBoaQi0K2KN1+lwpQFzCzc13Xeno+tNIBLqoYBYcctfKmxtBJYGqrfjcfN2xLQdcSYjPal1JMbfbFiTSBIp06F6qwCDs6N1DEA=='),
-('service', 'zwei', 'Uqqp44pD79g873HQv2PyzQ+WpCUU9LnPTlGF3bF2WAjLt7vXEfc7v0Odfg/wpXO7I7zuzXN96Z6aWHfsp7+/mwluVZ/qLnuw+etkLw=='),
-('service', 'chaos', 'lhVDRFtSPyItPUYwNsfEFb+F9IuogYvAOTIGs47LKyFmr8TeCFvfIZFB2iqAJX9sihwHxDjM6VDQ6zJ8VaMy+UTbOmiC9yCI8gWOXQ==')
+('domain', 'consumer', '53lhcLdbYh422/+ps5D4VRVYOhTFHypXa1pKcv6F96d5My1Z73QMTFDffhcYZp5hcxGgKnwaBB54N3dcXyHvQDVK7ZDRCralN0r8Nw=='),
+('domain', 'platform', '2xtVrhEityrxPmsP/mDVUpKXnhikPJihgrF886gCbv82h0z/3rD/OkCnzOz1OLVhuPcjFE0WjYt3ZhTuyYKHnmpVOVk4l0yFW2pAdA=='),
+('service', 'hermes', 'J04QjtMzuye5QjcUjEBfrS+jvKlAal3heqZ+Z98Hj+1reiLuf5ZnqF+jqAI6BbY33rU4xb4XVrKPI+sNxTHQ0KYTQmEZgDdbuHeHOw=='),
+('service', 'iris', 'MAm+ZW89MifLgWaJSuVu5pkxn/W9opZFXIhWzv3ivCNnezpI5Xr3Y+zXKh0J+fsxfEoXkbdUxOfp9bx31hL9zHoUIOBsF+MNHjYYDw=='),
+('service', 'zwei', 'QsEwGLKhJRGLeBFsTXjILDRhsQmfxhtYMVtGWGJYPX/pPwo9ix+6s4r82k3+4720Cmoz4QeKtIcuN+W1aOAjUDalLEjq54V11IWE6Q=='),
+('service', 'chaos', 'Ty4AYmq8Kxt1CmeVAlnAemx6CsingzbVoiqJxUCaavSKx7sTqRUuA+v+6X/I45lPVShK5L5Txra4zNxuTx8Q/yOdqrt5bKMRbwLpQw==')
 ;
 
 -- ==================== 应用 ====================
@@ -96,16 +96,16 @@ ON DUPLICATE KEY UPDATE expires_in = VALUES(expires_in), limits = VALUES(limits)
 
 -- ==================== 用户 ====================
 INSERT INTO t_user (openid, status, username, password_hash, email_verified, nickname, picture, email) VALUES
-('5fb6700fd625a0854b80e5e07932f365', 0, 'heliannuuthus', '$2b$10$IydKmonsoml6jcSh3ZY7/uy/2ZRTHEtf4Mf1dskTWAbiukd71lpEm', 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
+('3364466cd0e3370b723b93a151f6cf22', 0, 'heliannuuthus', '$2b$10$rx1z7jhg7GuuxPxVBkcDT.Br3d8djW33FuRxE/0jV3FvMGTISI2Hy', 1, 'Heliannuuthus', NULL, 'heliannuuthus@gmail.com')
 ON DUPLICATE KEY UPDATE nickname = VALUES(nickname), email = VALUES(email), email_verified = VALUES(email_verified), username = VALUES(username), password_hash = VALUES(password_hash);
 
 -- ==================== 用户身份 ====================
 INSERT INTO t_user_identity (domain, uid, idp, t_openid) VALUES
-('platform', '5fb6700fd625a0854b80e5e07932f365', 'global', '5fb6700fd625a0854b80e5e07932f365'),
-('platform', '5fb6700fd625a0854b80e5e07932f365', 'staff', 'heliannuuthus')
+('platform', '3364466cd0e3370b723b93a151f6cf22', 'global', '3364466cd0e3370b723b93a151f6cf22'),
+('platform', '3364466cd0e3370b723b93a151f6cf22', 'staff', 'heliannuuthus')
 ON DUPLICATE KEY UPDATE t_openid = VALUES(t_openid);
 
 -- ==================== 服务关系（权限） ====================
 INSERT INTO t_relationship (service_id, subject_type, subject_id, relation, object_type, object_id) VALUES
-('hermes', 'user', '5fb6700fd625a0854b80e5e07932f365', 'admin', '*', '*')
+('hermes', 'user', '3364466cd0e3370b723b93a151f6cf22', 'admin', '*', '*')
 ON DUPLICATE KEY UPDATE relation = VALUES(relation);

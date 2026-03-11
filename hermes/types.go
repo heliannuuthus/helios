@@ -9,7 +9,7 @@ type ServiceCreateRequest struct {
 	ServiceID             string  `json:"service_id" binding:"required"`
 	DomainID              string  `json:"domain_id" binding:"required"`
 	Name                  string  `json:"name" binding:"required"`
-	Description           *string `json:"description"`
+	Description           string  `json:"description" binding:"required"`
 	LogoURL               *string `json:"logo_url"`
 	AccessTokenExpiresIn  *uint   `json:"access_token_expires_in"`
 }
@@ -23,11 +23,12 @@ type ServiceUpdateRequest struct {
 }
 
 // ApplicationCreateRequest 创建应用请求（应用控制 id_token、refresh_token 有效期）
+// AppID 可选；不填时后端用随机 bigint 经 base62 编码自动生成
 type ApplicationCreateRequest struct {
 	DomainID                      string   `json:"domain_id" binding:"required"`
-	AppID                         string   `json:"app_id" binding:"required"`
+	AppID                         string   `json:"app_id"` // 可选，空则自动生成
 	Name                          string   `json:"name" binding:"required"`
-	Description                   *string  `json:"description"`
+	Description                   string   `json:"description" binding:"required"`
 	RedirectURIs                  []string `json:"redirect_uris"`
 	NeedKey                       bool     `json:"need_key"` // 是否需要密钥
 	IdTokenExpiresIn              *uint    `json:"id_token_expires_in"`

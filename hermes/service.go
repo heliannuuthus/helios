@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/go-json-experiment/json"
@@ -13,6 +15,7 @@ import (
 	"github.com/heliannuuthus/helios/hermes/config"
 	"github.com/heliannuuthus/helios/hermes/models"
 	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
+	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
@@ -164,11 +167,12 @@ func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 
 // CreateService 创建服务
 func (s *Service) CreateService(ctx context.Context, req *ServiceCreateRequest) (*models.Service, error) {
+	desc := req.Description
 	service := &models.Service{
 		ServiceID:             req.ServiceID,
 		DomainID:              req.DomainID,
 		Name:                  req.Name,
-		Description:           req.Description,
+		Description:           &desc,
 		LogoURL:               req.LogoURL,
 		AccessTokenExpiresIn:  7200,
 	}
@@ -286,8 +290,18 @@ func (s *Service) DeleteService(ctx context.Context, serviceID string) error {
 
 // ==================== Application 相关 ====================
 
+// appIDPattern 应用标识：字母数字、下划线、连字符，1~64 字符
+var appIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+
 // CreateApplication 创建应用
 func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateRequest) (*models.Application, error) {
+	appID := strings.TrimSpace(req.AppID)
+	if appID == "" {
+		appID = helpers.GenerateID(12)
+	} else if !appIDPattern.MatchString(appID) {
+		return nil, fmt.Errorf("应用标识仅允许字母、数字、下划线、连字符，1~64 字符")
+	}
+
 	var redirectURIs *string
 	if len(req.RedirectURIs) > 0 {
 		urisJSON, err := json.Marshal(req.RedirectURIs)
@@ -298,11 +312,12 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 		redirectURIs = &urisStr
 	}
 
+	desc := req.Description
 	app := &models.Application{
 		DomainID:                      req.DomainID,
-		AppID:                         req.AppID,
+		AppID:                         appID,
 		Name:                          req.Name,
-		Description:                   req.Description,
+		Description:                   &desc,
 		RedirectURIs:                  redirectURIs,
 		IdTokenExpiresIn:              3600,
 		RefreshTokenExpiresIn:         604800,
@@ -323,7 +338,7 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 			return fmt.Errorf("创建应用失败: %w", err)
 		}
 		if req.NeedKey {
-			if err := s.createKey(tx, models.KeyOwnerApplication, req.AppID); err != nil {
+			if err := s.createKey(tx, models.KeyOwnerApplication, appID); err != nil {
 				return err
 			}
 		}
