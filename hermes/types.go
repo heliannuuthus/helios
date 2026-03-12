@@ -4,6 +4,12 @@ import (
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
+// DomainUpdateRequest 更新域请求（JSON Merge Patch 语义，仅 name、description 可编辑）
+type DomainUpdateRequest struct {
+	Name        patch.Optional[string] `json:"name"`
+	Description patch.Optional[string] `json:"description"`
+}
+
 // ServiceCreateRequest 创建服务请求（服务仅控制 access_token 有效期）
 type ServiceCreateRequest struct {
 	ServiceID            string  `json:"service_id" binding:"required"`
@@ -42,6 +48,7 @@ type ApplicationCreateRequest struct {
 type ApplicationUpdateRequest struct {
 	Name                          patch.Optional[string]   `json:"name"`
 	Description                   patch.Optional[string]   `json:"description"`
+	LogoURL                       patch.Optional[string]   `json:"logo_url"`
 	AllowedRedirectURIs           patch.Optional[[]string] `json:"allowed_redirect_uris"`
 	AllowedOrigins                patch.Optional[[]string] `json:"allowed_origins"`
 	AllowedLogoutURIs             patch.Optional[[]string] `json:"allowed_logout_uris"`

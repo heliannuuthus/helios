@@ -50,6 +50,26 @@ func (h *Handler) GetDomainAllowedIDPs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"allowed_idps": idps})
 }
 
+// UpdateDomain PATCH /hermes/domains/:domain_id（仅 name、description 可编辑）
+func (h *Handler) UpdateDomain(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	var req DomainUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	domain, err := h.service.UpdateDomain(c.Request.Context(), domainID, &req)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, dto.DomainResponse{
+		DomainID:    domain.DomainID,
+		Name:        domain.Name,
+		Description: domain.Description,
+	})
+}
+
 // ListDomains GET /hermes/domains
 func (h *Handler) ListDomains(c *gin.Context) {
 	domains, err := h.service.ListDomains(c.Request.Context())

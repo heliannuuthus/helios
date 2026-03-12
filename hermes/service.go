@@ -124,6 +124,25 @@ func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 	return domains, nil
 }
 
+// UpdateDomain 更新域（仅 name、description）
+func (s *Service) UpdateDomain(ctx context.Context, domainID string, req *DomainUpdateRequest) (*models.Domain, error) {
+	_, err := s.getDomainRecordOnly(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+	updates := patch.Collect(
+		patch.Field("name", req.Name),
+		patch.Field("description", req.Description),
+	)
+	if len(updates) == 0 {
+		return s.GetDomain(ctx, domainID)
+	}
+	if err := s.db.WithContext(ctx).Model(&models.DomainRecord{}).Where("domain_id = ?", domainID).Updates(updates).Error; err != nil {
+		return nil, fmt.Errorf("更新域失败: %w", err)
+	}
+	return s.GetDomain(ctx, domainID)
+}
+
 // ==================== Service 相关 ====================
 
 // CreateService 创建服务
@@ -399,6 +418,7 @@ func (s *Service) UpdateApplication(ctx context.Context, appID string, req *Appl
 	updates := patch.Collect(
 		patch.Field("name", req.Name),
 		patch.Field("description", req.Description),
+		patch.Field("logo_url", req.LogoURL),
 		patch.Field("id_token_expires_in", req.IDTokenExpiresIn),
 		patch.Field("refresh_token_expires_in", req.RefreshTokenExpiresIn),
 		patch.Field("refresh_token_absolute_expires_in", req.RefreshTokenAbsoluteExpiresIn),
