@@ -6,20 +6,20 @@ import (
 
 // ServiceCreateRequest 创建服务请求（服务仅控制 access_token 有效期）
 type ServiceCreateRequest struct {
-	ServiceID             string  `json:"service_id" binding:"required"`
-	DomainID              string  `json:"domain_id" binding:"required"`
-	Name                  string  `json:"name" binding:"required"`
-	Description           string  `json:"description" binding:"required"`
-	LogoURL               *string `json:"logo_url"`
-	AccessTokenExpiresIn  *uint   `json:"access_token_expires_in"`
+	ServiceID            string  `json:"service_id" binding:"required"`
+	DomainID             string  `json:"domain_id" binding:"required"`
+	Name                 string  `json:"name" binding:"required"`
+	Description          string  `json:"description" binding:"required"`
+	LogoURL              *string `json:"logo_url"`
+	AccessTokenExpiresIn *uint   `json:"access_token_expires_in"`
 }
 
 // ServiceUpdateRequest 更新服务请求（JSON Merge Patch 语义）
 type ServiceUpdateRequest struct {
-	Name                  patch.Optional[string] `json:"name"`
-	Description           patch.Optional[string] `json:"description"`
-	LogoURL               patch.Optional[string] `json:"logo_url"`
-	AccessTokenExpiresIn  patch.Optional[uint]   `json:"access_token_expires_in"`
+	Name                 patch.Optional[string] `json:"name"`
+	Description          patch.Optional[string] `json:"description"`
+	LogoURL              patch.Optional[string] `json:"logo_url"`
+	AccessTokenExpiresIn patch.Optional[uint]   `json:"access_token_expires_in"`
 }
 
 // ApplicationCreateRequest 创建应用请求（应用控制 id_token、refresh_token 有效期）
@@ -29,9 +29,11 @@ type ApplicationCreateRequest struct {
 	AppID                         string   `json:"app_id"` // 可选，空则自动生成
 	Name                          string   `json:"name" binding:"required"`
 	Description                   string   `json:"description" binding:"required"`
-	RedirectURIs                  []string `json:"redirect_uris"`
+	AllowedRedirectURIs           []string `json:"allowed_redirect_uris"`
+	AllowedOrigins                []string `json:"allowed_origins"`
+	AllowedLogoutURIs             []string `json:"allowed_logout_uris"`
 	NeedKey                       bool     `json:"need_key"` // 是否需要密钥
-	IdTokenExpiresIn              *uint    `json:"id_token_expires_in"`
+	IDTokenExpiresIn              *uint    `json:"id_token_expires_in"`
 	RefreshTokenExpiresIn         *uint    `json:"refresh_token_expires_in"`
 	RefreshTokenAbsoluteExpiresIn *uint    `json:"refresh_token_absolute_expires_in"`
 }
@@ -40,8 +42,10 @@ type ApplicationCreateRequest struct {
 type ApplicationUpdateRequest struct {
 	Name                          patch.Optional[string]   `json:"name"`
 	Description                   patch.Optional[string]   `json:"description"`
-	RedirectURIs                  patch.Optional[[]string] `json:"redirect_uris"`
-	IdTokenExpiresIn              patch.Optional[uint]     `json:"id_token_expires_in"`
+	AllowedRedirectURIs           patch.Optional[[]string] `json:"allowed_redirect_uris"`
+	AllowedOrigins                patch.Optional[[]string] `json:"allowed_origins"`
+	AllowedLogoutURIs             patch.Optional[[]string] `json:"allowed_logout_uris"`
+	IDTokenExpiresIn              patch.Optional[uint]     `json:"id_token_expires_in"`
 	RefreshTokenExpiresIn         patch.Optional[uint]     `json:"refresh_token_expires_in"`
 	RefreshTokenAbsoluteExpiresIn patch.Optional[uint]     `json:"refresh_token_absolute_expires_in"`
 }

@@ -104,7 +104,7 @@ func (h *Handler) Authorize(c *gin.Context) {
 		h.authorizeErrorResponse(c, autherrors.NewClientNotFoundf("application not found: %s", req.ClientID))
 		return
 	}
-	if !app.ValidateRedirectURI(req.RedirectURI) {
+	if !app.ValidateAllowedRedirectURI(req.RedirectURI) {
 		h.authorizeErrorResponse(c, autherrors.NewInvalidRequest("invalid redirect_uri"))
 		return
 	}
@@ -541,14 +541,17 @@ func (h *Handler) ConfirmIdentify(c *gin.Context) {
 // --- Token ---
 
 // Token POST /auth/token
-// Content-Type: application/x-www-form-urlencoded → 单 audience token 交换
-// Content-Type: application/json → 多 audience token 交换
+//
+// 按 Content-Type 路由：
+//   - application/x-www-form-urlencoded：authorization_code（单/多 audience 由 flow 决定，响应分别为扁平或 keyed）+ refresh_token。
+//     提交 code 换取 token 时统一使用 form，客户端按响应结构解析即可。
+//   - application/json：client_credentials 等多 audience 场景。
 func (h *Handler) Token(c *gin.Context) {
 	if c.ContentType() == "application/json" {
 		h.tokenMultiAudience(c)
 		return
 	}
-	h.tokenSingleAudience(c)
+	h.tokenForm(c)
 }
 
 // --- 权限检查 ---
@@ -647,20 +650,41 @@ func (h *Handler) Revoke(c *gin.Context) {
 // Logout POST /auth/logout
 // 登出（撤销 refresh token + 清除 SSO cookie）
 func (h *Handler) Logout(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
-	if openID == "" {
-		clearSSOCookie(c)
-		c.Status(http.StatusOK)
-		return
-	}
-
-	if err := h.cache.DelUserRefreshTokens(c.Request.Context(), openID); err != nil {
-		h.errorResponse(c, autherrors.NewServerError("failed to revoke tokens"))
-		return
-	}
-
-	clearSSOCookie(c)
+	h.revokeAndClearSSO(c, h.openIDFromRequest(c))
 	c.Status(http.StatusOK)
+}
+
+// LogoutGET GET /auth/logout
+// 重定向式登出：清除 SSO cookie 后 302 到 return_to。client_id 必填，return_to 可选（缺省时用 Referer 或 allowed_origins 首个）
+func (h *Handler) LogoutGET(c *gin.Context) {
+	clientID := c.Query(QueryClientID)
+	if clientID == "" {
+		c.Redirect(http.StatusFound, "/")
+		return
+	}
+
+	app, err := h.cache.GetApplication(c.Request.Context(), clientID)
+	if err != nil {
+		logger.Warnf("[Handler] LogoutGET app not found: %v", err)
+		c.Redirect(http.StatusFound, "/")
+		return
+	}
+
+	returnTo := c.Query("return_to")
+	referer := c.GetHeader("Referer")
+	redirectURL, err := app.ResolveLogoutRedirect(returnTo, referer)
+	if err != nil {
+		if errors.Is(err, models.ErrLogoutURINotConfigured) {
+			h.errorResponse(c, autherrors.NewInvalidRequest("allowed_logout_uris not configured"))
+		} else {
+			h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		}
+		return
+	}
+
+	h.revokeAndClearSSO(c, h.openIDFromRequestOrSSOCookie(c, &app.Application))
+
+	c.Redirect(http.StatusFound, redirectURL)
 }
 
 // --- 公钥 ---
@@ -683,6 +707,38 @@ func (h *Handler) PublicKeys(c *gin.Context) {
 	maxAge := int(config.GetPublicKeyCacheMaxAge().Seconds())
 	c.Header("Cache-Control", fmt.Sprintf("public, max-age=%d", maxAge))
 	c.JSON(http.StatusOK, publicKey)
+}
+
+func (h *Handler) openIDFromRequest(c *gin.Context) string {
+	tc, err := web.Authenticate(c.Request)
+	if err != nil {
+		logger.Debugf("[Handler] logout without valid token: %v", err)
+		return ""
+	}
+	if tc != nil {
+		return tc.AccessToken.OpenID()
+	}
+	return ""
+}
+
+func (h *Handler) openIDFromRequestOrSSOCookie(c *gin.Context, app *models.Application) string {
+	if openID := h.openIDFromRequest(c); openID != "" {
+		return openID
+	}
+	ssoToken, _ := h.resolveSSO(c, c.Request.Context(), app)
+	if ssoToken != nil {
+		return ssoToken.GetOpenID(app.DomainID)
+	}
+	return ""
+}
+
+func (h *Handler) revokeAndClearSSO(c *gin.Context, openID string) {
+	if openID != "" {
+		if err := h.cache.DelUserRefreshTokens(c.Request.Context(), openID); err != nil {
+			logger.Warnf("[Handler] logout revoke tokens failed: %v", err)
+		}
+	}
+	clearSSOCookie(c)
 }
 
 // ==================== 私有方法（按引用顺序） ====================
@@ -1122,20 +1178,35 @@ func (h *Handler) initiateChallenge(ctx context.Context, ch *types.Challenge) er
 
 // --- Token 引用链 ---
 
-// tokenSingleAudience 单 audience token 交换（form-urlencoded）
-func (h *Handler) tokenSingleAudience(c *gin.Context) {
+// tokenForm form 请求：authorization_code 单/多由 flow 决定，refresh_token 走单 audience
+func (h *Handler) tokenForm(c *gin.Context) {
 	var req authorize.TokenRequest
 	if err := c.ShouldBind(&req); err != nil {
 		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
 
-	resp, err := h.authorizeSvc.ExchangeToken(c.Request.Context(), &req)
-	if err != nil {
-		h.errorResponse(c, autherrors.NewInvalidGrant(err.Error()))
+	logger.Infof("[Token] 进入 token 交换 - grant_type: %s, client_id: %s", req.GrantType, req.ClientID)
+
+	if req.GrantType == authorize.GrantTypeAuthorizationCode {
+		resp, err := h.authorizeSvc.ExchangeAuthCodeForm(c.Request.Context(), &req)
+		if err != nil {
+			logger.Warnf("[Token] token 交换失败 - grant_type: %s, client_id: %s, error: %v", req.GrantType, req.ClientID, err)
+			h.tokenErrorResponse(c, err)
+			return
+		}
+		logger.Infof("[Token] token 交换成功 - grant_type: %s, client_id: %s", req.GrantType, req.ClientID)
+		c.JSON(http.StatusOK, resp)
 		return
 	}
 
+	resp, err := h.authorizeSvc.ExchangeToken(c.Request.Context(), &req)
+	if err != nil {
+		logger.Warnf("[Token] token 交换失败 - grant_type: %s, client_id: %s, error: %v", req.GrantType, req.ClientID, err)
+		h.tokenErrorResponse(c, err)
+		return
+	}
+	logger.Infof("[Token] token 交换成功 - grant_type: %s, client_id: %s", req.GrantType, req.ClientID)
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -1148,12 +1219,16 @@ func (h *Handler) tokenMultiAudience(c *gin.Context) {
 		return
 	}
 
+	logger.Infof("[Token] 进入多 audience token 交换 - grant_type: %s, client_id: %s", req.GrantType, req.ClientID)
+
 	resp, err := h.authorizeSvc.ExchangeMultiAudienceToken(c.Request.Context(), &req)
 	if err != nil {
-		h.errorResponse(c, autherrors.NewInvalidGrant(err.Error()))
+		logger.Warnf("[Token] 多 audience token 交换失败 - grant_type: %s, client_id: %s, error: %v", req.GrantType, req.ClientID, err)
+		h.tokenErrorResponse(c, err)
 		return
 	}
 
+	logger.Infof("[Token] 多 audience token 交换成功 - grant_type: %s, client_id: %s", req.GrantType, req.ClientID)
 	c.JSON(http.StatusOK, resp)
 }
 
@@ -1187,6 +1262,16 @@ func (h *Handler) authorizeAndGenerateCode(ctx context.Context, flow *types.Auth
 }
 
 // --- 错误响应 ---
+
+// tokenErrorResponse Token 接口专用错误响应
+// 保留原始错误类型（如 invalid_request→400），返回 OAuth 2.0 规范的 error/error_description
+func (h *Handler) tokenErrorResponse(c *gin.Context, err error) {
+	authErr := autherrors.ToAuthError(err)
+	c.JSON(authErr.HTTPStatus, gin.H{
+		"error":             authErr.Code,
+		"error_description": authErr.Description,
+	})
+}
 
 // errorResponse 统一错误响应
 // 仅返回 HTTP status code；有附加数据时（429 retry_after、428 required）发送 data

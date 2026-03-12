@@ -16,38 +16,39 @@ type DomainResponse struct {
 
 // ServiceResponse 服务（无 _id，仅 access_token 有效期由服务控制）
 type ServiceResponse struct {
-	ServiceID             string  `json:"service_id"`
-	DomainID              string  `json:"domain_id"`
-	Name                  string  `json:"name"`
-	Description           *string `json:"description,omitempty"`
-	LogoURL               *string `json:"logo_url,omitempty"`
-	AccessTokenExpiresIn  uint    `json:"access_token_expires_in"`
-	CreatedAt             string  `json:"created_at"`
-	UpdatedAt             string  `json:"updated_at"`
+	ServiceID            string  `json:"service_id"`
+	DomainID             string  `json:"domain_id"`
+	Name                 string  `json:"name"`
+	Description          *string `json:"description,omitempty"`
+	LogoURL              *string `json:"logo_url,omitempty"`
+	AccessTokenExpiresIn uint    `json:"access_token_expires_in"`
+	CreatedAt            string  `json:"created_at"`
+	UpdatedAt            string  `json:"updated_at"`
 }
 
 // ApplicationIDPConfigResponse 应用 IDP 配置（无 _id）
 type ApplicationIDPConfigResponse struct {
-	AppID    string   `json:"app_id"`
-	Type     string   `json:"type"`
-	Priority int      `json:"priority"`
-	Strategy *string  `json:"strategy,omitempty"`
-	Delegate *string  `json:"delegate,omitempty"`
-	Require  *string  `json:"require,omitempty"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	AppID     string  `json:"app_id"`
+	Type      string  `json:"type"`
+	Priority  int     `json:"priority"`
+	Strategy  *string `json:"strategy,omitempty"`
+	Delegate  *string `json:"delegate,omitempty"`
+	Require   *string `json:"require,omitempty"`
+	CreatedAt string  `json:"created_at"`
+	UpdatedAt string  `json:"updated_at"`
 }
 
-// ApplicationResponse 应用（无 _id，redirect_uris/allowed_origins 为数组）
+// ApplicationResponse 应用（无 _id，allowed_redirect_uris/allowed_origins 为数组）
 type ApplicationResponse struct {
 	DomainID                      string   `json:"domain_id"`
 	AppID                         string   `json:"app_id"`
 	Name                          string   `json:"name"`
 	Description                   *string  `json:"description,omitempty"`
 	LogoURL                       *string  `json:"logo_url,omitempty"`
-	RedirectURIs                  []string `json:"redirect_uris,omitempty"`
+	AllowedRedirectURIs           []string `json:"allowed_redirect_uris,omitempty"`
 	AllowedOrigins                []string `json:"allowed_origins,omitempty"`
-	IdTokenExpiresIn              uint     `json:"id_token_expires_in"`
+	AllowedLogoutURIs             []string `json:"allowed_logout_uris,omitempty"`
+	IDTokenExpiresIn              uint     `json:"id_token_expires_in"`
 	RefreshTokenExpiresIn         uint     `json:"refresh_token_expires_in"`
 	RefreshTokenAbsoluteExpiresIn uint     `json:"refresh_token_absolute_expires_in"`
 	CreatedAt                     string   `json:"created_at"`

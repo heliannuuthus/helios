@@ -36,7 +36,7 @@ func NewInvalidRequestf(format string, args ...any) *AuthError {
 }
 
 func NewInvalidGrant(description string) *AuthError {
-	return New(http.StatusGone, CodeInvalidGrant, description)
+	return New(http.StatusBadRequest, CodeInvalidGrant, description)
 }
 
 func NewInvalidCredentials(description string) *AuthError {

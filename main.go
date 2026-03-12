@@ -102,6 +102,7 @@ func main() {
 			{"POST", "/token", app.AegisHandler.Token},
 			{"POST", "/revoke", app.AegisHandler.Revoke},
 			{"POST", "/logout", app.AegisHandler.Logout},
+			{"GET", "/logout", app.AegisHandler.LogoutGET},
 			{"GET", "/pubkeys", app.AegisHandler.PublicKeys},
 		}
 		registered := make(map[string]bool)

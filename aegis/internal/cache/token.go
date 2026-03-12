@@ -49,16 +49,18 @@ func (cm *Manager) GetAuthCode(ctx context.Context, code string) (*Authorization
 	script := "local d=redis.call('GET',KEYS[1]) if not d then return nil end redis.call('DEL',KEYS[1]) return d"
 	result, err := cm.redis.Eval(ctx, script, []string{key})
 	if err != nil {
-		// Lua 脚本返回 nil（key 不存在）→ 授权码未找到
+		// Lua 脚本返回 nil（key 不存在）→ 授权码未找到（已使用或从未存在）
 		if errors.Is(err, pkgredis.ErrNil) {
+			logger.Warnf("[Token] 授权码消费失败 - 原因: code 已使用或不存在 (Redis key 不存在)")
 			return nil, ErrAuthCodeNotFound
 		}
-		logger.Errorf("[Manager] ConsumeAuthCode redis eval failed: %v", err)
+		logger.Errorf("[Token] 授权码消费失败 - Redis eval 错误: %v", err)
 		return nil, fmt.Errorf("consume auth code failed: %w", err)
 	}
 
 	data, ok := result.(string)
 	if !ok {
+		logger.Warnf("[Token] 授权码消费失败 - 原因: Redis 返回格式异常")
 		return nil, ErrAuthCodeNotFound
 	}
 
@@ -68,9 +70,11 @@ func (cm *Manager) GetAuthCode(ctx context.Context, code string) (*Authorization
 	}
 
 	if time.Now().After(authCode.ExpiresAt) {
+		logger.Warnf("[Token] 授权码消费失败 - 原因: code 已过期, ExpiresAt: %v", authCode.ExpiresAt)
 		return nil, ErrAuthCodeExpired
 	}
 
+	logger.Infof("[Token] 授权码消费成功 - FlowID: %s, 进入下一阶段校验", authCode.FlowID)
 	return &authCode, nil
 }
 
@@ -78,15 +82,15 @@ func (cm *Manager) GetAuthCode(ctx context.Context, code string) (*Authorization
 
 // RefreshToken 刷新令牌
 type RefreshToken struct {
-	Token       string     `json:"token"`
-	OpenID      string     `json:"openid"`
-	ClientID    string     `json:"client_id"`
-	Audience    string     `json:"audience"`
-	Scope       string     `json:"scope"`
-	ExpiresAt   time.Time  `json:"expires_at"`   // 沉寂过期（每次使用可延长）
+	Token        string     `json:"token"`
+	OpenID       string     `json:"openid"`
+	ClientID     string     `json:"client_id"`
+	Audience     string     `json:"audience"`
+	Scope        string     `json:"scope"`
+	ExpiresAt    time.Time  `json:"expires_at"`               // 沉寂过期（每次使用可延长）
 	MaxExpiresAt *time.Time `json:"max_expires_at,omitempty"` // 绝对过期（从创建起，不可延长），nil=不限制
-	Revoked     bool       `json:"revoked"`
-	CreatedAt   time.Time  `json:"created_at"`
+	Revoked      bool       `json:"revoked"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // SetRefreshToken 保存刷新令牌

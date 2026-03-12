@@ -13,17 +13,17 @@ type RateLimits map[string]int
 
 // Service 服务（DB 模型，不直接序列化到 API，请使用 dto.ToServiceResponse）
 type Service struct {
-	ID                    uint                      `gorm:"primaryKey;autoIncrement;column:_id"`
-	DomainID              string                    `gorm:"column:domain_id;size:32;not null"`
-	ServiceID             string                    `gorm:"column:service_id;size:32;not null;uniqueIndex"`
-	Name                  string                    `gorm:"column:name;size:128;not null"`
-	Description           *string                   `gorm:"column:description;size:512"`
-	LogoURL               *string                   `gorm:"column:logo_url;size:512"`
+	ID                   uint                      `gorm:"primaryKey;autoIncrement;column:_id"`
+	DomainID             string                    `gorm:"column:domain_id;size:32;not null"`
+	ServiceID            string                    `gorm:"column:service_id;size:32;not null;uniqueIndex"`
+	Name                 string                    `gorm:"column:name;size:128;not null"`
+	Description          *string                   `gorm:"column:description;size:512"`
+	LogoURL              *string                   `gorm:"column:logo_url;size:512"`
 	AccessTokenExpiresIn uint                      `gorm:"column:access_token_expires_in;not null;default:7200"` // Access Token 有效期（秒），由服务控制
 	RequiredIdentities   *string                   `gorm:"column:required_identities;size:512"`
-	CreatedAt             time.Time                 `gorm:"column:created_at;not null"`
-	UpdatedAt             time.Time                 `gorm:"column:updated_at;not null"`
-	ChallengeSettings     []ServiceChallengeSetting `gorm:"foreignKey:ServiceID;references:ServiceID"`
+	CreatedAt            time.Time                 `gorm:"column:created_at;not null"`
+	UpdatedAt            time.Time                 `gorm:"column:updated_at;not null"`
+	ChallengeSettings    []ServiceChallengeSetting `gorm:"foreignKey:ServiceID;references:ServiceID"`
 }
 
 func (Service) TableName() string {

@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS t_application (
     logo_url           VARCHAR(512)  DEFAULT NULL COMMENT '应用 Logo URL',
     redirect_uris                   VARCHAR(2048) DEFAULT NULL COMMENT '重定向 URI 列表（JSON 数组）',
     allowed_origins                 VARCHAR(1024) DEFAULT NULL COMMENT '允许的跨域源（JSON 数组）',
+    allowed_logout_uris             VARCHAR(1024) DEFAULT NULL COMMENT '登出后允许跳转的 URI（JSON 数组）',
     id_token_expires_in             INT UNSIGNED  NOT NULL DEFAULT 3600   COMMENT 'ID Token 有效期（秒）',
     refresh_token_expires_in        INT UNSIGNED  NOT NULL DEFAULT 604800 COMMENT 'Refresh Token 沉寂有效期（秒）',
     refresh_token_absolute_expires_in INT UNSIGNED NOT NULL DEFAULT 0    COMMENT 'Refresh Token 绝对有效期（秒），0=不限制',

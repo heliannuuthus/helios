@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"net/url"
 	"strings"
 
@@ -16,29 +17,87 @@ type ApplicationWithKey struct {
 	Keys [][]byte `json:"-"` // 所有有效密钥（包括主密钥和轮换中的旧密钥）
 }
 
-// GetRedirectURIs 解析重定向 URI 列表
-func (a *Application) GetRedirectURIs() []string {
-	if a.RedirectURIs == nil || *a.RedirectURIs == "" {
+// GetAllowedRedirectURIs 解析允许的重定向 URI 列表
+func (a *Application) GetAllowedRedirectURIs() []string {
+	if a.AllowedRedirectURIs == nil || *a.AllowedRedirectURIs == "" {
 		return nil
 	}
 	var uris []string
-	if err := json.Unmarshal([]byte(*a.RedirectURIs), &uris); err != nil {
-		logger.Warnf("[Application] unmarshal redirect uris failed: %v", err)
+	if err := json.Unmarshal([]byte(*a.AllowedRedirectURIs), &uris); err != nil {
+		logger.Warnf("[Application] unmarshal allowed redirect uris failed: %v", err)
 		return nil
 	}
 	return uris
 }
 
-// ValidateRedirectURI 验证重定向 URI（规范化后比较）
-func (a *Application) ValidateRedirectURI(uri string) bool {
+// ValidateAllowedRedirectURI 验证重定向 URI 是否在允许列表中（规范化后比较）
+func (a *Application) ValidateAllowedRedirectURI(uri string) bool {
 	normalizedURI := normalizeURI(uri)
 
-	for _, allowed := range a.GetRedirectURIs() {
+	for _, allowed := range a.GetAllowedRedirectURIs() {
 		if normalizeURI(allowed) == normalizedURI {
 			return true
 		}
 	}
 	return false
+}
+
+// GetAllowedLogoutURIs 解析登出后允许跳转的 URI 列表
+func (a *Application) GetAllowedLogoutURIs() []string {
+	if a.AllowedLogoutURIs == nil || *a.AllowedLogoutURIs == "" {
+		return nil
+	}
+	var uris []string
+	if err := json.Unmarshal([]byte(*a.AllowedLogoutURIs), &uris); err != nil {
+		logger.Warnf("[Application] unmarshal allowed logout uris failed: %v", err)
+		return nil
+	}
+	return uris
+}
+
+// ValidateAllowedLogoutURI 验证登出后跳转 URI 是否在允许列表中
+func (a *Application) ValidateAllowedLogoutURI(uri string) bool {
+	normalizedURI := normalizeURI(uri)
+	for _, allowed := range a.GetAllowedLogoutURIs() {
+		if normalizeURI(allowed) == normalizedURI {
+			return true
+		}
+	}
+	return false
+}
+
+// ErrLogoutURINotConfigured allowed_logout_uris 未配置
+var ErrLogoutURINotConfigured = errors.New("allowed_logout_uris not configured")
+
+// ResolveLogoutRedirect 解析登出后跳转 URL。仅匹配 allowed_logout_uris，未配置或未匹配则返回错误。
+func (a *Application) ResolveLogoutRedirect(returnTo, referer string) (string, error) {
+	allowed := a.GetAllowedLogoutURIs()
+	if len(allowed) == 0 {
+		return "", ErrLogoutURINotConfigured
+	}
+
+	try := func(uri string) string {
+		u, err := url.Parse(uri)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return ""
+		}
+		if a.ValidateAllowedLogoutURI(uri) {
+			return uri
+		}
+		return ""
+	}
+
+	if returnTo != "" {
+		if r := try(returnTo); r != "" {
+			return r, nil
+		}
+	}
+	if referer != "" {
+		if r := try(referer); r != "" {
+			return r, nil
+		}
+	}
+	return "", errors.New("return_to or referer does not match allowed_logout_uris")
 }
 
 // GetAllowedOrigins 解析允许的跨域源列表

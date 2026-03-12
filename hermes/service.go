@@ -14,6 +14,7 @@ import (
 
 	"github.com/heliannuuthus/helios/hermes/config"
 	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/hermes/validation"
 	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -56,46 +57,6 @@ func NewService(db *gorm.DB) *Service {
 }
 
 // ==================== Domain 相关 ====================
-
-// getDomainRecordOnly 仅查 t_domain，不查 allowed_idps（用于 GetDomain 等只需基础信息时）
-func (s *Service) getDomainRecordOnly(ctx context.Context, domainID string) (*models.DomainRecord, error) {
-	var rec models.DomainRecord
-	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).First(&rec).Error; err != nil {
-		return nil, fmt.Errorf("域 %s 不存在: %w", domainID, err)
-	}
-	return &rec, nil
-}
-
-// getDomainFromDB 从数据库读取域元数据及允许的 IDP 列表（供 GetDomainWithKey 等需要完整域信息时用）
-func (s *Service) getDomainFromDB(ctx context.Context, domainID string) (*models.Domain, error) {
-	rec, err := s.getDomainRecordOnly(ctx, domainID)
-	if err != nil {
-		return nil, err
-	}
-	allowedIDPs, err := s.getDomainAllowedIDPs(ctx, domainID)
-	if err != nil {
-		return nil, err
-	}
-	return &models.Domain{
-		DomainID:    rec.DomainID,
-		Name:        rec.Name,
-		Description: rec.Description,
-		AllowedIDPs: allowedIDPs,
-	}, nil
-}
-
-// getDomainAllowedIDPs 查询域允许的 IDP 类型列表
-func (s *Service) getDomainAllowedIDPs(ctx context.Context, domainID string) ([]string, error) {
-	var rows []models.DomainIDPRecord
-	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("查询域 IDP 列表失败: %w", err)
-	}
-	out := make([]string, 0, len(rows))
-	for i := range rows {
-		out = append(out, rows[i].IDPType)
-	}
-	return out, nil
-}
 
 // GetDomain 获取域基础信息（仅 t_domain，不查 t_domain_idp；需时调 GetDomainAllowedIDPs）
 func (s *Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
@@ -169,12 +130,12 @@ func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 func (s *Service) CreateService(ctx context.Context, req *ServiceCreateRequest) (*models.Service, error) {
 	desc := req.Description
 	service := &models.Service{
-		ServiceID:             req.ServiceID,
-		DomainID:              req.DomainID,
-		Name:                  req.Name,
-		Description:           &desc,
-		LogoURL:               req.LogoURL,
-		AccessTokenExpiresIn:  7200,
+		ServiceID:            req.ServiceID,
+		DomainID:             req.DomainID,
+		Name:                 req.Name,
+		Description:          &desc,
+		LogoURL:              req.LogoURL,
+		AccessTokenExpiresIn: 7200,
 	}
 	if req.AccessTokenExpiresIn != nil {
 		service.AccessTokenExpiresIn = *req.AccessTokenExpiresIn
@@ -281,10 +242,7 @@ func (s *Service) DeleteService(ctx context.Context, serviceID string) error {
 		if err := tx.Where("owner_type = ? AND owner_id = ?", models.KeyOwnerService, serviceID).Delete(&models.Key{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("service_id = ?", serviceID).Delete(&models.Service{}).Error; err != nil {
-			return err
-		}
-		return nil
+		return tx.Where("service_id = ?", serviceID).Delete(&models.Service{}).Error
 	})
 }
 
@@ -292,6 +250,18 @@ func (s *Service) DeleteService(ctx context.Context, serviceID string) error {
 
 // appIDPattern 应用标识：字母数字、下划线、连字符，1~64 字符
 var appIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+
+func marshalOptionalStringSlice(s []string) *string {
+	if len(s) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return nil
+	}
+	str := string(b)
+	return &str
+}
 
 // CreateApplication 创建应用
 func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateRequest) (*models.Application, error) {
@@ -302,15 +272,19 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 		return nil, fmt.Errorf("应用标识仅允许字母、数字、下划线、连字符，1~64 字符")
 	}
 
-	var redirectURIs *string
-	if len(req.RedirectURIs) > 0 {
-		urisJSON, err := json.Marshal(req.RedirectURIs)
-		if err != nil {
-			return nil, fmt.Errorf("marshal redirect uris: %w", err)
-		}
-		urisStr := string(urisJSON)
-		redirectURIs = &urisStr
+	if err := validation.ValidateRedirectURIs(req.AllowedRedirectURIs); err != nil {
+		return nil, fmt.Errorf("allowed_redirect_uris: %w", err)
 	}
+	if err := validation.ValidateAllowedOrigins(req.AllowedOrigins); err != nil {
+		return nil, fmt.Errorf("allowed_origins: %w", err)
+	}
+	if err := validation.ValidateLogoutURIs(req.AllowedLogoutURIs); err != nil {
+		return nil, fmt.Errorf("allowed_logout_uris: %w", err)
+	}
+
+	allowedRedirectURIs := marshalOptionalStringSlice(req.AllowedRedirectURIs)
+	allowedOrigins := marshalOptionalStringSlice(req.AllowedOrigins)
+	allowedLogoutURIs := marshalOptionalStringSlice(req.AllowedLogoutURIs)
 
 	desc := req.Description
 	app := &models.Application{
@@ -318,13 +292,15 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 		AppID:                         appID,
 		Name:                          req.Name,
 		Description:                   &desc,
-		RedirectURIs:                  redirectURIs,
-		IdTokenExpiresIn:              3600,
+		AllowedRedirectURIs:           allowedRedirectURIs,
+		AllowedOrigins:                allowedOrigins,
+		AllowedLogoutURIs:             allowedLogoutURIs,
+		IDTokenExpiresIn:              3600,
 		RefreshTokenExpiresIn:         604800,
 		RefreshTokenAbsoluteExpiresIn: 0,
 	}
-	if req.IdTokenExpiresIn != nil {
-		app.IdTokenExpiresIn = *req.IdTokenExpiresIn
+	if req.IDTokenExpiresIn != nil {
+		app.IDTokenExpiresIn = *req.IDTokenExpiresIn
 	}
 	if req.RefreshTokenExpiresIn != nil {
 		app.RefreshTokenExpiresIn = *req.RefreshTokenExpiresIn
@@ -392,27 +368,50 @@ func (s *Service) ListApplications(ctx context.Context, domainID string) ([]mode
 	return apps, nil
 }
 
+func applyOptionalURIList(
+	updates map[string]interface{},
+	opt patch.Optional[[]string],
+	dbKey string,
+	validate func([]string) error,
+	errPrefix string,
+) error {
+	if !opt.IsPresent() {
+		return nil
+	}
+	if opt.IsNull() {
+		updates[dbKey] = nil
+		return nil
+	}
+	vals := opt.Value()
+	if err := validate(vals); err != nil {
+		return fmt.Errorf("%s: %w", errPrefix, err)
+	}
+	b, err := json.Marshal(vals)
+	if err != nil {
+		return fmt.Errorf("序列化 %s 失败: %w", errPrefix, err)
+	}
+	updates[dbKey] = string(b)
+	return nil
+}
+
 // UpdateApplication 更新应用（JSON Merge Patch 语义）
 func (s *Service) UpdateApplication(ctx context.Context, appID string, req *ApplicationUpdateRequest) error {
 	updates := patch.Collect(
 		patch.Field("name", req.Name),
 		patch.Field("description", req.Description),
-		patch.Field("id_token_expires_in", req.IdTokenExpiresIn),
+		patch.Field("id_token_expires_in", req.IDTokenExpiresIn),
 		patch.Field("refresh_token_expires_in", req.RefreshTokenExpiresIn),
 		patch.Field("refresh_token_absolute_expires_in", req.RefreshTokenAbsoluteExpiresIn),
 	)
 
-	// redirect_uris 需要序列化为 JSON 字符串
-	if req.RedirectURIs.IsPresent() {
-		if req.RedirectURIs.IsNull() {
-			updates["redirect_uris"] = nil
-		} else {
-			urisJSON, err := json.Marshal(req.RedirectURIs.Value())
-			if err != nil {
-				return fmt.Errorf("序列化 redirect_uris 失败: %w", err)
-			}
-			updates["redirect_uris"] = string(urisJSON)
-		}
+	if err := applyOptionalURIList(updates, req.AllowedRedirectURIs, "redirect_uris", validation.ValidateRedirectURIs, "allowed_redirect_uris"); err != nil {
+		return err
+	}
+	if err := applyOptionalURIList(updates, req.AllowedOrigins, "allowed_origins", validation.ValidateAllowedOrigins, "allowed_origins"); err != nil {
+		return err
+	}
+	if err := applyOptionalURIList(updates, req.AllowedLogoutURIs, "allowed_logout_uris", validation.ValidateLogoutURIs, "allowed_logout_uris"); err != nil {
+		return err
 	}
 
 	if len(updates) == 0 {
@@ -859,24 +858,6 @@ func (s *Service) GetGroupMembers(ctx context.Context, groupID string) ([]string
 
 // ==================== Application IDP Config 相关 ====================
 
-// ensureIDPAllowedForApplication 校验 idpType 是否在应用所属域的 allowed_idps 中
-func (s *Service) ensureIDPAllowedForApplication(ctx context.Context, appID, idpType string) error {
-	app, err := s.GetApplication(ctx, appID)
-	if err != nil {
-		return err
-	}
-	allowed, err := s.getDomainAllowedIDPs(ctx, app.DomainID)
-	if err != nil {
-		return err
-	}
-	for _, t := range allowed {
-		if t == idpType {
-			return nil
-		}
-	}
-	return fmt.Errorf("IDP %s 不在域 %s 的允许列表中", idpType, app.DomainID)
-}
-
 // GetApplicationIDPConfigs 获取应用 IDP 配置列表（按 priority 降序）
 func (s *Service) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
 	var configs []*models.ApplicationIDPConfig
@@ -978,6 +959,60 @@ func (s *Service) RotateKey(ctx context.Context, ownerType, ownerID string, wind
 		}
 		return s.createKey(tx, ownerType, ownerID)
 	})
+}
+
+func (s *Service) getDomainRecordOnly(ctx context.Context, domainID string) (*models.DomainRecord, error) {
+	var rec models.DomainRecord
+	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).First(&rec).Error; err != nil {
+		return nil, fmt.Errorf("域 %s 不存在: %w", domainID, err)
+	}
+	return &rec, nil
+}
+
+func (s *Service) getDomainFromDB(ctx context.Context, domainID string) (*models.Domain, error) {
+	rec, err := s.getDomainRecordOnly(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+	allowedIDPs, err := s.getDomainAllowedIDPs(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+	return &models.Domain{
+		DomainID:    rec.DomainID,
+		Name:        rec.Name,
+		Description: rec.Description,
+		AllowedIDPs: allowedIDPs,
+	}, nil
+}
+
+func (s *Service) getDomainAllowedIDPs(ctx context.Context, domainID string) ([]string, error) {
+	var rows []models.DomainIDPRecord
+	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("查询域 IDP 列表失败: %w", err)
+	}
+	out := make([]string, 0, len(rows))
+	for i := range rows {
+		out = append(out, rows[i].IDPType)
+	}
+	return out, nil
+}
+
+func (s *Service) ensureIDPAllowedForApplication(ctx context.Context, appID, idpType string) error {
+	app, err := s.GetApplication(ctx, appID)
+	if err != nil {
+		return err
+	}
+	allowed, err := s.getDomainAllowedIDPs(ctx, app.DomainID)
+	if err != nil {
+		return err
+	}
+	for _, t := range allowed {
+		if t == idpType {
+			return nil
+		}
+	}
+	return fmt.Errorf("IDP %s 不在域 %s 的允许列表中", idpType, app.DomainID)
 }
 
 // getKeys 获取指定 owner 的所有有效密钥（已解密），按 created_at DESC 排序

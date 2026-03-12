@@ -105,6 +105,7 @@ class Application:
     logo_url: Optional[str] = None
     redirect_uris: list[str] = field(default_factory=list)
     allowed_origins: list[str] = field(default_factory=list)
+    allowed_logout_uris: list[str] = field(default_factory=list)
     id_token_expires_in: int = 3600
     refresh_token_expires_in: int = 604800  # 沉寂有效期（秒）
     refresh_token_absolute_expires_in: int = 0  # 绝对有效期（秒），0=不限制
@@ -492,16 +493,17 @@ class Initializer:
 
         if APPLICATIONS:
             lines.append("-- ==================== 应用 ====================")
-            lines.append("INSERT INTO t_application (app_id, domain_id, name, description, logo_url, redirect_uris, allowed_origins, id_token_expires_in, refresh_token_expires_in, refresh_token_absolute_expires_in) VALUES")
+            lines.append("INSERT INTO t_application (app_id, domain_id, name, description, logo_url, redirect_uris, allowed_origins, allowed_logout_uris, id_token_expires_in, refresh_token_expires_in, refresh_token_absolute_expires_in) VALUES")
             app_values = []
             for app in APPLICATIONS:
                 logo_url = f"'{app.logo_url}'" if app.logo_url else "NULL"
                 description = f"'{app.description}'" if app.description else "NULL"
                 redirect_uris = f"'{json.dumps(app.redirect_uris)}'" if app.redirect_uris else "NULL"
                 allowed_origins = f"'{json.dumps(app.allowed_origins)}'" if app.allowed_origins else "NULL"
-                app_values.append(f"('{app.app_id}', '{app.domain_id}', '{app.name}', {description}, {logo_url}, {redirect_uris}, {allowed_origins}, {app.id_token_expires_in}, {app.refresh_token_expires_in}, {app.refresh_token_absolute_expires_in})")
+                allowed_logout_uris = f"'{json.dumps(app.allowed_logout_uris)}'" if app.allowed_logout_uris else "NULL"
+                app_values.append(f"('{app.app_id}', '{app.domain_id}', '{app.name}', {description}, {logo_url}, {redirect_uris}, {allowed_origins}, {allowed_logout_uris}, {app.id_token_expires_in}, {app.refresh_token_expires_in}, {app.refresh_token_absolute_expires_in})")
             lines.append(",\n".join(app_values))
-            lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), logo_url = VALUES(logo_url), redirect_uris = VALUES(redirect_uris), allowed_origins = VALUES(allowed_origins), id_token_expires_in = VALUES(id_token_expires_in), refresh_token_expires_in = VALUES(refresh_token_expires_in), refresh_token_absolute_expires_in = VALUES(refresh_token_absolute_expires_in);")
+            lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), logo_url = VALUES(logo_url), redirect_uris = VALUES(redirect_uris), allowed_origins = VALUES(allowed_origins), allowed_logout_uris = VALUES(allowed_logout_uris), id_token_expires_in = VALUES(id_token_expires_in), refresh_token_expires_in = VALUES(refresh_token_expires_in), refresh_token_absolute_expires_in = VALUES(refresh_token_absolute_expires_in);")
             lines.append("")
 
         if APP_IDP_CONFIGS:
