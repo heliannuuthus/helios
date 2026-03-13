@@ -2,11 +2,11 @@ package zwei
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/aegis-go/guard"
+	reqr "github.com/heliannuuthus/aegis-go/guard/requirement"
+	"github.com/heliannuuthus/aegis-go/utilities/relation"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/utils/relation"
-	"github.com/heliannuuthus/helios/pkg/aegis/web/guard"
-	reqr "github.com/heliannuuthus/helios/pkg/aegis/web/requirement"
 	zweiconfig "github.com/heliannuuthus/helios/zwei/config"
 	"github.com/heliannuuthus/helios/zwei/internal/favorite"
 	"github.com/heliannuuthus/helios/zwei/internal/history"
@@ -18,7 +18,7 @@ import (
 )
 
 type Zwei struct {
-	guard             *guard.GinGuard
+	guard             *guard.Gin
 	recipeHandler     *recipe.Handler
 	favoriteHandler   *favorite.Handler
 	historyHandler    *history.Handler
@@ -29,7 +29,7 @@ type Zwei struct {
 }
 
 func New(db *gorm.DB) *Zwei {
-	g := guard.NewGinGuard(zweiconfig.GetAegisAudience())
+	g := guard.NewGin(zweiconfig.GetAegisAudience())
 
 	return &Zwei{
 		guard:             g,

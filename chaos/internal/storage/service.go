@@ -21,9 +21,10 @@ import (
 
 // Service 存储服务
 type Service struct {
-	s3Client  *s3.Client
-	bucket    string
-	publicURL string
+	s3Client      *s3.Client
+	presignClient *s3.PresignClient
+	bucket        string
+	publicURL     string
 }
 
 // NewService 创建存储服务
@@ -50,9 +51,10 @@ func NewService() (*Service, error) {
 	})
 
 	return &Service{
-		s3Client:  client,
-		bucket:    chaosconfig.GetCloudflareR2Bucket(),
-		publicURL: chaosconfig.GetCloudflareR2PublicURL(),
+		s3Client:      client,
+		presignClient: s3.NewPresignClient(client),
+		bucket:        chaosconfig.GetCloudflareR2Bucket(),
+		publicURL:     chaosconfig.GetCloudflareR2PublicURL(),
 	}, nil
 }
 
@@ -104,6 +106,44 @@ func (s *Service) Upload(ctx context.Context, file *multipart.FileHeader, path s
 		ContentType: contentType,
 		PublicURL:   publicURL,
 	}, nil
+}
+
+const presignExpiry = 15 * time.Minute
+
+// GeneratePresignedURL 生成 Presigned PUT URL，前端可直接用此 URL 上传文件到 R2
+func (s *Service) GeneratePresignedURL(ctx context.Context, req *PresignRequest) (*PresignResponse, error) {
+	storageKey := resolveStorageKey(req.Path, req.Prefix, req.FileName)
+
+	presigned, err := s.presignClient.PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(s.bucket),
+		Key:         aws.String(storageKey),
+		ContentType: aws.String(req.ContentType),
+	}, s3.WithPresignExpires(presignExpiry))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate presigned URL: %w", err)
+	}
+
+	publicURL := fmt.Sprintf("%s/%s", strings.TrimSuffix(s.publicURL, "/"), storageKey)
+
+	logger.Infof("[Storage] Presigned URL generated - Key: %s, Expires: %v", storageKey, presignExpiry)
+	return &PresignResponse{
+		UploadURL: presigned.URL,
+		Key:       storageKey,
+		PublicURL: publicURL,
+		ExpiresIn: int(presignExpiry.Seconds()),
+	}, nil
+}
+
+func resolveStorageKey(path, prefix, filename string) string {
+	if path != "" {
+		return strings.TrimPrefix(path, "/")
+	}
+	if prefix == "" {
+		prefix = "uploads"
+	}
+	fileID := uuid.New().String()
+	ext := filepath.Ext(filename)
+	return fmt.Sprintf("%s/%s/%s%s", prefix, time.Now().Format("2006/01/02"), fileID, ext)
 }
 
 // UploadFromReader 从 Reader 上传文件（供内部调用）

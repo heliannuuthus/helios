@@ -8,12 +8,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-json-experiment/json/jsontext"
+	"github.com/heliannuuthus/aegis-go/guard"
 
 	"github.com/heliannuuthus/helios/aegis"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
-	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
@@ -26,7 +26,7 @@ type Handler struct {
 
 // getOpenID 从 context 中获取用户标识
 func getOpenID(c *gin.Context) string {
-	return web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	return guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 }
 
 // errorResponse 统一错误响应
