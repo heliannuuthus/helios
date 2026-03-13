@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"aidanwoods.dev/go-paseto"
+	"github.com/heliannuuthus/aegis-go/utilities/key"
+	pasetokit "github.com/heliannuuthus/aegis-go/utilities/paseto"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/key"
-	pasetokit "github.com/heliannuuthus/helios/pkg/aegis/utils/paseto"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 

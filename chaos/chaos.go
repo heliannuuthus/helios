@@ -3,6 +3,7 @@ package chaos
 import (
 	"fmt"
 
+	"github.com/heliannuuthus/aegis-go/guard"
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/chaos/config"
@@ -10,7 +11,6 @@ import (
 	"github.com/heliannuuthus/helios/chaos/internal/storage"
 	"github.com/heliannuuthus/helios/chaos/internal/template"
 	"github.com/heliannuuthus/helios/chaos/models"
-	"github.com/heliannuuthus/helios/pkg/aegis/web/guard"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -46,7 +46,7 @@ func New(db *gorm.DB) (*Chaos, error) {
 	}
 
 	aud := config.GetAegisAudience()
-	g := guard.NewGinGuard(aud)
+	g := guard.NewGin(aud)
 	handler := NewHandler(g, aud, mailSvc, templateSvc, storageSvc)
 
 	return &Chaos{

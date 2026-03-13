@@ -21,7 +21,7 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/user"
 	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
-	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
+	tokendef "github.com/heliannuuthus/aegis-go/utilities/token"
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
