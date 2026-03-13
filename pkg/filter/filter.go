@@ -20,6 +20,9 @@ const (
 	In            // |   (multi-value)
 )
 
+const maxFilterLength = 500
+const maxInValues = 50
+
 var opSQL = map[Op]string{
 	Eq:  "%s = ?",
 	Neq: "%s != ?",
@@ -27,14 +30,11 @@ var opSQL = map[Op]string{
 	Gte: "%s >= ?",
 	Lt:  "%s < ?",
 	Lte: "%s <= ?",
-	Pre: "%s LIKE ?",
+	Pre: "%s LIKE ? ESCAPE '\\'",
 	In:  "%s IN (?)",
 }
 
 // Whitelist declares which columns accept which operators.
-// The first operator is used as the default when the client provides a bare
-// "column value" without an explicit operator (not applicable in symbol-based
-// parsing, but kept for consistency).
 //
 //	var serviceFilters = filter.Whitelist{
 //	    "service_id": {filter.Eq},
@@ -50,10 +50,10 @@ type Whitelist map[string][]Op
 //
 //	filter=col1=val,col2!=val,col3~=val,col4>=val,col5|a|b|c
 //
-// Multiple conditions are separated by comma. The value of the entire filter
-// parameter should be URL-encoded by the client.
+// Multiple conditions are separated by comma. Values must not contain
+// unencoded commas; use URL-encoding (%2C) if a literal comma is needed.
 //
-// Operator symbols (parsed longest-match first):
+// Operator symbols (matched at the boundary between column name and value):
 //
 //	~=   prefix match   (LIKE 'val%')
 //	!=   not equal
@@ -64,16 +64,13 @@ type Whitelist map[string][]Op
 //	=    equal
 //	|    IN (value segments separated by |)
 func Apply(db *gorm.DB, raw string, wl Whitelist) *gorm.DB {
-	if raw == "" || len(wl) == 0 {
+	if raw == "" || len(wl) == 0 || len(raw) > maxFilterLength {
 		return db
 	}
 
-	for _, expr := range splitExpressions(raw) {
+	for _, expr := range strings.Split(raw, ",") {
 		col, op, val, ok := parseExpression(expr)
 		if !ok || val == "" {
-			continue
-		}
-		if !isValidColumn(col) {
 			continue
 		}
 		allowed, exists := wl[col]
@@ -88,59 +85,7 @@ func Apply(db *gorm.DB, raw string, wl Whitelist) *gorm.DB {
 	return db
 }
 
-// splitExpressions splits the raw filter string by comma, but not commas
-// inside values shouldn't appear because | is used for multi-value.
-func splitExpressions(raw string) []string {
-	return strings.Split(raw, ",")
-}
-
-// parseExpression parses a single "col<op>val" expression.
-//
-// Operator detection order matters: two-char operators (~=, !=, >=, <=) must
-// be checked before single-char ones (=, >, <). The pipe operator is special:
-// "col|a|b|c" means IN with values [a, b, c].
-func parseExpression(expr string) (col string, op Op, val string, ok bool) {
-	expr = strings.TrimSpace(expr)
-	if expr == "" {
-		return "", 0, "", false
-	}
-
-	// Two-char operators
-	for _, pair := range []struct {
-		sym string
-		op  Op
-	}{
-		{"~=", Pre},
-		{"!=", Neq},
-		{">=", Gte},
-		{"<=", Lte},
-	} {
-		if idx := strings.Index(expr, pair.sym); idx > 0 {
-			return expr[:idx], pair.op, expr[idx+len(pair.sym):], true
-		}
-	}
-
-	// Single-char: > < =
-	for _, pair := range []struct {
-		sym byte
-		op  Op
-	}{
-		{'>', Gt},
-		{'<', Lt},
-		{'=', Eq},
-	} {
-		if idx := strings.IndexByte(expr, pair.sym); idx > 0 {
-			return expr[:idx], pair.op, expr[idx+1:], true
-		}
-	}
-
-	// Pipe: col|a|b|c → IN
-	if idx := strings.IndexByte(expr, '|'); idx > 0 {
-		return expr[:idx], In, expr[idx+1:], true
-	}
-
-	return "", 0, "", false
-}
+var likeEscaper = strings.NewReplacer("%", "\\%", "_", "\\_")
 
 func applyCondition(db *gorm.DB, col string, op Op, val string) *gorm.DB {
 	tmpl, ok := opSQL[op]
@@ -151,24 +96,62 @@ func applyCondition(db *gorm.DB, col string, op Op, val string) *gorm.DB {
 
 	switch op {
 	case Pre:
-		return db.Where(clause, val+"%")
+		return db.Where(clause, likeEscaper.Replace(val)+"%")
 	case In:
-		return db.Where(clause, strings.Split(val, "|"))
+		parts := strings.Split(val, "|")
+		filtered := parts[:0]
+		for _, p := range parts {
+			if p != "" {
+				filtered = append(filtered, p)
+			}
+		}
+		if len(filtered) == 0 || len(filtered) > maxInValues {
+			return db
+		}
+		return db.Where(clause, filtered)
 	default:
 		return db.Where(clause, val)
 	}
 }
 
-func isValidColumn(col string) bool {
-	if col == "" {
-		return false
+// parseExpression extracts column, operator and value from a single expression.
+//
+// It first extracts the column name (contiguous [a-z0-9_] characters), then
+// matches the operator symbol immediately after the column name. This avoids
+// ambiguity when the value itself contains operator characters.
+func parseExpression(expr string) (col string, op Op, val string, ok bool) {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return "", 0, "", false
 	}
-	for _, c := range col {
-		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_') {
-			return false
+
+	i := 0
+	for i < len(expr) && isColumnChar(expr[i]) {
+		i++
+	}
+	if i == 0 || i >= len(expr) {
+		return "", 0, "", false
+	}
+	col = expr[:i]
+	rest := expr[i:]
+
+	type opDef struct {
+		sym string
+		op  Op
+	}
+	for _, def := range []opDef{
+		{"~=", Pre}, {"!=", Neq}, {">=", Gte}, {"<=", Lte},
+		{">", Gt}, {"<", Lt}, {"=", Eq}, {"|", In},
+	} {
+		if strings.HasPrefix(rest, def.sym) {
+			return col, def.op, rest[len(def.sym):], true
 		}
 	}
-	return true
+	return "", 0, "", false
+}
+
+func isColumnChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
 }
 
 func opAllowed(op Op, allowed []Op) bool {

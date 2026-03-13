@@ -25,7 +25,6 @@ import (
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/pkg/pagination"
 )
 
 // Service 授权服务
@@ -255,10 +254,7 @@ func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudi
 
 // CheckRelation 检查用户是否具有指定的关系
 func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID string, relations []string, objectType, objectID string) (map[string]bool, error) {
-	page, err := s.hermesSvc.ListRelationships(ctx, &hermes.ListRequest{
-		Pagination: pagination.Pagination{Size: 100},
-		Filter:     fmt.Sprintf("service_id=%s,subject_type=%s,subject_id=%s", serviceID, types.SubjectTypeUser, subjectID),
-	})
+	rels, err := s.hermesSvc.FindRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +264,7 @@ func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID strin
 		results[r] = false
 	}
 
-	for _, rel := range page.Items {
+	for _, rel := range rels {
 		if objectType != "*" && rel.ObjectType != objectType && rel.ObjectType != "*" {
 			continue
 		}

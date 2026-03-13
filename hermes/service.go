@@ -557,6 +557,16 @@ func (s *Service) ListRelationships(ctx context.Context, req *ListRequest) (*pag
 	return pagination.CursorPaginate[models.Relationship](query, req.Pagination)
 }
 
+// FindRelationships 按精确条件查询关系（不分页），供内部服务调用。
+func (s *Service) FindRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
+	var rels []models.Relationship
+	query := s.db.WithContext(ctx).Where("service_id = ? AND subject_type = ? AND subject_id = ?", serviceID, subjectType, subjectID)
+	if err := query.Find(&rels).Error; err != nil {
+		return nil, fmt.Errorf("查询关系失败: %w", err)
+	}
+	return rels, nil
+}
+
 // UpdateRelationship 更新关系（JSON Merge Patch 语义）
 func (s *Service) UpdateRelationship(ctx context.Context, req *RelationshipUpdateRequest) (*models.Relationship, error) {
 	// 1. 查找关系
