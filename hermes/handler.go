@@ -75,14 +75,19 @@ func (h *Handler) GetService(c *gin.Context) {
 
 // ListServices GET /hermes/services
 func (h *Handler) ListServices(c *gin.Context) {
-	domainID := c.Query("domain_id")
-	services, err := h.service.ListServices(c.Request.Context(), domainID)
+	var req ServiceListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	page, err := h.service.ListServices(c.Request.Context(), &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, services)
+	c.JSON(http.StatusOK, page)
 }
 
 // UpdateService PATCH /hermes/services/:service_id
@@ -135,14 +140,19 @@ func (h *Handler) GetApplication(c *gin.Context) {
 
 // ListApplications GET /hermes/applications
 func (h *Handler) ListApplications(c *gin.Context) {
-	domainID := c.Query("domain_id")
-	apps, err := h.service.ListApplications(c.Request.Context(), domainID)
+	var req ApplicationListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	page, err := h.service.ListApplications(c.Request.Context(), &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, apps)
+	c.JSON(http.StatusOK, page)
 }
 
 // UpdateApplication PATCH /hermes/applications/:app_id
@@ -232,17 +242,19 @@ func (h *Handler) DeleteRelationship(c *gin.Context) {
 
 // ListRelationships GET /hermes/relationships
 func (h *Handler) ListRelationships(c *gin.Context) {
-	serviceID := c.Query("service_id")
-	subjectType := c.Query("subject_type")
-	subjectID := c.Query("subject_id")
+	var req RelationshipListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-	rels, err := h.service.ListRelationships(c.Request.Context(), serviceID, subjectType, subjectID)
+	page, err := h.service.ListRelationships(c.Request.Context(), &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, rels)
+	c.JSON(http.StatusOK, page)
 }
 
 // UpdateRelationship PATCH /hermes/relationships
@@ -268,16 +280,20 @@ func (h *Handler) UpdateRelationship(c *gin.Context) {
 func (h *Handler) ListAppServiceRelationships(c *gin.Context) {
 	appID := c.Param("app_id")
 	serviceID := c.Param("service_id")
-	subjectType := c.Query("subject_type")
-	subjectID := c.Query("subject_id")
 
-	rels, err := h.service.ListAppServiceRelationships(c.Request.Context(), appID, serviceID, subjectType, subjectID)
+	var req AppServiceRelationshipListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	page, err := h.service.ListAppServiceRelationships(c.Request.Context(), appID, serviceID, &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, rels)
+	c.JSON(http.StatusOK, page)
 }
 
 // CreateAppServiceRelationship POST /hermes/applications/:app_id/services/:service_id/relationships
@@ -380,13 +396,19 @@ func (h *Handler) GetGroup(c *gin.Context) {
 
 // ListGroups GET /hermes/groups
 func (h *Handler) ListGroups(c *gin.Context) {
-	groups, err := h.service.ListGroups(c.Request.Context())
+	var req GroupListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	page, err := h.service.ListGroups(c.Request.Context(), &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, groups)
+	c.JSON(http.StatusOK, page)
 }
 
 // UpdateGroup PATCH /hermes/groups/:group_id

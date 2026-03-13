@@ -4,13 +4,14 @@ import (
 	"context"
 	"strings"
 
+	tokendef "github.com/heliannuuthus/aegis-go/utilities/token"
+
 	"github.com/heliannuuthus/helios/aegis/config"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/factor"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/pkg/accessctl"
-	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 

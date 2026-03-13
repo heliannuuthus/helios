@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-json-experiment/json"
+	tokendef "github.com/heliannuuthus/aegis-go/utilities/token"
 
 	"github.com/heliannuuthus/helios/aegis/config"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
@@ -20,7 +21,6 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/user"
 	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
-	tokendef "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -217,9 +217,14 @@ func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudi
 
 // ==================== 关系检查 ====================
 
-// CheckRelation 检查用户是否具有指定的关系
+// CheckRelations 检查用户是否具有指定的关系
 func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID string, relations []string, objectType, objectID string) (map[string]bool, error) {
-	relationships, err := s.hermesSvc.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
+	resp, err := s.hermesSvc.ListRelationships(ctx, &hermes.RelationshipListRequest{
+		ServiceID:   serviceID,
+		SubjectType: types.SubjectTypeUser,
+		SubjectID:   subjectID,
+		Limit:       100,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +234,7 @@ func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID strin
 		results[r] = false
 	}
 
-	for _, rel := range relationships {
+	for _, rel := range resp.Items {
 		if objectType != "*" && rel.ObjectType != objectType && rel.ObjectType != "*" {
 			continue
 		}

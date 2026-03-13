@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/go-json-experiment/json"
+	"github.com/heliannuuthus/aegis-go/utilities/token"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/utils/token"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 )
 

@@ -5,9 +5,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/aegis-go/guard"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/zwei/internal/dto"
 )
 
@@ -54,7 +54,7 @@ type HistoryListResponse struct {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history [post]
 func (h *Handler) AddViewHistory(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	var req HistoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -82,7 +82,7 @@ func (h *Handler) AddViewHistory(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history/{recipe_id} [delete]
 func (h *Handler) RemoveViewHistory(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveViewHistory(openID, recipeID); err != nil {
@@ -100,7 +100,7 @@ func (h *Handler) RemoveViewHistory(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history [delete]
 func (h *Handler) ClearViewHistory(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	if err := h.service.ClearViewHistory(openID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"message": err.Error()})
@@ -122,7 +122,7 @@ func (h *Handler) ClearViewHistory(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/history [get]
 func (h *Handler) GetViewHistory(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	category := c.Query("category")
 	search := c.Query("search")

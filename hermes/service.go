@@ -194,16 +194,12 @@ func (s *Service) GetServiceWithKey(ctx context.Context, serviceID string) (*mod
 }
 
 // ListServices 列出所有服务
-func (s *Service) ListServices(ctx context.Context, domainID string) ([]models.Service, error) {
-	var services []models.Service
-	query := s.db.WithContext(ctx)
-	if domainID != "" {
-		query = query.Where("domain_id = ?", domainID)
+func (s *Service) ListServices(ctx context.Context, req *ServiceListRequest) (*CursorPage[models.Service], error) {
+	query := s.db.WithContext(ctx).Model(&models.Service{})
+	if req.DomainID != "" {
+		query = query.Where("domain_id = ?", req.DomainID)
 	}
-	if err := query.Find(&services).Error; err != nil {
-		return nil, fmt.Errorf("列出服务失败: %w", err)
-	}
-	return services, nil
+	return CursorPaginate[models.Service](query, req.Cursor, req.Limit)
 }
 
 // UpdateService 更新服务（JSON Merge Patch 语义）
@@ -295,16 +291,12 @@ func (s *Service) GetApplicationWithKey(ctx context.Context, appID string) (*mod
 }
 
 // ListApplications 列出所有应用
-func (s *Service) ListApplications(ctx context.Context, domainID string) ([]models.Application, error) {
-	var apps []models.Application
-	query := s.db.WithContext(ctx)
-	if domainID != "" {
-		query = query.Where("domain_id = ?", domainID)
+func (s *Service) ListApplications(ctx context.Context, req *ApplicationListRequest) (*CursorPage[models.Application], error) {
+	query := s.db.WithContext(ctx).Model(&models.Application{})
+	if req.DomainID != "" {
+		query = query.Where("domain_id = ?", req.DomainID)
 	}
-	if err := query.Find(&apps).Error; err != nil {
-		return nil, fmt.Errorf("列出应用失败: %w", err)
-	}
-	return apps, nil
+	return CursorPaginate[models.Application](query, req.Cursor, req.Limit)
 }
 
 // UpdateApplication 更新应用（JSON Merge Patch 语义）
@@ -412,20 +404,36 @@ func (s *Service) DeleteRelationship(ctx context.Context, req *RelationshipDelet
 	return nil
 }
 
-// ListRelationships 列出关系
-func (s *Service) ListRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
-	var rels []models.Relationship
-	query := s.db.WithContext(ctx).Where("service_id = ?", serviceID)
-	if subjectType != "" {
-		query = query.Where("subject_type = ?", subjectType)
+// ListRelationships 通用关系查询（游标分页）
+func (s *Service) ListRelationships(ctx context.Context, req *RelationshipListRequest) (*CursorPage[models.Relationship], error) {
+	query := s.db.WithContext(ctx).Model(&models.Relationship{})
+
+	if req.ServiceID != "" {
+		query = query.Where("service_id = ?", req.ServiceID)
 	}
-	if subjectID != "" {
-		query = query.Where("subject_id = ?", subjectID)
+	if req.SubjectType != "" {
+		query = query.Where("subject_type = ?", req.SubjectType)
 	}
-	if err := query.Find(&rels).Error; err != nil {
-		return nil, fmt.Errorf("列出关系失败: %w", err)
+	if req.SubjectID != "" {
+		query = query.Where("subject_id = ?", req.SubjectID)
 	}
-	return rels, nil
+	if req.Relation != "" {
+		query = query.Where("relation = ?", req.Relation)
+	}
+	if req.ObjectType != "" {
+		query = query.Where("object_type = ?", req.ObjectType)
+	}
+	if req.ObjectID != "" {
+		query = query.Where("object_id = ?", req.ObjectID)
+	}
+	if req.EntityType != "" {
+		query = query.Where("(subject_type = ? OR object_type = ?)", req.EntityType, req.EntityType)
+	}
+	if req.EntityID != "" {
+		query = query.Where("(subject_id = ? OR object_id = ?)", req.EntityID, req.EntityID)
+	}
+
+	return CursorPaginate[models.Relationship](query, req.Cursor, req.Limit)
 }
 
 // UpdateRelationship 更新关系（JSON Merge Patch 语义）
@@ -478,8 +486,7 @@ func (s *Service) UpdateRelationship(ctx context.Context, req *RelationshipUpdat
 // ==================== App Service Relationship 相关（RESTful 风格）====================
 
 // ListAppServiceRelationships 列出应用服务下的关系
-func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
-	// 1. 验证应用和服务是否存在
+func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, serviceID string, req *AppServiceRelationshipListRequest) (*CursorPage[models.Relationship], error) {
 	var app models.Application
 	if err := s.db.WithContext(ctx).Where("app_id = ?", appID).First(&app).Error; err != nil {
 		return nil, fmt.Errorf("应用不存在: %w", err)
@@ -490,25 +497,19 @@ func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, servic
 		return nil, fmt.Errorf("服务不存在: %w", err)
 	}
 
-	// 2. 验证应用是否有权限访问该服务
 	var relation models.ApplicationServiceRelation
 	if err := s.db.WithContext(ctx).Where("app_id = ? AND service_id = ?", appID, serviceID).First(&relation).Error; err != nil {
 		return nil, fmt.Errorf("应用无权访问该服务")
 	}
 
-	// 3. 查询关系
-	var rels []models.Relationship
-	query := s.db.WithContext(ctx).Where("service_id = ?", serviceID)
-	if subjectType != "" {
-		query = query.Where("subject_type = ?", subjectType)
+	query := s.db.WithContext(ctx).Model(&models.Relationship{}).Where("service_id = ?", serviceID)
+	if req.SubjectType != "" {
+		query = query.Where("subject_type = ?", req.SubjectType)
 	}
-	if subjectID != "" {
-		query = query.Where("subject_id = ?", subjectID)
+	if req.SubjectID != "" {
+		query = query.Where("subject_id = ?", req.SubjectID)
 	}
-	if err := query.Find(&rels).Error; err != nil {
-		return nil, fmt.Errorf("列出关系失败: %w", err)
-	}
-	return rels, nil
+	return CursorPaginate[models.Relationship](query, req.Cursor, req.Limit)
 }
 
 // CreateAppServiceRelationship 在应用服务下创建关系
@@ -674,12 +675,9 @@ func (s *Service) GetGroup(ctx context.Context, groupID string) (*models.Group, 
 }
 
 // ListGroups 列出所有组
-func (s *Service) ListGroups(ctx context.Context) ([]models.Group, error) {
-	var groups []models.Group
-	if err := s.db.WithContext(ctx).Find(&groups).Error; err != nil {
-		return nil, fmt.Errorf("列出组失败: %w", err)
-	}
-	return groups, nil
+func (s *Service) ListGroups(ctx context.Context, req *GroupListRequest) (*CursorPage[models.Group], error) {
+	query := s.db.WithContext(ctx).Model(&models.Group{})
+	return CursorPaginate[models.Group](query, req.Cursor, req.Limit)
 }
 
 // UpdateGroup 更新组（JSON Merge Patch 语义）

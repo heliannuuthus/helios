@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	aegisguard "github.com/heliannuuthus/aegis-go/guard"
+	pkgtoken "github.com/heliannuuthus/aegis-go/utilities/token"
 
 	"github.com/heliannuuthus/helios/aegis/config"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
@@ -23,8 +25,6 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/aegis/internal/user"
 	"github.com/heliannuuthus/helios/hermes/models"
-	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
-	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -646,7 +646,7 @@ func (h *Handler) Revoke(c *gin.Context) {
 // Logout POST /auth/logout
 // 登出（撤销 refresh token + 清除 SSO cookie）
 func (h *Handler) Logout(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := aegisguard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 	if openID == "" {
 		clearSSOCookie(c)
 		c.Status(http.StatusOK)

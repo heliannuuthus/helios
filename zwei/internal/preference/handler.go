@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/aegis-go/guard"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/zwei/internal/tag"
 )
@@ -54,7 +54,7 @@ func (h *Handler) GetOptions(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/user/preference [get]
 func (h *Handler) GetUserPreferences(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	prefs, err := h.service.GetUserPreferences(openID)
 	if err != nil {
@@ -80,7 +80,7 @@ func (h *Handler) GetUserPreferences(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /api/user/preference [put]
 func (h *Handler) UpdateUserPreferences(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	var req UpdatePreferencesRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

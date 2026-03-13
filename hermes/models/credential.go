@@ -34,6 +34,10 @@ func (UserCredential) TableName() string {
 	return "t_user_credential"
 }
 
+func (c UserCredential) PrimaryKey() uint {
+	return c.ID
+}
+
 // TOTPSecret TOTP 凭证数据结构（存储在 secret JSON 中）
 type TOTPSecret struct {
 	Secret string `json:"secret"` // Base32 编码的密钥
