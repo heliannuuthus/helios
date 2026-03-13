@@ -25,6 +25,10 @@ func (Application) TableName() string {
 	return "t_application"
 }
 
+func (a Application) PrimaryKey() uint {
+	return a.ID
+}
+
 // ApplicationIDPConfig 应用 IDP 配置
 type ApplicationIDPConfig struct {
 	// 主键
@@ -44,6 +48,10 @@ type ApplicationIDPConfig struct {
 
 func (ApplicationIDPConfig) TableName() string {
 	return "t_application_idp_config"
+}
+
+func (a ApplicationIDPConfig) PrimaryKey() uint {
+	return a.ID
 }
 
 // GetStrategyList 获取策略列表
@@ -84,4 +92,8 @@ type ApplicationServiceRelation struct {
 
 func (ApplicationServiceRelation) TableName() string {
 	return "t_application_service_relation"
+}
+
+func (a ApplicationServiceRelation) PrimaryKey() uint {
+	return a.ID
 }

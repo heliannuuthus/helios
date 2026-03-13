@@ -93,6 +93,48 @@ type AppServiceRelationshipUpdateRequest struct {
 	ExpiresAt   patch.Optional[string] `json:"expires_at,omitempty"`   // 新的过期时间（可选，ISO 8601 格式，传 null 表示清除过期时间）
 }
 
+// RelationshipListRequest 通用关系查询请求（游标分页）
+type RelationshipListRequest struct {
+	ServiceID   string `form:"service_id"`
+	SubjectType string `form:"subject_type"`
+	SubjectID   string `form:"subject_id"`
+	Relation    string `form:"relation"`
+	ObjectType  string `form:"object_type"`
+	ObjectID    string `form:"object_id"`
+	EntityType  string `form:"entity_type"` // 匹配 subject_type 或 object_type
+	EntityID    string `form:"entity_id"`   // 匹配 subject_id 或 object_id
+	Cursor      string `form:"cursor"`
+	Limit       int    `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+// ServiceListRequest 服务列表查询请求（游标分页）
+type ServiceListRequest struct {
+	DomainID string `form:"domain_id"`
+	Cursor   string `form:"cursor"`
+	Limit    int    `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+// ApplicationListRequest 应用列表查询请求（游标分页）
+type ApplicationListRequest struct {
+	DomainID string `form:"domain_id"`
+	Cursor   string `form:"cursor"`
+	Limit    int    `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+// AppServiceRelationshipListRequest 应用服务关系列表查询请求（游标分页）
+type AppServiceRelationshipListRequest struct {
+	SubjectType string `form:"subject_type"`
+	SubjectID   string `form:"subject_id"`
+	Cursor      string `form:"cursor"`
+	Limit       int    `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+// GroupListRequest 组列表查询请求（游标分页）
+type GroupListRequest struct {
+	Cursor string `form:"cursor"`
+	Limit  int    `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
 // GroupCreateRequest 创建组请求
 type GroupCreateRequest struct {
 	GroupID     string  `json:"group_id" binding:"required"`
