@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-本文档定义系统 API 中列表查询、筛选、分页和部分更新的统一约定。所有模块的接口设计应遵守本文档的规范，确保前后端行为一致。
+本文档定义系统 API 中列表查询、条件筛选、分页和部分更新的统一约定。所有模块的接口设计应遵守本文档的规范，确保前后端行为一致。
 
 ---
 
@@ -18,6 +18,7 @@
 |------|------|------|------|--------|------|------|
 | `token` | string | query | 否 | 空 | — | 游标令牌；首次请求不传，后续传上一页返回的 `next` |
 | `size` | int | query | 否 | 20 | 1–100 | 每页条数 |
+| `filter` | string | query | 否 | 空 | — | 条件筛选表达式，见 §2.2 |
 
 #### 响应结构
 
@@ -51,20 +52,50 @@
 - 仅支持顺序向后翻页，不支持跳页
 - 游标不可跨进程持久化
 
-### 2.2 筛选
+### 2.2 条件筛选（filter）
 
-筛选参数通过 query string 传递，与分页参数并列。筛选字段随资源类型而定，在各自的 `XxxListRequest` 结构体中声明。
+#### 格式
+
+所有列表接口使用统一的 `filter` query 参数传递筛选条件。多个条件以 `,` 分隔，整个值由客户端 URL encode。
 
 ```
-GET /domains/{domain_id}/services?name=auth&size=10
-GET /relationships?service_id=svc-1&subject_type=user&token=AQF4dkNb
+GET /domains/{id}/services?filter=name~=auth,service_id=svc-1&size=10
+GET /relationships?filter=service_id=svc-1,subject_type=user&token=AQF4dkNb
 ```
 
-筛选规则：
+#### 操作符
 
-- 字符串筛选为**精确匹配**（需模糊搜索时单独约定）
-- 多个筛选条件为 **AND** 关系
-- 未传的筛选参数不参与过滤
+| 符号 | 含义 | SQL 映射 | 示例 |
+|------|------|----------|------|
+| `=` | 等于 | `col = ?` | `service_id=abc` |
+| `!=` | 不等于 | `col != ?` | `status!=disabled` |
+| `>` | 大于 | `col > ?` | `priority>3` |
+| `>=` | 大于等于 | `col >= ?` | `priority>=5` |
+| `<` | 小于 | `col < ?` | `priority<10` |
+| `<=` | 小于等于 | `col <= ?` | `priority<=8` |
+| `~=` | 前缀匹配 | `col LIKE 'val%'` | `name~=auth` |
+| `\|` | IN 多值 | `col IN (...)` | `type\|user\|group` |
+
+操作符解析优先级：双字符（`~=`、`!=`、`>=`、`<=`）优先于单字符（`=`、`>`、`<`），`|` 作为 IN 语义最后匹配。
+
+#### 规则
+
+- 多个条件之间为 **AND** 关系
+- 未传 `filter` 或传空值时不添加任何 WHERE 条件
+- 无操作符前缀默认按所在列白名单的首选操作符处理
+
+#### 白名单机制
+
+后端为每个资源声明允许筛选的列及支持的操作符，不在白名单中的列或操作符会被**静默忽略**，防止任意列注入。
+
+```go
+var serviceFilters = filter.Whitelist{
+    "service_id": {filter.Eq},
+    "name":       {filter.Eq, filter.Pre},
+}
+```
+
+列名校验仅允许 `[a-zA-Z0-9_]`，进一步防御 SQL 注入。
 
 ---
 
@@ -145,44 +176,45 @@ c.JSON(http.StatusOK, pagination.Mapping(page, func(s *models.Service) dto.Servi
 func (s Service) PrimaryKey() uint { return s.ID }
 ```
 
-### 5.2 Request
+### 5.2 白名单
 
-定义 `XxxListRequest`，嵌入 `pagination.Pagination` 并声明筛选字段：
+在 Service 层为资源定义 filter 白名单：
 
 ```go
-type ServiceListRequest struct {
-    pagination.Pagination
-    DomainID  string `form:"domain_id"`
-    Name      string `form:"name"`
+var serviceFilters = filter.Whitelist{
+    "service_id": {filter.Eq},
+    "name":       {filter.Eq, filter.Pre},
 }
 ```
 
 ### 5.3 Service
 
-接收 Request 结构体，构建 GORM 查询后调用 `CursorPaginate`：
+接收 `*ListRequest`，对特殊字段（如 domain_id 需要 OR 逻辑）手动 WHERE，其余通过 `filter.Apply` 自动处理：
 
 ```go
-func (s *HermesService) ListServices(req *ServiceListRequest) (*pagination.Items[models.Service], error) {
-    query := s.db.Model(&models.Service{})
-    if req.Name != "" {
-        query = query.Where("name = ?", req.Name)
+func (s *Service) ListServices(ctx context.Context, domainID string, req *ListRequest) (*pagination.Items[models.Service], error) {
+    query := s.db.WithContext(ctx).Model(&models.Service{})
+    if domainID != "" {
+        query = query.Where("domain_id = ? OR domain_id = ?", domainID, models.CrossDomainID)
     }
+    query = filter.Apply(query, req.Filter, serviceFilters)
     return pagination.CursorPaginate[models.Service](query, req.Pagination)
 }
 ```
 
 ### 5.4 Handler
 
-绑定 query 参数 → 调用 Service → Mapping 转 DTO：
+绑定 query 参数（`ListRequest` 统一包含 `Pagination` + `Filter`）→ 调用 Service → Mapping 转 DTO：
 
 ```go
 func (h *Handler) ListServices(c *gin.Context) {
-    var req ServiceListRequest
+    domainID := c.Param("domain_id")
+    var req ListRequest
     if err := c.ShouldBindQuery(&req); err != nil {
         c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
         return
     }
-    page, err := h.svc.ListServices(&req)
+    page, err := h.service.ListServices(c.Request.Context(), domainID, &req)
     if err != nil { ... }
     c.JSON(http.StatusOK, pagination.Mapping(page, func(s *models.Service) dto.ServiceResponse {
         return dto.NewServiceResponse(s, domainID)
@@ -192,28 +224,95 @@ func (h *Handler) ListServices(c *gin.Context) {
 
 ### 5.5 前端
 
-TypeScript 类型与 API 调用：
+#### Filter 构建器（`@atlas/shared`）
+
+前端提供类型安全的 filter 构建器，生成后端 `filter=col<op>val` 格式的 query string。
 
 ```typescript
-interface Items<T> {
-  items: T[]
-  next?: string
-}
+import { eq, prefix, oneOf, buildFilter, listParams } from '@atlas/shared'
+```
 
-const serviceApi = {
-  getList: (domainId: string, params?: { name?: string; token?: string; size?: number }) =>
-    request.get<Items<Service>>(`/domains/${domainId}/services`, { params }),
+##### 辅助函数
+
+| 函数 | 生成操作符 | 示例 |
+|------|-----------|------|
+| `eq(val)` | `=` | `eq('abc')` → `col=abc` |
+| `neq(val)` | `!=` | `neq('disabled')` → `col!=disabled` |
+| `gt(val)` | `>` | `gt('3')` → `col>3` |
+| `gte(val)` | `>=` | `gte('5')` → `col>=5` |
+| `lt(val)` | `<` | `lt('10')` → `col<10` |
+| `lte(val)` | `<=` | `lte('8')` → `col<=8` |
+| `prefix(val)` | `~=` | `prefix('auth')` → `col~=auth` |
+| `oneOf([...])` | `\|` | `oneOf(['a','b'])` → `col\|a\|b` |
+
+`undefined`、`null`、`''` 值会被自动跳过，不生成条件。
+
+##### buildFilter
+
+将 spec 对象转为 filter query string：
+
+```typescript
+buildFilter({ name: prefix('auth'), service_id: eq('svc-1') })
+// => "name~=auth,service_id=svc-1"
+
+buildFilter({ service_id: 'abc' })
+// => "service_id=abc"  (plain string 默认 eq)
+
+buildFilter({ name: prefix('') })
+// => undefined  (空值跳过，无条件时返回 undefined)
+```
+
+##### listParams
+
+一步构建 `{ filter, token, size }` params 对象，直接传给 axios：
+
+```typescript
+request.get('/services', { params: listParams({ name: prefix('auth') }, { size: 20 }) })
+// => GET /services?filter=name~=auth&size=20
+```
+
+##### API 签名
+
+所有 `getList` 方法签名统一为 `(routeParams..., filter?: FilterSpec, pagination?: { token, size })`：
+
+```typescript
+export const serviceApi = {
+  getList: (domainId: string, filter?: FilterSpec, pagination?: { token?: string; size?: number }) =>
+    request.get<Items<Service>>(`/domains/${domainId}/services`, { params: listParams(filter, pagination) }),
 }
+```
+
+##### 调用示例
+
+```typescript
+// 无筛选
+serviceApi.getList(domainId)
+
+// 前缀搜索
+serviceApi.getList(domainId, { name: prefix(keyword) })
+
+// 精确匹配
+serviceApi.getList(domainId, { service_id: eq(serviceId) })
+
+// plain string 默认 eq
+relationshipApi.getList({ service_id: currentServiceId, subject_type: 'user' })
 ```
 
 ---
 
 ## 6. 已接入接口
 
-| 接口 | Request 结构体 | 筛选字段 |
-|------|----------------|----------|
-| `GET /domains/:id/services` | `ServiceListRequest` | `service_id`, `name` |
-| `GET /domains/:id/applications` | `ApplicationListRequest` | — |
-| `GET /relationships` | `RelationshipListRequest` | `service_id`, `subject_type`, `subject_id` |
-| `GET /domains/:id/services/:sid/relationships` | `AppServiceRelationshipListRequest` | `subject_type`, `subject_id` |
-| `GET /groups` | `GroupListRequest` | — |
+| 接口 | 可筛选列 | 支持的操作符 |
+|------|----------|-------------|
+| `GET /domains/:id/services` | `service_id` | `eq` |
+|  | `name` | `eq`, `prefix` |
+| `GET /domains/:id/applications` | `name` | `eq`, `prefix` |
+| `GET /relationships` | `service_id` | `eq` |
+|  | `subject_type` | `eq` |
+|  | `subject_id` | `eq` |
+| `GET /applications/:aid/services/:sid/relationships` | `subject_type` | `eq` |
+|  | `subject_id` | `eq` |
+| `GET /groups` | `service_id` | `eq` |
+|  | `name` | `eq`, `prefix` |
+
+> 注：`domain_id` 不走 filter，由路径参数决定，在 Service 层手动 WHERE。
