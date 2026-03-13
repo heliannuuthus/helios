@@ -35,6 +35,10 @@ func (User) TableName() string {
 	return "t_user"
 }
 
+func (u User) PrimaryKey() uint {
+	return u.ID
+}
+
 // IsActive 用户是否活跃
 func (u *User) IsActive() bool {
 	return u.Status == 0
@@ -56,6 +60,10 @@ type UserIdentity struct {
 
 func (UserIdentity) TableName() string {
 	return "t_user_identity"
+}
+
+func (u UserIdentity) PrimaryKey() uint {
+	return u.ID
 }
 
 // Identities 用户身份列表，提供按条件快速检索的便捷方法
