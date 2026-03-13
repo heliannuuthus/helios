@@ -1,6 +1,7 @@
 package hermes
 
 import (
+	"github.com/heliannuuthus/helios/pkg/pagination"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
@@ -153,4 +154,10 @@ type GroupUpdateRequest struct {
 type GroupMemberRequest struct {
 	GroupID string   `json:"group_id" binding:"required"`
 	UserIDs []string `json:"user_ids" binding:"required"`
+}
+
+// ListRequest 通用列表查询请求（游标分页），筛选条件通过 filter=col<op>val 传递
+type ListRequest struct {
+	pagination.Pagination
+	Filter string `form:"filter"`
 }

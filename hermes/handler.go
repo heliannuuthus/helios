@@ -3,12 +3,12 @@ package hermes
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	"github.com/heliannuuthus/helios/hermes/dto"
 	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/pagination"
 )
 
 // Handler 管理服务处理器
@@ -93,32 +93,21 @@ func (h *Handler) ListDomains(c *gin.Context) {
 // ListServices GET /hermes/domains/:domain_id/services
 func (h *Handler) ListServices(c *gin.Context) {
 	domainID := c.Param("domain_id")
-	serviceID := c.Query("service_id")
-	name := strings.TrimSpace(c.Query("name"))
-	services, err := h.service.ListServices(c.Request.Context(), domainID, serviceID, name)
+	var req ListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	page, err := h.service.ListServices(c.Request.Context(), domainID, &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	resp := make([]dto.ServiceResponse, 0, len(services))
-	for i := range services {
-		s := &services[i]
-		effectiveDomainID := s.DomainID
-		if effectiveDomainID == models.CrossDomainID {
-			effectiveDomainID = domainID
-		}
-		resp = append(resp, dto.ServiceResponse{
-			ServiceID:            s.ServiceID,
-			DomainID:             effectiveDomainID,
-			Name:                 s.Name,
-			Description:          s.Description,
-			LogoURL:              s.LogoURL,
-			AccessTokenExpiresIn: s.AccessTokenExpiresIn,
-			CreatedAt:            dto.FormatTime(s.CreatedAt),
-			UpdatedAt:            dto.FormatTime(s.UpdatedAt),
-		})
-	}
-	c.JSON(http.StatusOK, resp)
+
+	c.JSON(http.StatusOK, pagination.Mapping(page, func(s *models.Service) dto.ServiceResponse {
+		return dto.NewServiceResponse(s, domainID)
+	}))
 }
 
 // GetService GET /hermes/domains/:domain_id/services/:service_id
@@ -134,20 +123,7 @@ func (h *Handler) GetService(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
-	effectiveDomainID := service.DomainID
-	if effectiveDomainID == models.CrossDomainID {
-		effectiveDomainID = domainID
-	}
-	c.JSON(http.StatusOK, dto.ServiceResponse{
-		ServiceID:            service.ServiceID,
-		DomainID:             effectiveDomainID,
-		Name:                 service.Name,
-		Description:          service.Description,
-		LogoURL:              service.LogoURL,
-		AccessTokenExpiresIn: service.AccessTokenExpiresIn,
-		CreatedAt:            dto.FormatTime(service.CreatedAt),
-		UpdatedAt:            dto.FormatTime(service.UpdatedAt),
-	})
+	c.JSON(http.StatusOK, dto.NewServiceResponse(service, domainID))
 }
 
 // CreateService POST /hermes/domains/:domain_id/services
@@ -164,16 +140,7 @@ func (h *Handler) CreateService(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, dto.ServiceResponse{
-		ServiceID:            service.ServiceID,
-		DomainID:             service.DomainID,
-		Name:                 service.Name,
-		Description:          service.Description,
-		LogoURL:              service.LogoURL,
-		AccessTokenExpiresIn: service.AccessTokenExpiresIn,
-		CreatedAt:            dto.FormatTime(service.CreatedAt),
-		UpdatedAt:            dto.FormatTime(service.UpdatedAt),
-	})
+	c.JSON(http.StatusOK, dto.NewServiceResponse(service, domainID))
 }
 
 // UpdateService PATCH /hermes/domains/:domain_id/services/:service_id
@@ -306,31 +273,21 @@ func (h *Handler) SetServiceAppRelations(c *gin.Context) {
 // ListApplications GET /hermes/domains/:domain_id/applications
 func (h *Handler) ListApplications(c *gin.Context) {
 	domainID := c.Param("domain_id")
-	apps, err := h.service.ListApplications(c.Request.Context(), domainID)
+	var req ListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	page, err := h.service.ListApplications(c.Request.Context(), domainID, &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	resp := make([]dto.ApplicationResponse, 0, len(apps))
-	for i := range apps {
-		a := &apps[i]
-		resp = append(resp, dto.ApplicationResponse{
-			DomainID:                      a.DomainID,
-			AppID:                         a.AppID,
-			Name:                          a.Name,
-			Description:                   a.Description,
-			LogoURL:                       a.LogoURL,
-			AllowedRedirectURIs:           dto.ParseJSONStringSlice(a.AllowedRedirectURIs),
-			AllowedOrigins:                dto.ParseJSONStringSlice(a.AllowedOrigins),
-			AllowedLogoutURIs:             dto.ParseJSONStringSlice(a.AllowedLogoutURIs),
-			IDTokenExpiresIn:              a.IDTokenExpiresIn,
-			RefreshTokenExpiresIn:         a.RefreshTokenExpiresIn,
-			RefreshTokenAbsoluteExpiresIn: a.RefreshTokenAbsoluteExpiresIn,
-			CreatedAt:                     dto.FormatTime(a.CreatedAt),
-			UpdatedAt:                     dto.FormatTime(a.UpdatedAt),
-		})
-	}
-	c.JSON(http.StatusOK, resp)
+
+	c.JSON(http.StatusOK, pagination.Mapping(page, func(a *models.Application) dto.ApplicationResponse {
+		return dto.NewApplicationResponse(a)
+	}))
 }
 
 // GetApplication GET /hermes/domains/:domain_id/applications/:app_id
@@ -346,21 +303,7 @@ func (h *Handler) GetApplication(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "application not found in this domain"})
 		return
 	}
-	c.JSON(http.StatusOK, dto.ApplicationResponse{
-		DomainID:                      app.DomainID,
-		AppID:                         app.AppID,
-		Name:                          app.Name,
-		Description:                   app.Description,
-		LogoURL:                       app.LogoURL,
-		AllowedRedirectURIs:           dto.ParseJSONStringSlice(app.AllowedRedirectURIs),
-		AllowedOrigins:                dto.ParseJSONStringSlice(app.AllowedOrigins),
-		AllowedLogoutURIs:             dto.ParseJSONStringSlice(app.AllowedLogoutURIs),
-		IDTokenExpiresIn:              app.IDTokenExpiresIn,
-		RefreshTokenExpiresIn:         app.RefreshTokenExpiresIn,
-		RefreshTokenAbsoluteExpiresIn: app.RefreshTokenAbsoluteExpiresIn,
-		CreatedAt:                     dto.FormatTime(app.CreatedAt),
-		UpdatedAt:                     dto.FormatTime(app.UpdatedAt),
-	})
+	c.JSON(http.StatusOK, dto.NewApplicationResponse(app))
 }
 
 // CreateApplication POST /hermes/domains/:domain_id/applications
@@ -377,21 +320,7 @@ func (h *Handler) CreateApplication(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, dto.ApplicationResponse{
-		DomainID:                      app.DomainID,
-		AppID:                         app.AppID,
-		Name:                          app.Name,
-		Description:                   app.Description,
-		LogoURL:                       app.LogoURL,
-		AllowedRedirectURIs:           dto.ParseJSONStringSlice(app.AllowedRedirectURIs),
-		AllowedOrigins:                dto.ParseJSONStringSlice(app.AllowedOrigins),
-		AllowedLogoutURIs:             dto.ParseJSONStringSlice(app.AllowedLogoutURIs),
-		IDTokenExpiresIn:              app.IDTokenExpiresIn,
-		RefreshTokenExpiresIn:         app.RefreshTokenExpiresIn,
-		RefreshTokenAbsoluteExpiresIn: app.RefreshTokenAbsoluteExpiresIn,
-		CreatedAt:                     dto.FormatTime(app.CreatedAt),
-		UpdatedAt:                     dto.FormatTime(app.UpdatedAt),
-	})
+	c.JSON(http.StatusOK, dto.NewApplicationResponse(app))
 }
 
 // UpdateApplication PATCH /hermes/domains/:domain_id/applications/:app_id
@@ -581,7 +510,7 @@ func (h *Handler) CreateRelationship(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, buildRelationshipResponse(rel))
+	c.JSON(http.StatusOK, dto.NewRelationshipResponse(rel))
 }
 
 // DeleteRelationship DELETE /hermes/relationships
@@ -602,21 +531,21 @@ func (h *Handler) DeleteRelationship(c *gin.Context) {
 
 // ListRelationships GET /hermes/relationships
 func (h *Handler) ListRelationships(c *gin.Context) {
-	serviceID := c.Query("service_id")
-	subjectType := c.Query("subject_type")
-	subjectID := c.Query("subject_id")
+	var req ListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
-	rels, err := h.service.ListRelationships(c.Request.Context(), serviceID, subjectType, subjectID)
+	page, err := h.service.ListRelationships(c.Request.Context(), &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp := make([]dto.RelationshipResponse, 0, len(rels))
-	for i := range rels {
-		resp = append(resp, buildRelationshipResponse(&rels[i]))
-	}
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, pagination.Mapping(page, func(r *models.Relationship) dto.RelationshipResponse {
+		return dto.NewRelationshipResponse(r)
+	}))
 }
 
 // UpdateRelationship PATCH /hermes/relationships
@@ -633,7 +562,7 @@ func (h *Handler) UpdateRelationship(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, buildRelationshipResponse(rel))
+	c.JSON(http.StatusOK, dto.NewRelationshipResponse(rel))
 }
 
 // ==================== App Service Relationship 相关（RESTful 风格）====================
@@ -642,20 +571,22 @@ func (h *Handler) UpdateRelationship(c *gin.Context) {
 func (h *Handler) ListAppServiceRelationships(c *gin.Context) {
 	appID := c.Param("app_id")
 	serviceID := c.Param("service_id")
-	subjectType := c.Query("subject_type")
-	subjectID := c.Query("subject_id")
 
-	rels, err := h.service.ListAppServiceRelationships(c.Request.Context(), appID, serviceID, subjectType, subjectID)
+	var req ListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	page, err := h.service.ListAppServiceRelationships(c.Request.Context(), appID, serviceID, &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp := make([]dto.RelationshipResponse, 0, len(rels))
-	for i := range rels {
-		resp = append(resp, buildRelationshipResponse(&rels[i]))
-	}
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, pagination.Mapping(page, func(r *models.Relationship) dto.RelationshipResponse {
+		return dto.NewRelationshipResponse(r)
+	}))
 }
 
 // CreateAppServiceRelationship POST /hermes/applications/:app_id/services/:service_id/relationships
@@ -675,7 +606,7 @@ func (h *Handler) CreateAppServiceRelationship(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, buildRelationshipResponse(rel))
+	c.JSON(http.StatusCreated, dto.NewRelationshipResponse(rel))
 }
 
 // UpdateAppServiceRelationship PATCH /hermes/applications/:app_id/services/:service_id/relationships/:relationship_id
@@ -702,7 +633,7 @@ func (h *Handler) UpdateAppServiceRelationship(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, buildRelationshipResponse(rel))
+	c.JSON(http.StatusOK, dto.NewRelationshipResponse(rel))
 }
 
 // DeleteAppServiceRelationship DELETE /hermes/applications/:app_id/services/:service_id/relationships/:relationship_id
@@ -741,7 +672,7 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, buildGroupResponse(group))
+	c.JSON(http.StatusOK, dto.NewGroupResponse(group))
 }
 
 // GetGroup GET /hermes/groups/:group_id
@@ -753,22 +684,26 @@ func (h *Handler) GetGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, buildGroupResponse(group))
+	c.JSON(http.StatusOK, dto.NewGroupResponse(group))
 }
 
 // ListGroups GET /hermes/groups
 func (h *Handler) ListGroups(c *gin.Context) {
-	groups, err := h.service.ListGroups(c.Request.Context())
+	var req ListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	page, err := h.service.ListGroups(c.Request.Context(), &req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	resp := make([]dto.GroupResponse, 0, len(groups))
-	for i := range groups {
-		resp = append(resp, buildGroupResponse(&groups[i]))
-	}
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, pagination.Mapping(page, func(g *models.Group) dto.GroupResponse {
+		return dto.NewGroupResponse(g)
+	}))
 }
 
 // UpdateGroup PATCH /hermes/groups/:group_id
@@ -816,34 +751,4 @@ func (h *Handler) GetGroupMembers(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, dto.GroupMembersResponse{Members: members})
-}
-
-// buildRelationshipResponse 根据 model 直接构建响应（无 _id，expires_at 格式化为 ISO）
-func buildRelationshipResponse(r *models.Relationship) dto.RelationshipResponse {
-	resp := dto.RelationshipResponse{
-		ServiceID:   r.ServiceID,
-		SubjectType: r.SubjectType,
-		SubjectID:   r.SubjectID,
-		Relation:    r.Relation,
-		ObjectType:  r.ObjectType,
-		ObjectID:    r.ObjectID,
-		CreatedAt:   dto.FormatTime(r.CreatedAt),
-	}
-	if r.ExpiresAt != nil {
-		s := dto.FormatTime(*r.ExpiresAt)
-		resp.ExpiresAt = &s
-	}
-	return resp
-}
-
-// buildGroupResponse 根据 model 直接构建响应（无 _id）
-func buildGroupResponse(g *models.Group) dto.GroupResponse {
-	return dto.GroupResponse{
-		GroupID:     g.GroupID,
-		ServiceID:   g.ServiceID,
-		Name:        g.Name,
-		Description: g.Description,
-		CreatedAt:   dto.FormatTime(g.CreatedAt),
-		UpdatedAt:   dto.FormatTime(g.UpdatedAt),
-	}
 }

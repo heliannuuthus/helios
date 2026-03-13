@@ -3,6 +3,8 @@ package dto
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/heliannuuthus/helios/hermes/models"
 )
 
 // 响应 DTO：仅包含需要暴露给前端的字段，不包含内部 _id；由 handler 直接构建。
@@ -94,7 +96,70 @@ type GroupMembersResponse struct {
 	Members []string `json:"members"`
 }
 
-// FormatTime 时间格式化为 ISO8601，供 handler 构建响应时使用
+func NewServiceResponse(s *models.Service, domainID string) ServiceResponse {
+	effectiveDomainID := s.DomainID
+	if effectiveDomainID == models.CrossDomainID {
+		effectiveDomainID = domainID
+	}
+	return ServiceResponse{
+		ServiceID:            s.ServiceID,
+		DomainID:             effectiveDomainID,
+		Name:                 s.Name,
+		Description:          s.Description,
+		LogoURL:              s.LogoURL,
+		AccessTokenExpiresIn: s.AccessTokenExpiresIn,
+		CreatedAt:            FormatTime(s.CreatedAt),
+		UpdatedAt:            FormatTime(s.UpdatedAt),
+	}
+}
+
+func NewApplicationResponse(a *models.Application) ApplicationResponse {
+	return ApplicationResponse{
+		DomainID:                      a.DomainID,
+		AppID:                         a.AppID,
+		Name:                          a.Name,
+		Description:                   a.Description,
+		LogoURL:                       a.LogoURL,
+		AllowedRedirectURIs:           ParseJSONStringSlice(a.AllowedRedirectURIs),
+		AllowedOrigins:                ParseJSONStringSlice(a.AllowedOrigins),
+		AllowedLogoutURIs:             ParseJSONStringSlice(a.AllowedLogoutURIs),
+		IDTokenExpiresIn:              a.IDTokenExpiresIn,
+		RefreshTokenExpiresIn:         a.RefreshTokenExpiresIn,
+		RefreshTokenAbsoluteExpiresIn: a.RefreshTokenAbsoluteExpiresIn,
+		CreatedAt:                     FormatTime(a.CreatedAt),
+		UpdatedAt:                     FormatTime(a.UpdatedAt),
+	}
+}
+
+func NewRelationshipResponse(r *models.Relationship) RelationshipResponse {
+	resp := RelationshipResponse{
+		ServiceID:   r.ServiceID,
+		SubjectType: r.SubjectType,
+		SubjectID:   r.SubjectID,
+		Relation:    r.Relation,
+		ObjectType:  r.ObjectType,
+		ObjectID:    r.ObjectID,
+		CreatedAt:   FormatTime(r.CreatedAt),
+	}
+	if r.ExpiresAt != nil {
+		s := FormatTime(*r.ExpiresAt)
+		resp.ExpiresAt = &s
+	}
+	return resp
+}
+
+func NewGroupResponse(g *models.Group) GroupResponse {
+	return GroupResponse{
+		GroupID:     g.GroupID,
+		ServiceID:   g.ServiceID,
+		Name:        g.Name,
+		Description: g.Description,
+		CreatedAt:   FormatTime(g.CreatedAt),
+		UpdatedAt:   FormatTime(g.UpdatedAt),
+	}
+}
+
+// FormatTime 时间格式化为 ISO8601
 func FormatTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }

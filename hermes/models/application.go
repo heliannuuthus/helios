@@ -30,6 +30,8 @@ func (Application) TableName() string {
 	return "t_application"
 }
 
+func (a Application) PrimaryKey() uint { return a.ID }
+
 // ApplicationIDPConfig 应用 IDP 配置
 type ApplicationIDPConfig struct {
 	// 主键

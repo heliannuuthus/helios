@@ -30,6 +30,8 @@ func (Service) TableName() string {
 	return "t_service"
 }
 
+func (s Service) PrimaryKey() uint { return s.ID }
+
 // ServiceChallengeSetting 服务 Challenge 配置（按 channel_type 或 channel_type:biz_type 维度）
 type ServiceChallengeSetting struct {
 	// 主键

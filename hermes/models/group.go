@@ -19,3 +19,5 @@ type Group struct {
 func (Group) TableName() string {
 	return "t_group"
 }
+
+func (g Group) PrimaryKey() uint { return g.ID }

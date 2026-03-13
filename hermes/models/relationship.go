@@ -22,3 +22,5 @@ type Relationship struct {
 func (Relationship) TableName() string {
 	return "t_relationship"
 }
+
+func (r Relationship) PrimaryKey() uint { return r.ID }

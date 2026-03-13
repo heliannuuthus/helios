@@ -16,8 +16,10 @@ import (
 	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/hermes/validation"
 	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
+	"github.com/heliannuuthus/helios/pkg/filter"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/helios/pkg/pagination"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
@@ -201,21 +203,20 @@ func (s *Service) GetServiceWithKey(ctx context.Context, serviceID string) (*mod
 	return result, nil
 }
 
-// ListServices 列出服务，支持 service_id 精确、name 左模糊。包含该域下的服务及跨域服务（domain_id = DomainIDCrossDomain），跨域不在上层暴露由 handler 用请求 domain 表示。
-func (s *Service) ListServices(ctx context.Context, domainID, serviceIDExact, namePrefix string) ([]models.Service, error) {
-	var services []models.Service
-	query := s.db.WithContext(ctx).Where("domain_id = ? OR domain_id = ?", domainID, models.CrossDomainID)
-	if serviceIDExact != "" && namePrefix != "" {
-		query = query.Where("(service_id = ? OR name LIKE ?)", serviceIDExact, namePrefix+"%")
-	} else if serviceIDExact != "" {
-		query = query.Where("service_id = ?", serviceIDExact)
-	} else if namePrefix != "" {
-		query = query.Where("name LIKE ?", namePrefix+"%")
+var serviceFilters = filter.Whitelist{
+	"service_id": {filter.Eq},
+	"name":       {filter.Eq, filter.Pre},
+}
+
+// ListServices 列出服务（游标分页）。
+// 包含该域下的服务及跨域服务（domain_id = CrossDomainID），跨域不在上层暴露由 handler 用请求 domain 表示。
+func (s *Service) ListServices(ctx context.Context, domainID string, req *ListRequest) (*pagination.Items[models.Service], error) {
+	query := s.db.WithContext(ctx).Model(&models.Service{})
+	if domainID != "" {
+		query = query.Where("domain_id = ? OR domain_id = ?", domainID, models.CrossDomainID)
 	}
-	if err := query.Find(&services).Error; err != nil {
-		return nil, fmt.Errorf("列出服务失败: %w", err)
-	}
-	return services, nil
+	query = filter.Apply(query, req.Filter, serviceFilters)
+	return pagination.CursorPaginate[models.Service](query, req.Pagination)
 }
 
 // UpdateService 更新服务（JSON Merge Patch 语义）
@@ -374,17 +375,18 @@ func (s *Service) GetApplicationWithKey(ctx context.Context, appID string) (*mod
 	return result, nil
 }
 
-// ListApplications 列出所有应用
-func (s *Service) ListApplications(ctx context.Context, domainID string) ([]models.Application, error) {
-	var apps []models.Application
-	query := s.db.WithContext(ctx)
+var applicationFilters = filter.Whitelist{
+	"name": {filter.Eq, filter.Pre},
+}
+
+// ListApplications 列出应用（游标分页）
+func (s *Service) ListApplications(ctx context.Context, domainID string, req *ListRequest) (*pagination.Items[models.Application], error) {
+	query := s.db.WithContext(ctx).Model(&models.Application{})
 	if domainID != "" {
 		query = query.Where("domain_id = ?", domainID)
 	}
-	if err := query.Find(&apps).Error; err != nil {
-		return nil, fmt.Errorf("列出应用失败: %w", err)
-	}
-	return apps, nil
+	query = filter.Apply(query, req.Filter, applicationFilters)
+	return pagination.CursorPaginate[models.Application](query, req.Pagination)
 }
 
 func applyOptionalURIList(
@@ -542,20 +544,17 @@ func (s *Service) DeleteRelationship(ctx context.Context, req *RelationshipDelet
 	return nil
 }
 
-// ListRelationships 列出关系
-func (s *Service) ListRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
-	var rels []models.Relationship
-	query := s.db.WithContext(ctx).Where("service_id = ?", serviceID)
-	if subjectType != "" {
-		query = query.Where("subject_type = ?", subjectType)
-	}
-	if subjectID != "" {
-		query = query.Where("subject_id = ?", subjectID)
-	}
-	if err := query.Find(&rels).Error; err != nil {
-		return nil, fmt.Errorf("列出关系失败: %w", err)
-	}
-	return rels, nil
+var relationshipFilters = filter.Whitelist{
+	"service_id":   {filter.Eq},
+	"subject_type": {filter.Eq},
+	"subject_id":   {filter.Eq},
+}
+
+// ListRelationships 列出关系（游标分页）
+func (s *Service) ListRelationships(ctx context.Context, req *ListRequest) (*pagination.Items[models.Relationship], error) {
+	query := s.db.WithContext(ctx).Model(&models.Relationship{})
+	query = filter.Apply(query, req.Filter, relationshipFilters)
+	return pagination.CursorPaginate[models.Relationship](query, req.Pagination)
 }
 
 // UpdateRelationship 更新关系（JSON Merge Patch 语义）
@@ -607,9 +606,13 @@ func (s *Service) UpdateRelationship(ctx context.Context, req *RelationshipUpdat
 
 // ==================== App Service Relationship 相关（RESTful 风格）====================
 
-// ListAppServiceRelationships 列出应用服务下的关系
-func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
-	// 1. 验证应用和服务是否存在
+var appServiceRelationshipFilters = filter.Whitelist{
+	"subject_type": {filter.Eq},
+	"subject_id":   {filter.Eq},
+}
+
+// ListAppServiceRelationships 列出应用服务下的关系（游标分页）
+func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, serviceID string, req *ListRequest) (*pagination.Items[models.Relationship], error) {
 	var app models.Application
 	if err := s.db.WithContext(ctx).Where("app_id = ?", appID).First(&app).Error; err != nil {
 		return nil, fmt.Errorf("应用不存在: %w", err)
@@ -620,25 +623,14 @@ func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, servic
 		return nil, fmt.Errorf("服务不存在: %w", err)
 	}
 
-	// 2. 验证应用是否有权限访问该服务
 	var relation models.ApplicationServiceRelation
 	if err := s.db.WithContext(ctx).Where("app_id = ? AND service_id = ?", appID, serviceID).First(&relation).Error; err != nil {
 		return nil, fmt.Errorf("应用无权访问该服务")
 	}
 
-	// 3. 查询关系
-	var rels []models.Relationship
-	query := s.db.WithContext(ctx).Where("service_id = ?", serviceID)
-	if subjectType != "" {
-		query = query.Where("subject_type = ?", subjectType)
-	}
-	if subjectID != "" {
-		query = query.Where("subject_id = ?", subjectID)
-	}
-	if err := query.Find(&rels).Error; err != nil {
-		return nil, fmt.Errorf("列出关系失败: %w", err)
-	}
-	return rels, nil
+	query := s.db.WithContext(ctx).Model(&models.Relationship{}).Where("service_id = ?", serviceID)
+	query = filter.Apply(query, req.Filter, appServiceRelationshipFilters)
+	return pagination.CursorPaginate[models.Relationship](query, req.Pagination)
 }
 
 // CreateAppServiceRelationship 在应用服务下创建关系
@@ -803,13 +795,16 @@ func (s *Service) GetGroup(ctx context.Context, groupID string) (*models.Group, 
 	return &group, nil
 }
 
-// ListGroups 列出所有组
-func (s *Service) ListGroups(ctx context.Context) ([]models.Group, error) {
-	var groups []models.Group
-	if err := s.db.WithContext(ctx).Find(&groups).Error; err != nil {
-		return nil, fmt.Errorf("列出组失败: %w", err)
-	}
-	return groups, nil
+var groupFilters = filter.Whitelist{
+	"service_id": {filter.Eq},
+	"name":       {filter.Eq, filter.Pre},
+}
+
+// ListGroups 列出组（游标分页）
+func (s *Service) ListGroups(ctx context.Context, req *ListRequest) (*pagination.Items[models.Group], error) {
+	query := s.db.WithContext(ctx).Model(&models.Group{})
+	query = filter.Apply(query, req.Filter, groupFilters)
+	return pagination.CursorPaginate[models.Group](query, req.Pagination)
 }
 
 // UpdateGroup 更新组（JSON Merge Patch 语义）
