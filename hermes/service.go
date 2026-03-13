@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/go-json-experiment/json"
@@ -12,8 +14,12 @@ import (
 
 	"github.com/heliannuuthus/helios/hermes/config"
 	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/hermes/validation"
 	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
+	"github.com/heliannuuthus/helios/pkg/filter"
+	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/helios/pkg/pagination"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
@@ -54,102 +60,106 @@ func NewService(db *gorm.DB) *Service {
 
 // ==================== Domain 相关 ====================
 
-// GetDomain 获取域（从配置读取，不含密钥）
-func (*Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
-	// 检查域配置是否存在
-	signKeys := config.GetDomainSignKeys(domainID)
-	if len(signKeys) == 0 {
-		return nil, fmt.Errorf("域 %s 配置不存在", domainID)
+// GetDomain 获取域基础信息（仅 t_domain，不查 t_domain_idp；需时调 GetDomainAllowedIDPs）
+func (s *Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
+	rec, err := s.getDomainRecordOnly(ctx, domainID)
+	if err != nil {
+		return nil, err
 	}
-
-	name := config.Cfg().GetString("aegis.domains" + "." + domainID + ".name")
-	if name == "" {
-		name = domainID
-	}
-
-	var description *string
-	if desc := config.Cfg().GetString("aegis.domains" + "." + domainID + ".description"); desc != "" {
-		description = &desc
-	}
-
-	domain := &models.Domain{
-		DomainID:    domainID,
-		Name:        name,
-		Description: description,
-	}
-
-	return domain, nil
+	return &models.Domain{
+		DomainID:    rec.DomainID,
+		Name:        rec.Name,
+		Description: rec.Description,
+		AllowedIDPs: nil,
+	}, nil
 }
 
-// GetDomainWithKey 获取域（含签名密钥）
+// GetDomainAllowedIDPs 获取域允许的 IDP 类型列表（供应用配置 IDP 时按需拉取）
+func (s *Service) GetDomainAllowedIDPs(ctx context.Context, domainID string) ([]string, error) {
+	if _, err := s.getDomainRecordOnly(ctx, domainID); err != nil {
+		return nil, err
+	}
+	return s.getDomainAllowedIDPs(ctx, domainID)
+}
+
+// GetDomainWithKey 获取域（含签名密钥，供 aegis 签发/验签；AllowedIDPs 来自 DB；密钥优先从 t_key 读，否则回退到配置）
 func (s *Service) GetDomainWithKey(ctx context.Context, domainID string) (*models.DomainWithKey, error) {
-	domain, err := s.GetDomain(ctx, domainID)
+	domain, err := s.getDomainFromDB(ctx, domainID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 获取所有签名密钥（第一把是主密钥，其余是旧密钥）
-	signKeys, err := config.GetDomainSignKeysBytes(domainID)
+	signKeys, err := s.getKeys(ctx, models.KeyOwnerDomain, domainID)
 	if err != nil {
-		return nil, fmt.Errorf("获取域签名密钥失败: %w", err)
+		return nil, fmt.Errorf("获取域密钥失败: %w", err)
+	}
+	if len(signKeys) == 0 {
+		// 回退到配置文件（兼容未把域密钥写入 t_key 的旧部署）
+		signKeys, err = config.GetDomainSignKeysBytes(domainID)
+		if err != nil {
+			return nil, fmt.Errorf("获取域签名密钥失败: %w", err)
+		}
 	}
 
 	return &models.DomainWithKey{
 		Domain: *domain,
-		Main:   signKeys[0], // 第一把是主密钥
-		Keys:   signKeys,    // 所有密钥（用于验证）
+		Main:   signKeys[0],
+		Keys:   signKeys,
 	}, nil
 }
 
-// ListDomains 列出所有域（从配置读取）
-func (*Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
-	// 从配置读取 auth.domains 下的所有域
-	domainsMap := config.Cfg().GetStringMap("aegis.domains")
-	if len(domainsMap) == 0 {
-		return nil, fmt.Errorf("aegis.domains 配置为空")
+// ListDomains 列出所有域（仅基础信息，不含 allowed_idps；需时用 GetDomainAllowedIDPs）
+func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
+	var recs []models.DomainRecord
+	if err := s.db.WithContext(ctx).Find(&recs).Error; err != nil {
+		return nil, fmt.Errorf("列出域失败: %w", err)
 	}
-
-	domains := make([]models.Domain, 0, len(domainsMap))
-	for domainID := range domainsMap {
-		name := config.Cfg().GetString("aegis.domains" + "." + domainID + ".name")
-		if name == "" {
-			name = domainID
-		}
-
-		var description *string
-		if desc := config.Cfg().GetString("aegis.domains" + "." + domainID + ".description"); desc != "" {
-			description = &desc
-		}
-
-		domain := models.Domain{
-			DomainID:    domainID,
-			Name:        name,
-			Description: description,
-		}
-		domains = append(domains, domain)
+	domains := make([]models.Domain, 0, len(recs))
+	for i := range recs {
+		domains = append(domains, models.Domain{
+			DomainID:    recs[i].DomainID,
+			Name:        recs[i].Name,
+			Description: recs[i].Description,
+			AllowedIDPs: nil,
+		})
 	}
-
 	return domains, nil
+}
+
+// UpdateDomain 更新域（仅 name、description）
+func (s *Service) UpdateDomain(ctx context.Context, domainID string, req *DomainUpdateRequest) (*models.Domain, error) {
+	_, err := s.getDomainRecordOnly(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+	updates := patch.Collect(
+		patch.Field("name", req.Name),
+		patch.Field("description", req.Description),
+	)
+	if len(updates) == 0 {
+		return s.GetDomain(ctx, domainID)
+	}
+	if err := s.db.WithContext(ctx).Model(&models.DomainRecord{}).Where("domain_id = ?", domainID).Updates(updates).Error; err != nil {
+		return nil, fmt.Errorf("更新域失败: %w", err)
+	}
+	return s.GetDomain(ctx, domainID)
 }
 
 // ==================== Service 相关 ====================
 
 // CreateService 创建服务
 func (s *Service) CreateService(ctx context.Context, req *ServiceCreateRequest) (*models.Service, error) {
+	desc := req.Description
 	service := &models.Service{
-		ServiceID:             req.ServiceID,
-		DomainID:              req.DomainID,
-		Name:                  req.Name,
-		Description:           req.Description,
-		AccessTokenExpiresIn:  7200,
-		RefreshTokenExpiresIn: 604800,
+		ServiceID:            req.ServiceID,
+		DomainID:             req.DomainID,
+		Name:                 req.Name,
+		Description:          &desc,
+		LogoURL:              req.LogoURL,
+		AccessTokenExpiresIn: 7200,
 	}
-
 	if req.AccessTokenExpiresIn != nil {
 		service.AccessTokenExpiresIn = *req.AccessTokenExpiresIn
-	}
-	if req.RefreshTokenExpiresIn != nil {
-		service.RefreshTokenExpiresIn = *req.RefreshTokenExpiresIn
 	}
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -193,17 +203,20 @@ func (s *Service) GetServiceWithKey(ctx context.Context, serviceID string) (*mod
 	return result, nil
 }
 
-// ListServices 列出所有服务
-func (s *Service) ListServices(ctx context.Context, domainID string) ([]models.Service, error) {
-	var services []models.Service
-	query := s.db.WithContext(ctx)
+var serviceFilters = filter.Whitelist{
+	"service_id": {filter.Eq},
+	"name":       {filter.Eq, filter.Pre},
+}
+
+// ListServices 列出服务（游标分页）。
+// 包含该域下的服务及跨域服务（domain_id = CrossDomainID），跨域不在上层暴露由 handler 用请求 domain 表示。
+func (s *Service) ListServices(ctx context.Context, domainID string, req *ListRequest) (*pagination.Items[models.Service], error) {
+	query := s.db.WithContext(ctx).Model(&models.Service{})
 	if domainID != "" {
-		query = query.Where("domain_id = ?", domainID)
+		query = query.Where("domain_id = ? OR domain_id = ?", domainID, models.CrossDomainID)
 	}
-	if err := query.Find(&services).Error; err != nil {
-		return nil, fmt.Errorf("列出服务失败: %w", err)
-	}
-	return services, nil
+	query = filter.Apply(query, req.Filter, serviceFilters)
+	return pagination.CursorPaginate[models.Service](query, req.Pagination)
 }
 
 // UpdateService 更新服务（JSON Merge Patch 语义）
@@ -211,8 +224,8 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, req *Serv
 	updates := patch.Collect(
 		patch.Field("name", req.Name),
 		patch.Field("description", req.Description),
+		patch.Field("logo_url", req.LogoURL),
 		patch.Field("access_token_expires_in", req.AccessTokenExpiresIn),
-		patch.Field("refresh_token_expires_in", req.RefreshTokenExpiresIn),
 	)
 
 	if len(updates) == 0 {
@@ -227,25 +240,93 @@ func (s *Service) UpdateService(ctx context.Context, serviceID string, req *Serv
 	return nil
 }
 
+// DeleteService 删除服务（级联删除关联数据）
+func (s *Service) DeleteService(ctx context.Context, serviceID string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var svc models.Service
+		if err := tx.Where("service_id = ?", serviceID).First(&svc).Error; err != nil {
+			return fmt.Errorf("服务不存在: %w", err)
+		}
+		if err := tx.Where("service_id = ?", serviceID).Delete(&models.ApplicationServiceRelation{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("service_id = ?", serviceID).Delete(&models.Relationship{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("service_id = ?", serviceID).Delete(&models.Group{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("service_id = ?", serviceID).Delete(&models.ServiceChallengeSetting{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("owner_type = ? AND owner_id = ?", models.KeyOwnerService, serviceID).Delete(&models.Key{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("service_id = ?", serviceID).Delete(&models.Service{}).Error
+	})
+}
+
 // ==================== Application 相关 ====================
+
+// appIDPattern 应用标识：字母数字、下划线、连字符，1~64 字符
+var appIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+
+func marshalOptionalStringSlice(s []string) *string {
+	if len(s) == 0 {
+		return nil
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		return nil
+	}
+	str := string(b)
+	return &str
+}
 
 // CreateApplication 创建应用
 func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateRequest) (*models.Application, error) {
-	var redirectURIs *string
-	if len(req.RedirectURIs) > 0 {
-		urisJSON, err := json.Marshal(req.RedirectURIs)
-		if err != nil {
-			return nil, fmt.Errorf("marshal redirect uris: %w", err)
-		}
-		urisStr := string(urisJSON)
-		redirectURIs = &urisStr
+	appID := strings.TrimSpace(req.AppID)
+	if appID == "" {
+		appID = helpers.GenerateID(12)
+	} else if !appIDPattern.MatchString(appID) {
+		return nil, fmt.Errorf("应用标识仅允许字母、数字、下划线、连字符，1~64 字符")
 	}
 
+	if err := validation.ValidateRedirectURIs(req.AllowedRedirectURIs); err != nil {
+		return nil, fmt.Errorf("allowed_redirect_uris: %w", err)
+	}
+	if err := validation.ValidateAllowedOrigins(req.AllowedOrigins); err != nil {
+		return nil, fmt.Errorf("allowed_origins: %w", err)
+	}
+	if err := validation.ValidateLogoutURIs(req.AllowedLogoutURIs); err != nil {
+		return nil, fmt.Errorf("allowed_logout_uris: %w", err)
+	}
+
+	allowedRedirectURIs := marshalOptionalStringSlice(req.AllowedRedirectURIs)
+	allowedOrigins := marshalOptionalStringSlice(req.AllowedOrigins)
+	allowedLogoutURIs := marshalOptionalStringSlice(req.AllowedLogoutURIs)
+
+	desc := req.Description
 	app := &models.Application{
-		DomainID:     req.DomainID,
-		AppID:        req.AppID,
-		Name:         req.Name,
-		RedirectURIs: redirectURIs,
+		DomainID:                      req.DomainID,
+		AppID:                         appID,
+		Name:                          req.Name,
+		Description:                   &desc,
+		AllowedRedirectURIs:           allowedRedirectURIs,
+		AllowedOrigins:                allowedOrigins,
+		AllowedLogoutURIs:             allowedLogoutURIs,
+		IDTokenExpiresIn:              3600,
+		RefreshTokenExpiresIn:         604800,
+		RefreshTokenAbsoluteExpiresIn: 0,
+	}
+	if req.IDTokenExpiresIn != nil {
+		app.IDTokenExpiresIn = *req.IDTokenExpiresIn
+	}
+	if req.RefreshTokenExpiresIn != nil {
+		app.RefreshTokenExpiresIn = *req.RefreshTokenExpiresIn
+	}
+	if req.RefreshTokenAbsoluteExpiresIn != nil {
+		app.RefreshTokenAbsoluteExpiresIn = *req.RefreshTokenAbsoluteExpiresIn
 	}
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -253,7 +334,7 @@ func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateR
 			return fmt.Errorf("创建应用失败: %w", err)
 		}
 		if req.NeedKey {
-			if err := s.createKey(tx, models.KeyOwnerApplication, req.AppID); err != nil {
+			if err := s.createKey(tx, models.KeyOwnerApplication, appID); err != nil {
 				return err
 			}
 		}
@@ -294,36 +375,65 @@ func (s *Service) GetApplicationWithKey(ctx context.Context, appID string) (*mod
 	return result, nil
 }
 
-// ListApplications 列出所有应用
-func (s *Service) ListApplications(ctx context.Context, domainID string) ([]models.Application, error) {
-	var apps []models.Application
-	query := s.db.WithContext(ctx)
+var applicationFilters = filter.Whitelist{
+	"name": {filter.Eq, filter.Pre},
+}
+
+// ListApplications 列出应用（游标分页）
+func (s *Service) ListApplications(ctx context.Context, domainID string, req *ListRequest) (*pagination.Items[models.Application], error) {
+	query := s.db.WithContext(ctx).Model(&models.Application{})
 	if domainID != "" {
 		query = query.Where("domain_id = ?", domainID)
 	}
-	if err := query.Find(&apps).Error; err != nil {
-		return nil, fmt.Errorf("列出应用失败: %w", err)
+	query = filter.Apply(query, req.Filter, applicationFilters)
+	return pagination.CursorPaginate[models.Application](query, req.Pagination)
+}
+
+func applyOptionalURIList(
+	updates map[string]interface{},
+	opt patch.Optional[[]string],
+	dbKey string,
+	validate func([]string) error,
+	errPrefix string,
+) error {
+	if !opt.IsPresent() {
+		return nil
 	}
-	return apps, nil
+	if opt.IsNull() {
+		updates[dbKey] = nil
+		return nil
+	}
+	vals := opt.Value()
+	if err := validate(vals); err != nil {
+		return fmt.Errorf("%s: %w", errPrefix, err)
+	}
+	b, err := json.Marshal(vals)
+	if err != nil {
+		return fmt.Errorf("序列化 %s 失败: %w", errPrefix, err)
+	}
+	updates[dbKey] = string(b)
+	return nil
 }
 
 // UpdateApplication 更新应用（JSON Merge Patch 语义）
 func (s *Service) UpdateApplication(ctx context.Context, appID string, req *ApplicationUpdateRequest) error {
 	updates := patch.Collect(
 		patch.Field("name", req.Name),
+		patch.Field("description", req.Description),
+		patch.Field("logo_url", req.LogoURL),
+		patch.Field("id_token_expires_in", req.IDTokenExpiresIn),
+		patch.Field("refresh_token_expires_in", req.RefreshTokenExpiresIn),
+		patch.Field("refresh_token_absolute_expires_in", req.RefreshTokenAbsoluteExpiresIn),
 	)
 
-	// redirect_uris 需要序列化为 JSON 字符串
-	if req.RedirectURIs.IsPresent() {
-		if req.RedirectURIs.IsNull() {
-			updates["redirect_uris"] = nil
-		} else {
-			urisJSON, err := json.Marshal(req.RedirectURIs.Value())
-			if err != nil {
-				return fmt.Errorf("序列化 redirect_uris 失败: %w", err)
-			}
-			updates["redirect_uris"] = string(urisJSON)
-		}
+	if err := applyOptionalURIList(updates, req.AllowedRedirectURIs, "redirect_uris", validation.ValidateRedirectURIs, "allowed_redirect_uris"); err != nil {
+		return err
+	}
+	if err := applyOptionalURIList(updates, req.AllowedOrigins, "allowed_origins", validation.ValidateAllowedOrigins, "allowed_origins"); err != nil {
+		return err
+	}
+	if err := applyOptionalURIList(updates, req.AllowedLogoutURIs, "allowed_logout_uris", validation.ValidateLogoutURIs, "allowed_logout_uris"); err != nil {
+		return err
 	}
 
 	if len(updates) == 0 {
@@ -370,6 +480,28 @@ func (s *Service) GetApplicationServiceRelations(ctx context.Context, appID stri
 	return relations, nil
 }
 
+// GetServiceApplicationRelations 获取服务已授权给哪些应用及授予的权限（ReBAC 服务侧视角）
+func (s *Service) GetServiceApplicationRelations(ctx context.Context, serviceID string) ([]models.ApplicationServiceRelation, error) {
+	var relations []models.ApplicationServiceRelation
+	if err := s.db.WithContext(ctx).Where("service_id = ?", serviceID).Find(&relations).Error; err != nil {
+		return nil, fmt.Errorf("获取服务已授权应用失败: %w", err)
+	}
+	return relations, nil
+}
+
+// GetServiceAppRelations 获取某服务授予某应用的关系列表
+func (s *Service) GetServiceAppRelations(ctx context.Context, serviceID, appID string) ([]string, error) {
+	var relations []models.ApplicationServiceRelation
+	if err := s.db.WithContext(ctx).Where("service_id = ? AND app_id = ?", serviceID, appID).Find(&relations).Error; err != nil {
+		return nil, fmt.Errorf("获取服务应用关系失败: %w", err)
+	}
+	rels := make([]string, 0, len(relations))
+	for i := range relations {
+		rels = append(rels, relations[i].Relation)
+	}
+	return rels, nil
+}
+
 // ==================== Relationship 相关 ====================
 
 // CreateRelationship 创建关系
@@ -412,18 +544,25 @@ func (s *Service) DeleteRelationship(ctx context.Context, req *RelationshipDelet
 	return nil
 }
 
-// ListRelationships 列出关系
-func (s *Service) ListRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
+var relationshipFilters = filter.Whitelist{
+	"service_id":   {filter.Eq},
+	"subject_type": {filter.Eq},
+	"subject_id":   {filter.Eq},
+}
+
+// ListRelationships 列出关系（游标分页）
+func (s *Service) ListRelationships(ctx context.Context, req *ListRequest) (*pagination.Items[models.Relationship], error) {
+	query := s.db.WithContext(ctx).Model(&models.Relationship{})
+	query = filter.Apply(query, req.Filter, relationshipFilters)
+	return pagination.CursorPaginate[models.Relationship](query, req.Pagination)
+}
+
+// FindRelationships 按精确条件查询关系（不分页），供内部服务调用。
+func (s *Service) FindRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
 	var rels []models.Relationship
-	query := s.db.WithContext(ctx).Where("service_id = ?", serviceID)
-	if subjectType != "" {
-		query = query.Where("subject_type = ?", subjectType)
-	}
-	if subjectID != "" {
-		query = query.Where("subject_id = ?", subjectID)
-	}
+	query := s.db.WithContext(ctx).Where("service_id = ? AND subject_type = ? AND subject_id = ?", serviceID, subjectType, subjectID)
 	if err := query.Find(&rels).Error; err != nil {
-		return nil, fmt.Errorf("列出关系失败: %w", err)
+		return nil, fmt.Errorf("查询关系失败: %w", err)
 	}
 	return rels, nil
 }
@@ -477,9 +616,13 @@ func (s *Service) UpdateRelationship(ctx context.Context, req *RelationshipUpdat
 
 // ==================== App Service Relationship 相关（RESTful 风格）====================
 
-// ListAppServiceRelationships 列出应用服务下的关系
-func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
-	// 1. 验证应用和服务是否存在
+var appServiceRelationshipFilters = filter.Whitelist{
+	"subject_type": {filter.Eq},
+	"subject_id":   {filter.Eq},
+}
+
+// ListAppServiceRelationships 列出应用服务下的关系（游标分页）
+func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, serviceID string, req *ListRequest) (*pagination.Items[models.Relationship], error) {
 	var app models.Application
 	if err := s.db.WithContext(ctx).Where("app_id = ?", appID).First(&app).Error; err != nil {
 		return nil, fmt.Errorf("应用不存在: %w", err)
@@ -490,25 +633,14 @@ func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, servic
 		return nil, fmt.Errorf("服务不存在: %w", err)
 	}
 
-	// 2. 验证应用是否有权限访问该服务
 	var relation models.ApplicationServiceRelation
 	if err := s.db.WithContext(ctx).Where("app_id = ? AND service_id = ?", appID, serviceID).First(&relation).Error; err != nil {
 		return nil, fmt.Errorf("应用无权访问该服务")
 	}
 
-	// 3. 查询关系
-	var rels []models.Relationship
-	query := s.db.WithContext(ctx).Where("service_id = ?", serviceID)
-	if subjectType != "" {
-		query = query.Where("subject_type = ?", subjectType)
-	}
-	if subjectID != "" {
-		query = query.Where("subject_id = ?", subjectID)
-	}
-	if err := query.Find(&rels).Error; err != nil {
-		return nil, fmt.Errorf("列出关系失败: %w", err)
-	}
-	return rels, nil
+	query := s.db.WithContext(ctx).Model(&models.Relationship{}).Where("service_id = ?", serviceID)
+	query = filter.Apply(query, req.Filter, appServiceRelationshipFilters)
+	return pagination.CursorPaginate[models.Relationship](query, req.Pagination)
 }
 
 // CreateAppServiceRelationship 在应用服务下创建关系
@@ -673,13 +805,16 @@ func (s *Service) GetGroup(ctx context.Context, groupID string) (*models.Group, 
 	return &group, nil
 }
 
-// ListGroups 列出所有组
-func (s *Service) ListGroups(ctx context.Context) ([]models.Group, error) {
-	var groups []models.Group
-	if err := s.db.WithContext(ctx).Find(&groups).Error; err != nil {
-		return nil, fmt.Errorf("列出组失败: %w", err)
-	}
-	return groups, nil
+var groupFilters = filter.Whitelist{
+	"service_id": {filter.Eq},
+	"name":       {filter.Eq, filter.Pre},
+}
+
+// ListGroups 列出组（游标分页）
+func (s *Service) ListGroups(ctx context.Context, req *ListRequest) (*pagination.Items[models.Group], error) {
+	query := s.db.WithContext(ctx).Model(&models.Group{})
+	query = filter.Apply(query, req.Filter, groupFilters)
+	return pagination.CursorPaginate[models.Group](query, req.Pagination)
 }
 
 // UpdateGroup 更新组（JSON Merge Patch 语义）
@@ -760,6 +895,59 @@ func (s *Service) GetApplicationIDPConfigs(ctx context.Context, appID string) ([
 	return configs, nil
 }
 
+// CreateApplicationIDPConfig 创建应用 IDP 配置（仅允许添加该应用所属域下的 IDP）
+func (s *Service) CreateApplicationIDPConfig(ctx context.Context, appID string, req *ApplicationIDPConfigCreateRequest) (*models.ApplicationIDPConfig, error) {
+	if err := s.ensureIDPAllowedForApplication(ctx, appID, req.Type); err != nil {
+		return nil, err
+	}
+	cfg := &models.ApplicationIDPConfig{
+		AppID:    appID,
+		Type:     req.Type,
+		Priority: req.Priority,
+		Strategy: req.Strategy,
+		Delegate: req.Delegate,
+		Require:  req.Require,
+	}
+	if err := s.db.WithContext(ctx).Create(cfg).Error; err != nil {
+		return nil, fmt.Errorf("创建应用 IDP 配置失败: %w", err)
+	}
+	return cfg, nil
+}
+
+// UpdateApplicationIDPConfig 更新应用 IDP 配置（不修改 type 时不校验域；若请求中带新 type 则需在域允许列表中）
+func (s *Service) UpdateApplicationIDPConfig(ctx context.Context, appID, idpType string, req *ApplicationIDPConfigUpdateRequest) error {
+	updates := patch.Collect(
+		patch.Field("priority", req.Priority),
+		patch.Field("strategy", req.Strategy),
+		patch.Field("delegate", req.Delegate),
+		patch.Field("require", req.Require),
+	)
+	if len(updates) == 0 {
+		return nil
+	}
+	result := s.db.WithContext(ctx).Model(&models.ApplicationIDPConfig{}).
+		Where("app_id = ? AND `type` = ?", appID, idpType).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("更新应用 IDP 配置失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("应用 IDP 配置不存在: app_id=%s, type=%s", appID, idpType)
+	}
+	return nil
+}
+
+// DeleteApplicationIDPConfig 删除应用 IDP 配置
+func (s *Service) DeleteApplicationIDPConfig(ctx context.Context, appID, idpType string) error {
+	result := s.db.WithContext(ctx).Where("app_id = ? AND `type` = ?", appID, idpType).Delete(&models.ApplicationIDPConfig{})
+	if result.Error != nil {
+		return fmt.Errorf("删除应用 IDP 配置失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("应用 IDP 配置不存在: app_id=%s, type=%s", appID, idpType)
+	}
+	return nil
+}
+
 // ==================== Service Challenge Config 相关 ====================
 
 // GetServiceChallengeSetting 获取服务 Challenge 配置（service_id + type 唯一）
@@ -796,6 +984,60 @@ func (s *Service) RotateKey(ctx context.Context, ownerType, ownerID string, wind
 		}
 		return s.createKey(tx, ownerType, ownerID)
 	})
+}
+
+func (s *Service) getDomainRecordOnly(ctx context.Context, domainID string) (*models.DomainRecord, error) {
+	var rec models.DomainRecord
+	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).First(&rec).Error; err != nil {
+		return nil, fmt.Errorf("域 %s 不存在: %w", domainID, err)
+	}
+	return &rec, nil
+}
+
+func (s *Service) getDomainFromDB(ctx context.Context, domainID string) (*models.Domain, error) {
+	rec, err := s.getDomainRecordOnly(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+	allowedIDPs, err := s.getDomainAllowedIDPs(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+	return &models.Domain{
+		DomainID:    rec.DomainID,
+		Name:        rec.Name,
+		Description: rec.Description,
+		AllowedIDPs: allowedIDPs,
+	}, nil
+}
+
+func (s *Service) getDomainAllowedIDPs(ctx context.Context, domainID string) ([]string, error) {
+	var rows []models.DomainIDPRecord
+	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).Find(&rows).Error; err != nil {
+		return nil, fmt.Errorf("查询域 IDP 列表失败: %w", err)
+	}
+	out := make([]string, 0, len(rows))
+	for i := range rows {
+		out = append(out, rows[i].IDPType)
+	}
+	return out, nil
+}
+
+func (s *Service) ensureIDPAllowedForApplication(ctx context.Context, appID, idpType string) error {
+	app, err := s.GetApplication(ctx, appID)
+	if err != nil {
+		return err
+	}
+	allowed, err := s.getDomainAllowedIDPs(ctx, app.DomainID)
+	if err != nil {
+		return err
+	}
+	for _, t := range allowed {
+		if t == idpType {
+			return nil
+		}
+	}
+	return fmt.Errorf("IDP %s 不在域 %s 的允许列表中", idpType, app.DomainID)
 }
 
 // getKeys 获取指定 owner 的所有有效密钥（已解密），按 created_at DESC 排序

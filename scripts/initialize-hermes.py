@@ -23,9 +23,8 @@ aegis.toml:
 
 hermes.toml:
   - [db] enc-key: Base64 编码的 32 字节 AES-256 密钥，用于加密敏感数据
-  - [aegis.domains.{domain}] sign-keys: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)
-    支持密钥轮换，逗号分隔多个密钥，第一把是主密钥
-  - [aegis] secret-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)，服务密钥
+  - [aegis] secret-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)，Hermes 服务密钥
+  域元数据、域允许的 IDP、域签名密钥已落库（t_domain / t_domain_idp / t_key），不再写入本配置。
 
 iris.toml:
   - [aegis] secret-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)，服务密钥
@@ -93,8 +92,8 @@ class Service:
     domain_id: str
     name: str
     description: str = ""
-    access_token_expires_in: int = 7200
-    refresh_token_expires_in: int = 604800
+    logo_url: Optional[str] = None
+    access_token_expires_in: int = 7200  # 服务仅控制 access_token 有效期
 
 
 @dataclass
@@ -102,9 +101,14 @@ class Application:
     app_id: str
     domain_id: str
     name: str
+    description: str = ""
     logo_url: Optional[str] = None
     redirect_uris: list[str] = field(default_factory=list)
     allowed_origins: list[str] = field(default_factory=list)
+    allowed_logout_uris: list[str] = field(default_factory=list)
+    id_token_expires_in: int = 3600
+    refresh_token_expires_in: int = 604800  # 沉寂有效期（秒）
+    refresh_token_absolute_expires_in: int = 0  # 绝对有效期（秒），0=不限制
 
 
 @dataclass
@@ -224,15 +228,25 @@ def ensure_table(doc, *keys: str):
 # ==================== 预制数据 ====================
 
 DOMAINS = [
-    Domain("consumer", "Consumer Identity", "C端用户身份域"),
-    Domain("platform", "Platform Identity", "B端平台身份域"),
+    Domain("consumer", "用户身份域", "C 端用户身份与权限隔离边界"),
+    Domain("platform", "平台身份域", "B 端平台身份与权限隔离边界"),
 ]
 
+# 每个域允许的 IDP 类型（应用添加 IDP 时只能从此列表选）
+DOMAIN_IDPS: dict[str, list[str]] = {
+    "consumer": ["wechat-mp", "tt-mp", "alipay-mp", "wechat-web", "alipay-web", "tt-web", "user"],
+    "platform": ["github", "google", "staff", "oper"],
+}
+
+# 与 hermes/models.CrossDomainID 一致：底层约定，domain_id 为该值时表示跨域服务，不在 API 暴露。
+CROSS_DOMAIN_ID = "-"
+
+# 服务归属域：hermes/iris 为跨域（多域共用）；zwei/chaos 归属 platform。
 SERVICES = [
-    Service("hermes", "-", "Hermes 管理服务", "身份与访问管理服务"),
-    Service("iris", "-", "Iris 用户服务", "用户信息管理服务"),
-    Service("zwei", "-", "Zwei 菜谱服务", "菜谱管理、收藏、推荐服务"),
-    Service("chaos", "-", "Chaos 聚合服务", "邮件发送、文件上传等业务聚合服务"),
+    Service("hermes", CROSS_DOMAIN_ID, "Hermes 管理服务", "身份与访问管理服务", "https://aegis.heliannuuthus.com/logos/hermes.svg"),
+    Service("iris", CROSS_DOMAIN_ID, "Iris 用户服务", "用户信息管理服务", "https://aegis.heliannuuthus.com/logos/iris.svg"),
+    Service("zwei", "platform", "Zwei 菜谱服务", "菜谱管理、收藏、推荐服务", "https://aegis.heliannuuthus.com/logos/zwei.svg"),
+    Service("chaos", "platform", "Chaos 聚合服务", "邮件发送、文件上传等业务聚合服务", "https://aegis.heliannuuthus.com/logos/chaos.svg"),
 ]
 
 APPLICATIONS = [
@@ -240,6 +254,7 @@ APPLICATIONS = [
         app_id="atlas",
         domain_id="platform",
         name="Atlas 管理控制台",
+        description="Hermes 身份与访问管理系统的官方管理后台，支持域、应用、服务及关系的配置与可视化管理。",
         logo_url="https://aegis.heliannuuthus.com/logos/atlas.svg",
         redirect_uris=["https://atlas.heliannuuthus.com/auth/callback"],
         allowed_origins=["https://atlas.heliannuuthus.com"],
@@ -248,6 +263,7 @@ APPLICATIONS = [
         app_id="zwei",
         domain_id="platform",
         name="Zwei 菜谱管理",
+        description="企业级菜谱管理与分发系统，集成 Hermes 实现细粒度的权限控制。",
         redirect_uris=["https://zwei.heliannuuthus.com/auth/callback"],
         allowed_origins=["https://zwei.heliannuuthus.com"],
     ),
@@ -255,6 +271,7 @@ APPLICATIONS = [
         app_id="hermes",
         domain_id="platform",
         name="Hermes 身份管理",
+        description="身份验证与授权中心，提供 OIDC/OAuth2 协议支持与 ReBAC 鉴权能力。",
         redirect_uris=["https://hermes.heliannuuthus.com/auth/callback"],
         allowed_origins=["https://hermes.heliannuuthus.com"],
     ),
@@ -262,6 +279,7 @@ APPLICATIONS = [
         app_id="chaos",
         domain_id="platform",
         name="Chaos 聚合服务",
+        description="业务支撑聚合系统，包含邮件、短信、文件存储等通用能力模块。",
         redirect_uris=["https://chaos.heliannuuthus.com/auth/callback"],
         allowed_origins=["https://chaos.heliannuuthus.com"],
     ),
@@ -269,6 +287,7 @@ APPLICATIONS = [
         app_id="piris",
         domain_id="platform",
         name="平台个人中心",
+        description="B 端员工个人信息管理与安全设置中心。",
         redirect_uris=["https://iris.heliannuuthus.com/auth/callback"],
         allowed_origins=["https://iris.heliannuuthus.com"],
     ),
@@ -276,6 +295,7 @@ APPLICATIONS = [
         app_id="ciris",
         domain_id="consumer",
         name="用户个人中心",
+        description="C 端外部用户个人账号管理与偏好设置中心。",
         redirect_uris=["https://iris.heliannuuthus.com/auth/callback"],
         allowed_origins=["https://iris.heliannuuthus.com"],
     ),
@@ -367,6 +387,17 @@ class Initializer:
 
         self.sso_master_key = generate_seed()
 
+        for domain in DOMAINS:
+            sign_key = self.domain_sign_keys.get(domain.domain_id)
+            if sign_key is not None:
+                encrypted = encrypt_aes_gcm(self.db_enc_key, sign_key, domain.domain_id)
+                self.keys_data.append(KeyData(
+                    owner_type="domain",
+                    owner_id=domain.domain_id,
+                    secret_key=sign_key,
+                    encrypted_key=b64_encode(encrypted),
+                ))
+
         for service in SERVICES:
             secret_key = generate_seed()
             encrypted = encrypt_aes_gcm(self.db_enc_key, secret_key, service.service_id)
@@ -378,18 +409,10 @@ class Initializer:
             ))
 
     def update_hermes_toml(self):
+        """只写入 db.enc-key 与 aegis.secret-key。域元数据、域允许的 IDP、域签名密钥已落库，不写配置。"""
         doc = load_toml(HERMES_TOML)
 
         ensure_table(doc, "db")["enc-key"] = b64_encode(self.db_enc_key)
-
-        for domain in DOMAINS:
-            sign_key = self.domain_sign_keys.get(domain.domain_id)
-            if not sign_key:
-                continue
-            dt = ensure_table(doc, "aegis", "domains", domain.domain_id)
-            dt["name"] = domain.name
-            dt["description"] = domain.description
-            dt["sign-keys"] = b64url_encode(sign_key)
 
         hermes_data = next((kd for kd in self.keys_data if kd.owner_type == "service" and kd.owner_id == "hermes"), None)
         if hermes_data:
@@ -426,18 +449,40 @@ class Initializer:
         lines.append("USE `hermes`;")
         lines.append("")
 
-        lines.append("-- ==================== 服务 ====================")
-        lines.append("INSERT INTO t_service (service_id, domain_id, name, description, access_token_expires_in, refresh_token_expires_in) VALUES")
-        service_values = []
-        for svc in SERVICES:
-            desc = svc.description.replace("'", "''")
-            service_values.append(f"('{svc.service_id}', '{svc.domain_id}', '{svc.name}', '{desc}', {svc.access_token_expires_in}, {svc.refresh_token_expires_in})")
-        lines.append(",\n".join(service_values))
-        lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), domain_id = VALUES(domain_id);")
+        lines.append("-- ==================== 域 ====================")
+        lines.append("INSERT INTO t_domain (domain_id, name, description) VALUES")
+        domain_values = []
+        for d in DOMAINS:
+            desc = d.description.replace("'", "''")
+            domain_values.append(f"('{d.domain_id}', '{d.name}', '{desc}')")
+        lines.append(",\n".join(domain_values))
+        lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description);")
         lines.append("")
 
-        lines.append("-- ==================== 服务密钥 ====================")
-        lines.append("DELETE FROM t_key WHERE owner_type = 'service';")
+        lines.append("-- ==================== 域允许的 IDP ====================")
+        lines.append("INSERT INTO t_domain_idp (domain_id, idp_type) VALUES")
+        domain_idp_values = []
+        for domain_id, idp_list in DOMAIN_IDPS.items():
+            for idp_type in idp_list:
+                domain_idp_values.append(f"('{domain_id}', '{idp_type}')")
+        lines.append(",\n".join(domain_idp_values))
+        lines.append("ON DUPLICATE KEY UPDATE domain_id = VALUES(domain_id);")
+        lines.append("")
+
+        lines.append("-- ==================== 服务 ====================")
+        lines.append("INSERT INTO t_service (service_id, domain_id, name, description, logo_url, access_token_expires_in) VALUES")
+        service_values = []
+        for svc in SERVICES:
+            desc_val = svc.description.replace("'", "''") if svc.description else None
+            desc = f"'{desc_val}'" if desc_val else "NULL"
+            logo_url = f"'{svc.logo_url}'" if svc.logo_url else "NULL"
+            service_values.append(f"('{svc.service_id}', '{svc.domain_id}', '{svc.name}', {desc}, {logo_url}, {svc.access_token_expires_in})")
+        lines.append(",\n".join(service_values))
+        lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), logo_url = VALUES(logo_url), domain_id = VALUES(domain_id);")
+        lines.append("")
+
+        lines.append("-- ==================== 域密钥 & 服务密钥 ====================")
+        lines.append("DELETE FROM t_key WHERE owner_type IN ('domain', 'service');")
         lines.append("INSERT INTO t_key (owner_type, owner_id, encrypted_key) VALUES")
         key_values = []
         for kd in self.keys_data:
@@ -448,15 +493,17 @@ class Initializer:
 
         if APPLICATIONS:
             lines.append("-- ==================== 应用 ====================")
-            lines.append("INSERT INTO t_application (app_id, domain_id, name, logo_url, redirect_uris, allowed_origins) VALUES")
+            lines.append("INSERT INTO t_application (app_id, domain_id, name, description, logo_url, redirect_uris, allowed_origins, allowed_logout_uris, id_token_expires_in, refresh_token_expires_in, refresh_token_absolute_expires_in) VALUES")
             app_values = []
             for app in APPLICATIONS:
                 logo_url = f"'{app.logo_url}'" if app.logo_url else "NULL"
+                description = f"'{app.description}'" if app.description else "NULL"
                 redirect_uris = f"'{json.dumps(app.redirect_uris)}'" if app.redirect_uris else "NULL"
                 allowed_origins = f"'{json.dumps(app.allowed_origins)}'" if app.allowed_origins else "NULL"
-                app_values.append(f"('{app.app_id}', '{app.domain_id}', '{app.name}', {logo_url}, {redirect_uris}, {allowed_origins})")
+                allowed_logout_uris = f"'{json.dumps(app.allowed_logout_uris)}'" if app.allowed_logout_uris else "NULL"
+                app_values.append(f"('{app.app_id}', '{app.domain_id}', '{app.name}', {description}, {logo_url}, {redirect_uris}, {allowed_origins}, {allowed_logout_uris}, {app.id_token_expires_in}, {app.refresh_token_expires_in}, {app.refresh_token_absolute_expires_in})")
             lines.append(",\n".join(app_values))
-            lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), logo_url = VALUES(logo_url), redirect_uris = VALUES(redirect_uris), allowed_origins = VALUES(allowed_origins);")
+            lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), logo_url = VALUES(logo_url), redirect_uris = VALUES(redirect_uris), allowed_origins = VALUES(allowed_origins), allowed_logout_uris = VALUES(allowed_logout_uris), id_token_expires_in = VALUES(id_token_expires_in), refresh_token_expires_in = VALUES(refresh_token_expires_in), refresh_token_absolute_expires_in = VALUES(refresh_token_absolute_expires_in);")
             lines.append("")
 
         if APP_IDP_CONFIGS:

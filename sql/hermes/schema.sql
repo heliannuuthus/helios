@@ -1,8 +1,8 @@
 -- Hermes 数据库 Schema（身份与访问管理数据）
 -- MySQL 8.0+ 语法
 -- 注意：session、authorization_code、refresh_token 都存储在 Redis 中
--- 注意：Domain 配置从配置文件读取，不需要建表
--- 注意：IDP 配置从配置文件读取，不需要建表
+-- 注意：域签名密钥仍从配置文件或密钥服务读取，不存库
+-- 注意：IDP 的密钥/回调等从配置文件读取
 
 -- ==================== 数据库初始化 ====================
 
@@ -18,6 +18,31 @@ USE `hermes`;
 -- 一、平台配置层（Domain > Application > Service）
 -- ============================================================================
 
+-- ==================== 域表 ====================
+-- 域元数据及该域允许的 IDP 列表（签名密钥从配置/密钥服务读取）
+
+CREATE TABLE IF NOT EXISTS t_domain (
+    domain_id     VARCHAR(32)   NOT NULL COMMENT '域标识：consumer/platform 等',
+    name          VARCHAR(128)  NOT NULL COMMENT '域名称',
+    description   VARCHAR(512)  DEFAULT NULL COMMENT '域描述',
+    created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (domain_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='域（元数据）';
+
+-- ==================== 域允许的 IDP 表 ====================
+-- 每个域下允许使用的 IDP 类型，应用添加 IDP 时只能从此列表选
+
+CREATE TABLE IF NOT EXISTS t_domain_idp (
+    domain_id     VARCHAR(32)   NOT NULL COMMENT '域 ID',
+    idp_type      VARCHAR(32)   NOT NULL COMMENT 'IDP 类型：github/google/user/staff/wechat-mp 等',
+    created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (domain_id, idp_type),
+    CONSTRAINT fk_domain_idp_domain FOREIGN KEY (domain_id) REFERENCES t_domain(domain_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='域允许的 IDP';
+
 -- ==================== 应用表 ====================
 -- OAuth2 客户端应用，属于某个 Domain
 
@@ -27,9 +52,14 @@ CREATE TABLE IF NOT EXISTS t_application (
     domain_id          VARCHAR(32)   NOT NULL COMMENT '所属域：consumer/platform',
     app_id             VARCHAR(64)   NOT NULL COMMENT '应用唯一标识',
     name               VARCHAR(128)  NOT NULL COMMENT '应用名称',
+    description        VARCHAR(512)  DEFAULT NULL COMMENT '应用描述',
     logo_url           VARCHAR(512)  DEFAULT NULL COMMENT '应用 Logo URL',
-    redirect_uris      VARCHAR(2048) DEFAULT NULL COMMENT '重定向 URI 列表（JSON 数组）',
-    allowed_origins    VARCHAR(1024) DEFAULT NULL COMMENT '允许的跨域源（JSON 数组）',
+    redirect_uris                   VARCHAR(2048) DEFAULT NULL COMMENT '重定向 URI 列表（JSON 数组）',
+    allowed_origins                 VARCHAR(1024) DEFAULT NULL COMMENT '允许的跨域源（JSON 数组）',
+    allowed_logout_uris             VARCHAR(1024) DEFAULT NULL COMMENT '登出后允许跳转的 URI（JSON 数组）',
+    id_token_expires_in             INT UNSIGNED  NOT NULL DEFAULT 3600   COMMENT 'ID Token 有效期（秒）',
+    refresh_token_expires_in        INT UNSIGNED  NOT NULL DEFAULT 604800 COMMENT 'Refresh Token 沉寂有效期（秒）',
+    refresh_token_absolute_expires_in INT UNSIGNED NOT NULL DEFAULT 0    COMMENT 'Refresh Token 绝对有效期（秒），0=不限制',
     -- 时间戳
     created_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -65,12 +95,12 @@ UNIQUE KEY uk_app_type (app_id, `type`),
 CREATE TABLE IF NOT EXISTS t_service (
     _id                       INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
-    domain_id                 VARCHAR(32)   NOT NULL COMMENT '所属域：consumer/platform，- 表示跨域',
+    domain_id                 VARCHAR(32)   NOT NULL COMMENT '所属域：consumer/platform；- 表示跨域（底层约定，不在 API 暴露）',
     service_id                VARCHAR(32)   NOT NULL COMMENT '服务标识：hermes/zwei/order',
     name                      VARCHAR(128)  NOT NULL COMMENT '服务名称',
     description               VARCHAR(512)  DEFAULT NULL COMMENT '服务描述',
-    access_token_expires_in   INT UNSIGNED  NOT NULL DEFAULT 7200 COMMENT 'Access Token 有效期（秒）',
-    refresh_token_expires_in  INT UNSIGNED  NOT NULL DEFAULT 604800 COMMENT 'Refresh Token 有效期（秒）',
+    logo_url                  VARCHAR(512)  DEFAULT NULL COMMENT '服务 Logo URL',
+    access_token_expires_in   INT UNSIGNED  NOT NULL DEFAULT 7200 COMMENT 'Access Token 有效期（秒），由服务控制',
     required_identities       VARCHAR(512)  DEFAULT NULL COMMENT '访问需要的身份类型（JSON 数组）',
     -- 时间戳
     created_at                DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
