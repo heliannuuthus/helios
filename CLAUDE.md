@@ -196,7 +196,7 @@ if req.ExpiresAt.IsPresent() {
 
 ## 前端组件规范（Atlas / Aegis-UI）
 
-两个前端项目（`atlas/`、`aegis-ui/`）均使用 **Ant Design 6** 作为 UI 组件库。
+两个前端项目（`atlas/`、`pallas/`）均使用 **Ant Design 6** 作为 UI 组件库。
 
 ### 必须使用 antd 组件替代原生 HTML 元素
 

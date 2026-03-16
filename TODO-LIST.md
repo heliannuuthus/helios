@@ -24,7 +24,7 @@
 - [x] 区分验证类和交换类的处理逻辑（`IsVerification()` / `IsExchange()` 已实现）
 - [x] 验证类支持 Type 关联的限流策略（按 `audience:type:channel` 维度限流，读取 `ServiceChallengeConfig`）
 - [x] Challenge Token claims 增加 channel_type（typ）和 type（biz）字段
-- [x] 前端适配新 API 结构（aegis-ui 已使用三层模型调用 API）
+- [x] 前端适配新 API 结构（pallas 已使用三层模型调用 API）
 
 **遗留**:
 - [ ] 交换类（wechat-mp、alipay-mp）Create 直接签发 Challenge Token（当前 `Create` 未对 `IsExchange()` 分支处理）

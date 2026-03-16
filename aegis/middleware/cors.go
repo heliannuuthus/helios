@@ -30,7 +30,7 @@ const (
 )
 
 // CORS 创建 CORS 中间件
-// 优先检查配置文件的 origins（aegis-ui 无条件放行），然后检查应用的 allowed_origins
+// 优先检查配置文件的 origins（pallas 无条件放行），然后检查应用的 allowed_origins
 func CORS(cacheManager *cache.Manager) gin.HandlerFunc {
 	origins := config.GetCORSOrigins()
 

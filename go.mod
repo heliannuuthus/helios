@@ -3,16 +3,9 @@ module github.com/heliannuuthus/helios
 go 1.26
 
 require (
-	github.com/heliannuuthus/aegis-go/guard v0.0.0
-	github.com/heliannuuthus/aegis-go/service v0.0.0
-	github.com/heliannuuthus/aegis-go/utilities v0.0.0
-)
-
-replace (
-	github.com/heliannuuthus/aegis-go/application => ../aegis-go/application
-	github.com/heliannuuthus/aegis-go/guard => ../aegis-go/guard
-	github.com/heliannuuthus/aegis-go/service => ../aegis-go/service
-	github.com/heliannuuthus/aegis-go/utilities => ../aegis-go/utilities
+	github.com/heliannuuthus/aegis-go/guard v0.0.1
+	github.com/heliannuuthus/aegis-go/service v0.0.1
+	github.com/heliannuuthus/aegis-go/utilities v0.0.1
 )
 
 require (

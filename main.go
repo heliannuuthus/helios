@@ -85,7 +85,7 @@ func main() {
 	// Aegis 认证路由（OAuth2.1/OIDC 风格）
 	authGroup := r.Group("/auth")
 	{
-		// 需要 CORS 的路由（aegis-ui / 业务前端 SPA 跨域调用）
+		// 需要 CORS 的路由（pallas / 业务前端 SPA 跨域调用）
 		corsRoutes := []struct {
 			method, path string
 			handler      gin.HandlerFunc
