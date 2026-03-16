@@ -16,6 +16,10 @@ func (Key) TableName() string {
 	return "t_key"
 }
 
+func (k Key) PrimaryKey() uint {
+	return k.ID
+}
+
 const (
 	KeyOwnerApplication = "application"
 	KeyOwnerService     = "service"

@@ -5,6 +5,10 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/aegis-go/guard"
+	reqr "github.com/heliannuuthus/aegis-go/guard/requirement"
+	"github.com/heliannuuthus/aegis-go/utilities/key"
+	"github.com/heliannuuthus/aegis-go/utilities/relation"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 
@@ -13,11 +17,6 @@ import (
 	_ "github.com/heliannuuthus/helios/docs"
 	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
 	irisconfig "github.com/heliannuuthus/helios/iris/config"
-	"github.com/heliannuuthus/helios/pkg/aegis/key"
-	"github.com/heliannuuthus/helios/pkg/aegis/utils/relation"
-	"github.com/heliannuuthus/helios/pkg/aegis/web"
-	"github.com/heliannuuthus/helios/pkg/aegis/web/guard"
-	reqr "github.com/heliannuuthus/helios/pkg/aegis/web/requirement"
 	"github.com/heliannuuthus/helios/pkg/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -86,7 +85,7 @@ func main() {
 	// Aegis 认证路由（OAuth2.1/OIDC 风格）
 	authGroup := r.Group("/auth")
 	{
-		// 需要 CORS 的路由（aegis-ui / 业务前端 SPA 跨域调用）
+		// 需要 CORS 的路由（pallas / 业务前端 SPA 跨域调用）
 		corsRoutes := []struct {
 			method, path string
 			handler      gin.HandlerFunc
@@ -119,7 +118,7 @@ func main() {
 	}
 
 	// Iris 用户信息路由
-	irisGuard := guard.NewGinGuard(irisconfig.GetAegisAudience())
+	irisGuard := guard.NewGin(irisconfig.GetAegisAudience())
 	userGroup := r.Group("/user")
 	{
 		userRoutes := []struct {
@@ -155,7 +154,7 @@ func main() {
 
 	// Hermes 身份与访问管理路由
 	hermesAud := hermesconfig.GetAegisAudience()
-	hermesGuard := guard.NewGinGuard(hermesAud)
+	hermesGuard := guard.NewGin(hermesAud)
 	adminRelation := hermesGuard.Require(reqr.Relation(relation.Qualify("admin", "service:"+hermesAud)))
 	hermes := r.Group("/hermes")
 	hermes.Use(hermesGuard.Require())
@@ -247,5 +246,5 @@ func initTokenManager() {
 	seed := key.SingleOf(func(_ context.Context, _ string) ([]byte, error) {
 		return masterKey, nil
 	})
-	web.NewTokenManager(endpoint, seed)
+	guard.NewTokenManager(endpoint, seed)
 }

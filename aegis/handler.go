@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	aegisguard "github.com/heliannuuthus/aegis-go/guard"
+	pkgtoken "github.com/heliannuuthus/aegis-go/utilities/token"
 
 	"github.com/heliannuuthus/helios/aegis/config"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
@@ -24,8 +26,6 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/aegis/internal/user"
 	"github.com/heliannuuthus/helios/hermes/models"
-	pkgtoken "github.com/heliannuuthus/helios/pkg/aegis/utils/token"
-	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -710,12 +710,8 @@ func (h *Handler) PublicKeys(c *gin.Context) {
 }
 
 func (h *Handler) openIDFromRequest(c *gin.Context) string {
-	tc, err := web.Authenticate(c.Request)
-	if err != nil {
-		logger.Debugf("[Handler] logout without valid token: %v", err)
-		return ""
-	}
-	if tc != nil {
+	tc := aegisguard.GetTokenContext(c.Request.Context())
+	if tc.AccessToken != nil {
 		return tc.AccessToken.OpenID()
 	}
 	return ""

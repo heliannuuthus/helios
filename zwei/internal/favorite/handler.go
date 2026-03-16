@@ -5,9 +5,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/aegis-go/guard"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/zwei/internal/dto"
 )
 
@@ -66,7 +66,7 @@ type BatchCheckResponse struct {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites [post]
 func (h *Handler) AddFavorite(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	var req FavoriteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -94,7 +94,7 @@ func (h *Handler) AddFavorite(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites/{recipe_id} [delete]
 func (h *Handler) RemoveFavorite(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 	recipeID := c.Param("recipe_id")
 
 	if err := h.service.RemoveFavorite(openID, recipeID); err != nil {
@@ -114,7 +114,7 @@ func (h *Handler) RemoveFavorite(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites/{recipe_id}/check [get]
 func (h *Handler) CheckFavorite(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 	recipeID := c.Param("recipe_id")
 
 	isFavorite, err := h.service.IsFavorite(openID, recipeID)
@@ -140,7 +140,7 @@ func (h *Handler) CheckFavorite(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites [get]
 func (h *Handler) GetFavorites(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	category := c.Query("category")
 	search := c.Query("search")
@@ -202,7 +202,7 @@ func (h *Handler) GetFavorites(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /api/user/favorites/batch-check [post]
 func (h *Handler) BatchCheckFavorites(c *gin.Context) {
-	openID := web.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
+	openID := guard.GetTokenContext(c.Request.Context()).AccessToken.OpenID()
 
 	var req BatchCheckRequest
 	if err := c.ShouldBindJSON(&req); err != nil {

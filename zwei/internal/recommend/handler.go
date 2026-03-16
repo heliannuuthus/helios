@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/aegis-go/guard"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/pkg/aegis/web"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	"github.com/heliannuuthus/helios/zwei/internal/dto"
 )
@@ -83,7 +83,7 @@ func (h *Handler) GetRecommendations(c *gin.Context) {
 		ExcludeIDs: req.ExcludeIDs,
 	}
 
-	if tc := web.GetTokenContext(c.Request.Context()); tc != nil {
+	if tc := guard.GetTokenContext(c.Request.Context()); tc != nil {
 		ctx.UserID = tc.AccessToken.OpenID()
 	}
 

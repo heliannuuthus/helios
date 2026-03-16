@@ -3,6 +3,12 @@ module github.com/heliannuuthus/helios
 go 1.26
 
 require (
+	github.com/heliannuuthus/aegis-go/guard v0.0.1
+	github.com/heliannuuthus/aegis-go/service v0.0.1
+	github.com/heliannuuthus/aegis-go/utilities v0.0.1
+)
+
+require (
 	aidanwoods.dev/go-paseto v1.6.0
 	github.com/aws/aws-sdk-go-v2 v1.41.1
 	github.com/aws/aws-sdk-go-v2/config v1.27.39
@@ -26,7 +32,6 @@ require (
 	github.com/swaggo/swag v1.16.4
 	github.com/tidwall/gjson v1.18.0
 	go.uber.org/zap v1.27.1
-	golang.org/x/sync v0.19.0
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.30.0
 )
@@ -58,6 +63,7 @@ require (
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
+	golang.org/x/sync v0.19.0 // indirect
 )
 
 require (
