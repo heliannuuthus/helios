@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -70,6 +71,15 @@ func parseScopeSet(scope string) map[string]bool {
 		set[s] = true
 	}
 	return set
+}
+
+// uintSecToDuration 将秒数转为 time.Duration，避免 uint→int64 溢出（G115）
+func uintSecToDuration(sec uint) time.Duration {
+	const maxSec = 1e9 // 约 31 年，足够覆盖应用配置
+	if sec > maxSec {
+		sec = maxSec
+	}
+	return time.Duration(int64(sec)) * time.Second
 }
 
 // generateRefreshTokenValue 生成 refresh token 值
@@ -198,8 +208,33 @@ func (s *Service) ExchangeToken(ctx context.Context, req *TokenRequest) (*TokenR
 	case GrantTypeRefreshToken:
 		return s.refreshToken(ctx, req)
 	default:
-		return nil, fmt.Errorf("unsupported grant type: %s", req.GrantType)
+		return nil, autherrors.NewInvalidRequestf("unsupported grant type: %s", req.GrantType)
 	}
+}
+
+// ExchangeAuthCodeForm 授权码交换（form 请求，单/多 audience 由 flow 决定）
+// 单 audience 返回扁平 TokenResponse，多 audience 返回 keyed MultiAudienceTokenResponse
+func (s *Service) ExchangeAuthCodeForm(ctx context.Context, req *TokenRequest) (any, error) {
+	flow, flowID, err := s.resolveAuthCodeFlow(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(flow.Request.Audiences) > 0 {
+		resp, err := s.exchangeMultiAudienceAuthCode(ctx, flow)
+		if err != nil {
+			return nil, err
+		}
+		s.asyncCleanupFlow(ctx, flowID)
+		return resp, nil
+	}
+
+	resp, err := s.generateTokens(ctx, flow)
+	if err != nil {
+		return nil, err
+	}
+	s.asyncCleanupFlow(ctx, flowID)
+	return resp, nil
 }
 
 // ==================== 多 Audience Token 交换 ====================
@@ -211,7 +246,7 @@ func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudi
 	case GrantTypeAuthorizationCode:
 		return s.exchangeMultiAudienceAuthorizationCode(ctx, req)
 	default:
-		return nil, fmt.Errorf("unsupported grant type for multi-audience: %s (use single-audience refresh_token instead)", req.GrantType)
+		return nil, autherrors.NewInvalidRequestf("unsupported grant type for multi-audience: %s (use single-audience refresh_token instead)", req.GrantType)
 	}
 }
 
@@ -219,7 +254,7 @@ func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudi
 
 // CheckRelation 检查用户是否具有指定的关系
 func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID string, relations []string, objectType, objectID string) (map[string]bool, error) {
-	relationships, err := s.hermesSvc.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
+	rels, err := s.hermesSvc.FindRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +264,7 @@ func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID strin
 		results[r] = false
 	}
 
-	for _, rel := range relationships {
+	for _, rel := range rels {
 		if objectType != "*" && rel.ObjectType != objectType && rel.ObjectType != "*" {
 			continue
 		}
@@ -294,16 +329,89 @@ func (s *Service) GetPublicKey(ctx context.Context, clientID string) (*PublicKey
 	}, nil
 }
 
+func (s *Service) resolveAuthCodeFlow(ctx context.Context, req *TokenRequest) (*types.AuthFlow, string, error) {
+	authCode, err := s.cache.GetAuthCode(ctx, req.Code)
+	if err != nil {
+		desc := "invalid authorization code"
+		if errors.Is(err, cache.ErrAuthCodeNotFound) {
+			desc = "authorization code not found or already used"
+		} else if errors.Is(err, cache.ErrAuthCodeExpired) {
+			desc = "authorization code expired"
+		}
+		logger.Warnf("[Token] 阶段1 失败 - %s: %v", desc, err)
+		return nil, "", autherrors.NewInvalidGrant(desc)
+	}
+
+	flowData, err := s.cache.GetAuthFlow(ctx, authCode.FlowID)
+	if err != nil {
+		logger.Warnf("[Token] 阶段2 失败 - Flow 未找到: %v", err)
+		return nil, "", autherrors.NewFlowNotFound("session not found")
+	}
+
+	var flow types.AuthFlow
+	if err := json.Unmarshal(flowData, &flow); err != nil {
+		return nil, "", fmt.Errorf("unmarshal flow failed: %w", err)
+	}
+
+	if req.ClientID != flow.Request.ClientID {
+		return nil, "", autherrors.NewInvalidGrant("client_id mismatch")
+	}
+	if req.RedirectURI != flow.Request.RedirectURI {
+		return nil, "", autherrors.NewInvalidGrant("redirect_uri mismatch")
+	}
+	if !verifyCodeChallenge(flow.Request.CodeChallengeMethod, flow.Request.CodeChallenge, req.CodeVerifier) {
+		return nil, "", autherrors.NewInvalidGrant("invalid code verifier")
+	}
+
+	return &flow, authCode.FlowID, nil
+}
+
+func (s *Service) exchangeMultiAudienceAuthCode(ctx context.Context, flow *types.AuthFlow) (MultiAudienceTokenResponse, error) {
+	if flow.User == nil || flow.User.OpenID == "" {
+		return nil, autherrors.NewServerError("failed to resolve user subject")
+	}
+	audiences, err := resolveAudiences(nil, flow.Request.Audiences)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := s.generateMultiAudienceTokens(ctx, flow, audiences)
+	if err != nil {
+		return nil, err
+	}
+	if helpers.ContainsScope(flow.GrantedScopes, ScopeOpenID) {
+		idTokenStr, err := s.generateIDToken(ctx, flow)
+		if err != nil {
+			return nil, err
+		}
+		for _, tokenResp := range resp {
+			tokenResp.IDToken = idTokenStr
+		}
+	}
+	return resp, nil
+}
+
 func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenRequest) (*TokenResponse, error) {
+	logger.Infof("[Token] 阶段1: 消费授权码 - client_id: %s", req.ClientID)
+
 	// 1. 原子消费授权码（读取并删除，防止重放）
 	authCode, err := s.cache.GetAuthCode(ctx, req.Code)
 	if err != nil {
-		return nil, autherrors.NewInvalidGrant("invalid authorization code")
+		desc := "invalid authorization code"
+		if errors.Is(err, cache.ErrAuthCodeNotFound) {
+			desc = "authorization code not found or already used"
+		} else if errors.Is(err, cache.ErrAuthCodeExpired) {
+			desc = "authorization code expired"
+		}
+		logger.Warnf("[Token] 阶段1 失败 - %s: %v", desc, err)
+		return nil, autherrors.NewInvalidGrant(desc)
 	}
+
+	logger.Infof("[Token] 阶段2: 加载 AuthFlow - FlowID: %s", authCode.FlowID)
 
 	// 2. 获取 AuthFlow
 	flowData, err := s.cache.GetAuthFlow(ctx, authCode.FlowID)
 	if err != nil {
+		logger.Warnf("[Token] 阶段2 失败 - Flow 未找到: %v", err)
 		return nil, autherrors.NewFlowNotFound("session not found")
 	}
 
@@ -312,20 +420,27 @@ func (s *Service) exchangeAuthorizationCode(ctx context.Context, req *TokenReque
 		return nil, fmt.Errorf("unmarshal flow failed: %w", err)
 	}
 
+	logger.Infof("[Token] 阶段3: 校验 client_id, redirect_uri, code_verifier")
+
 	// 3. 验证 client_id
 	if req.ClientID != flow.Request.ClientID {
+		logger.Warnf("[Token] 阶段3 失败 - client_id 不匹配: req=%s, flow=%s", req.ClientID, flow.Request.ClientID)
 		return nil, autherrors.NewInvalidGrant("client_id mismatch")
 	}
 
 	// 4. 验证 redirect_uri
 	if req.RedirectURI != flow.Request.RedirectURI {
+		logger.Warnf("[Token] 阶段3 失败 - redirect_uri 不匹配: req=%q, flow=%q", req.RedirectURI, flow.Request.RedirectURI)
 		return nil, autherrors.NewInvalidGrant("redirect_uri mismatch")
 	}
 
 	// 5. 验证 PKCE
 	if !verifyCodeChallenge(flow.Request.CodeChallengeMethod, flow.Request.CodeChallenge, req.CodeVerifier) {
+		logger.Warnf("[Token] 阶段3 失败 - code_verifier 校验失败")
 		return nil, autherrors.NewInvalidGrant("invalid code verifier")
 	}
+
+	logger.Infof("[Token] 阶段3 通过, 进入签发 token")
 
 	// 6. 生成 Token
 	resp, err := s.generateTokens(ctx, &flow)
@@ -359,6 +474,14 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 		return nil, autherrors.NewInvalidGrant("client_id mismatch")
 	}
 
+	now := time.Now()
+	if rt.MaxExpiresAt != nil && now.After(*rt.MaxExpiresAt) {
+		return nil, autherrors.NewInvalidGrant("refresh token expired (absolute)")
+	}
+	if now.After(rt.ExpiresAt) {
+		return nil, autherrors.NewInvalidGrant("refresh token expired (sliding)")
+	}
+
 	// 3. 获取用户、应用、服务信息
 	user, err := s.userSvc.GetUser(ctx, rt.OpenID)
 	if err != nil {
@@ -375,15 +498,25 @@ func (s *Service) refreshToken(ctx context.Context, req *TokenRequest) (*TokenRe
 		return nil, fmt.Errorf("service not found: %w", err)
 	}
 
-	// 4. 生成新的 access token（使用 refresh token 中保存的 openid 作为 sub）
+	// 4. 沉寂延长：更新 rt.ExpiresAt，不超过绝对过期
+	sliding := uintSecToDuration(app.RefreshTokenExpiresIn)
+	if sliding > 0 {
+		newExpiresAt := now.Add(sliding)
+		if rt.MaxExpiresAt != nil && newExpiresAt.After(*rt.MaxExpiresAt) {
+			newExpiresAt = *rt.MaxExpiresAt
+		}
+		rt.ExpiresAt = newExpiresAt
+		if err := s.cache.SetRefreshToken(ctx, rt); err != nil {
+			return nil, fmt.Errorf("extend refresh token: %w", err)
+		}
+	}
+
+	// 5. 生成新的 access token
 	tokenResp, err := s.generateAccessToken(ctx, &app.Application, &svc.Service, user, rt.OpenID, rt.Scope)
 	if err != nil {
 		return nil, err
 	}
-
-	// 保持 refresh token 不变
 	tokenResp.RefreshToken = rt.Token
-
 	return tokenResp, nil
 }
 
@@ -488,21 +621,26 @@ func (s *Service) generateIDToken(ctx context.Context, flow *types.AuthFlow) (st
 		idtBuilder.Nonce(flow.Request.Nonce)
 	}
 
+	idTokenExpiresIn := uintSecToDuration(flow.Application.IDTokenExpiresIn)
+	if idTokenExpiresIn == 0 {
+		idTokenExpiresIn = time.Hour
+	}
 	idt := token.NewClaimsBuilder().
 		Issuer(s.tokenSvc.GetIssuer()).
 		Subject(flow.User.OpenID).
 		Audience(flow.Application.AppID).
-		ExpiresIn(time.Hour).
+		ExpiresIn(idTokenExpiresIn).
 		Build(idtBuilder)
 
 	return s.tokenSvc.Issue(ctx, idt)
 }
 
 func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, scope string) (*cache.RefreshToken, error) {
-	if flow.Service.RefreshTokenExpiresIn == 0 {
-		return nil, autherrors.NewInvalidRequestf("refresh_token_expires_in not configured for service %s", flow.Service.ServiceID)
+	if flow.Application.RefreshTokenExpiresIn == 0 {
+		return nil, autherrors.NewInvalidRequestf("refresh_token_expires_in not configured for application %s", flow.Application.AppID)
 	}
-	refreshExpiresIn := time.Duration(flow.Service.RefreshTokenExpiresIn) * time.Second //nolint:gosec // RefreshTokenExpiresIn 是配置的小整数，不会溢出
+	refreshExpiresIn := uintSecToDuration(flow.Application.RefreshTokenExpiresIn)
+	absoluteExpiresIn := uintSecToDuration(flow.Application.RefreshTokenAbsoluteExpiresIn)
 
 	// 异步清理旧的 refresh token
 	openid, clientID := flow.User.OpenID, flow.Application.AppID
@@ -510,13 +648,11 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 		s.cleanupOldRefreshTokens(ctx, openid, clientID)
 	})
 
-	// 生成 refresh token 值
 	tokenValue, err := generateRefreshTokenValue()
 	if err != nil {
 		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
 
-	// 创建新的 refresh token
 	now := time.Now()
 	rt := &cache.RefreshToken{
 		Token:     tokenValue,
@@ -526,6 +662,10 @@ func (s *Service) createRefreshToken(ctx context.Context, flow *types.AuthFlow, 
 		Scope:     scope,
 		ExpiresAt: now.Add(refreshExpiresIn),
 		CreatedAt: now,
+	}
+	if absoluteExpiresIn > 0 {
+		maxAt := now.Add(absoluteExpiresIn)
+		rt.MaxExpiresAt = &maxAt
 	}
 
 	if err := s.cache.SetRefreshToken(ctx, rt); err != nil {
@@ -557,15 +697,27 @@ func (s *Service) cleanupOldRefreshTokens(ctx context.Context, openid, clientID 
 }
 
 func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, req *MultiAudienceTokenRequest) (MultiAudienceTokenResponse, error) {
+	logger.Infof("[Token] 阶段1: 消费授权码(多audience) - client_id: %s", req.ClientID)
+
 	// 1. 原子消费授权码
 	authCode, err := s.cache.GetAuthCode(ctx, req.Code)
 	if err != nil {
-		return nil, autherrors.NewInvalidGrant("invalid authorization code")
+		desc := "invalid authorization code"
+		if errors.Is(err, cache.ErrAuthCodeNotFound) {
+			desc = "authorization code not found or already used"
+		} else if errors.Is(err, cache.ErrAuthCodeExpired) {
+			desc = "authorization code expired"
+		}
+		logger.Warnf("[Token] 阶段1 失败(多audience) - %s: %v", desc, err)
+		return nil, autherrors.NewInvalidGrant(desc)
 	}
+
+	logger.Infof("[Token] 阶段2: 加载 AuthFlow - FlowID: %s", authCode.FlowID)
 
 	// 2. 获取 AuthFlow
 	flowData, err := s.cache.GetAuthFlow(ctx, authCode.FlowID)
 	if err != nil {
+		logger.Warnf("[Token] 阶段2 失败 - Flow 未找到: %v", err)
 		return nil, autherrors.NewFlowNotFound("session not found")
 	}
 
@@ -574,24 +726,15 @@ func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, re
 		return nil, fmt.Errorf("unmarshal flow failed: %w", err)
 	}
 
-	// 3. 验证 client_id
-	if req.ClientID != flow.Request.ClientID {
-		return nil, autherrors.NewInvalidGrant("client_id mismatch")
+	logger.Infof("[Token] 阶段3: 校验 client_id, redirect_uri, code_verifier")
+
+	// 3. 验证 client_id、redirect_uri、PKCE、用户
+	if err := validateMultiAudienceExchange(req, &flow); err != nil {
+		logger.Warnf("[Token] 阶段3 失败(多audience): %v", err)
+		return nil, err
 	}
 
-	// 4. 验证 redirect_uri（客户端不传时跳过，由授权阶段保证）
-	if req.RedirectURI != "" && req.RedirectURI != flow.Request.RedirectURI {
-		return nil, autherrors.NewInvalidGrant("redirect_uri mismatch")
-	}
-
-	// 5. 验证 PKCE
-	if !verifyCodeChallenge(flow.Request.CodeChallengeMethod, flow.Request.CodeChallenge, req.CodeVerifier) {
-		return nil, autherrors.NewInvalidGrant("invalid code verifier")
-	}
-
-	if flow.User == nil || flow.User.OpenID == "" {
-		return nil, autherrors.NewServerError("failed to resolve user subject")
-	}
+	logger.Infof("[Token] 阶段3 通过(多audience), 进入签发 token")
 
 	audiences, err := resolveAudiences(req.Audiences, flow.Request.Audiences)
 	if err != nil {
@@ -619,6 +762,23 @@ func (s *Service) exchangeMultiAudienceAuthorizationCode(ctx context.Context, re
 	s.asyncCleanupFlow(ctx, authCode.FlowID)
 
 	return resp, nil
+}
+
+// validateMultiAudienceExchange 校验多 audience 交换请求的 client_id、redirect_uri、PKCE、用户
+func validateMultiAudienceExchange(req *MultiAudienceTokenRequest, flow *types.AuthFlow) error {
+	if req.ClientID != flow.Request.ClientID {
+		return autherrors.NewInvalidGrant("client_id mismatch")
+	}
+	if req.RedirectURI != "" && req.RedirectURI != flow.Request.RedirectURI {
+		return autherrors.NewInvalidGrant("redirect_uri mismatch")
+	}
+	if !verifyCodeChallenge(flow.Request.CodeChallengeMethod, flow.Request.CodeChallenge, req.CodeVerifier) {
+		return autherrors.NewInvalidGrant("invalid code verifier")
+	}
+	if flow.User == nil || flow.User.OpenID == "" {
+		return autherrors.NewServerError("failed to resolve user subject")
+	}
+	return nil
 }
 
 // resolveAudiences 从 flow 或请求中解析 audiences（flow 优先）
@@ -676,7 +836,7 @@ func (s *Service) generateMultiAudienceTokens(
 		// 如果 scope 包含 offline_access，签发独立的 refresh token
 		scopes := strings.Fields(scope)
 		if helpers.ContainsScope(scopes, ScopeOfflineAccess) {
-			rtValue, err := s.createRefreshTokenForAudience(ctx, flow.User.OpenID, flow.Application.AppID, &svc.Service, scope)
+			rtValue, err := s.createRefreshTokenForAudience(ctx, flow.User.OpenID, flow.Application, &svc.Service, scope)
 			if err != nil {
 				return nil, fmt.Errorf("create refresh token for audience %s: %w", audience, err)
 			}
@@ -689,18 +849,18 @@ func (s *Service) generateMultiAudienceTokens(
 	return resp, nil
 }
 
-// createRefreshTokenForAudience 为指定 audience 创建 refresh token
+// createRefreshTokenForAudience 为指定 audience 创建 refresh token（应用控制 refresh_token 有效期）
 func (s *Service) createRefreshTokenForAudience(
-	ctx context.Context, openID, clientID string, svc *models.Service, scope string,
+	ctx context.Context, openID string, app *models.Application, svc *models.Service, scope string,
 ) (string, error) {
-	if svc.RefreshTokenExpiresIn == 0 {
-		return "", autherrors.NewInvalidRequestf("refresh_token_expires_in not configured for service %s", svc.ServiceID)
+	if app.RefreshTokenExpiresIn == 0 {
+		return "", autherrors.NewInvalidRequestf("refresh_token_expires_in not configured for application %s", app.AppID)
 	}
-	refreshExpiresIn := time.Duration(svc.RefreshTokenExpiresIn) * time.Second //nolint:gosec // RefreshTokenExpiresIn 是配置的小整数，不会溢出
+	refreshExpiresIn := uintSecToDuration(app.RefreshTokenExpiresIn)
+	absoluteExpiresIn := uintSecToDuration(app.RefreshTokenAbsoluteExpiresIn)
 
-	// 异步清理旧的 refresh token
 	s.pool.GoWithContext(ctx, func(ctx context.Context) {
-		s.cleanupOldRefreshTokens(ctx, openID, clientID)
+		s.cleanupOldRefreshTokens(ctx, openID, app.AppID)
 	})
 
 	tokenValue, err := generateRefreshTokenValue()
@@ -712,11 +872,15 @@ func (s *Service) createRefreshTokenForAudience(
 	rt := &cache.RefreshToken{
 		Token:     tokenValue,
 		OpenID:    openID,
-		ClientID:  clientID,
+		ClientID:  app.AppID,
 		Audience:  svc.ServiceID,
 		Scope:     scope,
 		ExpiresAt: now.Add(refreshExpiresIn),
 		CreatedAt: now,
+	}
+	if absoluteExpiresIn > 0 {
+		maxAt := now.Add(absoluteExpiresIn)
+		rt.MaxExpiresAt = &maxAt
 	}
 
 	if err := s.cache.SetRefreshToken(ctx, rt); err != nil {
