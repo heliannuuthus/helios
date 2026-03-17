@@ -318,7 +318,8 @@ func (h *Handler) Login(c *gin.Context) {
 // --- Challenge ---
 
 // InitiateChallenge POST /auth/challenge
-// Flow: query setting → create challenge → check prerequisite → initiate → save
+// channel_type 支持 Exchanger → exchange 路径（code → principal → ChallengeToken）
+// 否则走标准 initiate 路径（query setting → create challenge → prerequisite → send OTP）
 func (h *Handler) InitiateChallenge(c *gin.Context) {
 	var req challenge.InitiateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -328,6 +329,11 @@ func (h *Handler) InitiateChallenge(c *gin.Context) {
 	logger.Infof("[发起 Challenge] 请求: %+v", req)
 
 	ctx := helpers.WithRemoteIP(c.Request.Context(), c.ClientIP())
+
+	if h.challengeSvc.CanExchange(req.ChannelType) {
+		h.handleExchange(c, ctx, &req)
+		return
+	}
 
 	// 1. 获取 ServiceChallengeSetting
 	setting, err := h.cache.GetServiceChallengeSetting(ctx, req.Audience, req.Type)
@@ -1088,6 +1094,43 @@ func (h *Handler) issueSSOCookie(c *gin.Context, ctx context.Context, flow *type
 }
 
 // --- Challenge 引用链 ---
+
+// handleExchange 处理 Exchange 类 channel_type（code → principal → ChallengeToken）
+func (h *Handler) handleExchange(c *gin.Context, ctx context.Context, req *challenge.InitiateRequest) {
+	if req.Type == "" {
+		h.errorResponse(c, autherrors.NewInvalidRequest("type is required for exchange challenge"))
+		return
+	}
+
+	principal, err := h.challengeSvc.Exchange(ctx, req.ChannelType, req.Channel)
+	if err != nil {
+		h.errorResponse(c, err)
+		return
+	}
+
+	expiresIn := config.GetChallengeBusinessExpiresIn()
+
+	ct := pkgtoken.NewClaimsBuilder().
+		Issuer(h.tokenSvc.GetIssuer()).
+		ClientID(req.ClientID).
+		Audience(req.Audience).
+		ExpiresIn(expiresIn).
+		Build(pkgtoken.NewChallengeTokenBuilder().
+			Subject(principal).
+			Type(req.Type))
+
+	tokenStr, err := h.tokenSvc.Issue(ctx, ct)
+	if err != nil {
+		logger.Errorf("[Exchange Challenge] 签发 ChallengeToken 失败: %v", err)
+		h.errorResponse(c, autherrors.NewServerError("issue challenge token failed"))
+		return
+	}
+
+	c.JSON(http.StatusOK, &challenge.InitiateResponse{
+		ChallengeToken: tokenStr,
+		ExpiresIn:      int(expiresIn.Seconds()),
+	})
+}
 
 func (h *Handler) handlePrerequisiteVerification(c *gin.Context, ctx context.Context, ch *types.Challenge, req *challenge.VerifyRequest) {
 	if !ch.Required.Contains(req.Type) {

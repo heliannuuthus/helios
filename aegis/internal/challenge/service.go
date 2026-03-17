@@ -100,6 +100,12 @@ func (s *Service) Verify(ctx context.Context, challenge *types.Challenge, req *V
 	return ok, nil
 }
 
+// CanExchange reports whether the given channelType supports the Exchanger interface
+func (s *Service) CanExchange(channelType string) bool {
+	_, err := s.getExchanger(channelType)
+	return err == nil
+}
+
 // Exchange executes the exchange flow (one-step: code → principal)
 func (s *Service) Exchange(ctx context.Context, channelType, code string) (principal string, err error) {
 	exchanger, err := s.getExchanger(channelType)

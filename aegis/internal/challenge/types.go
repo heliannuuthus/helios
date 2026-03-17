@@ -40,9 +40,11 @@ func (r *InitiateRequest) NewChallenge(setting *models.ServiceChallengeSetting, 
 
 // InitiateResponse 创建 Challenge 响应
 type InitiateResponse struct {
-	ChallengeID string            `json:"challenge_id"`
-	RetryAfter  int               `json:"retry_after,omitempty"` // 下次可重发的等待秒数
-	Required    ChallengeRequired `json:"required,omitempty"`    // 前置条件
+	ChallengeID    string            `json:"challenge_id,omitempty"`
+	RetryAfter     int               `json:"retry_after,omitempty"`
+	Required       ChallengeRequired `json:"required,omitempty"`
+	ChallengeToken string            `json:"challenge_token,omitempty"`
+	ExpiresIn      int               `json:"expires_in,omitempty"`
 }
 
 // ==================== Verify ====================
@@ -61,19 +63,4 @@ type VerifyResponse struct {
 	Required       ChallengeRequired `json:"required,omitempty"`        // 前置未完成时引导渲染
 	RetryAfter     int               `json:"retry_after,omitempty"`     // 下次可重发的等待秒数
 	ExpiresIn      int               `json:"expires_in,omitempty"`      // token 有效期（秒）
-}
-
-// ==================== Exchange ====================
-
-// ExchangeRequest 交换类 Challenge 请求（一步完成，不需要 Initiate/Verify 两步流程）
-type ExchangeRequest struct {
-	ClientID    string `json:"client_id" binding:"required"`    // 应用 ID
-	Audience    string `json:"audience" binding:"required"`     // 目标服务 ID
-	ChannelType string `json:"channel_type" binding:"required"` // 交换方式（wechat-mp / alipay-mp）
-	Code        string `json:"code" binding:"required"`         // 平台授权码
-}
-
-// ExchangeResponse 交换类 Challenge 响应
-type ExchangeResponse struct {
-	ChallengeToken string `json:"challenge_token"` // 验证成功后的凭证
 }

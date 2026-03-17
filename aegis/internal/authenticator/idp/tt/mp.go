@@ -3,11 +3,16 @@ package tt
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-json-experiment/json"
 	"github.com/tidwall/gjson"
@@ -21,17 +26,27 @@ import (
 
 // MPProvider 抖音小程序 Provider
 type MPProvider struct {
-	appID     string
-	appSecret string
+	appID      string
+	appSecret  string
+	privateKey *rsa.PrivateKey
 }
 
 // NewMPProvider 创建抖音小程序 Provider
 func NewMPProvider() *MPProvider {
 	cfg := config.Cfg()
-	return &MPProvider{
+	p := &MPProvider{
 		appID:     cfg.GetString("idps.tt.appid"),
 		appSecret: cfg.GetString("idps.tt.secret"),
 	}
+	if pkData := cfg.GetString("idps.tt.private-key"); pkData != "" {
+		pk, err := parsePKCS1PrivateKey(pkData)
+		if err != nil {
+			logger.Errorf("[TT] 解析应用私钥失败: %v", err)
+		} else {
+			p.privateKey = pk
+		}
+	}
+	return p
 }
 
 // Type 返回 IDP 类型
@@ -115,12 +130,10 @@ func (p *MPProvider) Exchange(ctx context.Context, proof string, _ ...any) (*idp
 // Prepare 准备前端所需的公开配置
 func (p *MPProvider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		Connection: "tt-mp",
+		Connection: "ttmp",
 		Identifier: p.appID,
 	}
 }
-
-// extractCode 提取授权码
 
 // validateConfig 验证配置
 func (p *MPProvider) validateConfig() error {
@@ -152,7 +165,7 @@ func (p *MPProvider) sendSessionRequest(ctx context.Context, code string) ([]byt
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		logger.Errorf("[TT] 请求接口失败: %v", err)
 		return nil, fmt.Errorf("请求接口失败: %w", err)
@@ -174,7 +187,7 @@ func (p *MPProvider) sendSessionRequest(ctx context.Context, code string) ([]byt
 		return nil, fmt.Errorf("API 请求失败: HTTP %d", resp.StatusCode)
 	}
 
-	logger.Infof("[TT] API 原始响应: %s", string(bodyBytes))
+	logger.Debugf("[TT] API 响应长度: %d", len(bodyBytes))
 	return bodyBytes, nil
 }
 
@@ -212,27 +225,29 @@ func (p *MPProvider) parseUserInfo(bodyBytes []byte) (*models.TUserInfo, error) 
 	}, nil
 }
 
-// getPhoneNumber 获取抖音手机号（内部方法）
+// getPhoneNumber 获取抖音手机号
+// 新版 API：code → RSA 加密的密文 → 用应用私钥解密 → phoneNumber
 func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, error) {
-	if p.appID == "" || p.appSecret == "" {
-		return "", errors.New("TT 小程序配置缺失")
+	if p.privateKey == nil {
+		return "", errors.New("TT 应用私钥未配置，无法解密手机号")
 	}
 
-	accessToken, err := p.getAccessToken(ctx)
+	clientToken, err := p.getClientToken(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	reqURL := fmt.Sprintf("https://developer.toutiao.com/api/apps/v2/user/get_phone_number?access_token=%s", accessToken)
-
-	body := fmt.Sprintf(`{"code":"%s"}`, code)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(body))
+	reqBody, _ := json.Marshal(map[string]string{"code": code})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://open.douyin.com/api/apps/v1/get_phonenumber_info/",
+		bytes.NewReader(reqBody))
 	if err != nil {
 		return "", fmt.Errorf("创建请求失败: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("access-token", clientToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		logger.Errorf("[TT] 请求获取手机号接口失败: %v", err)
 		return "", fmt.Errorf("请求 TT 接口失败: %w", err)
@@ -243,71 +258,119 @@ func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, e
 		}
 	}()
 
-	var result struct {
-		ErrNo   int    `json:"err_no"`
-		ErrTips string `json:"err_tips"`
-		Data    struct {
-			PhoneNumber string `json:"phone_number"`
-		} `json:"data"`
-	}
-	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
-		logger.Errorf("[TT] 解析手机号响应失败: %v", err)
-		return "", fmt.Errorf("解析 TT 响应失败: %w", err)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("读取 TT 响应失败: %w", err)
 	}
 
-	if result.ErrNo != 0 {
-		logger.Errorf("[TT] 获取手机号失败 - ErrNo: %d, ErrTips: %s", result.ErrNo, result.ErrTips)
-		return "", fmt.Errorf("TT 获取手机号失败: %s", result.ErrTips)
+	errNo := gjson.GetBytes(bodyBytes, "err_no").Int()
+	if errNo != 0 {
+		errMsg := gjson.GetBytes(bodyBytes, "err_msg").String()
+		logger.Errorf("[TT] 获取手机号失败 - ErrNo: %d, ErrMsg: %s", errNo, errMsg)
+		return "", fmt.Errorf("TT 获取手机号失败: %s", errMsg)
 	}
 
-	phone := result.Data.PhoneNumber
+	encryptedData := gjson.GetBytes(bodyBytes, "data").String()
+	if encryptedData == "" {
+		return "", errors.New("TT 返回的加密数据为空")
+	}
+
+	plaintext, err := rsaDecrypt(p.privateKey, encryptedData)
+	if err != nil {
+		logger.Errorf("[TT] RSA 解密手机号失败: %v", err)
+		return "", fmt.Errorf("RSA 解密失败: %w", err)
+	}
+
+	phone := gjson.GetBytes(plaintext, "purePhoneNumber").String()
 	if phone == "" {
-		return "", errors.New("TT 返回的手机号为空")
+		phone = gjson.GetBytes(plaintext, "phoneNumber").String()
+	}
+	if phone == "" {
+		return "", errors.New("TT 解密后手机号为空")
 	}
 
-	logger.Infof("[TT] 获取手机号成功 - Phone: %s***%s", phone[:3], phone[len(phone)-4:])
+	logger.Infof("[TT] 获取手机号成功 - Phone: %s", maskPhone(phone))
 	return phone, nil
 }
 
-// getAccessToken 获取 TT access_token
-func (p *MPProvider) getAccessToken(ctx context.Context) (string, error) {
+// getClientToken 获取 TT client_token（不需要用户授权的接口凭证）
+func (p *MPProvider) getClientToken(ctx context.Context) (string, error) {
 	if p.appID == "" || p.appSecret == "" {
 		return "", errors.New("TT 小程序配置缺失")
 	}
 
-	reqURL := fmt.Sprintf("https://developer.toutiao.com/api/apps/v2/token?appid=%s&secret=%s&grant_type=client_credential", p.appID, p.appSecret)
+	reqBody, _ := json.Marshal(map[string]string{
+		"client_key":    p.appID,
+		"client_secret": p.appSecret,
+		"grant_type":    "client_credential",
+	})
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://open.douyin.com/oauth/client_token/",
+		bytes.NewReader(reqBody))
 	if err != nil {
 		return "", fmt.Errorf("创建请求失败: %w", err)
 	}
+	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("请求 TT access_token 失败: %w", err)
+		return "", fmt.Errorf("请求 TT client_token 失败: %w", err)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			logger.Warnf("[TT] close access_token response body failed: %v", closeErr)
+			logger.Warnf("[TT] close client_token response body failed: %v", closeErr)
 		}
 	}()
 
-	var result struct {
-		ErrNo   int    `json:"err_no"`
-		ErrTips string `json:"err_tips"`
-		Data    struct {
-			AccessToken string `json:"access_token"`
-			ExpiresIn   int    `json:"expires_in"`
-		} `json:"data"`
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("读取 TT client_token 响应失败: %w", err)
 	}
 
-	if err := json.UnmarshalRead(resp.Body, &result); err != nil {
-		return "", fmt.Errorf("解析 TT access_token 响应失败: %w", err)
+	accessToken := gjson.GetBytes(bodyBytes, "data.access_token").String()
+	if accessToken == "" {
+		errDesc := gjson.GetBytes(bodyBytes, "data.description").String()
+		return "", fmt.Errorf("获取 TT client_token 失败: %s", errDesc)
 	}
 
-	if result.ErrNo != 0 {
-		return "", fmt.Errorf("获取 TT access_token 失败: %s", result.ErrTips)
-	}
+	return accessToken, nil
+}
 
-	return result.Data.AccessToken, nil
+// parsePKCS1PrivateKey 解析 PKCS1 格式的 RSA 私钥（base64 编码，无 PEM header/footer）
+func parsePKCS1PrivateKey(raw string) (*rsa.PrivateKey, error) {
+	raw = strings.TrimSpace(raw)
+	raw = strings.ReplaceAll(raw, "\n", "")
+	raw = strings.ReplaceAll(raw, "\r", "")
+	raw = strings.TrimPrefix(raw, "-----BEGIN RSA PRIVATE KEY-----")
+	raw = strings.TrimSuffix(raw, "-----END RSA PRIVATE KEY-----")
+	raw = strings.TrimSpace(raw)
+
+	der, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, fmt.Errorf("base64 decode: %w", err)
+	}
+	pk, err := x509.ParsePKCS1PrivateKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("parse PKCS1: %w", err)
+	}
+	return pk, nil
+}
+
+// rsaDecrypt 使用 PKCS1v15 解密 base64 编码的密文
+func rsaDecrypt(pk *rsa.PrivateKey, cipherBase64 string) ([]byte, error) {
+	cipherBytes, err := base64.StdEncoding.DecodeString(cipherBase64)
+	if err != nil {
+		return nil, fmt.Errorf("base64 decode cipher: %w", err)
+	}
+	return rsa.DecryptPKCS1v15(rand.Reader, pk, cipherBytes)
+}
+
+var httpClient = &http.Client{Timeout: 10 * time.Second}
+
+func maskPhone(phone string) string {
+	if len(phone) >= 7 {
+		return phone[:3] + "***" + phone[len(phone)-4:]
+	}
+	return "***"
 }

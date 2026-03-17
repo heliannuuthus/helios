@@ -23,12 +23,12 @@ ON DUPLICATE KEY UPDATE
 -- ==================== 域允许的 IDP ====================
 INSERT INTO
     t_domain_idp (domain_id, idp_type)
-VALUES ('consumer', 'wechat-mp'),
-    ('consumer', 'tt-mp'),
-    ('consumer', 'alipay-mp'),
-    ('consumer', 'wechat-web'),
-    ('consumer', 'alipay-web'),
-    ('consumer', 'tt-web'),
+VALUES ('consumer', 'wxmp'),
+    ('consumer', 'ttmp'),
+    ('consumer', 'almp'),
+    ('consumer', 'wechat'),
+    ('consumer', 'alipay'),
+    ('consumer', 'tt'),
     ('consumer', 'user'),
     ('platform', 'github'),
     ('platform', 'google'),
@@ -371,7 +371,7 @@ VALUES (
     ),
     (
         'ciris',
-        'wechat-mp',
+        'wxmp',
         5,
         NULL,
         NULL,
@@ -379,7 +379,7 @@ VALUES (
     ),
     (
         'ciris',
-        'wechat-web',
+        'wechat',
         5,
         NULL,
         NULL,
