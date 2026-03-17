@@ -1,0 +1,263 @@
+syntax = "proto3";
+
+package hermes.v1;
+
+option go_package = "github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "hermes/v1/common.proto";
+import "hermes/v1/app.proto";
+
+// ResourceService 服务（资源）+ Challenge 配置 + Relationship + Group
+service ResourceService {
+  // ---- Service (资源) ----
+
+  rpc CreateService(CreateServiceRequest) returns (Service);
+  rpc GetService(GetServiceRequest) returns (Service);
+  rpc ListServices(ListServicesRequest) returns (ServiceList);
+  rpc UpdateService(UpdateServiceRequest) returns (Service);
+  rpc DeleteService(DeleteServiceRequest) returns (google.protobuf.Empty);
+  rpc GetServiceChallengeSetting(GetServiceChallengeSettingRequest) returns (ServiceChallengeSetting);
+  rpc GetServiceApplicationRelations(GetServiceRequest) returns (ApplicationServiceRelationList);
+
+  // ---- Relationship (ReBAC) ----
+
+  rpc CreateRelationship(CreateRelationshipRequest) returns (Relationship);
+  rpc DeleteRelationship(DeleteRelationshipRequest) returns (google.protobuf.Empty);
+  rpc UpdateRelationship(UpdateRelationshipRequest) returns (Relationship);
+  rpc ListRelationships(ListRelationshipsRequest) returns (RelationshipList);
+  rpc FindRelationships(FindRelationshipsRequest) returns (Relationships);
+
+  // ---- AppService Relationship (RESTful 嵌套) ----
+
+  rpc ListAppServiceRelationships(ListAppServiceRelationshipsRequest) returns (RelationshipList);
+  rpc CreateAppServiceRelationship(CreateAppServiceRelationshipRequest) returns (Relationship);
+  rpc UpdateAppServiceRelationship(UpdateAppServiceRelationshipRequest) returns (Relationship);
+  rpc DeleteAppServiceRelationship(DeleteAppServiceRelationshipRequest) returns (google.protobuf.Empty);
+
+  // ---- Group ----
+
+  rpc CreateGroup(CreateGroupRequest) returns (Group);
+  rpc GetGroup(GetGroupRequest) returns (Group);
+  rpc ListGroups(ListGroupsRequest) returns (GroupList);
+  rpc UpdateGroup(UpdateGroupRequest) returns (Group);
+  rpc DeleteGroup(GetGroupRequest) returns (google.protobuf.Empty);
+  rpc SetGroupMembers(SetGroupMembersRequest) returns (google.protobuf.Empty);
+  rpc GetGroupMembers(GetGroupRequest) returns (StringList);
+}
+
+// ==================== Service (资源) ====================
+
+message GetServiceRequest {
+  string service_id = 1;
+}
+
+message Service {
+  uint32 id = 1;
+  string domain_id = 2;
+  string service_id = 3;
+  string name = 4;
+  optional string description = 5;
+  optional string logo_url = 6;
+  uint32 access_token_expires_in = 7;
+  repeated string required_identity_types = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  repeated ServiceChallengeSetting challenge_settings = 11;
+}
+
+message ServiceList {
+  repeated Service services = 1;
+  string next_cursor = 2;
+}
+
+message CreateServiceRequest {
+  string service_id = 1;
+  string domain_id = 2;
+  string name = 3;
+  string description = 4;
+  optional string logo_url = 5;
+  optional uint32 access_token_expires_in = 6;
+}
+
+message UpdateServiceRequest {
+  string service_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string logo_url = 4;
+  optional uint32 access_token_expires_in = 5;
+}
+
+message DeleteServiceRequest {
+  string service_id = 1;
+}
+
+message ListServicesRequest {
+  string domain_id = 1;
+  string filter = 2;
+  Pagination pagination = 3;
+}
+
+// ==================== Service Challenge Setting ====================
+
+message GetServiceChallengeSettingRequest {
+  string service_id = 1;
+  string type = 2;
+}
+
+message ServiceChallengeSetting {
+  uint32 id = 1;
+  string service_id = 2;
+  string type = 3;
+  uint32 expires_in = 4;
+  map<string, int32> limits = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// ==================== Relationship ====================
+
+message Relationship {
+  uint32 id = 1;
+  string service_id = 2;
+  string subject_type = 3;
+  string subject_id = 4;
+  string relation = 5;
+  string object_type = 6;
+  string object_id = 7;
+  google.protobuf.Timestamp created_at = 8;
+  optional google.protobuf.Timestamp expires_at = 9;
+}
+
+message RelationshipList {
+  repeated Relationship relationships = 1;
+  string next_cursor = 2;
+}
+
+message CreateRelationshipRequest {
+  string service_id = 1;
+  string subject_type = 2;
+  string subject_id = 3;
+  string relation = 4;
+  string object_type = 5;
+  string object_id = 6;
+  optional google.protobuf.Timestamp expires_at = 7;
+}
+
+message DeleteRelationshipRequest {
+  string service_id = 1;
+  string subject_type = 2;
+  string subject_id = 3;
+  string relation = 4;
+  string object_type = 5;
+  string object_id = 6;
+}
+
+// UpdateRelationshipRequest 更新关系（PATCH 语义）
+// expires_at: 未设置 = 不更新；设置为 epoch zero (0001-01-01) = 清除；设置为有效时间 = 更新
+message UpdateRelationshipRequest {
+  string service_id = 1;
+  string subject_type = 2;
+  string subject_id = 3;
+  string relation = 4;
+  string object_type = 5;
+  string object_id = 6;
+  optional string new_relation = 7;
+  optional google.protobuf.Timestamp expires_at = 8;
+}
+
+message ListRelationshipsRequest {
+  string filter = 1;
+  Pagination pagination = 2;
+}
+
+message FindRelationshipsRequest {
+  string service_id = 1;
+  string subject_type = 2;
+  string subject_id = 3;
+}
+
+// Relationships 不分页的关系列表（供 FindRelationships 等全量查询使用）
+message Relationships {
+  repeated Relationship items = 1;
+}
+
+// ==================== AppService Relationship (嵌套资源) ====================
+
+message ListAppServiceRelationshipsRequest {
+  string app_id = 1;
+  string service_id = 2;
+  string filter = 3;
+  Pagination pagination = 4;
+}
+
+message CreateAppServiceRelationshipRequest {
+  string app_id = 1;
+  string service_id = 2;
+  string subject_type = 3;
+  string subject_id = 4;
+  string relation = 5;
+  string object_type = 6;
+  string object_id = 7;
+  optional google.protobuf.Timestamp expires_at = 8;
+}
+
+// UpdateAppServiceRelationshipRequest expires_at 语义同 UpdateRelationshipRequest
+message UpdateAppServiceRelationshipRequest {
+  string app_id = 1;
+  string service_id = 2;
+  uint32 relationship_id = 3;
+  optional string new_relation = 4;
+  optional google.protobuf.Timestamp expires_at = 5;
+}
+
+message DeleteAppServiceRelationshipRequest {
+  string app_id = 1;
+  string service_id = 2;
+  uint32 relationship_id = 3;
+}
+
+// ==================== Group ====================
+
+message Group {
+  uint32 id = 1;
+  string group_id = 2;
+  string service_id = 3;
+  string name = 4;
+  optional string description = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message GroupList {
+  repeated Group groups = 1;
+  string next_cursor = 2;
+}
+
+message GetGroupRequest {
+  string group_id = 1;
+}
+
+message CreateGroupRequest {
+  string group_id = 1;
+  string service_id = 2;
+  string name = 3;
+  optional string description = 4;
+}
+
+message UpdateGroupRequest {
+  string group_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+}
+
+message ListGroupsRequest {
+  string filter = 1;
+  Pagination pagination = 2;
+}
+
+message SetGroupMembersRequest {
+  string group_id = 1;
+  repeated string user_ids = 2;
+}

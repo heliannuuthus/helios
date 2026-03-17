@@ -17,10 +17,10 @@ import (
 	"github.com/heliannuuthus/helios/aegis/config"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
+	"github.com/heliannuuthus/helios/aegis/internal/contract"
 	"github.com/heliannuuthus/helios/aegis/internal/token"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/aegis/internal/user"
-	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/helpers"
@@ -30,7 +30,7 @@ import (
 // Service 授权服务
 type Service struct {
 	cache     *cache.Manager
-	hermesSvc *hermes.Service
+	hermesSvc contract.HermesProvider
 	userSvc   *user.Service
 	tokenSvc  *token.Service
 	pool      *async.Pool
@@ -94,7 +94,7 @@ func generateRefreshTokenValue() (string, error) {
 // NewService 创建授权服务
 func NewService(
 	cache *cache.Manager,
-	hermesSvc *hermes.Service,
+	hermesSvc contract.HermesProvider,
 	userSvc *user.Service,
 	tokenSvc *token.Service,
 	pool *async.Pool,
@@ -569,7 +569,7 @@ func (s *Service) generateAccessToken(
 	if svc.AccessTokenExpiresIn == 0 {
 		return nil, autherrors.NewInvalidRequestf("access_token_expires_in not configured for service %s", svc.ServiceID)
 	}
-	accessExpiresIn := time.Duration(svc.AccessTokenExpiresIn) * time.Second //nolint:gosec // AccessTokenExpiresIn 是配置的小整数，不会溢出
+	accessExpiresIn := time.Duration(svc.AccessTokenExpiresIn) * time.Second
 
 	// 构建 UAT，用户信息根据 granted scope 过滤
 	scopes := parseScopeSet(scope)

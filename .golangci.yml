@@ -73,6 +73,7 @@ linters:
       confidence: medium
       excludes:
         - G104  # 与 errcheck 重复
+        - G115  # 已有 safeUint32/safeInt32 等边界检查，gosec 不识别 control-flow guard
         - G117  # struct 字段名匹配 secret 模式（OAuth2/API DTO 规范字段名）
         - G704  # SSRF false positive（项目中 URL 均为硬编码常量域名，非用户可控）
 

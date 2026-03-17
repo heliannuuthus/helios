@@ -42,6 +42,7 @@ type Handler struct {
 	cache           *cache.Manager
 	tokenSvc        *token.Service
 	mfaSvc          *MFAService
+	profileHandler  *ProfileHandler
 	pool            *async.Pool
 }
 
@@ -54,6 +55,7 @@ func NewHandler(
 	cache *cache.Manager,
 	tokenSvc *token.Service,
 	mfaSvc *MFAService,
+	profileHandler *ProfileHandler,
 	pool *async.Pool,
 ) *Handler {
 	return &Handler{
@@ -64,6 +66,7 @@ func NewHandler(
 		cache:           cache,
 		tokenSvc:        tokenSvc,
 		mfaSvc:          mfaSvc,
+		profileHandler:  profileHandler,
 		pool:            pool,
 	}
 }
@@ -73,9 +76,14 @@ func (h *Handler) CacheManager() *cache.Manager {
 	return h.cache
 }
 
-// MFASvc 返回 MFA 服务（供 iris 等模块使用）
+// MFASvc 返回 MFA 服务
 func (h *Handler) MFASvc() *MFAService {
 	return h.mfaSvc
+}
+
+// Profile 返回用户信息处理器
+func (h *Handler) Profile() *ProfileHandler {
+	return h.profileHandler
 }
 
 // ==================== 公开方法（按认证流程顺序） ====================

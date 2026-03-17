@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.25-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
 
@@ -11,9 +11,12 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
 COPY . .
+
+ARG SERVICE=hermes
+
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=1 go build -ldflags="-s -w" -o zwei-backend .
+    CGO_ENABLED=1 go build -ldflags="-s -w" -o server ./cmd/${SERVICE}
 
 FROM alpine:3.21
 
@@ -22,15 +25,13 @@ RUN apk add --no-cache ca-certificates tzdata && \
 
 WORKDIR /app
 
-COPY --from=builder /app/zwei-backend .
-COPY config.example.toml ./config.toml
+COPY --from=builder /app/server .
 
-# 构建参数：环境标识（prod 表示生产环境，使用内网 OSS）
 ARG ENV=""
 ENV APP_ENV=${ENV}
 
 USER app
 
-EXPOSE 18000
+EXPOSE 18000 50051
 
-CMD ["./zwei-backend"]
+CMD ["./server"]

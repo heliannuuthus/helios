@@ -1,0 +1,338 @@
+syntax = "proto3";
+
+package hermes.v1;
+
+option go_package = "github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "hermes/v1/common.proto";
+
+// UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证
+service UserService {
+  // ---- 用户查询 ----
+
+  rpc GetByOpenID(OpenIDRequest) returns (User);
+  rpc GetByIdentity(GetByIdentityRequest) returns (User);
+  rpc GetByEmail(GetByEmailRequest) returns (DecryptedUser);
+  rpc GetByPhonePlain(GetByPhonePlainRequest) returns (DecryptedUser);
+  rpc GetDecryptedUser(OpenIDRequest) returns (DecryptedUser);
+  rpc GetDecryptedUserByIdentity(GetByIdentityRequest) returns (DecryptedUser);
+
+  // ---- 用户写入 ----
+
+  rpc CreateUser(CreateUserRequest) returns (DecryptedUser);
+  rpc UpdateUser(UpdateUserRequest) returns (User);
+  rpc UpdateLastLogin(OpenIDRequest) returns (google.protobuf.Empty);
+  rpc UpdatePassword(UpdatePasswordRequest) returns (google.protobuf.Empty);
+
+  // ---- 身份管理 ----
+
+  rpc GetIdentities(OpenIDRequest) returns (IdentityList);
+  rpc GetIdentitiesByIdentity(GetByIdentityRequest) returns (IdentityList);
+  rpc GetIdentityByType(GetIdentityByTypeRequest) returns (UserIdentity);
+  rpc AddIdentity(AddIdentityRequest) returns (google.protobuf.Empty);
+
+  // ---- 密码认证（PasswordStore） ----
+
+  rpc GetUserByIdentifier(GetByIdentifierRequest) returns (PasswordStoreCredential);
+  rpc GetStaffByIdentifier(GetByIdentifierRequest) returns (PasswordStoreCredential);
+
+  // ---- 凭证通用 ----
+
+  rpc CreateCredential(CreateCredentialRequest) returns (google.protobuf.Empty);
+  rpc GetCredentialByID(CredentialIDRequest) returns (UserCredential);
+  rpc GetUserCredentials(OpenIDRequest) returns (UserCredentialList);
+  rpc GetUserCredentialsByType(GetCredentialsByTypeRequest) returns (UserCredentialList);
+  rpc GetEnabledUserCredentialsByType(GetCredentialsByTypeRequest) returns (UserCredentialList);
+  rpc UpdateCredential(UpdateCredentialRequest) returns (google.protobuf.Empty);
+  rpc UpdateCredentialSignCount(UpdateCredentialSignCountRequest) returns (google.protobuf.Empty);
+  rpc EnableCredential(CredentialIDRequest) returns (google.protobuf.Empty);
+  rpc DisableCredential(CredentialIDRequest) returns (google.protobuf.Empty);
+  rpc DeleteCredential(DeleteCredentialRequest) returns (google.protobuf.Empty);
+  rpc GetOpenIDByCredentialID(CredentialIDRequest) returns (OpenIDResponse);
+
+  // ---- TOTP ----
+
+  rpc SetupTOTP(SetupTOTPRequest) returns (SetupTOTPResponse);
+  rpc ConfirmTOTP(ConfirmTOTPRequest) returns (google.protobuf.Empty);
+  rpc VerifyTOTP(VerifyTOTPRequest) returns (google.protobuf.Empty);
+  rpc DisableTOTP(OpenIDRequest) returns (google.protobuf.Empty);
+  rpc CheckTOTPEnabled(OpenIDRequest) returns (BoolValue);
+  rpc SetTOTPEnabled(SetTOTPEnabledRequest) returns (google.protobuf.Empty);
+
+  // ---- WebAuthn ----
+
+  rpc RegisterWebAuthn(RegisterWebAuthnRequest) returns (UserCredential);
+  rpc GetWebAuthnByCredentialID(CredentialIDRequest) returns (WebAuthnCredentialDetail);
+  rpc UpdateWebAuthnSignCount(UpdateWebAuthnSignCountRequest) returns (google.protobuf.Empty);
+  rpc ListUserWebAuthn(OpenIDRequest) returns (UserCredentialList);
+  rpc DeleteWebAuthn(DeleteWebAuthnRequest) returns (google.protobuf.Empty);
+  rpc SetWebAuthnEnabled(SetWebAuthnEnabledRequest) returns (google.protobuf.Empty);
+  rpc GetPublicKeyForCredential(CredentialIDRequest) returns (PublicKeyResponse);
+
+  // ---- MFA 状态 ----
+
+  rpc GetUserCredentialSummaries(OpenIDRequest) returns (CredentialSummaryList);
+  rpc GetUserMFAStatus(OpenIDRequest) returns (MFAStatus);
+}
+
+// ==================== User ====================
+
+message User {
+  uint32 id = 1;
+  string openid = 2;
+  int32 status = 3;
+  optional string nickname = 4;
+  optional string picture = 5;
+  optional string email = 6;
+  bool email_verified = 7;
+  optional google.protobuf.Timestamp last_login_at = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+// DecryptedUser 解密后的用户（含明文手机号）
+message DecryptedUser {
+  User user = 1;
+  string phone = 2;
+}
+
+message GetByIdentityRequest {
+  string domain = 1;
+  string idp = 2;
+  string t_openid = 3;
+}
+
+message GetByEmailRequest {
+  string email = 1;
+}
+
+message GetByPhonePlainRequest {
+  string phone = 1;
+}
+
+message CreateUserRequest {
+  UserIdentity identity = 1;
+  optional TUserInfo user_info = 2;
+}
+
+message TUserInfo {
+  string t_openid = 1;
+  optional string nickname = 2;
+  optional string email = 3;
+  optional string phone = 4;
+  optional string picture = 5;
+  optional string raw_data = 6;
+}
+
+message UpdateUserRequest {
+  string openid = 1;
+  optional string nickname = 2;
+  optional string picture = 3;
+  optional string email = 4;
+  optional int32 status = 5;
+}
+
+message UpdatePasswordRequest {
+  string openid = 1;
+  string old_password = 2;
+  string new_password = 3;
+}
+
+// ==================== Identity ====================
+
+message UserIdentity {
+  uint32 id = 1;
+  string domain = 2;
+  string openid = 3; // 用户的 openid（对应 Go 模型中的 uid 字段）
+  string idp = 4;
+  string t_openid = 5;
+  optional string raw_data = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message IdentityList {
+  repeated UserIdentity identities = 1;
+}
+
+message GetIdentityByTypeRequest {
+  string domain = 1;
+  string openid = 2;
+  string idp_type = 3;
+}
+
+message AddIdentityRequest {
+  string domain = 1;
+  string openid = 2;
+  string idp = 3;
+  string t_openid = 4;
+  optional string raw_data = 5;
+}
+
+// ==================== Password Store ====================
+
+message GetByIdentifierRequest {
+  string identifier = 1;
+}
+
+message PasswordStoreCredential {
+  string openid = 1;
+  string password_hash = 2;
+  optional string nickname = 3;
+  optional string email = 4;
+  optional string picture = 5;
+  int32 status = 6;
+}
+
+// ==================== Credential ====================
+
+message CredentialIDRequest {
+  string credential_id = 1;
+}
+
+message UserCredential {
+  uint32 id = 1;
+  string openid = 2;
+  optional string credential_id = 3;
+  string type = 4;
+  bool enabled = 5;
+  optional google.protobuf.Timestamp last_used_at = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  string secret = 9; // 加密后的密文（gRPC 内部传输，不暴露给前端）
+}
+
+message UserCredentialList {
+  repeated UserCredential credentials = 1;
+}
+
+message CreateCredentialRequest {
+  string openid = 1;
+  optional string credential_id = 2;
+  string type = 3;
+  bool enabled = 4;
+  string secret = 5;
+}
+
+message GetCredentialsByTypeRequest {
+  string openid = 1;
+  string type = 2;
+}
+
+message UpdateCredentialRequest {
+  string credential_id = 1;
+  optional bool enabled = 2;
+  optional string secret = 3;
+  optional google.protobuf.Timestamp last_used_at = 4;
+}
+
+message UpdateCredentialSignCountRequest {
+  string credential_id = 1;
+  uint32 sign_count = 2;
+}
+
+message DeleteCredentialRequest {
+  string openid = 1;
+  string credential_id = 2;
+}
+
+message OpenIDResponse {
+  string openid = 1;
+}
+
+// ==================== TOTP ====================
+
+message SetupTOTPRequest {
+  string openid = 1;
+  string app_name = 2;
+}
+
+message SetupTOTPResponse {
+  string secret = 1;
+  string otpauth_uri = 2;
+  uint32 credential_id = 3;
+}
+
+message ConfirmTOTPRequest {
+  string openid = 1;
+  uint32 credential_id = 2;
+  string code = 3;
+}
+
+message VerifyTOTPRequest {
+  string openid = 1;
+  string code = 2;
+}
+
+message SetTOTPEnabledRequest {
+  string openid = 1;
+  bool enabled = 2;
+}
+
+// ==================== WebAuthn ====================
+
+message RegisterWebAuthnRequest {
+  string openid = 1;
+  string credential_id = 2;
+  string public_key = 3;
+  string aaguid = 4;
+  repeated string transport = 5;
+  string attestation_type = 6;
+}
+
+message WebAuthnSecret {
+  string public_key = 1;
+  uint32 sign_count = 2;
+  string aaguid = 3;
+  repeated string transport = 4;
+  string attestation_type = 5;
+}
+
+// WebAuthnCredentialDetail 凭证 + 解密后的 secret
+message WebAuthnCredentialDetail {
+  UserCredential credential = 1;
+  WebAuthnSecret secret = 2;
+}
+
+message UpdateWebAuthnSignCountRequest {
+  string credential_id = 1;
+  uint32 sign_count = 2;
+}
+
+message DeleteWebAuthnRequest {
+  string openid = 1;
+  string credential_id = 2;
+}
+
+message SetWebAuthnEnabledRequest {
+  string openid = 1;
+  string credential_id = 2;
+  bool enabled = 3;
+}
+
+message PublicKeyResponse {
+  bytes public_key = 1;
+}
+
+// ==================== MFA Status ====================
+
+message CredentialSummary {
+  uint32 id = 1;
+  string type = 2;
+  string credential_id = 3;
+  bool enabled = 4;
+  optional google.protobuf.Timestamp last_used_at = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message CredentialSummaryList {
+  repeated CredentialSummary summaries = 1;
+}
+
+message MFAStatus {
+  bool totp_enabled = 1;
+  int32 webauthn_count = 2;
+  int32 passkey_count = 3;
+}

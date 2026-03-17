@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package hermes.v1;
+
+option go_package = "github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1";
+
+import "google/protobuf/empty.proto";
+
+// KeyService 统一密钥管理（域/应用/服务，后续可扩展 IDP 配置等）
+service KeyService {
+  rpc GetKeys(GetKeysRequest) returns (KeySet);
+  rpc RotateKey(RotateKeyRequest) returns (google.protobuf.Empty);
+}
+
+message GetKeysRequest {
+  string owner_type = 1; // domain / application / service
+  string owner_id = 2;
+}
+
+message RotateKeyRequest {
+  string owner_type = 1;
+  string owner_id = 2;
+  int64 window_seconds = 3; // 旧密钥过期窗口（秒）
+}
+
+// KeySet 密钥集合（已解密）
+message KeySet {
+  bytes main = 1;           // 当前主密钥（48 字节 seed）
+  repeated bytes keys = 2;  // 所有有效密钥（含轮换中旧密钥，按 created_at DESC）
+}

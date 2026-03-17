@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package hermes.v1;
+
+option go_package = "github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1";
+
+// ErrorReason hermes 业务错误码，通过 google.rpc.ErrorInfo.reason 传递
+enum ErrorReason {
+  ERROR_REASON_UNSPECIFIED = 0;
+
+  // NotFound 系列 → gRPC NOT_FOUND
+  DOMAIN_NOT_FOUND = 1;
+  APPLICATION_NOT_FOUND = 2;
+  SERVICE_NOT_FOUND = 3;
+  USER_NOT_FOUND = 4;
+  IDENTITY_NOT_FOUND = 5;
+  CREDENTIAL_NOT_FOUND = 6;
+  RELATIONSHIP_NOT_FOUND = 7;
+  GROUP_NOT_FOUND = 8;
+  KEY_NOT_FOUND = 9;
+  CHALLENGE_SETTING_NOT_FOUND = 10;
+
+  // AlreadyExists 系列 → gRPC ALREADY_EXISTS
+  APPLICATION_ALREADY_EXISTS = 100;
+  CREDENTIAL_ALREADY_EXISTS = 101;
+  IDENTITY_ALREADY_EXISTS = 102;
+  TOTP_ALREADY_BOUND = 103;
+
+  // FailedPrecondition 系列 → gRPC FAILED_PRECONDITION
+  PASSWORD_INCORRECT = 200;
+  OTP_INVALID = 201;
+  IDP_NOT_ALLOWED = 202;
+  USER_DISABLED = 203;
+  SIGN_COUNT_ANOMALY = 204;
+  TOTP_NOT_BOUND = 205;
+  CREDENTIAL_NOT_ENABLED = 206;
+
+  // PermissionDenied 系列 → gRPC PERMISSION_DENIED
+  APP_SERVICE_ACCESS_DENIED = 300;
+}
+
+// Pagination 游标分页参数
+message Pagination {
+  string cursor = 1;
+  int32 limit = 2;
+}
+
+// StringList 通用字符串列表
+message StringList {
+  repeated string values = 1;
+}
+
+// BoolValue 通用布尔响应
+message BoolValue {
+  bool value = 1;
+}
+
+// OpenIDRequest 以 openid 为参数的通用请求
+message OpenIDRequest {
+  string openid = 1;
+}

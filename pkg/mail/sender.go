@@ -85,22 +85,18 @@ func (s *Sender) Send(ctx context.Context, to, subject, body string) error {
 	return nil
 }
 
-// ==================== 实现 challenge.EmailSender 接口 ====================
+// ==================== 验证码邮件 ====================
 
-// SendCode 发送验证码邮件
-func (s *Sender) SendCode(ctx context.Context, email, code string) error {
-	return s.SendCodeWithScene(ctx, email, code, templates.SceneOTPLogin, "")
-}
-
-// SendCodeWithScene 根据场景发送验证码邮件
-func (s *Sender) SendCodeWithScene(ctx context.Context, email, code string, scene templates.Scene, greeting string) error {
+// SendCode 按场景发送验证码邮件
+// scene 由业务层传入（如 "otp_login"、"otp_register"），直接映射到模板引擎的 Scene
+func (s *Sender) SendCode(ctx context.Context, email, code, scene string) error {
 	if s.templateEngine == nil {
 		subject := "您的验证码"
 		body := fmt.Sprintf("您的验证码是：%s，5 分钟内有效。", code)
 		return s.Send(ctx, email, subject, body)
 	}
 
-	subject, html, err := s.templateEngine.RenderOTPScene(scene, code, greeting)
+	subject, html, err := s.templateEngine.RenderOTPScene(templates.Scene(scene), code, "")
 	if err != nil {
 		logger.Errorf("[Mail] 渲染 OTP 模板失败: %v", err)
 		return fmt.Errorf("render otp template failed: %w", err)
