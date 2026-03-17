@@ -4,18 +4,16 @@ package totp
 import (
 	"context"
 
+	"github.com/heliannuuthus/helios/aegis/internal/contract"
 	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
-// Verifier TOTP 验证器
-// 通过 hermes.CredentialService 读取用户 TOTP 密钥并验证
 type Verifier struct {
-	credentialSvc *hermes.CredentialService
+	credentialSvc contract.CredentialProvider
 }
 
-// NewVerifier 创建 TOTP 验证器
-func NewVerifier(credentialSvc *hermes.CredentialService) *Verifier {
+func NewVerifier(credentialSvc contract.CredentialProvider) *Verifier {
 	return &Verifier{
 		credentialSvc: credentialSvc,
 	}

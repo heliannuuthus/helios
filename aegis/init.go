@@ -27,9 +27,9 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/authorize"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
 	"github.com/heliannuuthus/helios/aegis/internal/challenge"
+	"github.com/heliannuuthus/helios/aegis/internal/contract"
 	"github.com/heliannuuthus/helios/aegis/internal/token"
 	"github.com/heliannuuthus/helios/aegis/internal/user"
-	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/pkg/accessctl"
 	"github.com/heliannuuthus/helios/pkg/async"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -39,7 +39,7 @@ import (
 )
 
 // Initialize 初始化 Auth 模块，返回 Handler
-func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credentialSvc *hermes.CredentialService) (*Handler, error) {
+func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, credentialSvc contract.CredentialProvider) (*Handler, error) {
 	redisURL := getRedisURL()
 	redis, err := pkgredis.NewClient(redisURL)
 	if err != nil {
@@ -76,8 +76,9 @@ func Initialize(hermesSvc *hermes.Service, userSvc *hermes.UserService, credenti
 	authorizeSvc := authorize.NewService(cacheManager, hermesSvc, userService, tokenSvc, pool, 5*time.Minute)
 	challengeSvc := challenge.NewService(cacheManager, registry)
 	mfaSvc := NewMFAService(webauthnSvc)
+	profileHandler := NewProfileHandler(userSvc, credentialSvc, mfaSvc)
 
-	handler := NewHandler(authenticateSvc, authorizeSvc, challengeSvc, userService, cacheManager, tokenSvc, mfaSvc, pool)
+	handler := NewHandler(authenticateSvc, authorizeSvc, challengeSvc, userService, cacheManager, tokenSvc, mfaSvc, profileHandler, pool)
 	logger.Info("[Auth] 模块初始化完成")
 	return handler, nil
 }
@@ -148,7 +149,7 @@ func initKeyProviders(cm *cache.Manager) (key.MultiOf, key.MultiOf, key.MultiOf,
 }
 
 // initProviders 初始化底层 Provider（WebAuthn、Captcha、TOTP）
-func initProviders(credentialSvc *hermes.CredentialService, cacheManager *cache.Manager, userSvc *hermes.UserService) (*webauthn.Service, captcha.Verifier, factor.TOTPVerifier) {
+func initProviders(credentialSvc contract.CredentialProvider, cacheManager *cache.Manager, userSvc contract.UserProvider) (*webauthn.Service, captcha.Verifier, factor.TOTPVerifier) {
 	// WebAuthn
 	var webauthnSvc *webauthn.Service
 	if svc, err := webauthn.NewService(cacheManager, userSvc); err != nil {
@@ -175,7 +176,7 @@ func initProviders(credentialSvc *hermes.CredentialService, cacheManager *cache.
 }
 
 // initRegistry 初始化全局 Registry（注册胶水层 Authenticator）
-func initRegistry(userSvc *hermes.UserService, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier factor.TOTPVerifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
+func initRegistry(userSvc contract.UserProvider, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier factor.TOTPVerifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
 	registry := authenticator.NewRegistry()
 
 	// ==================== IDP Authenticators ====================

@@ -70,6 +70,21 @@ func (s *Service) Send(ctx context.Context, req *SendRequest) error {
 	return nil
 }
 
+// SendCode 发送验证码邮件（按 scene 查找模板）
+// scene 作为 templateID 查询 DB 模板，找不到则降级为纯文本
+func (s *Service) SendCode(ctx context.Context, email, code, scene string) error {
+	err := s.Send(ctx, &SendRequest{
+		To:         email,
+		TemplateID: scene,
+		Data:       map[string]any{"code": code},
+	})
+	if err != nil {
+		logger.Warnf("[Mail] 模板 %s 不可用，降级为原始邮件: %v", scene, err)
+		return s.SendRaw(ctx, email, "您的验证码", fmt.Sprintf("您的验证码是：%s，5 分钟内有效。", code))
+	}
+	return nil
+}
+
 // SendRaw 发送原始邮件（不使用模板）
 func (s *Service) SendRaw(ctx context.Context, to, subject, body string) error {
 	from := s.from

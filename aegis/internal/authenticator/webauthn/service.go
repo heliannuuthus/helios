@@ -14,8 +14,8 @@ import (
 
 	"github.com/heliannuuthus/helios/aegis/config"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
+	"github.com/heliannuuthus/helios/aegis/internal/contract"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -29,11 +29,10 @@ type Service struct {
 	webauthn *webauthn.WebAuthn
 	rpID     string
 	cache    *cache.Manager
-	userSvc  *hermes.UserService
+	userSvc  contract.UserProvider
 }
 
-// NewService 创建 WebAuthn 服务
-func NewService(cm *cache.Manager, userSvc *hermes.UserService) (*Service, error) {
+func NewService(cm *cache.Manager, userSvc contract.UserProvider) (*Service, error) {
 	cfg := config.Cfg()
 
 	rpID := cfg.GetString("mfa.webauthn.rp-id")

@@ -9,8 +9,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
+	"github.com/heliannuuthus/helios/aegis/internal/contract"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
@@ -27,11 +27,10 @@ type credential struct {
 
 // Provider C 端用户账号密码 Provider
 type Provider struct {
-	userSvc *hermes.UserService
+	userSvc contract.UserProvider
 }
 
-// NewProvider 创建 C 端用户 Provider
-func NewProvider(userSvc *hermes.UserService) *Provider {
+func NewProvider(userSvc contract.UserProvider) *Provider {
 	return &Provider{userSvc: userSvc}
 }
 

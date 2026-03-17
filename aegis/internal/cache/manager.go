@@ -6,7 +6,7 @@ import (
 	"github.com/dgraph-io/ristretto/v2"
 
 	"github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/hermes"
+	"github.com/heliannuuthus/helios/aegis/internal/contract"
 	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	pkgredis "github.com/heliannuuthus/helios/pkg/redis"
@@ -28,9 +28,8 @@ var (
 // Manager 缓存管理器
 // 统管所有缓存操作：本地缓存（热数据）+ Redis（分布式数据）
 type Manager struct {
-	// Hermes Service（获取应用/服务/域/用户数据）
-	hermesSvc *hermes.Service
-	userSvc   *hermes.UserService
+	hermesSvc contract.HermesProvider
+	userSvc   contract.UserProvider
 
 	// 本地缓存（ristretto，用于热数据）
 	domainCache      *ristretto.Cache[string, *DomainWithKey]
@@ -68,7 +67,7 @@ func newConfiguredCache[V any](name string) *ristretto.Cache[string, V] {
 	return newCache[V](name, config.GetCacheNumCounters(name), config.GetCacheSize(name), config.GetCacheBufferItems(name))
 }
 
-func NewManager(hermesSvc *hermes.Service, userSvc *hermes.UserService, redis pkgredis.Client) *Manager {
+func NewManager(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, redis pkgredis.Client) *Manager {
 	return &Manager{
 		hermesSvc:            hermesSvc,
 		userSvc:              userSvc,

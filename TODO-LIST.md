@@ -27,7 +27,7 @@
 - [x] 前端适配新 API 结构（pallas 已使用三层模型调用 API）
 
 **遗留**:
-- [ ] 交换类（wxmp、almp）Create 直接签发 Challenge Token（当前 `Create` 未对 `IsExchange()` 分支处理）
+- [x] 交换类（wxmp、almp）Create 直接签发 Challenge Token（`handleExchange` 已实现 code → principal → ChallengeToken 全链路）
 - [ ] 验证类支持 Type 关联的消息模板（`pkg/mail` 已有 `SendCodeWithScene`，但 `EmailSender` 接口未传 Type）
 
 ---

@@ -836,6 +836,18 @@ func (s *Service) UpdateGroup(ctx context.Context, groupID string, req *GroupUpd
 	return nil
 }
 
+// DeleteGroup 删除组
+func (s *Service) DeleteGroup(ctx context.Context, groupID string) error {
+	result := s.db.WithContext(ctx).Where("group_id = ?", groupID).Delete(&models.Group{})
+	if result.Error != nil {
+		return fmt.Errorf("删除组失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 // SetGroupMembers 设置组成员（通过关系表）
 // 注意：组成员关系使用 service_id = "system" 表示系统级别关系
 func (s *Service) SetGroupMembers(ctx context.Context, req *GroupMemberRequest) error {

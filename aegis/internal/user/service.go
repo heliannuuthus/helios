@@ -5,7 +5,7 @@ import (
 
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
-	"github.com/heliannuuthus/helios/hermes"
+	"github.com/heliannuuthus/helios/aegis/internal/contract"
 	"github.com/heliannuuthus/helios/hermes/models"
 )
 
@@ -15,11 +15,10 @@ import (
 //   - 非缓存的 DB 操作直接调用 hermes.UserService
 type Service struct {
 	cache   *cache.Manager
-	userSvc *hermes.UserService
+	userSvc contract.UserProvider
 }
 
-// NewService 创建用户业务服务
-func NewService(cache *cache.Manager, userSvc *hermes.UserService) *Service {
+func NewService(cache *cache.Manager, userSvc contract.UserProvider) *Service {
 	return &Service{
 		cache:   cache,
 		userSvc: userSvc,

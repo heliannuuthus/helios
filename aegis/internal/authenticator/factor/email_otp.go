@@ -14,8 +14,9 @@ import (
 var _ Provider = (*EmailOTPProvider)(nil)
 
 // EmailSender 邮件发送接口
+// scene 由业务层根据 challenge.Type 映射，Sender 实现按 scene 选择模板渲染
 type EmailSender interface {
-	SendCode(ctx context.Context, email, code string) error
+	SendCode(ctx context.Context, email, code, scene string) error
 }
 
 // EmailOTPProvider 邮件验证码认证因子 Provider
@@ -41,7 +42,7 @@ func (p *EmailOTPProvider) Initiate(ctx context.Context, challenge *types.Challe
 	if _, err := mail.ParseAddress(challenge.Channel); err != nil {
 		return fmt.Errorf("invalid email format: %s", challenge.Channel)
 	}
-	return p.sendOTP(ctx, challenge.Channel, challenge.ID)
+	return p.sendOTP(ctx, challenge)
 }
 
 // Verify 验证邮件验证码
@@ -89,24 +90,46 @@ func (*EmailOTPProvider) Prepare() *types.ConnectionConfig {
 // ==================== 内部方法 ====================
 
 // sendOTP 发送邮件验证码
-func (p *EmailOTPProvider) sendOTP(ctx context.Context, email, challengeID string) error {
+func (p *EmailOTPProvider) sendOTP(ctx context.Context, ch *types.Challenge) error {
 	code, err := helpers.GenerateOTP(6)
 	if err != nil {
 		return err
 	}
 
-	otpKey := types.CacheKeyPrefixEmailOTP + challengeID
+	otpKey := types.CacheKeyPrefixEmailOTP + ch.ID
 	if err := p.cache.SaveOTP(ctx, otpKey, code); err != nil {
 		return err
 	}
 
 	if p.emailSender != nil {
-		if err := p.emailSender.SendCode(ctx, email, code); err != nil {
+		if err := p.emailSender.SendCode(ctx, ch.Channel, code, otpScene(ch.Type)); err != nil {
 			logger.Errorf("[EmailOTP] 发送邮件失败: %v", err)
 			return err
 		}
 	}
 
-	logger.Infof("[EmailOTP] 已发送验证码 - Email: %s", helpers.MaskEmail(email))
+	logger.Infof("[EmailOTP] 已发送验证码 - Email: %s", helpers.MaskEmail(ch.Channel))
 	return nil
+}
+
+// otpScene 将业务类型映射到邮件模板场景
+func otpScene(typ string) string {
+	switch typ {
+	case "register":
+		return "otp_register"
+	case "reset_password", "forget_password":
+		return "otp_reset_password"
+	case "bind_email":
+		return "otp_bind_email"
+	case "change_email":
+		return "otp_change_email"
+	case "mfa":
+		return "otp_mfa"
+	case "verify_identity":
+		return "otp_verify_identity"
+	case "delete_account":
+		return "otp_delete_account"
+	default:
+		return "otp_login"
+	}
 }

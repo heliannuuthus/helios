@@ -117,31 +117,32 @@ func main() {
 		authGroup.POST("/check", app.AegisHandler.Check)
 	}
 
-	// Iris 用户信息路由
-	irisGuard := guard.NewGin(irisconfig.GetAegisAudience())
+	// 用户信息路由（原 iris，已合并到 aegis）
+	profile := app.AegisHandler.Profile()
+	userGuard := guard.NewGin(irisconfig.GetAegisAudience())
 	userGroup := r.Group("/user")
 	{
 		userRoutes := []struct {
 			method, path string
 			handler      gin.HandlerFunc
 		}{
-			{"GET", "/profile", app.IrisHandler.GetProfile},
-			{"PATCH", "/profile", app.IrisHandler.UpdateProfile},
-			{"POST", "/profile/avatar", app.IrisHandler.UploadAvatar},
-			{"PUT", "/profile/email", app.IrisHandler.UpdateEmail},
-			{"PUT", "/profile/phone", app.IrisHandler.UpdatePhone},
-			{"GET", "/identities", app.IrisHandler.ListIdentities},
-			{"POST", "/identities/:idp", app.IrisHandler.BindIdentity},
-			{"DELETE", "/identities/:idp", app.IrisHandler.UnbindIdentity},
-			{"GET", "/mfa", app.IrisHandler.GetMFAStatus},
-			{"POST", "/mfa", app.IrisHandler.SetupMFA},
-			{"PUT", "/mfa", app.IrisHandler.VerifyMFA},
-			{"PATCH", "/mfa", app.IrisHandler.UpdateMFA},
-			{"DELETE", "/mfa", app.IrisHandler.DeleteMFA},
+			{"GET", "/profile", profile.GetProfile},
+			{"PATCH", "/profile", profile.UpdateProfile},
+			{"POST", "/profile/avatar", profile.UploadAvatar},
+			{"PUT", "/profile/email", profile.UpdateEmail},
+			{"PUT", "/profile/phone", profile.UpdatePhone},
+			{"GET", "/identities", profile.ListIdentities},
+			{"POST", "/identities/:idp", profile.BindIdentity},
+			{"DELETE", "/identities/:idp", profile.UnbindIdentity},
+			{"GET", "/mfa", profile.GetMFAStatus},
+			{"POST", "/mfa", profile.SetupMFA},
+			{"PUT", "/mfa", profile.VerifyMFA},
+			{"PATCH", "/mfa", profile.UpdateMFA},
+			{"DELETE", "/mfa", profile.DeleteMFA},
 		}
 		registered := make(map[string]bool)
 		for _, route := range userRoutes {
-			userGroup.Handle(route.method, route.path, aegisCORS, irisGuard.Require(), route.handler)
+			userGroup.Handle(route.method, route.path, aegisCORS, userGuard.Require(), route.handler)
 			if !registered[route.path] {
 				userGroup.OPTIONS(route.path, aegisCORS)
 				registered[route.path] = true
