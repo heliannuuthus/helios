@@ -7,8 +7,8 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
-	"github.com/heliannuuthus/helios/hermes"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/pkg/models"
 	"github.com/heliannuuthus/helios/pkg/pagination"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
@@ -55,7 +55,7 @@ func (c *Client) ListDomains(ctx context.Context) ([]models.Domain, error) {
 	return domains, nil
 }
 
-func (c *Client) UpdateDomain(ctx context.Context, domainID string, req *hermes.DomainUpdateRequest) (*models.Domain, error) {
+func (c *Client) UpdateDomain(ctx context.Context, domainID string, req *dto.DomainUpdateRequest) (*models.Domain, error) {
 	pbReq := &hermesv1.UpdateDomainRequest{DomainId: domainID}
 	if req.Name.IsPresent() && !req.Name.IsNull() {
 		v := req.Name.Value()
@@ -74,7 +74,7 @@ func (c *Client) UpdateDomain(ctx context.Context, domainID string, req *hermes.
 
 // ==================== Application ====================
 
-func (c *Client) CreateApplication(ctx context.Context, req *hermes.ApplicationCreateRequest) (*models.Application, error) {
+func (c *Client) CreateApplication(ctx context.Context, req *dto.ApplicationCreateRequest) (*models.Application, error) {
 	pbReq := &hermesv1.CreateApplicationRequest{
 		DomainId:            req.DomainID,
 		Name:                req.Name,
@@ -126,7 +126,7 @@ func (c *Client) GetApplicationWithKey(ctx context.Context, appID string) (*mode
 	return applicationWithKeyFromProto(app, keySet), nil
 }
 
-func (c *Client) ListApplications(ctx context.Context, domainID string, req *hermes.ListRequest) (*pagination.Items[models.Application], error) {
+func (c *Client) ListApplications(ctx context.Context, domainID string, req *dto.ListRequest) (*pagination.Items[models.Application], error) {
 	pbReq := &hermesv1.ListApplicationsRequest{
 		DomainId: domainID,
 		Filter:   req.Filter,
@@ -149,7 +149,7 @@ func (c *Client) ListApplications(ctx context.Context, domainID string, req *her
 	}, nil
 }
 
-func (c *Client) UpdateApplication(ctx context.Context, appID string, req *hermes.ApplicationUpdateRequest) error {
+func (c *Client) UpdateApplication(ctx context.Context, appID string, req *dto.ApplicationUpdateRequest) error {
 	pbReq := &hermesv1.UpdateApplicationRequest{AppId: appID}
 	setOptionalString(&pbReq.Name, req.Name)
 	setOptionalString(&pbReq.Description, req.Description)
@@ -187,14 +187,12 @@ func (c *Client) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]
 	return configs, nil
 }
 
-func (c *Client) CreateApplicationIDPConfig(ctx context.Context, appID string, req *hermes.ApplicationIDPConfigCreateRequest) (*models.ApplicationIDPConfig, error) {
+func (c *Client) CreateApplicationIDPConfig(ctx context.Context, appID string, req *dto.ApplicationIDPConfigCreateRequest) (*models.ApplicationIDPConfig, error) {
 	pbReq := &hermesv1.CreateApplicationIDPConfigRequest{
 		AppId:    appID,
 		Type:     req.Type,
 		Priority: safeInt32(req.Priority),
 		Strategy: req.Strategy,
-		Delegate: req.Delegate,
-		Require:  req.Require,
 	}
 	resp, err := c.app.CreateApplicationIDPConfig(ctx, pbReq)
 	if err != nil {
@@ -203,7 +201,7 @@ func (c *Client) CreateApplicationIDPConfig(ctx context.Context, appID string, r
 	return idpConfigFromProto(resp), nil
 }
 
-func (c *Client) UpdateApplicationIDPConfig(ctx context.Context, appID, idpType string, req *hermes.ApplicationIDPConfigUpdateRequest) error {
+func (c *Client) UpdateApplicationIDPConfig(ctx context.Context, appID, idpType string, req *dto.ApplicationIDPConfigUpdateRequest) error {
 	pbReq := &hermesv1.UpdateApplicationIDPConfigRequest{
 		AppId: appID,
 		Type:  idpType,
@@ -215,14 +213,6 @@ func (c *Client) UpdateApplicationIDPConfig(ctx context.Context, appID, idpType 
 	if req.Strategy.IsPresent() && !req.Strategy.IsNull() {
 		v := req.Strategy.Value()
 		pbReq.Strategy = &v
-	}
-	if req.Delegate.IsPresent() && !req.Delegate.IsNull() {
-		v := req.Delegate.Value()
-		pbReq.Delegate = &v
-	}
-	if req.Require.IsPresent() && !req.Require.IsNull() {
-		v := req.Require.Value()
-		pbReq.Require = &v
 	}
 	_, err := c.app.UpdateApplicationIDPConfig(ctx, pbReq)
 	if err != nil {
@@ -244,7 +234,7 @@ func (c *Client) DeleteApplicationIDPConfig(ctx context.Context, appID, idpType 
 
 // ==================== Application Service Relations ====================
 
-func (c *Client) SetApplicationServiceRelations(ctx context.Context, req *hermes.ApplicationServiceRelationRequest) error {
+func (c *Client) SetApplicationServiceRelations(ctx context.Context, req *dto.ApplicationServiceRelationRequest) error {
 	_, err := c.app.SetApplicationServiceRelations(ctx, &hermesv1.SetApplicationServiceRelationsRequest{
 		AppId:     req.AppID,
 		ServiceId: req.ServiceID,

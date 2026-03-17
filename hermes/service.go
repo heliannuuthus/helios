@@ -13,12 +13,13 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/hermes/config"
-	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/hermes/validation"
 	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
+	"github.com/heliannuuthus/helios/pkg/dto"
 	"github.com/heliannuuthus/helios/pkg/filter"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/helios/pkg/models"
 	"github.com/heliannuuthus/helios/pkg/pagination"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
@@ -127,7 +128,7 @@ func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 }
 
 // UpdateDomain 更新域（仅 name、description）
-func (s *Service) UpdateDomain(ctx context.Context, domainID string, req *DomainUpdateRequest) (*models.Domain, error) {
+func (s *Service) UpdateDomain(ctx context.Context, domainID string, req *dto.DomainUpdateRequest) (*models.Domain, error) {
 	_, err := s.getDomainRecordOnly(ctx, domainID)
 	if err != nil {
 		return nil, err
@@ -148,7 +149,7 @@ func (s *Service) UpdateDomain(ctx context.Context, domainID string, req *Domain
 // ==================== Service 相关 ====================
 
 // CreateService 创建服务
-func (s *Service) CreateService(ctx context.Context, req *ServiceCreateRequest) (*models.Service, error) {
+func (s *Service) CreateService(ctx context.Context, req *dto.ServiceCreateRequest) (*models.Service, error) {
 	desc := req.Description
 	service := &models.Service{
 		ServiceID:            req.ServiceID,
@@ -210,7 +211,7 @@ var serviceFilters = filter.Whitelist{
 
 // ListServices 列出服务（游标分页）。
 // 包含该域下的服务及跨域服务（domain_id = CrossDomainID），跨域不在上层暴露由 handler 用请求 domain 表示。
-func (s *Service) ListServices(ctx context.Context, domainID string, req *ListRequest) (*pagination.Items[models.Service], error) {
+func (s *Service) ListServices(ctx context.Context, domainID string, req *dto.ListRequest) (*pagination.Items[models.Service], error) {
 	query := s.db.WithContext(ctx).Model(&models.Service{})
 	if domainID != "" {
 		query = query.Where("domain_id = ? OR domain_id = ?", domainID, models.CrossDomainID)
@@ -220,7 +221,7 @@ func (s *Service) ListServices(ctx context.Context, domainID string, req *ListRe
 }
 
 // UpdateService 更新服务（JSON Merge Patch 语义）
-func (s *Service) UpdateService(ctx context.Context, serviceID string, req *ServiceUpdateRequest) error {
+func (s *Service) UpdateService(ctx context.Context, serviceID string, req *dto.ServiceUpdateRequest) error {
 	updates := patch.Collect(
 		patch.Field("name", req.Name),
 		patch.Field("description", req.Description),
@@ -284,7 +285,7 @@ func marshalOptionalStringSlice(s []string) *string {
 }
 
 // CreateApplication 创建应用
-func (s *Service) CreateApplication(ctx context.Context, req *ApplicationCreateRequest) (*models.Application, error) {
+func (s *Service) CreateApplication(ctx context.Context, req *dto.ApplicationCreateRequest) (*models.Application, error) {
 	appID := strings.TrimSpace(req.AppID)
 	if appID == "" {
 		appID = helpers.GenerateID(12)
@@ -380,7 +381,7 @@ var applicationFilters = filter.Whitelist{
 }
 
 // ListApplications 列出应用（游标分页）
-func (s *Service) ListApplications(ctx context.Context, domainID string, req *ListRequest) (*pagination.Items[models.Application], error) {
+func (s *Service) ListApplications(ctx context.Context, domainID string, req *dto.ListRequest) (*pagination.Items[models.Application], error) {
 	query := s.db.WithContext(ctx).Model(&models.Application{})
 	if domainID != "" {
 		query = query.Where("domain_id = ?", domainID)
@@ -416,7 +417,7 @@ func applyOptionalURIList(
 }
 
 // UpdateApplication 更新应用（JSON Merge Patch 语义）
-func (s *Service) UpdateApplication(ctx context.Context, appID string, req *ApplicationUpdateRequest) error {
+func (s *Service) UpdateApplication(ctx context.Context, appID string, req *dto.ApplicationUpdateRequest) error {
 	updates := patch.Collect(
 		patch.Field("name", req.Name),
 		patch.Field("description", req.Description),
@@ -449,7 +450,7 @@ func (s *Service) UpdateApplication(ctx context.Context, appID string, req *Appl
 }
 
 // SetApplicationServiceRelations 设置应用可访问的服务和关系
-func (s *Service) SetApplicationServiceRelations(ctx context.Context, req *ApplicationServiceRelationRequest) error {
+func (s *Service) SetApplicationServiceRelations(ctx context.Context, req *dto.ApplicationServiceRelationRequest) error {
 	// 先删除旧的关系
 	if err := s.db.WithContext(ctx).Where("app_id = ? AND service_id = ?", req.AppID, req.ServiceID).
 		Delete(&models.ApplicationServiceRelation{}).Error; err != nil {
@@ -505,7 +506,7 @@ func (s *Service) GetServiceAppRelations(ctx context.Context, serviceID, appID s
 // ==================== Relationship 相关 ====================
 
 // CreateRelationship 创建关系
-func (s *Service) CreateRelationship(ctx context.Context, req *RelationshipCreateRequest) (*models.Relationship, error) {
+func (s *Service) CreateRelationship(ctx context.Context, req *dto.RelationshipCreateRequest) (*models.Relationship, error) {
 	var expiresAt *time.Time
 	if req.ExpiresAt != nil {
 		exp, err := time.Parse(time.RFC3339, *req.ExpiresAt)
@@ -533,7 +534,7 @@ func (s *Service) CreateRelationship(ctx context.Context, req *RelationshipCreat
 }
 
 // DeleteRelationship 删除关系
-func (s *Service) DeleteRelationship(ctx context.Context, req *RelationshipDeleteRequest) error {
+func (s *Service) DeleteRelationship(ctx context.Context, req *dto.RelationshipDeleteRequest) error {
 	if err := s.db.WithContext(ctx).Where(
 		"service_id = ? AND subject_type = ? AND subject_id = ? AND relation = ? AND object_type = ? AND object_id = ?",
 		req.ServiceID, req.SubjectType, req.SubjectID, req.Relation, req.ObjectType, req.ObjectID,
@@ -551,7 +552,7 @@ var relationshipFilters = filter.Whitelist{
 }
 
 // ListRelationships 列出关系（游标分页）
-func (s *Service) ListRelationships(ctx context.Context, req *ListRequest) (*pagination.Items[models.Relationship], error) {
+func (s *Service) ListRelationships(ctx context.Context, req *dto.ListRequest) (*pagination.Items[models.Relationship], error) {
 	query := s.db.WithContext(ctx).Model(&models.Relationship{})
 	query = filter.Apply(query, req.Filter, relationshipFilters)
 	return pagination.CursorPaginate[models.Relationship](query, req.Pagination)
@@ -568,7 +569,7 @@ func (s *Service) FindRelationships(ctx context.Context, serviceID, subjectType,
 }
 
 // UpdateRelationship 更新关系（JSON Merge Patch 语义）
-func (s *Service) UpdateRelationship(ctx context.Context, req *RelationshipUpdateRequest) (*models.Relationship, error) {
+func (s *Service) UpdateRelationship(ctx context.Context, req *dto.RelationshipUpdateRequest) (*models.Relationship, error) {
 	// 1. 查找关系
 	var rel models.Relationship
 	if err := s.db.WithContext(ctx).Where(
@@ -622,7 +623,7 @@ var appServiceRelationshipFilters = filter.Whitelist{
 }
 
 // ListAppServiceRelationships 列出应用服务下的关系（游标分页）
-func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, serviceID string, req *ListRequest) (*pagination.Items[models.Relationship], error) {
+func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, serviceID string, req *dto.ListRequest) (*pagination.Items[models.Relationship], error) {
 	var app models.Application
 	if err := s.db.WithContext(ctx).Where("app_id = ?", appID).First(&app).Error; err != nil {
 		return nil, fmt.Errorf("应用不存在: %w", err)
@@ -644,7 +645,7 @@ func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, servic
 }
 
 // CreateAppServiceRelationship 在应用服务下创建关系
-func (s *Service) CreateAppServiceRelationship(ctx context.Context, appID, serviceID string, req *AppServiceRelationshipCreateRequest) (*models.Relationship, error) {
+func (s *Service) CreateAppServiceRelationship(ctx context.Context, appID, serviceID string, req *dto.AppServiceRelationshipCreateRequest) (*models.Relationship, error) {
 	// 1. 验证应用和服务是否存在
 	var app models.Application
 	if err := s.db.WithContext(ctx).Where("app_id = ?", appID).First(&app).Error; err != nil {
@@ -691,7 +692,7 @@ func (s *Service) CreateAppServiceRelationship(ctx context.Context, appID, servi
 }
 
 // UpdateAppServiceRelationship 在应用服务下更新关系（JSON Merge Patch 语义）
-func (s *Service) UpdateAppServiceRelationship(ctx context.Context, appID, serviceID string, relationshipID uint, req *AppServiceRelationshipUpdateRequest) (*models.Relationship, error) {
+func (s *Service) UpdateAppServiceRelationship(ctx context.Context, appID, serviceID string, relationshipID uint, req *dto.AppServiceRelationshipUpdateRequest) (*models.Relationship, error) {
 	// 1. 验证应用和服务是否存在
 	var app models.Application
 	if err := s.db.WithContext(ctx).Where("app_id = ?", appID).First(&app).Error; err != nil {
@@ -781,7 +782,7 @@ func (s *Service) DeleteAppServiceRelationship(ctx context.Context, appID, servi
 // ==================== Group 相关 ====================
 
 // CreateGroup 创建组
-func (s *Service) CreateGroup(ctx context.Context, req *GroupCreateRequest) (*models.Group, error) {
+func (s *Service) CreateGroup(ctx context.Context, req *dto.GroupCreateRequest) (*models.Group, error) {
 	group := &models.Group{
 		GroupID:     req.GroupID,
 		ServiceID:   req.ServiceID,
@@ -811,14 +812,14 @@ var groupFilters = filter.Whitelist{
 }
 
 // ListGroups 列出组（游标分页）
-func (s *Service) ListGroups(ctx context.Context, req *ListRequest) (*pagination.Items[models.Group], error) {
+func (s *Service) ListGroups(ctx context.Context, req *dto.ListRequest) (*pagination.Items[models.Group], error) {
 	query := s.db.WithContext(ctx).Model(&models.Group{})
 	query = filter.Apply(query, req.Filter, groupFilters)
 	return pagination.CursorPaginate[models.Group](query, req.Pagination)
 }
 
 // UpdateGroup 更新组（JSON Merge Patch 语义）
-func (s *Service) UpdateGroup(ctx context.Context, groupID string, req *GroupUpdateRequest) error {
+func (s *Service) UpdateGroup(ctx context.Context, groupID string, req *dto.GroupUpdateRequest) error {
 	updates := patch.Collect(
 		patch.Field("name", req.Name),
 		patch.Field("description", req.Description),
@@ -850,7 +851,7 @@ func (s *Service) DeleteGroup(ctx context.Context, groupID string) error {
 
 // SetGroupMembers 设置组成员（通过关系表）
 // 注意：组成员关系使用 service_id = "system" 表示系统级别关系
-func (s *Service) SetGroupMembers(ctx context.Context, req *GroupMemberRequest) error {
+func (s *Service) SetGroupMembers(ctx context.Context, req *dto.GroupMemberRequest) error {
 	// 先删除旧的成员关系
 	if err := s.db.WithContext(ctx).Where("service_id = ? AND object_type = ? AND object_id = ? AND relation = ?", "system", "group", req.GroupID, "member").
 		Delete(&models.Relationship{}).Error; err != nil {
@@ -893,6 +894,172 @@ func (s *Service) GetGroupMembers(ctx context.Context, groupID string) ([]string
 	return userIDs, nil
 }
 
+// ==================== IDP Secret 相关 ====================
+
+// GetIDPKeys 获取所有 IDP 密钥
+func (s *Service) GetIDPKeys(ctx context.Context) ([]*models.IDPKey, error) {
+	var secrets []*models.IDPKey
+	if err := s.db.WithContext(ctx).Find(&secrets).Error; err != nil {
+		return nil, fmt.Errorf("获取 IDP 密钥列表失败: %w", err)
+	}
+	return secrets, nil
+}
+
+// GetIDPKey 获取指定 IDP 密钥
+func (s *Service) GetIDPKey(ctx context.Context, idpType, tAppID string) (*models.IDPKey, error) {
+	var secret models.IDPKey
+	if err := s.db.WithContext(ctx).
+		Where("idp_type = ? AND t_app_id = ?", idpType, tAppID).
+		First(&secret).Error; err != nil {
+		return nil, fmt.Errorf("获取 IDP 密钥失败: %w", err)
+	}
+	return &secret, nil
+}
+
+// CreateIDPKey 创建 IDP 密钥
+func (s *Service) CreateIDPKey(ctx context.Context, req *dto.IDPKeyCreateRequest) (*models.IDPKey, error) {
+	aad := req.IDPType + ":" + req.TAppID
+	encryptedSecret, err := s.encryptIDPKey(req.TSecret, aad)
+	if err != nil {
+		return nil, err
+	}
+	secret := &models.IDPKey{
+		IDPType: req.IDPType,
+		TAppID:  req.TAppID,
+		TSecret: encryptedSecret,
+	}
+	if err := s.db.WithContext(ctx).Create(secret).Error; err != nil {
+		return nil, fmt.Errorf("创建 IDP 密钥失败: %w", err)
+	}
+	return secret, nil
+}
+
+// UpdateIDPKey 更新 IDP 密钥
+func (s *Service) UpdateIDPKey(ctx context.Context, idpType, tAppID string, req *dto.IDPKeyUpdateRequest) error {
+	if !req.TSecret.IsPresent() || req.TSecret.IsNull() {
+		return nil
+	}
+	aad := idpType + ":" + tAppID
+	encryptedSecret, err := s.encryptIDPKey(req.TSecret.Value(), aad)
+	if err != nil {
+		return err
+	}
+	result := s.db.WithContext(ctx).Model(&models.IDPKey{}).
+		Where("idp_type = ? AND t_app_id = ?", idpType, tAppID).
+		Update("t_secret", encryptedSecret)
+	if result.Error != nil {
+		return fmt.Errorf("更新 IDP 密钥失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("IDP 密钥不存在: idp_type=%s, t_app_id=%s", idpType, tAppID)
+	}
+	return nil
+}
+
+// DeleteIDPKey 删除 IDP 密钥
+func (s *Service) DeleteIDPKey(ctx context.Context, idpType, tAppID string) error {
+	result := s.db.WithContext(ctx).
+		Where("idp_type = ? AND t_app_id = ?", idpType, tAppID).
+		Delete(&models.IDPKey{})
+	if result.Error != nil {
+		return fmt.Errorf("删除 IDP 密钥失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("IDP 密钥不存在: idp_type=%s, t_app_id=%s", idpType, tAppID)
+	}
+	return nil
+}
+
+// ==================== Domain IDP Config 相关 ====================
+
+// GetDomainIDPConfigs 获取域下所有 IDP 配置（按 priority 降序）
+func (s *Service) GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error) {
+	var configs []*models.DomainIDPConfig
+	if err := s.db.WithContext(ctx).
+		Where("domain_id = ?", domainID).
+		Order("priority DESC").
+		Find(&configs).Error; err != nil {
+		return nil, fmt.Errorf("获取域 IDP 配置列表失败: %w", err)
+	}
+	return configs, nil
+}
+
+// GetDomainIDPConfig 获取域下指定 IDP 类型的配置
+func (s *Service) GetDomainIDPConfig(ctx context.Context, domainID, idpType string) (*models.DomainIDPConfig, error) {
+	var cfg models.DomainIDPConfig
+	if err := s.db.WithContext(ctx).
+		Where("domain_id = ? AND idp_type = ?", domainID, idpType).
+		First(&cfg).Error; err != nil {
+		return nil, fmt.Errorf("获取域 IDP 配置失败: %w", err)
+	}
+	return &cfg, nil
+}
+
+// CreateDomainIDPConfig 创建域 IDP 配置（idp_type 必须在域允许列表中）
+func (s *Service) CreateDomainIDPConfig(ctx context.Context, domainID string, req *dto.DomainIDPConfigCreateRequest) (*models.DomainIDPConfig, error) {
+	allowed, err := s.getDomainAllowedIDPs(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+	found := false
+	for _, t := range allowed {
+		if t == req.IDPType {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("IDP %s 不在域 %s 的允许列表中", req.IDPType, domainID)
+	}
+
+	cfg := &models.DomainIDPConfig{
+		DomainID: domainID,
+		IDPType:  req.IDPType,
+		Priority: req.Priority,
+		Strategy: req.Strategy,
+		TAppID:   req.TAppID,
+	}
+	if err := s.db.WithContext(ctx).Create(cfg).Error; err != nil {
+		return nil, fmt.Errorf("创建域 IDP 配置失败: %w", err)
+	}
+	return cfg, nil
+}
+
+// UpdateDomainIDPConfig 更新域 IDP 配置（JSON Merge Patch 语义）
+func (s *Service) UpdateDomainIDPConfig(ctx context.Context, domainID, idpType string, req *dto.DomainIDPConfigUpdateRequest) error {
+	updates := patch.Collect(
+		patch.Field("priority", req.Priority),
+		patch.Field("strategy", req.Strategy),
+		patch.Field("t_app_id", req.TAppID),
+	)
+	if len(updates) == 0 {
+		return nil
+	}
+	result := s.db.WithContext(ctx).Model(&models.DomainIDPConfig{}).
+		Where("domain_id = ? AND idp_type = ?", domainID, idpType).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("更新域 IDP 配置失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("域 IDP 配置不存在: domain_id=%s, idp_type=%s", domainID, idpType)
+	}
+	return nil
+}
+
+// DeleteDomainIDPConfig 删除域 IDP 配置
+func (s *Service) DeleteDomainIDPConfig(ctx context.Context, domainID, idpType string) error {
+	result := s.db.WithContext(ctx).
+		Where("domain_id = ? AND idp_type = ?", domainID, idpType).
+		Delete(&models.DomainIDPConfig{})
+	if result.Error != nil {
+		return fmt.Errorf("删除域 IDP 配置失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("域 IDP 配置不存在: domain_id=%s, idp_type=%s", domainID, idpType)
+	}
+	return nil
+}
+
 // ==================== Application IDP Config 相关 ====================
 
 // GetApplicationIDPConfigs 获取应用 IDP 配置列表（按 priority 降序）
@@ -908,7 +1075,7 @@ func (s *Service) GetApplicationIDPConfigs(ctx context.Context, appID string) ([
 }
 
 // CreateApplicationIDPConfig 创建应用 IDP 配置（仅允许添加该应用所属域下的 IDP）
-func (s *Service) CreateApplicationIDPConfig(ctx context.Context, appID string, req *ApplicationIDPConfigCreateRequest) (*models.ApplicationIDPConfig, error) {
+func (s *Service) CreateApplicationIDPConfig(ctx context.Context, appID string, req *dto.ApplicationIDPConfigCreateRequest) (*models.ApplicationIDPConfig, error) {
 	if err := s.ensureIDPAllowedForApplication(ctx, appID, req.Type); err != nil {
 		return nil, err
 	}
@@ -917,8 +1084,7 @@ func (s *Service) CreateApplicationIDPConfig(ctx context.Context, appID string, 
 		Type:     req.Type,
 		Priority: req.Priority,
 		Strategy: req.Strategy,
-		Delegate: req.Delegate,
-		Require:  req.Require,
+		TAppID:   req.TAppID,
 	}
 	if err := s.db.WithContext(ctx).Create(cfg).Error; err != nil {
 		return nil, fmt.Errorf("创建应用 IDP 配置失败: %w", err)
@@ -926,13 +1092,12 @@ func (s *Service) CreateApplicationIDPConfig(ctx context.Context, appID string, 
 	return cfg, nil
 }
 
-// UpdateApplicationIDPConfig 更新应用 IDP 配置（不修改 type 时不校验域；若请求中带新 type 则需在域允许列表中）
-func (s *Service) UpdateApplicationIDPConfig(ctx context.Context, appID, idpType string, req *ApplicationIDPConfigUpdateRequest) error {
+// UpdateApplicationIDPConfig 更新应用 IDP 配置（JSON Merge Patch 语义）
+func (s *Service) UpdateApplicationIDPConfig(ctx context.Context, appID, idpType string, req *dto.ApplicationIDPConfigUpdateRequest) error {
 	updates := patch.Collect(
 		patch.Field("priority", req.Priority),
 		patch.Field("strategy", req.Strategy),
-		patch.Field("delegate", req.Delegate),
-		patch.Field("require", req.Require),
+		patch.Field("t_app_id", req.TAppID),
 	)
 	if len(updates) == 0 {
 		return nil
@@ -958,6 +1123,48 @@ func (s *Service) DeleteApplicationIDPConfig(ctx context.Context, appID, idpType
 		return fmt.Errorf("应用 IDP 配置不存在: app_id=%s, type=%s", appID, idpType)
 	}
 	return nil
+}
+
+// ResolveIDPCredential 解析应用的有效 IDP 凭证
+// 确定 t_app_id（app 覆盖 → domain 默认），再从 t_idp_key 查密钥
+func (s *Service) ResolveIDPCredential(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error) {
+	var appCfg models.ApplicationIDPConfig
+	if findErr := s.db.WithContext(ctx).
+		Where("app_id = ? AND `type` = ?", appID, idpType).
+		First(&appCfg).Error; findErr != nil {
+		return "", "", fmt.Errorf("应用 IDP 配置不存在: %w", findErr)
+	}
+
+	resolvedAppID := ""
+	if appCfg.TAppID != nil && *appCfg.TAppID != "" {
+		resolvedAppID = *appCfg.TAppID
+	} else {
+		app, appErr := s.GetApplication(ctx, appID)
+		if appErr != nil {
+			return "", "", appErr
+		}
+		var domainCfg models.DomainIDPConfig
+		if findErr := s.db.WithContext(ctx).
+			Where("domain_id = ? AND idp_type = ?", app.DomainID, idpType).
+			First(&domainCfg).Error; findErr != nil {
+			return "", "", fmt.Errorf("域 IDP 配置未配置: domain_id=%s, idp_type=%s", app.DomainID, idpType)
+		}
+		resolvedAppID = domainCfg.TAppID
+	}
+
+	var idpSecret models.IDPKey
+	if findErr := s.db.WithContext(ctx).
+		Where("idp_type = ? AND t_app_id = ?", idpType, resolvedAppID).
+		First(&idpSecret).Error; findErr != nil {
+		return "", "", fmt.Errorf("IDP 密钥不存在: idp_type=%s, t_app_id=%s", idpType, resolvedAppID)
+	}
+
+	aad := idpType + ":" + resolvedAppID
+	secret, decErr := s.decryptIDPKey(idpSecret.TSecret, aad)
+	if decErr != nil {
+		return "", "", decErr
+	}
+	return resolvedAppID, secret, nil
 }
 
 // ==================== Service Challenge Config 相关 ====================
@@ -1085,6 +1292,34 @@ func (s *Service) getKeys(ctx context.Context, ownerType, ownerID string) ([][]b
 	}
 
 	return result, nil
+}
+
+func (s *Service) encryptIDPKey(plaintext, aad string) (string, error) {
+	dbEncKey, err := config.GetDBEncKeyRaw()
+	if err != nil {
+		return "", fmt.Errorf("获取数据库加密密钥失败: %w", err)
+	}
+	encrypted, err := cryptoutil.EncryptAESGCM(dbEncKey, []byte(plaintext), aad)
+	if err != nil {
+		return "", fmt.Errorf("加密 IDP secret 失败: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(encrypted), nil
+}
+
+func (s *Service) decryptIDPKey(cipherBase64, aad string) (string, error) {
+	dbEncKey, err := config.GetDBEncKeyRaw()
+	if err != nil {
+		return "", fmt.Errorf("获取数据库加密密钥失败: %w", err)
+	}
+	encrypted, err := base64.StdEncoding.DecodeString(cipherBase64)
+	if err != nil {
+		return "", fmt.Errorf("Base64 解码失败: %w", err)
+	}
+	decrypted, err := cryptoutil.DecryptAESGCM(dbEncKey, encrypted, aad)
+	if err != nil {
+		return "", fmt.Errorf("解密 IDP secret 失败: %w", err)
+	}
+	return string(decrypted), nil
 }
 
 // createKey 为 owner 创建新密钥（在事务中调用）

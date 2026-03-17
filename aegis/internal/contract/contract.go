@@ -3,8 +3,8 @@ package contract
 import (
 	"context"
 
-	"github.com/heliannuuthus/helios/hermes"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 type HermesProvider interface {
@@ -26,8 +26,8 @@ type UserProvider interface {
 	GetByPhonePlain(ctx context.Context, phone string) (*models.UserWithDecrypted, error)
 	AddIdentity(ctx context.Context, identity *models.UserIdentity) error
 	CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error)
-	GetUserByIdentifier(ctx context.Context, identifier string) (*hermes.PasswordStoreCredential, error)
-	GetStaffByIdentifier(ctx context.Context, identifier string) (*hermes.PasswordStoreCredential, error)
+	GetUserByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error)
+	GetStaffByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error)
 	CreateCredential(ctx context.Context, cred *models.UserCredential) error
 	UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
@@ -38,11 +38,11 @@ type UserProvider interface {
 }
 
 type CredentialProvider interface {
-	VerifyTOTP(ctx context.Context, req *hermes.VerifyTOTPRequest) error
+	VerifyTOTP(ctx context.Context, req *dto.VerifyTOTPRequest) error
 	GetUserMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error)
 	GetUserCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error)
-	SetupTOTP(ctx context.Context, req *hermes.TOTPSetupRequest) (*hermes.TOTPSetupResponse, error)
-	ConfirmTOTP(ctx context.Context, req *hermes.ConfirmTOTPRequest) error
+	SetupTOTP(ctx context.Context, req *dto.TOTPSetupRequest) (*dto.TOTPSetupResponse, error)
+	ConfirmTOTP(ctx context.Context, req *dto.ConfirmTOTPRequest) error
 	SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error
 	SetWebAuthnEnabled(ctx context.Context, openid, credentialID string, enabled bool) error
 	DisableTOTP(ctx context.Context, openid string) error

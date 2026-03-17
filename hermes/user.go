@@ -12,9 +12,10 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/hermes/config"
-	"github.com/heliannuuthus/helios/hermes/models"
 	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
+	"github.com/heliannuuthus/helios/pkg/dto"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // UserService 用户服务（连接数据库）
@@ -367,27 +368,17 @@ func (s *UserService) GetOpenIDByCredentialID(ctx context.Context, credentialID 
 
 // ==================== PasswordStore 接口实现（供 password IDP 使用）====================
 
-// PasswordStoreCredential 密码存储凭证信息
-type PasswordStoreCredential struct {
-	OpenID       string // 该 IDP 身份的 TOpenID，由 toPasswordStoreCredentialWithIDP 设置
-	PasswordHash string // 密码哈希（bcrypt）
-	Nickname     string // 昵称
-	Email        string // 邮箱
-	Picture      string // 头像
-	Status       int8   // 用户状态
-}
-
 // GetUserByIdentifier 根据标识符获取 C 端用户凭证信息
 // identifier 可以是用户名、邮箱或手机号
 // 通过 identity 表中 idp=user 的记录确认用户具有 C 端身份
-func (s *UserService) GetUserByIdentifier(ctx context.Context, identifier string) (*PasswordStoreCredential, error) {
+func (s *UserService) GetUserByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error) {
 	return s.getByIdentifierWithIDP(ctx, identifier, "user")
 }
 
 // GetStaffByIdentifier 根据标识符获取 B 端平台人员凭证信息
 // identifier 通常是用户名
 // 通过 identity 表中 idp=staff 的记录确认用户具有 B 端身份
-func (s *UserService) GetStaffByIdentifier(ctx context.Context, identifier string) (*PasswordStoreCredential, error) {
+func (s *UserService) GetStaffByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error) {
 	return s.getByIdentifierWithIDP(ctx, identifier, "staff")
 }
 
@@ -401,7 +392,7 @@ func (s *UserService) getByEmail(ctx context.Context, email string) (*models.Use
 }
 
 // getByIdentifierWithIDP 根据标识符查找用户，并验证用户具有指定 IDP 的主身份
-func (s *UserService) getByIdentifierWithIDP(ctx context.Context, identifier, idpType string) (*PasswordStoreCredential, error) {
+func (s *UserService) getByIdentifierWithIDP(ctx context.Context, identifier, idpType string) (*dto.PasswordStoreCredential, error) {
 	// 按优先级尝试不同的标识符类型
 	// 1. 尝试用户名
 	user, err := s.GetByUsername(ctx, identifier)
@@ -430,7 +421,7 @@ func (s *UserService) getByIdentifierWithIDP(ctx context.Context, identifier, id
 }
 
 // toPasswordStoreCredentialWithIDP 转换为密码存储凭证，同时验证用户具有指定 IDP 的身份
-func (s *UserService) toPasswordStoreCredentialWithIDP(ctx context.Context, user *models.User, idpType string) (*PasswordStoreCredential, error) {
+func (s *UserService) toPasswordStoreCredentialWithIDP(ctx context.Context, user *models.User, idpType string) (*dto.PasswordStoreCredential, error) {
 	// 查找用户在该 IDP 类型下的身份（任意域均可）
 	var identity models.UserIdentity
 	if err := s.db.WithContext(ctx).Where("uid = ? AND idp = ?", user.OpenID, idpType).First(&identity).Error; err != nil {
@@ -444,8 +435,8 @@ func (s *UserService) toPasswordStoreCredentialWithIDP(ctx context.Context, user
 }
 
 // toPasswordStoreCredential 转换为密码存储凭证
-func (s *UserService) toPasswordStoreCredential(user *models.User) *PasswordStoreCredential {
-	cred := &PasswordStoreCredential{
+func (s *UserService) toPasswordStoreCredential(user *models.User) *dto.PasswordStoreCredential {
+	cred := &dto.PasswordStoreCredential{
 		Status: user.Status,
 	}
 

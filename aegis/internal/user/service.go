@@ -6,7 +6,7 @@ import (
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
 	"github.com/heliannuuthus/helios/aegis/internal/contract"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // Service 用户业务服务

@@ -7,7 +7,7 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // 编译期接口检查

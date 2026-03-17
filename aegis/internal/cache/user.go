@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // ==================== User（read-through 缓存）====================

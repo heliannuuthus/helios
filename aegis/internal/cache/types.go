@@ -1,6 +1,6 @@
 package cache
 
-import "github.com/heliannuuthus/helios/hermes/models"
+import "github.com/heliannuuthus/helios/pkg/models"
 
 // Key 统一密钥结构（派生后的 raw bytes）。
 // 不同场景按需填充：

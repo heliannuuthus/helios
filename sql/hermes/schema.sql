@@ -2,7 +2,7 @@
 -- MySQL 8.0+ 语法
 -- 注意：session、authorization_code、refresh_token 都存储在 Redis 中
 -- 注意：域签名密钥仍从配置文件或密钥服务读取，不存库
--- 注意：IDP 的密钥/回调等从配置文件读取
+-- 注意：IDP 的凭证（app_id/secret）存储在 t_domain_idp_credential 和 t_application_idp_config 中
 
 -- ==================== 数据库初始化 ====================
 
@@ -68,23 +68,57 @@ CREATE TABLE IF NOT EXISTS t_application (
 UNIQUE KEY uk_app_id (app_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='OAuth2 应用';
 
+-- ==================== IDP 密钥表 ====================
+-- 全局存储第三方 IDP 凭证，(idp_type, t_app_id) 唯一
+
+CREATE TABLE IF NOT EXISTS t_idp_key (
+    _id          INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
+    -- 业务字段
+    idp_type     VARCHAR(32)   NOT NULL COMMENT 'IDP 类型：github/google/wxmp/ttmp 等',
+    t_app_id     VARCHAR(256)  NOT NULL COMMENT '第三方 IDP 的 App ID / Client ID',
+    t_secret     VARCHAR(2048) NOT NULL COMMENT '加密 JSON（AES-GCM），含 secret/private_key 等',
+    -- 时间戳
+    created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+UNIQUE KEY uk_idp_app (idp_type, t_app_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='IDP 密钥';
+
+-- ==================== 域 IDP 配置表 ====================
+-- 域级别的 IDP 默认配置，引用 t_idp_key 中的 t_app_id
+
+CREATE TABLE IF NOT EXISTS t_domain_idp_config (
+    _id          INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
+    -- 业务字段
+    domain_id    VARCHAR(32)   NOT NULL COMMENT '域 ID',
+    idp_type     VARCHAR(32)   NOT NULL COMMENT 'IDP 类型：github/google/wxmp/ttmp 等',
+    priority     INT           NOT NULL DEFAULT 0 COMMENT '排序优先级（值越大越靠前）',
+    strategy     VARCHAR(256)  DEFAULT NULL COMMENT '认证方式：password,webauthn',
+    t_app_id     VARCHAR(256)  NOT NULL COMMENT '引用 t_idp_key 的 t_app_id',
+    -- 时间戳
+    created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+UNIQUE KEY uk_domain_idp_type (domain_id, idp_type),
+    INDEX idx_domain_priority (domain_id, priority DESC),
+    CONSTRAINT fk_idp_cfg_domain FOREIGN KEY (domain_id) REFERENCES t_domain(domain_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='域 IDP 配置';
+
 -- ==================== 应用 IDP 配置表 ====================
--- 应用级别的 IDP 配置（登录方式、委托验证、前置验证）
+-- 应用级别的 IDP 配置，可选覆盖 t_app_id（NULL=使用域默认）
 
 CREATE TABLE IF NOT EXISTS t_application_idp_config (
-    _id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    _id          INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
-    app_id       VARCHAR(64)  NOT NULL COMMENT '应用 ID',
-    `type`       VARCHAR(32)  NOT NULL COMMENT 'IDP 类型：github/google/wxmp/user/staff',
-    priority     INT          NOT NULL DEFAULT 0 COMMENT '排序优先级（值越大越靠前）',
-    strategy     VARCHAR(256) DEFAULT NULL COMMENT '认证方式（仅 user/staff）：password,webauthn',
-    delegate     VARCHAR(256) DEFAULT NULL COMMENT '委托 MFA：email_otp,totp,webauthn',
-    `require`    VARCHAR(256) DEFAULT NULL COMMENT '前置验证：captcha',
+    app_id       VARCHAR(64)   NOT NULL COMMENT '应用 ID',
+    `type`       VARCHAR(32)   NOT NULL COMMENT 'IDP 类型：github/google/wxmp/user/staff',
+    priority     INT           NOT NULL DEFAULT 0 COMMENT '排序优先级（值越大越靠前）',
+    strategy     VARCHAR(256)  DEFAULT NULL COMMENT '认证方式（仅 user/staff）：password,webauthn',
+    t_app_id     VARCHAR(256)  DEFAULT NULL COMMENT '引用 t_idp_key 的 t_app_id（NULL=使用域默认）',
     -- 时间戳
-    created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
--- 索引：主查询 WHERE app_id = ? ORDER BY priority DESC
 UNIQUE KEY uk_app_type (app_id, `type`),
     INDEX idx_app_priority (app_id, priority DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='应用 IDP 配置';

@@ -1,4 +1,4 @@
-package hermes
+package dto
 
 import (
 	"github.com/heliannuuthus/helios/pkg/pagination"
@@ -33,13 +33,13 @@ type ServiceUpdateRequest struct {
 // AppID 可选；不填时后端用随机 bigint 经 base62 编码自动生成
 type ApplicationCreateRequest struct {
 	DomainID                      string   `json:"domain_id" binding:"required"`
-	AppID                         string   `json:"app_id"` // 可选，空则自动生成
+	AppID                         string   `json:"app_id"`
 	Name                          string   `json:"name" binding:"required"`
 	Description                   string   `json:"description" binding:"required"`
 	AllowedRedirectURIs           []string `json:"allowed_redirect_uris"`
 	AllowedOrigins                []string `json:"allowed_origins"`
 	AllowedLogoutURIs             []string `json:"allowed_logout_uris"`
-	NeedKey                       bool     `json:"need_key"` // 是否需要密钥
+	NeedKey                       bool     `json:"need_key"`
 	IDTokenExpiresIn              *uint    `json:"id_token_expires_in"`
 	RefreshTokenExpiresIn         *uint    `json:"refresh_token_expires_in"`
 	RefreshTokenAbsoluteExpiresIn *uint    `json:"refresh_token_absolute_expires_in"`
@@ -58,28 +58,53 @@ type ApplicationUpdateRequest struct {
 	RefreshTokenAbsoluteExpiresIn patch.Optional[uint]     `json:"refresh_token_absolute_expires_in"`
 }
 
-// ApplicationIDPConfigCreateRequest 创建应用 IDP 配置请求（idp 类型必须在应用所属域的 allowed_idps 内）
-type ApplicationIDPConfigCreateRequest struct {
-	Type     string  `json:"type" binding:"required"` // idp 类型：github/google/user/staff 等
-	Priority int     `json:"priority"`
-	Strategy *string `json:"strategy,omitempty"` // password,webauthn
-	Delegate *string `json:"delegate,omitempty"` // email_otp,totp,webauthn
-	Require  *string `json:"require,omitempty"`  // captcha
+// IDPKeyCreateRequest 创建 IDP 密钥
+type IDPKeyCreateRequest struct {
+	IDPType string `json:"idp_type" binding:"required"`
+	TAppID  string `json:"t_app_id" binding:"required"`
+	TSecret string `json:"t_secret" binding:"required"`
 }
 
-// ApplicationIDPConfigUpdateRequest 更新应用 IDP 配置请求（若修改 type 则必须在域 allowed_idps 内）
+// IDPKeyUpdateRequest 更新 IDP 密钥（JSON Merge Patch 语义）
+type IDPKeyUpdateRequest struct {
+	TSecret patch.Optional[string] `json:"t_secret"`
+}
+
+// DomainIDPConfigCreateRequest 创建域 IDP 配置请求
+type DomainIDPConfigCreateRequest struct {
+	IDPType  string  `json:"idp_type" binding:"required"`
+	Priority int     `json:"priority"`
+	Strategy *string `json:"strategy,omitempty"`
+	TAppID   string  `json:"t_app_id" binding:"required"`
+}
+
+// DomainIDPConfigUpdateRequest 更新域 IDP 配置请求（JSON Merge Patch 语义）
+type DomainIDPConfigUpdateRequest struct {
+	Priority patch.Optional[int]    `json:"priority"`
+	Strategy patch.Optional[string] `json:"strategy"`
+	TAppID   patch.Optional[string] `json:"t_app_id"`
+}
+
+// ApplicationIDPConfigCreateRequest 创建应用 IDP 配置请求（idp 类型必须在应用所属域的 allowed_idps 内）
+type ApplicationIDPConfigCreateRequest struct {
+	Type     string  `json:"type" binding:"required"`
+	Priority int     `json:"priority"`
+	Strategy *string `json:"strategy,omitempty"`
+	TAppID   *string `json:"t_app_id,omitempty"`
+}
+
+// ApplicationIDPConfigUpdateRequest 更新应用 IDP 配置请求（JSON Merge Patch 语义）
 type ApplicationIDPConfigUpdateRequest struct {
 	Priority patch.Optional[int]    `json:"priority"`
 	Strategy patch.Optional[string] `json:"strategy"`
-	Delegate patch.Optional[string] `json:"delegate"`
-	Require  patch.Optional[string] `json:"require"`
+	TAppID   patch.Optional[string] `json:"t_app_id"`
 }
 
 // ApplicationServiceRelationRequest 应用服务关系请求（内部用，path 提供 app_id/service_id）
 type ApplicationServiceRelationRequest struct {
 	AppID     string   `json:"app_id" binding:"required"`
 	ServiceID string   `json:"service_id" binding:"required"`
-	Relations []string `json:"relations" binding:"required"` // 关系列表，["*"] 表示全部
+	Relations []string `json:"relations" binding:"required"`
 }
 
 // ServiceAppRelationsRequest 服务-应用关系请求 PUT /services/:service_id/applications/:app_id/relations
@@ -90,12 +115,12 @@ type ServiceAppRelationsRequest struct {
 // RelationshipCreateRequest 创建关系请求
 type RelationshipCreateRequest struct {
 	ServiceID   string  `json:"service_id" binding:"required"`
-	SubjectType string  `json:"subject_type" binding:"required"` // user/group/application
+	SubjectType string  `json:"subject_type" binding:"required"`
 	SubjectID   string  `json:"subject_id" binding:"required"`
 	Relation    string  `json:"relation" binding:"required"`
 	ObjectType  string  `json:"object_type" binding:"required"`
 	ObjectID    string  `json:"object_id" binding:"required"`
-	ExpiresAt   *string `json:"expires_at"` // ISO 8601 格式
+	ExpiresAt   *string `json:"expires_at"`
 }
 
 // RelationshipDeleteRequest 删除关系请求
@@ -113,27 +138,27 @@ type RelationshipUpdateRequest struct {
 	ServiceID   string                 `json:"service_id" binding:"required"`
 	SubjectType string                 `json:"subject_type" binding:"required"`
 	SubjectID   string                 `json:"subject_id" binding:"required"`
-	Relation    string                 `json:"relation" binding:"required"` // 旧的关系类型（用于定位）
+	Relation    string                 `json:"relation" binding:"required"`
 	ObjectType  string                 `json:"object_type" binding:"required"`
 	ObjectID    string                 `json:"object_id" binding:"required"`
-	NewRelation patch.Optional[string] `json:"new_relation,omitempty"` // 新的关系类型（可选）
-	ExpiresAt   patch.Optional[string] `json:"expires_at,omitempty"`   // 新的过期时间（可选，ISO 8601 格式，传 null 表示清除过期时间）
+	NewRelation patch.Optional[string] `json:"new_relation,omitempty"`
+	ExpiresAt   patch.Optional[string] `json:"expires_at,omitempty"`
 }
 
 // AppServiceRelationshipCreateRequest 在应用服务下创建关系请求（RESTful 风格）
 type AppServiceRelationshipCreateRequest struct {
-	SubjectType string  `json:"subject_type" binding:"required"` // user/group/application
+	SubjectType string  `json:"subject_type" binding:"required"`
 	SubjectID   string  `json:"subject_id" binding:"required"`
 	Relation    string  `json:"relation" binding:"required"`
 	ObjectType  string  `json:"object_type" binding:"required"`
 	ObjectID    string  `json:"object_id" binding:"required"`
-	ExpiresAt   *string `json:"expires_at,omitempty"` // ISO 8601 格式
+	ExpiresAt   *string `json:"expires_at,omitempty"`
 }
 
 // AppServiceRelationshipUpdateRequest 在应用服务下更新关系请求（JSON Merge Patch 语义）
 type AppServiceRelationshipUpdateRequest struct {
-	NewRelation patch.Optional[string] `json:"new_relation,omitempty"` // 新的关系类型（可选）
-	ExpiresAt   patch.Optional[string] `json:"expires_at,omitempty"`   // 新的过期时间（可选，ISO 8601 格式，传 null 表示清除过期时间）
+	NewRelation patch.Optional[string] `json:"new_relation,omitempty"`
+	ExpiresAt   patch.Optional[string] `json:"expires_at,omitempty"`
 }
 
 // RelationshipListRequest 通用关系查询请求（游标分页）
@@ -144,8 +169,8 @@ type RelationshipListRequest struct {
 	Relation    string `form:"relation"`
 	ObjectType  string `form:"object_type"`
 	ObjectID    string `form:"object_id"`
-	EntityType  string `form:"entity_type"` // 匹配 subject_type 或 object_type
-	EntityID    string `form:"entity_id"`   // 匹配 subject_id 或 object_id
+	EntityType  string `form:"entity_type"`
+	EntityID    string `form:"entity_id"`
 	Cursor      string `form:"cursor"`
 	Limit       int    `form:"limit" binding:"omitempty,min=1,max=100"`
 }

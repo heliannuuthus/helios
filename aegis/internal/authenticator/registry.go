@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // Authenticator 统一认证器接口

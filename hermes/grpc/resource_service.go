@@ -9,7 +9,8 @@ import (
 
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
 	"github.com/heliannuuthus/helios/hermes"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/pkg/models"
 	"github.com/heliannuuthus/helios/pkg/pagination"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
@@ -24,7 +25,7 @@ func NewResourceServiceServer(svc *hermes.Service) hermesv1.ResourceServiceServe
 }
 
 func (s *resourceServiceServer) CreateService(ctx context.Context, req *hermesv1.CreateServiceRequest) (*hermesv1.Service, error) {
-	createReq := &hermes.ServiceCreateRequest{
+	createReq := &dto.ServiceCreateRequest{
 		ServiceID:   req.GetServiceId(),
 		DomainID:    req.GetDomainId(),
 		Name:        req.GetName(),
@@ -52,7 +53,7 @@ func (s *resourceServiceServer) GetService(ctx context.Context, req *hermesv1.Ge
 }
 
 func (s *resourceServiceServer) ListServices(ctx context.Context, req *hermesv1.ListServicesRequest) (*hermesv1.ServiceList, error) {
-	listReq := &hermes.ListRequest{Filter: req.GetFilter()}
+	listReq := &dto.ListRequest{Filter: req.GetFilter()}
 	if p := req.GetPagination(); p != nil {
 		listReq.Pagination = pagination.Pagination{Token: p.GetCursor(), Size: int(p.GetLimit())}
 	}
@@ -70,7 +71,7 @@ func (s *resourceServiceServer) ListServices(ctx context.Context, req *hermesv1.
 }
 
 func (s *resourceServiceServer) UpdateService(ctx context.Context, req *hermesv1.UpdateServiceRequest) (*hermesv1.Service, error) {
-	updateReq := &hermes.ServiceUpdateRequest{
+	updateReq := &dto.ServiceUpdateRequest{
 		Name:        optionalFromPtr(req.Name),
 		Description: optionalFromPtr(req.Description),
 		LogoURL:     optionalFromPtr(req.LogoUrl),
@@ -118,7 +119,7 @@ func (s *resourceServiceServer) GetServiceApplicationRelations(ctx context.Conte
 }
 
 func (s *resourceServiceServer) CreateRelationship(ctx context.Context, req *hermesv1.CreateRelationshipRequest) (*hermesv1.Relationship, error) {
-	createReq := &hermes.RelationshipCreateRequest{
+	createReq := &dto.RelationshipCreateRequest{
 		ServiceID:   req.GetServiceId(),
 		SubjectType: req.GetSubjectType(),
 		SubjectID:   req.GetSubjectId(),
@@ -139,7 +140,7 @@ func (s *resourceServiceServer) CreateRelationship(ctx context.Context, req *her
 }
 
 func (s *resourceServiceServer) DeleteRelationship(ctx context.Context, req *hermesv1.DeleteRelationshipRequest) (*emptypb.Empty, error) {
-	deleteReq := &hermes.RelationshipDeleteRequest{
+	deleteReq := &dto.RelationshipDeleteRequest{
 		ServiceID:   req.GetServiceId(),
 		SubjectType: req.GetSubjectType(),
 		SubjectID:   req.GetSubjectId(),
@@ -154,7 +155,7 @@ func (s *resourceServiceServer) DeleteRelationship(ctx context.Context, req *her
 }
 
 func (s *resourceServiceServer) UpdateRelationship(ctx context.Context, req *hermesv1.UpdateRelationshipRequest) (*hermesv1.Relationship, error) {
-	updateReq := &hermes.RelationshipUpdateRequest{
+	updateReq := &dto.RelationshipUpdateRequest{
 		ServiceID:   req.GetServiceId(),
 		SubjectType: req.GetSubjectType(),
 		SubjectID:   req.GetSubjectId(),
@@ -181,7 +182,7 @@ func (s *resourceServiceServer) UpdateRelationship(ctx context.Context, req *her
 }
 
 func (s *resourceServiceServer) ListRelationships(ctx context.Context, req *hermesv1.ListRelationshipsRequest) (*hermesv1.RelationshipList, error) {
-	listReq := &hermes.ListRequest{Filter: req.GetFilter()}
+	listReq := &dto.ListRequest{Filter: req.GetFilter()}
 	if p := req.GetPagination(); p != nil {
 		listReq.Pagination = pagination.Pagination{Token: p.GetCursor(), Size: int(p.GetLimit())}
 	}
@@ -211,7 +212,7 @@ func (s *resourceServiceServer) FindRelationships(ctx context.Context, req *herm
 }
 
 func (s *resourceServiceServer) ListAppServiceRelationships(ctx context.Context, req *hermesv1.ListAppServiceRelationshipsRequest) (*hermesv1.RelationshipList, error) {
-	listReq := &hermes.ListRequest{Filter: req.GetFilter()}
+	listReq := &dto.ListRequest{Filter: req.GetFilter()}
 	if p := req.GetPagination(); p != nil {
 		listReq.Pagination = pagination.Pagination{Token: p.GetCursor(), Size: int(p.GetLimit())}
 	}
@@ -229,7 +230,7 @@ func (s *resourceServiceServer) ListAppServiceRelationships(ctx context.Context,
 }
 
 func (s *resourceServiceServer) CreateAppServiceRelationship(ctx context.Context, req *hermesv1.CreateAppServiceRelationshipRequest) (*hermesv1.Relationship, error) {
-	createReq := &hermes.AppServiceRelationshipCreateRequest{
+	createReq := &dto.AppServiceRelationshipCreateRequest{
 		SubjectType: req.GetSubjectType(),
 		SubjectID:   req.GetSubjectId(),
 		Relation:    req.GetRelation(),
@@ -249,7 +250,7 @@ func (s *resourceServiceServer) CreateAppServiceRelationship(ctx context.Context
 }
 
 func (s *resourceServiceServer) UpdateAppServiceRelationship(ctx context.Context, req *hermesv1.UpdateAppServiceRelationshipRequest) (*hermesv1.Relationship, error) {
-	updateReq := &hermes.AppServiceRelationshipUpdateRequest{
+	updateReq := &dto.AppServiceRelationshipUpdateRequest{
 		NewRelation: optionalFromPtr(req.NewRelation),
 	}
 
@@ -277,7 +278,7 @@ func (s *resourceServiceServer) DeleteAppServiceRelationship(ctx context.Context
 }
 
 func (s *resourceServiceServer) CreateGroup(ctx context.Context, req *hermesv1.CreateGroupRequest) (*hermesv1.Group, error) {
-	createReq := &hermes.GroupCreateRequest{
+	createReq := &dto.GroupCreateRequest{
 		GroupID:     req.GetGroupId(),
 		ServiceID:   req.GetServiceId(),
 		Name:        req.GetName(),
@@ -300,7 +301,7 @@ func (s *resourceServiceServer) GetGroup(ctx context.Context, req *hermesv1.GetG
 }
 
 func (s *resourceServiceServer) ListGroups(ctx context.Context, req *hermesv1.ListGroupsRequest) (*hermesv1.GroupList, error) {
-	listReq := &hermes.ListRequest{Filter: req.GetFilter()}
+	listReq := &dto.ListRequest{Filter: req.GetFilter()}
 	if p := req.GetPagination(); p != nil {
 		listReq.Pagination = pagination.Pagination{Token: p.GetCursor(), Size: int(p.GetLimit())}
 	}
@@ -318,7 +319,7 @@ func (s *resourceServiceServer) ListGroups(ctx context.Context, req *hermesv1.Li
 }
 
 func (s *resourceServiceServer) UpdateGroup(ctx context.Context, req *hermesv1.UpdateGroupRequest) (*hermesv1.Group, error) {
-	updateReq := &hermes.GroupUpdateRequest{
+	updateReq := &dto.GroupUpdateRequest{
 		Name:        optionalFromPtr(req.Name),
 		Description: optionalFromPtr(req.Description),
 	}
@@ -340,7 +341,7 @@ func (s *resourceServiceServer) DeleteGroup(ctx context.Context, req *hermesv1.G
 }
 
 func (s *resourceServiceServer) SetGroupMembers(ctx context.Context, req *hermesv1.SetGroupMembersRequest) (*emptypb.Empty, error) {
-	memberReq := &hermes.GroupMemberRequest{
+	memberReq := &dto.GroupMemberRequest{
 		GroupID: req.GetGroupId(),
 		UserIDs: req.GetUserIds(),
 	}

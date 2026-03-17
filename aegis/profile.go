@@ -12,8 +12,8 @@ import (
 
 	"github.com/heliannuuthus/helios/aegis/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/contract"
-	"github.com/heliannuuthus/helios/hermes"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/pkg/models"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
@@ -244,7 +244,7 @@ func (h *ProfileHandler) SetupMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		resp, err := h.credentialSvc.SetupTOTP(ctx, &hermes.TOTPSetupRequest{
+		resp, err := h.credentialSvc.SetupTOTP(ctx, &dto.TOTPSetupRequest{
 			OpenID:  openid,
 			AppName: req.AppName,
 		})
@@ -303,7 +303,7 @@ func (h *ProfileHandler) VerifyMFA(c *gin.Context) {
 				profileError(c, errors.NewInvalidRequest("credential_id is required for confirm"))
 				return
 			}
-			err := h.credentialSvc.ConfirmTOTP(ctx, &hermes.ConfirmTOTPRequest{
+			err := h.credentialSvc.ConfirmTOTP(ctx, &dto.ConfirmTOTPRequest{
 				OpenID:       openid,
 				CredentialID: req.CredentialID,
 				Code:         req.Code,
@@ -313,7 +313,7 @@ func (h *ProfileHandler) VerifyMFA(c *gin.Context) {
 				return
 			}
 		} else {
-			err := h.credentialSvc.VerifyTOTP(ctx, &hermes.VerifyTOTPRequest{
+			err := h.credentialSvc.VerifyTOTP(ctx, &dto.VerifyTOTPRequest{
 				OpenID: openid,
 				Code:   req.Code,
 			})

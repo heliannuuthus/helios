@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // 响应 DTO：仅包含需要暴露给前端的字段，不包含内部 _id；由 handler 直接构建。
@@ -28,14 +28,53 @@ type ServiceResponse struct {
 	UpdatedAt            string  `json:"updated_at"`
 }
 
-// ApplicationIDPConfigResponse 应用 IDP 配置（无 _id）
+// IDPKeyResponse IDP 密钥（不暴露 t_secret）
+type IDPKeyResponse struct {
+	IDPType   string `json:"idp_type"`
+	TAppID    string `json:"t_app_id"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+func NewIDPKeyResponse(s *models.IDPKey) IDPKeyResponse {
+	return IDPKeyResponse{
+		IDPType:   s.IDPType,
+		TAppID:    s.TAppID,
+		CreatedAt: FormatTime(s.CreatedAt),
+		UpdatedAt: FormatTime(s.UpdatedAt),
+	}
+}
+
+// DomainIDPConfigResponse 域 IDP 配置（无 _id，t_secret 不暴露）
+type DomainIDPConfigResponse struct {
+	DomainID  string  `json:"domain_id"`
+	IDPType   string  `json:"idp_type"`
+	Priority  int     `json:"priority"`
+	Strategy  *string `json:"strategy,omitempty"`
+	TAppID    string  `json:"t_app_id"`
+	CreatedAt string  `json:"created_at"`
+	UpdatedAt string  `json:"updated_at"`
+}
+
+func NewDomainIDPConfigResponse(c *models.DomainIDPConfig) DomainIDPConfigResponse {
+	return DomainIDPConfigResponse{
+		DomainID:  c.DomainID,
+		IDPType:   c.IDPType,
+		Priority:  c.Priority,
+		Strategy:  c.Strategy,
+		TAppID:    c.TAppID,
+		CreatedAt: FormatTime(c.CreatedAt),
+		UpdatedAt: FormatTime(c.UpdatedAt),
+	}
+}
+
+// ApplicationIDPConfigResponse 应用 IDP 配置（无 _id，t_secret 不暴露）
 type ApplicationIDPConfigResponse struct {
 	AppID     string  `json:"app_id"`
 	Type      string  `json:"type"`
 	Priority  int     `json:"priority"`
 	Strategy  *string `json:"strategy,omitempty"`
-	Delegate  *string `json:"delegate,omitempty"`
-	Require   *string `json:"require,omitempty"`
+	TAppID    *string `json:"t_app_id,omitempty"`
 	CreatedAt string  `json:"created_at"`
 	UpdatedAt string  `json:"updated_at"`
 }

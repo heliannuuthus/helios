@@ -32,49 +32,27 @@ func (Application) TableName() string {
 
 func (a Application) PrimaryKey() uint { return a.ID }
 
-// ApplicationIDPConfig 应用 IDP 配置
+// ApplicationIDPConfig 应用 IDP 配置 + 可选凭证覆盖
 type ApplicationIDPConfig struct {
-	// 主键
-	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
-	// 固定长度字段
-	AppID    string `gorm:"column:app_id;size:64;not null" json:"app_id"`
-	Type     string `gorm:"column:type;size:32;not null" json:"type"` // github/google/wxmp/user/staff
-	Priority int    `gorm:"column:priority;not null;default:0" json:"priority"`
-	// 时间戳
+	ID        uint      `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
+	AppID     string    `gorm:"column:app_id;size:64;not null" json:"app_id"`
+	Type      string    `gorm:"column:type;size:32;not null" json:"type"`
+	Priority  int       `gorm:"column:priority;not null;default:0" json:"priority"`
+	Strategy  *string   `gorm:"column:strategy;size:256" json:"strategy,omitempty"`
+	TAppID    *string   `gorm:"column:t_app_id;size:256" json:"t_app_id,omitempty"`
 	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at;not null" json:"updated_at"`
-	// 变长字段（逗号分隔）
-	Strategy *string `gorm:"column:strategy;size:256" json:"strategy,omitempty"` // password,webauthn（仅 user/staff 需要）
-	Delegate *string `gorm:"column:delegate;size:256" json:"delegate,omitempty"` // email_otp,totp,webauthn
-	Require  *string `gorm:"column:require;size:256" json:"require,omitempty"`   // captcha
 }
 
 func (ApplicationIDPConfig) TableName() string {
 	return "t_application_idp_config"
 }
 
-// GetStrategyList 获取策略列表
 func (a *ApplicationIDPConfig) GetStrategyList() []string {
 	if a.Strategy == nil || *a.Strategy == "" {
 		return nil
 	}
 	return strings.Split(*a.Strategy, ",")
-}
-
-// GetDelegateList 获取委托 MFA 列表
-func (a *ApplicationIDPConfig) GetDelegateList() []string {
-	if a.Delegate == nil || *a.Delegate == "" {
-		return nil
-	}
-	return strings.Split(*a.Delegate, ",")
-}
-
-// GetRequireList 获取前置验证列表
-func (a *ApplicationIDPConfig) GetRequireList() []string {
-	if a.Require == nil || *a.Require == "" {
-		return nil
-	}
-	return strings.Split(*a.Require, ",")
 }
 
 // ApplicationServiceRelation 应用服务关系

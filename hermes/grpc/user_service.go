@@ -8,7 +8,8 @@ import (
 
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
 	"github.com/heliannuuthus/helios/hermes"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 type userServiceServer struct {
@@ -325,7 +326,7 @@ func (s *userServiceServer) GetOpenIDByCredentialID(ctx context.Context, req *he
 // ==================== TOTP delegates ====================
 
 func (s *userServiceServer) SetupTOTP(ctx context.Context, req *hermesv1.SetupTOTPRequest) (*hermesv1.SetupTOTPResponse, error) {
-	resp, err := s.credSvc.SetupTOTP(ctx, &hermes.TOTPSetupRequest{
+	resp, err := s.credSvc.SetupTOTP(ctx, &dto.TOTPSetupRequest{
 		OpenID:  req.GetOpenid(),
 		AppName: req.GetAppName(),
 	})
@@ -340,7 +341,7 @@ func (s *userServiceServer) SetupTOTP(ctx context.Context, req *hermesv1.SetupTO
 }
 
 func (s *userServiceServer) ConfirmTOTP(ctx context.Context, req *hermesv1.ConfirmTOTPRequest) (*emptypb.Empty, error) {
-	if err := s.credSvc.ConfirmTOTP(ctx, &hermes.ConfirmTOTPRequest{
+	if err := s.credSvc.ConfirmTOTP(ctx, &dto.ConfirmTOTPRequest{
 		OpenID:       req.GetOpenid(),
 		CredentialID: uint(req.GetCredentialId()),
 		Code:         req.GetCode(),
@@ -351,7 +352,7 @@ func (s *userServiceServer) ConfirmTOTP(ctx context.Context, req *hermesv1.Confi
 }
 
 func (s *userServiceServer) VerifyTOTP(ctx context.Context, req *hermesv1.VerifyTOTPRequest) (*emptypb.Empty, error) {
-	if err := s.credSvc.VerifyTOTP(ctx, &hermes.VerifyTOTPRequest{
+	if err := s.credSvc.VerifyTOTP(ctx, &dto.VerifyTOTPRequest{
 		OpenID: req.GetOpenid(),
 		Code:   req.GetCode(),
 	}); err != nil {
@@ -385,7 +386,7 @@ func (s *userServiceServer) SetTOTPEnabled(ctx context.Context, req *hermesv1.Se
 // ==================== WebAuthn delegates ====================
 
 func (s *userServiceServer) RegisterWebAuthn(ctx context.Context, req *hermesv1.RegisterWebAuthnRequest) (*hermesv1.UserCredential, error) {
-	cred, err := s.credSvc.RegisterWebAuthn(ctx, &hermes.RegisterWebAuthnRequest{
+	cred, err := s.credSvc.RegisterWebAuthn(ctx, &dto.RegisterWebAuthnRequest{
 		OpenID:          req.GetOpenid(),
 		CredentialID:    req.GetCredentialId(),
 		PublicKey:       req.GetPublicKey(),
@@ -537,7 +538,7 @@ func identitiesToProto(identities models.Identities) *hermesv1.IdentityList {
 	return &hermesv1.IdentityList{Identities: out}
 }
 
-func passwordStoreCredentialToProto(c *hermes.PasswordStoreCredential) *hermesv1.PasswordStoreCredential {
+func passwordStoreCredentialToProto(c *dto.PasswordStoreCredential) *hermesv1.PasswordStoreCredential {
 	pb := &hermesv1.PasswordStoreCredential{
 		Openid:       c.OpenID,
 		PasswordHash: c.PasswordHash,

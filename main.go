@@ -160,6 +160,16 @@ func main() {
 	hermes := r.Group("/hermes")
 	hermes.Use(hermesGuard.Require())
 	{
+		// IDP 密钥管理
+		idpKeys := hermes.Group("/idp-keys")
+		{
+			idpKeys.GET("", app.HermesHandler.ListIDPKeys)
+			idpKeys.GET("/:idp_type/:t_app_id", app.HermesHandler.GetIDPKey)
+			idpKeys.POST("", adminRelation, app.HermesHandler.CreateIDPKey)
+			idpKeys.PATCH("/:idp_type/:t_app_id", adminRelation, app.HermesHandler.UpdateIDPKey)
+			idpKeys.DELETE("/:idp_type/:t_app_id", adminRelation, app.HermesHandler.DeleteIDPKey)
+		}
+
 		// 域管理
 		domains := hermes.Group("/domains")
 		{
@@ -167,6 +177,16 @@ func main() {
 			domains.GET("/:domain_id", app.HermesHandler.GetDomain)
 			domains.PATCH("/:domain_id", adminRelation, app.HermesHandler.UpdateDomain)
 			domains.GET("/:domain_id/idps", app.HermesHandler.GetDomainAllowedIDPs)
+
+			// 域 IDP 配置：domains/:domain_id/idp-configs
+			idpConfigs := domains.Group("/:domain_id/idp-configs")
+			{
+				idpConfigs.GET("", app.HermesHandler.ListDomainIDPConfigs)
+				idpConfigs.GET("/:idp_type", app.HermesHandler.GetDomainIDPConfig)
+				idpConfigs.POST("", adminRelation, app.HermesHandler.CreateDomainIDPConfig)
+				idpConfigs.PATCH("/:idp_type", adminRelation, app.HermesHandler.UpdateDomainIDPConfig)
+				idpConfigs.DELETE("/:idp_type", adminRelation, app.HermesHandler.DeleteDomainIDPConfig)
+			}
 
 			// 域下服务：domains/:domain_id/services
 			domainServices := domains.Group("/:domain_id/services")

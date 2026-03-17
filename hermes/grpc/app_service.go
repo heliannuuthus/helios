@@ -8,7 +8,8 @@ import (
 
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
 	"github.com/heliannuuthus/helios/hermes"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/pkg/models"
 	"github.com/heliannuuthus/helios/pkg/pagination"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
@@ -43,7 +44,7 @@ func (s *appServiceServer) ListDomains(ctx context.Context, _ *emptypb.Empty) (*
 }
 
 func (s *appServiceServer) UpdateDomain(ctx context.Context, req *hermesv1.UpdateDomainRequest) (*hermesv1.Domain, error) {
-	updateReq := &hermes.DomainUpdateRequest{
+	updateReq := &dto.DomainUpdateRequest{
 		Name:        optionalFromPtr(req.Name),
 		Description: optionalFromPtr(req.Description),
 	}
@@ -63,7 +64,7 @@ func (s *appServiceServer) GetDomainAllowedIDPs(ctx context.Context, req *hermes
 }
 
 func (s *appServiceServer) CreateApplication(ctx context.Context, req *hermesv1.CreateApplicationRequest) (*hermesv1.Application, error) {
-	createReq := &hermes.ApplicationCreateRequest{
+	createReq := &dto.ApplicationCreateRequest{
 		DomainID:            req.GetDomainId(),
 		Name:                req.GetName(),
 		Description:         req.GetDescription(),
@@ -104,7 +105,7 @@ func (s *appServiceServer) GetApplication(ctx context.Context, req *hermesv1.Get
 }
 
 func (s *appServiceServer) ListApplications(ctx context.Context, req *hermesv1.ListApplicationsRequest) (*hermesv1.ApplicationList, error) {
-	listReq := &hermes.ListRequest{
+	listReq := &dto.ListRequest{
 		Filter: req.GetFilter(),
 	}
 	if p := req.GetPagination(); p != nil {
@@ -124,7 +125,7 @@ func (s *appServiceServer) ListApplications(ctx context.Context, req *hermesv1.L
 }
 
 func (s *appServiceServer) UpdateApplication(ctx context.Context, req *hermesv1.UpdateApplicationRequest) (*hermesv1.Application, error) {
-	updateReq := &hermes.ApplicationUpdateRequest{
+	updateReq := &dto.ApplicationUpdateRequest{
 		Name:        optionalFromPtr(req.Name),
 		Description: optionalFromPtr(req.Description),
 		LogoURL:     optionalFromPtr(req.LogoUrl),
@@ -174,12 +175,10 @@ func (s *appServiceServer) GetApplicationIDPConfigs(ctx context.Context, req *he
 }
 
 func (s *appServiceServer) CreateApplicationIDPConfig(ctx context.Context, req *hermesv1.CreateApplicationIDPConfigRequest) (*hermesv1.ApplicationIDPConfig, error) {
-	createReq := &hermes.ApplicationIDPConfigCreateRequest{
+	createReq := &dto.ApplicationIDPConfigCreateRequest{
 		Type:     req.GetType(),
 		Priority: int(req.GetPriority()),
 		Strategy: req.Strategy,
-		Delegate: req.Delegate,
-		Require:  req.Require,
 	}
 	cfg, err := s.svc.CreateApplicationIDPConfig(ctx, req.GetAppId(), createReq)
 	if err != nil {
@@ -189,10 +188,8 @@ func (s *appServiceServer) CreateApplicationIDPConfig(ctx context.Context, req *
 }
 
 func (s *appServiceServer) UpdateApplicationIDPConfig(ctx context.Context, req *hermesv1.UpdateApplicationIDPConfigRequest) (*hermesv1.ApplicationIDPConfig, error) {
-	updateReq := &hermes.ApplicationIDPConfigUpdateRequest{
+	updateReq := &dto.ApplicationIDPConfigUpdateRequest{
 		Strategy: optionalFromPtr(req.Strategy),
-		Delegate: optionalFromPtr(req.Delegate),
-		Require:  optionalFromPtr(req.Require),
 	}
 	if req.Priority != nil {
 		updateReq.Priority = optionalIntFromPtr32(req.Priority)
@@ -222,7 +219,7 @@ func (s *appServiceServer) DeleteApplicationIDPConfig(ctx context.Context, req *
 }
 
 func (s *appServiceServer) SetApplicationServiceRelations(ctx context.Context, req *hermesv1.SetApplicationServiceRelationsRequest) (*emptypb.Empty, error) {
-	svcReq := &hermes.ApplicationServiceRelationRequest{
+	svcReq := &dto.ApplicationServiceRelationRequest{
 		AppID:     req.GetAppId(),
 		ServiceID: req.GetServiceId(),
 		Relations: req.GetRelations(),
@@ -292,8 +289,6 @@ func idpConfigToProto(cfg *models.ApplicationIDPConfig) *hermesv1.ApplicationIDP
 		Type:      cfg.Type,
 		Priority:  safeInt32(cfg.Priority),
 		Strategy:  cfg.Strategy,
-		Delegate:  cfg.Delegate,
-		Require:   cfg.Require,
 		CreatedAt: timestamppb.New(cfg.CreatedAt),
 		UpdatedAt: timestamppb.New(cfg.UpdatedAt),
 	}

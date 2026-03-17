@@ -6,14 +6,14 @@ import (
 	"time"
 
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
-	"github.com/heliannuuthus/helios/hermes"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/pkg/models"
 	"github.com/heliannuuthus/helios/pkg/pagination"
 )
 
 // ==================== Service ====================
 
-func (c *Client) CreateService(ctx context.Context, req *hermes.ServiceCreateRequest) (*models.Service, error) {
+func (c *Client) CreateService(ctx context.Context, req *dto.ServiceCreateRequest) (*models.Service, error) {
 	pbReq := &hermesv1.CreateServiceRequest{
 		ServiceId:   req.ServiceID,
 		DomainId:    req.DomainID,
@@ -52,7 +52,7 @@ func (c *Client) GetServiceWithKey(ctx context.Context, serviceID string) (*mode
 	return serviceWithKeyFromProto(svc, keySet), nil
 }
 
-func (c *Client) ListServices(ctx context.Context, domainID string, req *hermes.ListRequest) (*pagination.Items[models.Service], error) {
+func (c *Client) ListServices(ctx context.Context, domainID string, req *dto.ListRequest) (*pagination.Items[models.Service], error) {
 	pbReq := &hermesv1.ListServicesRequest{
 		DomainId: domainID,
 		Filter:   req.Filter,
@@ -75,7 +75,7 @@ func (c *Client) ListServices(ctx context.Context, domainID string, req *hermes.
 	}, nil
 }
 
-func (c *Client) UpdateService(ctx context.Context, serviceID string, req *hermes.ServiceUpdateRequest) error {
+func (c *Client) UpdateService(ctx context.Context, serviceID string, req *dto.ServiceUpdateRequest) error {
 	pbReq := &hermesv1.UpdateServiceRequest{ServiceId: serviceID}
 	if req.Name.IsPresent() && !req.Name.IsNull() {
 		v := req.Name.Value()
@@ -133,7 +133,7 @@ func (c *Client) GetServiceApplicationRelations(ctx context.Context, serviceID s
 
 // ==================== Relationship ====================
 
-func (c *Client) CreateRelationship(ctx context.Context, req *hermes.RelationshipCreateRequest) (*models.Relationship, error) {
+func (c *Client) CreateRelationship(ctx context.Context, req *dto.RelationshipCreateRequest) (*models.Relationship, error) {
 	pbReq := &hermesv1.CreateRelationshipRequest{
 		ServiceId:   req.ServiceID,
 		SubjectType: req.SubjectType,
@@ -156,7 +156,7 @@ func (c *Client) CreateRelationship(ctx context.Context, req *hermes.Relationshi
 	return relationshipFromProto(resp), nil
 }
 
-func (c *Client) DeleteRelationship(ctx context.Context, req *hermes.RelationshipDeleteRequest) error {
+func (c *Client) DeleteRelationship(ctx context.Context, req *dto.RelationshipDeleteRequest) error {
 	_, err := c.resource.DeleteRelationship(ctx, &hermesv1.DeleteRelationshipRequest{
 		ServiceId:   req.ServiceID,
 		SubjectType: req.SubjectType,
@@ -171,7 +171,7 @@ func (c *Client) DeleteRelationship(ctx context.Context, req *hermes.Relationshi
 	return nil
 }
 
-func (c *Client) UpdateRelationship(ctx context.Context, req *hermes.RelationshipUpdateRequest) (*models.Relationship, error) {
+func (c *Client) UpdateRelationship(ctx context.Context, req *dto.RelationshipUpdateRequest) (*models.Relationship, error) {
 	pbReq := &hermesv1.UpdateRelationshipRequest{
 		ServiceId:   req.ServiceID,
 		SubjectType: req.SubjectType,
@@ -198,7 +198,7 @@ func (c *Client) UpdateRelationship(ctx context.Context, req *hermes.Relationshi
 	return relationshipFromProto(resp), nil
 }
 
-func (c *Client) ListRelationships(ctx context.Context, req *hermes.ListRequest) (*pagination.Items[models.Relationship], error) {
+func (c *Client) ListRelationships(ctx context.Context, req *dto.ListRequest) (*pagination.Items[models.Relationship], error) {
 	pbReq := &hermesv1.ListRelationshipsRequest{
 		Filter: req.Filter,
 		Pagination: &hermesv1.Pagination{
@@ -238,7 +238,7 @@ func (c *Client) FindRelationships(ctx context.Context, serviceID, subjectType, 
 
 // ==================== App Service Relationship ====================
 
-func (c *Client) ListAppServiceRelationships(ctx context.Context, appID, serviceID string, req *hermes.ListRequest) (*pagination.Items[models.Relationship], error) {
+func (c *Client) ListAppServiceRelationships(ctx context.Context, appID, serviceID string, req *dto.ListRequest) (*pagination.Items[models.Relationship], error) {
 	pbReq := &hermesv1.ListAppServiceRelationshipsRequest{
 		AppId:     appID,
 		ServiceId: serviceID,
@@ -262,7 +262,7 @@ func (c *Client) ListAppServiceRelationships(ctx context.Context, appID, service
 	}, nil
 }
 
-func (c *Client) CreateAppServiceRelationship(ctx context.Context, appID, serviceID string, req *hermes.AppServiceRelationshipCreateRequest) (*models.Relationship, error) {
+func (c *Client) CreateAppServiceRelationship(ctx context.Context, appID, serviceID string, req *dto.AppServiceRelationshipCreateRequest) (*models.Relationship, error) {
 	pbReq := &hermesv1.CreateAppServiceRelationshipRequest{
 		AppId:       appID,
 		ServiceId:   serviceID,
@@ -286,7 +286,7 @@ func (c *Client) CreateAppServiceRelationship(ctx context.Context, appID, servic
 	return relationshipFromProto(resp), nil
 }
 
-func (c *Client) UpdateAppServiceRelationship(ctx context.Context, appID, serviceID string, relationshipID uint, req *hermes.AppServiceRelationshipUpdateRequest) (*models.Relationship, error) {
+func (c *Client) UpdateAppServiceRelationship(ctx context.Context, appID, serviceID string, relationshipID uint, req *dto.AppServiceRelationshipUpdateRequest) (*models.Relationship, error) {
 	pbReq := &hermesv1.UpdateAppServiceRelationshipRequest{
 		AppId:          appID,
 		ServiceId:      serviceID,
@@ -326,7 +326,7 @@ func (c *Client) DeleteAppServiceRelationship(ctx context.Context, appID, servic
 
 // ==================== Group ====================
 
-func (c *Client) CreateGroup(ctx context.Context, req *hermes.GroupCreateRequest) (*models.Group, error) {
+func (c *Client) CreateGroup(ctx context.Context, req *dto.GroupCreateRequest) (*models.Group, error) {
 	pbReq := &hermesv1.CreateGroupRequest{
 		GroupId:   req.GroupID,
 		ServiceId: req.ServiceID,
@@ -350,7 +350,7 @@ func (c *Client) GetGroup(ctx context.Context, groupID string) (*models.Group, e
 	return groupFromProto(resp), nil
 }
 
-func (c *Client) ListGroups(ctx context.Context, req *hermes.ListRequest) (*pagination.Items[models.Group], error) {
+func (c *Client) ListGroups(ctx context.Context, req *dto.ListRequest) (*pagination.Items[models.Group], error) {
 	pbReq := &hermesv1.ListGroupsRequest{
 		Filter: req.Filter,
 		Pagination: &hermesv1.Pagination{
@@ -372,7 +372,7 @@ func (c *Client) ListGroups(ctx context.Context, req *hermes.ListRequest) (*pagi
 	}, nil
 }
 
-func (c *Client) UpdateGroup(ctx context.Context, groupID string, req *hermes.GroupUpdateRequest) error {
+func (c *Client) UpdateGroup(ctx context.Context, groupID string, req *dto.GroupUpdateRequest) error {
 	pbReq := &hermesv1.UpdateGroupRequest{GroupId: groupID}
 	if req.Name.IsPresent() && !req.Name.IsNull() {
 		v := req.Name.Value()
@@ -397,7 +397,7 @@ func (c *Client) DeleteGroup(ctx context.Context, groupID string) error {
 	return nil
 }
 
-func (c *Client) SetGroupMembers(ctx context.Context, req *hermes.GroupMemberRequest) error {
+func (c *Client) SetGroupMembers(ctx context.Context, req *dto.GroupMemberRequest) error {
 	_, err := c.resource.SetGroupMembers(ctx, &hermesv1.SetGroupMembersRequest{
 		GroupId: req.GroupID,
 		UserIds: req.UserIDs,

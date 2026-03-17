@@ -15,9 +15,10 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/helios/hermes/config"
-	"github.com/heliannuuthus/helios/hermes/models"
 	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
+	"github.com/heliannuuthus/helios/pkg/dto"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // CredentialService 凭证服务
@@ -32,21 +33,8 @@ func NewCredentialService(db *gorm.DB) *CredentialService {
 
 // ==================== TOTP 相关 ====================
 
-// TOTPSetupRequest TOTP 设置请求
-type TOTPSetupRequest struct {
-	OpenID  string // 用户标识
-	AppName string // 应用名称（显示在 Authenticator App 中）
-}
-
-// TOTPSetupResponse TOTP 设置响应
-type TOTPSetupResponse struct {
-	Secret       string `json:"secret"`        // Base32 编码的密钥（用于手动输入）
-	OTPAuthURI   string `json:"otpauth_uri"`   // OTPAuth URI（用于二维码扫描）
-	CredentialID uint   `json:"credential_id"` // 凭证 ID（用于后续确认）
-}
-
 // SetupTOTP 初始化 TOTP（生成密钥，但尚未启用）
-func (s *CredentialService) SetupTOTP(ctx context.Context, req *TOTPSetupRequest) (*TOTPSetupResponse, error) {
+func (s *CredentialService) SetupTOTP(ctx context.Context, req *dto.TOTPSetupRequest) (*dto.TOTPSetupResponse, error) {
 	// 检查用户是否已有启用的 TOTP
 	var existing models.UserCredential
 	err := s.db.WithContext(ctx).
@@ -109,22 +97,15 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *TOTPSetupRequest
 		return nil, fmt.Errorf("保存凭证失败: %w", err)
 	}
 
-	return &TOTPSetupResponse{
+	return &dto.TOTPSetupResponse{
 		Secret:       secret,
 		OTPAuthURI:   otpauthURI,
 		CredentialID: credential.ID,
 	}, nil
 }
 
-// ConfirmTOTPRequest TOTP 确认请求
-type ConfirmTOTPRequest struct {
-	OpenID       string // 用户标识
-	CredentialID uint   // 凭证 ID
-	Code         string // 验证码
-}
-
 // ConfirmTOTP 确认 TOTP 绑定（验证一次后启用）
-func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *ConfirmTOTPRequest) error {
+func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *dto.ConfirmTOTPRequest) error {
 	// 获取凭证
 	var credential models.UserCredential
 	err := s.db.WithContext(ctx).
@@ -172,13 +153,8 @@ func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *ConfirmTOTPReq
 }
 
 // VerifyTOTPRequest TOTP 验证请求
-type VerifyTOTPRequest struct {
-	OpenID string // 用户标识
-	Code   string // 验证码
-}
-
 // VerifyTOTP 验证 TOTP
-func (s *CredentialService) VerifyTOTP(ctx context.Context, req *VerifyTOTPRequest) error {
+func (s *CredentialService) VerifyTOTP(ctx context.Context, req *dto.VerifyTOTPRequest) error {
 	// 获取启用的 TOTP 凭证
 	var credential models.UserCredential
 	err := s.db.WithContext(ctx).
@@ -265,18 +241,8 @@ func (s *CredentialService) SetTOTPEnabled(ctx context.Context, openid string, e
 
 // ==================== WebAuthn 相关 ====================
 
-// RegisterWebAuthnRequest WebAuthn 注册请求
-type RegisterWebAuthnRequest struct {
-	OpenID          string   // 用户标识
-	CredentialID    string   // Base64 编码的凭证 ID
-	PublicKey       string   // Base64 编码的公钥
-	AAGUID          string   // 认证器 GUID
-	Transport       []string // 传输方式
-	AttestationType string   // 认证类型
-}
-
 // RegisterWebAuthn 注册 WebAuthn 凭证
-func (s *CredentialService) RegisterWebAuthn(ctx context.Context, req *RegisterWebAuthnRequest) (*models.UserCredential, error) {
+func (s *CredentialService) RegisterWebAuthn(ctx context.Context, req *dto.RegisterWebAuthnRequest) (*models.UserCredential, error) {
 	// 检查凭证 ID 是否已存在
 	var existing models.UserCredential
 	err := s.db.WithContext(ctx).Where("credential_id = ?", req.CredentialID).First(&existing).Error

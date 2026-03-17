@@ -8,8 +8,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
-	"github.com/heliannuuthus/helios/hermes"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/pkg/models"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
@@ -198,8 +198,6 @@ func idpConfigFromProto(pb *hermesv1.ApplicationIDPConfig) *models.ApplicationID
 		Type:     pb.Type,
 		Priority: int(pb.Priority),
 		Strategy: pb.Strategy,
-		Delegate: pb.Delegate,
-		Require:  pb.Require,
 	}
 }
 
@@ -345,11 +343,11 @@ func webAuthnSecretFromProto(pb *hermesv1.WebAuthnSecret) *models.WebAuthnSecret
 	}
 }
 
-func passwordStoreCredentialFromProto(pb *hermesv1.PasswordStoreCredential) *hermes.PasswordStoreCredential {
+func passwordStoreCredentialFromProto(pb *hermesv1.PasswordStoreCredential) *dto.PasswordStoreCredential {
 	if pb == nil {
 		return nil
 	}
-	cred := &hermes.PasswordStoreCredential{
+	cred := &dto.PasswordStoreCredential{
 		OpenID:       pb.Openid,
 		PasswordHash: pb.PasswordHash,
 		Status:       safeInt8(pb.Status),

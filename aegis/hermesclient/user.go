@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
-	"github.com/heliannuuthus/helios/hermes"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // ==================== User Query ====================
@@ -207,7 +207,7 @@ func (c *Client) AddIdentity(ctx context.Context, identity *models.UserIdentity)
 
 // ==================== Password Store ====================
 
-func (c *Client) GetUserByIdentifier(ctx context.Context, identifier string) (*hermes.PasswordStoreCredential, error) {
+func (c *Client) GetUserByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error) {
 	resp, err := c.user.GetUserByIdentifier(ctx, &hermesv1.GetByIdentifierRequest{Identifier: identifier})
 	if err != nil {
 		return nil, err
@@ -215,7 +215,7 @@ func (c *Client) GetUserByIdentifier(ctx context.Context, identifier string) (*h
 	return passwordStoreCredentialFromProto(resp), nil
 }
 
-func (c *Client) GetStaffByIdentifier(ctx context.Context, identifier string) (*hermes.PasswordStoreCredential, error) {
+func (c *Client) GetStaffByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error) {
 	resp, err := c.user.GetStaffByIdentifier(ctx, &hermesv1.GetByIdentifierRequest{Identifier: identifier})
 	if err != nil {
 		return nil, err
@@ -341,7 +341,7 @@ func (c *Client) GetOpenIDByCredentialID(ctx context.Context, credentialID strin
 
 // ==================== TOTP ====================
 
-func (c *Client) SetupTOTP(ctx context.Context, req *hermes.TOTPSetupRequest) (*hermes.TOTPSetupResponse, error) {
+func (c *Client) SetupTOTP(ctx context.Context, req *dto.TOTPSetupRequest) (*dto.TOTPSetupResponse, error) {
 	resp, err := c.user.SetupTOTP(ctx, &hermesv1.SetupTOTPRequest{
 		Openid:  req.OpenID,
 		AppName: req.AppName,
@@ -349,14 +349,14 @@ func (c *Client) SetupTOTP(ctx context.Context, req *hermes.TOTPSetupRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	return &hermes.TOTPSetupResponse{
+	return &dto.TOTPSetupResponse{
 		Secret:       resp.Secret,
 		OTPAuthURI:   resp.OtpauthUri,
 		CredentialID: uint(resp.CredentialId),
 	}, nil
 }
 
-func (c *Client) ConfirmTOTP(ctx context.Context, req *hermes.ConfirmTOTPRequest) error {
+func (c *Client) ConfirmTOTP(ctx context.Context, req *dto.ConfirmTOTPRequest) error {
 	_, err := c.user.ConfirmTOTP(ctx, &hermesv1.ConfirmTOTPRequest{
 		Openid:       req.OpenID,
 		CredentialId: safeUint32(req.CredentialID),
@@ -365,7 +365,7 @@ func (c *Client) ConfirmTOTP(ctx context.Context, req *hermes.ConfirmTOTPRequest
 	return err
 }
 
-func (c *Client) VerifyTOTP(ctx context.Context, req *hermes.VerifyTOTPRequest) error {
+func (c *Client) VerifyTOTP(ctx context.Context, req *dto.VerifyTOTPRequest) error {
 	_, err := c.user.VerifyTOTP(ctx, &hermesv1.VerifyTOTPRequest{
 		Openid: req.OpenID,
 		Code:   req.Code,
@@ -396,7 +396,7 @@ func (c *Client) SetTOTPEnabled(ctx context.Context, openid string, enabled bool
 
 // ==================== WebAuthn ====================
 
-func (c *Client) RegisterWebAuthn(ctx context.Context, req *hermes.RegisterWebAuthnRequest) (*models.UserCredential, error) {
+func (c *Client) RegisterWebAuthn(ctx context.Context, req *dto.RegisterWebAuthnRequest) (*models.UserCredential, error) {
 	resp, err := c.user.RegisterWebAuthn(ctx, &hermesv1.RegisterWebAuthnRequest{
 		Openid:          req.OpenID,
 		CredentialId:    req.CredentialID,

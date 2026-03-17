@@ -11,9 +11,9 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/accessctl"
 	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // Service 认证服务
@@ -170,12 +170,6 @@ func (s *Service) buildConnectionConfig(idpCfg *models.ApplicationIDPConfig) *ty
 	}
 	if list := idpCfg.GetStrategyList(); len(list) > 0 {
 		cfg.Strategy = list
-	}
-	if list := idpCfg.GetDelegateList(); len(list) > 0 {
-		cfg.Delegate = list
-	}
-	if list := idpCfg.GetRequireList(); len(list) > 0 {
-		cfg.Require = list
 	}
 	return cfg
 }

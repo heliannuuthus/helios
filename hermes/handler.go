@@ -6,8 +6,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/heliannuuthus/helios/hermes/dto"
-	"github.com/heliannuuthus/helios/hermes/models"
+	herdto "github.com/heliannuuthus/helios/hermes/dto"
+	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/pkg/models"
 	"github.com/heliannuuthus/helios/pkg/pagination"
 )
 
@@ -32,7 +33,7 @@ func (h *Handler) GetDomain(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.DomainResponse{
+	c.JSON(http.StatusOK, herdto.DomainResponse{
 		DomainID:    domain.DomainID,
 		Name:        domain.Name,
 		Description: domain.Description,
@@ -50,10 +51,152 @@ func (h *Handler) GetDomainAllowedIDPs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"allowed_idps": idps})
 }
 
+// ==================== IDP Secret 相关 ====================
+
+// ListIDPKeys GET /hermes/idp-keys
+func (h *Handler) ListIDPKeys(c *gin.Context) {
+	secrets, err := h.service.GetIDPKeys(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	resp := make([]herdto.IDPKeyResponse, 0, len(secrets))
+	for _, s := range secrets {
+		resp = append(resp, herdto.NewIDPKeyResponse(s))
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// GetIDPKey GET /hermes/idp-keys/:idp_type/:t_app_id
+func (h *Handler) GetIDPKey(c *gin.Context) {
+	idpType := c.Param("idp_type")
+	tAppID := c.Param("t_app_id")
+	secret, err := h.service.GetIDPKey(c.Request.Context(), idpType, tAppID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, herdto.NewIDPKeyResponse(secret))
+}
+
+// CreateIDPKey POST /hermes/idp-keys
+func (h *Handler) CreateIDPKey(c *gin.Context) {
+	var req dto.IDPKeyCreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	secret, err := h.service.CreateIDPKey(c.Request.Context(), &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, herdto.NewIDPKeyResponse(secret))
+}
+
+// UpdateIDPKey PATCH /hermes/idp-keys/:idp_type/:t_app_id
+func (h *Handler) UpdateIDPKey(c *gin.Context) {
+	idpType := c.Param("idp_type")
+	tAppID := c.Param("t_app_id")
+	var req dto.IDPKeyUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.service.UpdateIDPKey(c.Request.Context(), idpType, tAppID, &req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "更新成功"})
+}
+
+// DeleteIDPKey DELETE /hermes/idp-keys/:idp_type/:t_app_id
+func (h *Handler) DeleteIDPKey(c *gin.Context) {
+	idpType := c.Param("idp_type")
+	tAppID := c.Param("t_app_id")
+	if err := h.service.DeleteIDPKey(c.Request.Context(), idpType, tAppID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}
+
+// ==================== Domain IDP Config 相关 ====================
+
+// ListDomainIDPConfigs GET /hermes/domains/:domain_id/idp-configs
+func (h *Handler) ListDomainIDPConfigs(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	configs, err := h.service.GetDomainIDPConfigs(c.Request.Context(), domainID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	resp := make([]herdto.DomainIDPConfigResponse, 0, len(configs))
+	for _, cfg := range configs {
+		resp = append(resp, herdto.NewDomainIDPConfigResponse(cfg))
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// GetDomainIDPConfig GET /hermes/domains/:domain_id/idp-configs/:idp_type
+func (h *Handler) GetDomainIDPConfig(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	idpType := c.Param("idp_type")
+	cfg, err := h.service.GetDomainIDPConfig(c.Request.Context(), domainID, idpType)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, herdto.NewDomainIDPConfigResponse(cfg))
+}
+
+// CreateDomainIDPConfig POST /hermes/domains/:domain_id/idp-configs
+func (h *Handler) CreateDomainIDPConfig(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	var req dto.DomainIDPConfigCreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	cfg, err := h.service.CreateDomainIDPConfig(c.Request.Context(), domainID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, herdto.NewDomainIDPConfigResponse(cfg))
+}
+
+// UpdateDomainIDPConfig PATCH /hermes/domains/:domain_id/idp-configs/:idp_type
+func (h *Handler) UpdateDomainIDPConfig(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	idpType := c.Param("idp_type")
+	var req dto.DomainIDPConfigUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.service.UpdateDomainIDPConfig(c.Request.Context(), domainID, idpType, &req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "更新成功"})
+}
+
+// DeleteDomainIDPConfig DELETE /hermes/domains/:domain_id/idp-configs/:idp_type
+func (h *Handler) DeleteDomainIDPConfig(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	idpType := c.Param("idp_type")
+	if err := h.service.DeleteDomainIDPConfig(c.Request.Context(), domainID, idpType); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+}
+
 // UpdateDomain PATCH /hermes/domains/:domain_id（仅 name、description 可编辑）
 func (h *Handler) UpdateDomain(c *gin.Context) {
 	domainID := c.Param("domain_id")
-	var req DomainUpdateRequest
+	var req dto.DomainUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -63,7 +206,7 @@ func (h *Handler) UpdateDomain(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, dto.DomainResponse{
+	c.JSON(http.StatusOK, herdto.DomainResponse{
 		DomainID:    domain.DomainID,
 		Name:        domain.Name,
 		Description: domain.Description,
@@ -77,9 +220,9 @@ func (h *Handler) ListDomains(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	resp := make([]dto.DomainResponse, 0, len(domains))
+	resp := make([]herdto.DomainResponse, 0, len(domains))
 	for i := range domains {
-		resp = append(resp, dto.DomainResponse{
+		resp = append(resp, herdto.DomainResponse{
 			DomainID:    domains[i].DomainID,
 			Name:        domains[i].Name,
 			Description: domains[i].Description,
@@ -93,7 +236,7 @@ func (h *Handler) ListDomains(c *gin.Context) {
 // ListServices GET /hermes/domains/:domain_id/services
 func (h *Handler) ListServices(c *gin.Context) {
 	domainID := c.Param("domain_id")
-	var req ListRequest
+	var req dto.ListRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -105,8 +248,8 @@ func (h *Handler) ListServices(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, pagination.Mapping(page, func(s *models.Service) dto.ServiceResponse {
-		return dto.NewServiceResponse(s, domainID)
+	c.JSON(http.StatusOK, pagination.Mapping(page, func(s *models.Service) herdto.ServiceResponse {
+		return herdto.NewServiceResponse(s, domainID)
 	}))
 }
 
@@ -123,13 +266,13 @@ func (h *Handler) GetService(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
-	c.JSON(http.StatusOK, dto.NewServiceResponse(service, domainID))
+	c.JSON(http.StatusOK, herdto.NewServiceResponse(service, domainID))
 }
 
 // CreateService POST /hermes/domains/:domain_id/services
 func (h *Handler) CreateService(c *gin.Context) {
 	domainID := c.Param("domain_id")
-	var req ServiceCreateRequest
+	var req dto.ServiceCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -140,7 +283,7 @@ func (h *Handler) CreateService(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, dto.NewServiceResponse(service, domainID))
+	c.JSON(http.StatusOK, herdto.NewServiceResponse(service, domainID))
 }
 
 // UpdateService PATCH /hermes/domains/:domain_id/services/:service_id
@@ -156,7 +299,7 @@ func (h *Handler) UpdateService(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
-	var req ServiceUpdateRequest
+	var req dto.ServiceUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -211,9 +354,9 @@ func (h *Handler) GetServiceApplicationRelations(c *gin.Context) {
 		aid := relations[i].AppID
 		byApp[aid] = append(byApp[aid], relations[i].Relation)
 	}
-	resp := make([]dto.ServiceApplicationRelationResponse, 0, len(byApp))
+	resp := make([]herdto.ServiceApplicationRelationResponse, 0, len(byApp))
 	for aid, rels := range byApp {
-		resp = append(resp, dto.ServiceApplicationRelationResponse{AppID: aid, Relations: rels})
+		resp = append(resp, herdto.ServiceApplicationRelationResponse{AppID: aid, Relations: rels})
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -254,12 +397,12 @@ func (h *Handler) SetServiceAppRelations(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
-	var req ServiceAppRelationsRequest
+	var req dto.ServiceAppRelationsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if err := h.service.SetApplicationServiceRelations(c.Request.Context(), &ApplicationServiceRelationRequest{
+	if err := h.service.SetApplicationServiceRelations(c.Request.Context(), &dto.ApplicationServiceRelationRequest{
 		AppID: appID, ServiceID: serviceID, Relations: req.Relations,
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -273,7 +416,7 @@ func (h *Handler) SetServiceAppRelations(c *gin.Context) {
 // ListApplications GET /hermes/domains/:domain_id/applications
 func (h *Handler) ListApplications(c *gin.Context) {
 	domainID := c.Param("domain_id")
-	var req ListRequest
+	var req dto.ListRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -285,8 +428,8 @@ func (h *Handler) ListApplications(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, pagination.Mapping(page, func(a *models.Application) dto.ApplicationResponse {
-		return dto.NewApplicationResponse(a)
+	c.JSON(http.StatusOK, pagination.Mapping(page, func(a *models.Application) herdto.ApplicationResponse {
+		return herdto.NewApplicationResponse(a)
 	}))
 }
 
@@ -303,13 +446,13 @@ func (h *Handler) GetApplication(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "application not found in this domain"})
 		return
 	}
-	c.JSON(http.StatusOK, dto.NewApplicationResponse(app))
+	c.JSON(http.StatusOK, herdto.NewApplicationResponse(app))
 }
 
 // CreateApplication POST /hermes/domains/:domain_id/applications
 func (h *Handler) CreateApplication(c *gin.Context) {
 	domainID := c.Param("domain_id")
-	var req ApplicationCreateRequest
+	var req dto.ApplicationCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -320,7 +463,7 @@ func (h *Handler) CreateApplication(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, dto.NewApplicationResponse(app))
+	c.JSON(http.StatusOK, herdto.NewApplicationResponse(app))
 }
 
 // UpdateApplication PATCH /hermes/domains/:domain_id/applications/:app_id
@@ -336,7 +479,7 @@ func (h *Handler) UpdateApplication(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "application not found in this domain"})
 		return
 	}
-	var req ApplicationUpdateRequest
+	var req dto.ApplicationUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -366,17 +509,16 @@ func (h *Handler) ListApplicationIDPConfigs(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	resp := make([]dto.ApplicationIDPConfigResponse, 0, len(configs))
+	resp := make([]herdto.ApplicationIDPConfigResponse, 0, len(configs))
 	for _, cfg := range configs {
-		resp = append(resp, dto.ApplicationIDPConfigResponse{
+		resp = append(resp, herdto.ApplicationIDPConfigResponse{
 			AppID:     cfg.AppID,
 			Type:      cfg.Type,
 			Priority:  cfg.Priority,
 			Strategy:  cfg.Strategy,
-			Delegate:  cfg.Delegate,
-			Require:   cfg.Require,
-			CreatedAt: dto.FormatTime(cfg.CreatedAt),
-			UpdatedAt: dto.FormatTime(cfg.UpdatedAt),
+			TAppID:    cfg.TAppID,
+			CreatedAt: herdto.FormatTime(cfg.CreatedAt),
+			UpdatedAt: herdto.FormatTime(cfg.UpdatedAt),
 		})
 	}
 	c.JSON(http.StatusOK, resp)
@@ -395,7 +537,7 @@ func (h *Handler) CreateApplicationIDPConfig(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "application not found in this domain"})
 		return
 	}
-	var req ApplicationIDPConfigCreateRequest
+	var req dto.ApplicationIDPConfigCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -405,15 +547,14 @@ func (h *Handler) CreateApplicationIDPConfig(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, dto.ApplicationIDPConfigResponse{
+	c.JSON(http.StatusOK, herdto.ApplicationIDPConfigResponse{
 		AppID:     cfg.AppID,
 		Type:      cfg.Type,
 		Priority:  cfg.Priority,
 		Strategy:  cfg.Strategy,
-		Delegate:  cfg.Delegate,
-		Require:   cfg.Require,
-		CreatedAt: dto.FormatTime(cfg.CreatedAt),
-		UpdatedAt: dto.FormatTime(cfg.UpdatedAt),
+		TAppID:    cfg.TAppID,
+		CreatedAt: herdto.FormatTime(cfg.CreatedAt),
+		UpdatedAt: herdto.FormatTime(cfg.UpdatedAt),
 	})
 }
 
@@ -431,7 +572,7 @@ func (h *Handler) UpdateApplicationIDPConfig(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "application not found in this domain"})
 		return
 	}
-	var req ApplicationIDPConfigUpdateRequest
+	var req dto.ApplicationIDPConfigUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -487,9 +628,9 @@ func (h *Handler) GetApplicationServiceRelations(c *gin.Context) {
 		sid := relations[i].ServiceID
 		byService[sid] = append(byService[sid], relations[i].Relation)
 	}
-	resp := make([]dto.ApplicationServiceRelationResponse, 0, len(byService))
+	resp := make([]herdto.ApplicationServiceRelationResponse, 0, len(byService))
 	for sid, rels := range byService {
-		resp = append(resp, dto.ApplicationServiceRelationResponse{ServiceID: sid, Relations: rels})
+		resp = append(resp, herdto.ApplicationServiceRelationResponse{ServiceID: sid, Relations: rels})
 	}
 	c.JSON(http.StatusOK, resp)
 }
@@ -498,7 +639,7 @@ func (h *Handler) GetApplicationServiceRelations(c *gin.Context) {
 
 // CreateRelationship POST /hermes/relationships
 func (h *Handler) CreateRelationship(c *gin.Context) {
-	var req RelationshipCreateRequest
+	var req dto.RelationshipCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -510,12 +651,12 @@ func (h *Handler) CreateRelationship(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.NewRelationshipResponse(rel))
+	c.JSON(http.StatusOK, herdto.NewRelationshipResponse(rel))
 }
 
 // DeleteRelationship DELETE /hermes/relationships
 func (h *Handler) DeleteRelationship(c *gin.Context) {
-	var req RelationshipDeleteRequest
+	var req dto.RelationshipDeleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -531,7 +672,7 @@ func (h *Handler) DeleteRelationship(c *gin.Context) {
 
 // ListRelationships GET /hermes/relationships
 func (h *Handler) ListRelationships(c *gin.Context) {
-	var req ListRequest
+	var req dto.ListRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -543,14 +684,14 @@ func (h *Handler) ListRelationships(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, pagination.Mapping(page, func(r *models.Relationship) dto.RelationshipResponse {
-		return dto.NewRelationshipResponse(r)
+	c.JSON(http.StatusOK, pagination.Mapping(page, func(r *models.Relationship) herdto.RelationshipResponse {
+		return herdto.NewRelationshipResponse(r)
 	}))
 }
 
 // UpdateRelationship PATCH /hermes/relationships
 func (h *Handler) UpdateRelationship(c *gin.Context) {
-	var req RelationshipUpdateRequest
+	var req dto.RelationshipUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -562,7 +703,7 @@ func (h *Handler) UpdateRelationship(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.NewRelationshipResponse(rel))
+	c.JSON(http.StatusOK, herdto.NewRelationshipResponse(rel))
 }
 
 // ==================== App Service Relationship 相关（RESTful 风格）====================
@@ -572,7 +713,7 @@ func (h *Handler) ListAppServiceRelationships(c *gin.Context) {
 	appID := c.Param("app_id")
 	serviceID := c.Param("service_id")
 
-	var req ListRequest
+	var req dto.ListRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -584,8 +725,8 @@ func (h *Handler) ListAppServiceRelationships(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, pagination.Mapping(page, func(r *models.Relationship) dto.RelationshipResponse {
-		return dto.NewRelationshipResponse(r)
+	c.JSON(http.StatusOK, pagination.Mapping(page, func(r *models.Relationship) herdto.RelationshipResponse {
+		return herdto.NewRelationshipResponse(r)
 	}))
 }
 
@@ -594,7 +735,7 @@ func (h *Handler) CreateAppServiceRelationship(c *gin.Context) {
 	appID := c.Param("app_id")
 	serviceID := c.Param("service_id")
 
-	var req AppServiceRelationshipCreateRequest
+	var req dto.AppServiceRelationshipCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -606,7 +747,7 @@ func (h *Handler) CreateAppServiceRelationship(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, dto.NewRelationshipResponse(rel))
+	c.JSON(http.StatusCreated, herdto.NewRelationshipResponse(rel))
 }
 
 // UpdateAppServiceRelationship PATCH /hermes/applications/:app_id/services/:service_id/relationships/:relationship_id
@@ -621,7 +762,7 @@ func (h *Handler) UpdateAppServiceRelationship(c *gin.Context) {
 		return
 	}
 
-	var req AppServiceRelationshipUpdateRequest
+	var req dto.AppServiceRelationshipUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -633,7 +774,7 @@ func (h *Handler) UpdateAppServiceRelationship(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.NewRelationshipResponse(rel))
+	c.JSON(http.StatusOK, herdto.NewRelationshipResponse(rel))
 }
 
 // DeleteAppServiceRelationship DELETE /hermes/applications/:app_id/services/:service_id/relationships/:relationship_id
@@ -660,7 +801,7 @@ func (h *Handler) DeleteAppServiceRelationship(c *gin.Context) {
 
 // CreateGroup POST /hermes/groups
 func (h *Handler) CreateGroup(c *gin.Context) {
-	var req GroupCreateRequest
+	var req dto.GroupCreateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -672,7 +813,7 @@ func (h *Handler) CreateGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.NewGroupResponse(group))
+	c.JSON(http.StatusOK, herdto.NewGroupResponse(group))
 }
 
 // GetGroup GET /hermes/groups/:group_id
@@ -684,12 +825,12 @@ func (h *Handler) GetGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.NewGroupResponse(group))
+	c.JSON(http.StatusOK, herdto.NewGroupResponse(group))
 }
 
 // ListGroups GET /hermes/groups
 func (h *Handler) ListGroups(c *gin.Context) {
-	var req ListRequest
+	var req dto.ListRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -701,15 +842,15 @@ func (h *Handler) ListGroups(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, pagination.Mapping(page, func(g *models.Group) dto.GroupResponse {
-		return dto.NewGroupResponse(g)
+	c.JSON(http.StatusOK, pagination.Mapping(page, func(g *models.Group) herdto.GroupResponse {
+		return herdto.NewGroupResponse(g)
 	}))
 }
 
 // UpdateGroup PATCH /hermes/groups/:group_id
 func (h *Handler) UpdateGroup(c *gin.Context) {
 	groupID := c.Param("group_id")
-	var req GroupUpdateRequest
+	var req dto.GroupUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -726,7 +867,7 @@ func (h *Handler) UpdateGroup(c *gin.Context) {
 // SetGroupMembers POST /hermes/groups/:group_id/members
 func (h *Handler) SetGroupMembers(c *gin.Context) {
 	groupID := c.Param("group_id")
-	var req GroupMemberRequest
+	var req dto.GroupMemberRequest
 	req.GroupID = groupID
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -750,5 +891,5 @@ func (h *Handler) GetGroupMembers(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, dto.GroupMembersResponse{Members: members})
+	c.JSON(http.StatusOK, herdto.GroupMembersResponse{Members: members})
 }
