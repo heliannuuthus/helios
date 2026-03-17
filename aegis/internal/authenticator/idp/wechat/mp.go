@@ -125,7 +125,7 @@ func (p *MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, p
 // Prepare 准备前端所需的公开配置
 func (p *MPProvider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
-		Connection: "wechat-mp",
+		Connection: "wxmp",
 		Identifier: p.appID,
 	}
 }
@@ -154,8 +154,8 @@ func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, e
 
 	reqURL := fmt.Sprintf("https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=%s", accessToken)
 
-	body := fmt.Sprintf(`{"code":"%s"}`, code)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(body))
+	body, _ := json.Marshal(map[string]string{"code": code})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(string(body)))
 	if err != nil {
 		return "", fmt.Errorf("创建请求失败: %w", err)
 	}
@@ -188,8 +188,15 @@ func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, e
 		phone = result.PhoneInfo.PhoneNumber
 	}
 
-	logger.Infof("[Wechat] 获取手机号成功 - Phone: %s***%s", phone[:3], phone[len(phone)-4:])
+	logger.Infof("[Wechat] 获取手机号成功 - Phone: %s", maskPhone(phone))
 	return phone, nil
+}
+
+func maskPhone(phone string) string {
+	if len(phone) >= 7 {
+		return phone[:3] + "***" + phone[len(phone)-4:]
+	}
+	return "***"
 }
 
 // getAccessToken 获取微信 access_token

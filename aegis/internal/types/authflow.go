@@ -430,7 +430,7 @@ func (f *AuthFlow) GetExtra(key string) string {
 // type 通过 ConnectionsMap 的 key 隐含，不再序列化到每个 item
 type Connection struct {
 	Type       ConnectionType `json:"-"`                   // 连接类型（idp / vchan / factor），仅内部分组用
-	Connection string         `json:"connection"`          // 标识（github, google, wechat-mp, user, staff, email_otp, totp, captcha...）
+	Connection string         `json:"connection"`          // 标识（github, google, wxmp, user, staff, email_otp, totp, captcha...）
 	Identifier string         `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
 	Strategy   []string       `json:"strategy,omitzero"`   // 认证方式（user/staff: password, webauthn; captcha: turnstile; 其余忽略）
 	Delegate   []string       `json:"delegate,omitzero"`   // 可替代主认证的独立验证方式（totp, email_otp）

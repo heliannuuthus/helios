@@ -87,7 +87,7 @@ type Challenge struct {
 	ClientID    string            `json:"client_id"`          // 发起验证的应用 ID
 	Audience    string            `json:"audience"`           // 目标服务 ID
 	Type        string            `json:"type,omitempty"`     // 业务场景（login / forget_password / bind_phone，验证类必填，交换类为空）
-	ChannelType ChannelType       `json:"channel_type"`       // 验证方式（email_otp / totp / sms_otp / webauthn / captcha / wechat-mp ...）
+	ChannelType ChannelType       `json:"channel_type"`       // 验证方式（email_otp / totp / sms_otp / webauthn / captcha / wxmp ...）
 	Channel     string            `json:"channel,omitempty"`  // 验证目标（邮箱 / 手机号 / user_id / wx_code ...）
 	Required    ChallengeRequired `json:"required,omitempty"` // 前置条件（如 captcha）
 	Limits      map[string]int    `json:"limits,omitempty"`   // 限流配置（从 ServiceChallengeSetting 复制）

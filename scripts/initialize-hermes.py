@@ -234,7 +234,7 @@ DOMAINS = [
 
 # 每个域允许的 IDP 类型（应用添加 IDP 时只能从此列表选）
 DOMAIN_IDPS: dict[str, list[str]] = {
-    "consumer": ["wechat-mp", "tt-mp", "alipay-mp", "wechat-web", "alipay-web", "tt-web", "user"],
+    "consumer": ["wxmp", "ttmp", "almp", "wechat", "alipay", "tt", "user"],
     "platform": ["github", "google", "staff", "oper"],
 }
 
@@ -318,8 +318,8 @@ APP_IDP_CONFIGS = [
     AppIdpConfig("piris", "google", priority=5),
     AppIdpConfig("piris", "github", priority=5),
     AppIdpConfig("ciris", "user", priority=10, strategy="password", delegate="sms_otp"),
-    AppIdpConfig("ciris", "wechat-mp", priority=5),
-    AppIdpConfig("ciris", "wechat-web", priority=5),
+    AppIdpConfig("ciris", "wxmp", priority=5),
+    AppIdpConfig("ciris", "wechat", priority=5),
 ]
 
 APP_SERVICE_RELATIONS = [

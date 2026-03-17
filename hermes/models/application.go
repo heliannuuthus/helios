@@ -38,7 +38,7 @@ type ApplicationIDPConfig struct {
 	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
 	// 固定长度字段
 	AppID    string `gorm:"column:app_id;size:64;not null" json:"app_id"`
-	Type     string `gorm:"column:type;size:32;not null" json:"type"` // github/google/wechat-mp/user/staff
+	Type     string `gorm:"column:type;size:32;not null" json:"type"` // github/google/wxmp/user/staff
 	Priority int    `gorm:"column:priority;not null;default:0" json:"priority"`
 	// 时间戳
 	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`

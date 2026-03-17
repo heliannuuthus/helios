@@ -54,8 +54,8 @@
 | `email_otp` | 验证类 | 邮箱地址 | 是 | 邮箱 OTP |
 | `totp` | 验证类 | 用户标识（user_id） | 是 | TOTP 动态口令 |
 | `webauthn` | 验证类 | 用户标识（可空，discoverable login 场景） | 是 | WebAuthn/Passkey |
-| `wechat-mp` | 交换类 | 微信 code | 否 | 微信小程序换手机号 |
-| `alipay-mp` | 交换类 | 支付宝 code | 否 | 支付宝小程序换手机号 |
+| `wxmp` | 交换类 | 微信 code | 否 | 微信小程序换手机号 |
+| `almp` | 交换类 | 支付宝 code | 否 | 支付宝小程序换手机号 |
 
 > `captcha` 不作为独立的 `channel_type`，作为 vchan（验证渠道）注册到 Registry，由 ACManager 根据配置动态决定是否需要 captcha 前置条件。
 >
@@ -382,7 +382,7 @@ POST /auth/challenge/yyy
 
 ```
 POST /auth/challenge
-{ "client_id": "app_abc", "audience": "svc_xyz", "channel_type": "wechat-mp", "channel": "<wx_phone_code>" }
+{ "client_id": "app_abc", "audience": "svc_xyz", "channel_type": "wxmp", "channel": "<wx_phone_code>" }
 → { "challenge_id": "zzz" }
 ```
 

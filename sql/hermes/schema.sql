@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS t_domain (
 
 CREATE TABLE IF NOT EXISTS t_domain_idp (
     domain_id     VARCHAR(32)   NOT NULL COMMENT '域 ID',
-    idp_type      VARCHAR(32)   NOT NULL COMMENT 'IDP 类型：github/google/user/staff/wechat-mp 等',
+    idp_type      VARCHAR(32)   NOT NULL COMMENT 'IDP 类型：github/google/user/staff/wxmp 等',
     created_at    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (domain_id, idp_type),
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS t_application_idp_config (
     _id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
     app_id       VARCHAR(64)  NOT NULL COMMENT '应用 ID',
-    `type`       VARCHAR(32)  NOT NULL COMMENT 'IDP 类型：github/google/wechat-mp/user/staff',
+    `type`       VARCHAR(32)  NOT NULL COMMENT 'IDP 类型：github/google/wxmp/user/staff',
     priority     INT          NOT NULL DEFAULT 0 COMMENT '排序优先级（值越大越靠前）',
     strategy     VARCHAR(256) DEFAULT NULL COMMENT '认证方式（仅 user/staff）：password,webauthn',
     delegate     VARCHAR(256) DEFAULT NULL COMMENT '委托 MFA：email_otp,totp,webauthn',
@@ -206,7 +206,7 @@ CREATE TABLE IF NOT EXISTS t_user_identity (
     -- 业务字段
     domain       VARCHAR(16)   NOT NULL COMMENT '身份所属域：consumer/platform',
     uid          VARCHAR(64)   NOT NULL COMMENT '用户内部标识（关联 t_user.openid）',
-    idp          VARCHAR(64)   NOT NULL COMMENT 'IDP 标识：global/user/staff/github/wechat-mp/google 等',
+    idp          VARCHAR(64)   NOT NULL COMMENT 'IDP 标识：global/user/staff/github/wxmp/google 等',
     t_openid     VARCHAR(256)  NOT NULL COMMENT 'IDP 侧用户标识（global 为域级对外标识，第三方为 IDP 返回的 openid）',
     raw_data     TEXT          DEFAULT NULL COMMENT 'IDP 返回的原始数据（JSON）',
     -- 时间戳

@@ -27,7 +27,7 @@
 - [x] 前端适配新 API 结构（pallas 已使用三层模型调用 API）
 
 **遗留**:
-- [ ] 交换类（wechat-mp、alipay-mp）Create 直接签发 Challenge Token（当前 `Create` 未对 `IsExchange()` 分支处理）
+- [ ] 交换类（wxmp、almp）Create 直接签发 Challenge Token（当前 `Create` 未对 `IsExchange()` 分支处理）
 - [ ] 验证类支持 Type 关联的消息模板（`pkg/mail` 已有 `SendCodeWithScene`，但 `EmailSender` 接口未传 Type）
 
 ---
