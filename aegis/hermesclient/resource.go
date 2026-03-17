@@ -22,7 +22,7 @@ func (c *Client) CreateService(ctx context.Context, req *hermes.ServiceCreateReq
 		LogoUrl:     req.LogoURL,
 	}
 	if req.AccessTokenExpiresIn != nil {
-		v := uint32(*req.AccessTokenExpiresIn)
+		v := safeUint32(*req.AccessTokenExpiresIn)
 		pbReq.AccessTokenExpiresIn = &v
 	}
 	resp, err := c.resource.CreateService(ctx, pbReq)
@@ -58,7 +58,7 @@ func (c *Client) ListServices(ctx context.Context, domainID string, req *hermes.
 		Filter:   req.Filter,
 		Pagination: &hermesv1.Pagination{
 			Cursor: req.Token,
-			Limit:  int32(req.Size),
+			Limit:  safeInt32(req.Size),
 		},
 	}
 	resp, err := c.resource.ListServices(ctx, pbReq)
@@ -90,7 +90,7 @@ func (c *Client) UpdateService(ctx context.Context, serviceID string, req *herme
 		pbReq.LogoUrl = &v
 	}
 	if req.AccessTokenExpiresIn.IsPresent() && !req.AccessTokenExpiresIn.IsNull() {
-		v := uint32(req.AccessTokenExpiresIn.Value())
+		v := safeUint32(req.AccessTokenExpiresIn.Value())
 		pbReq.AccessTokenExpiresIn = &v
 	}
 	_, err := c.resource.UpdateService(ctx, pbReq)
@@ -184,16 +184,12 @@ func (c *Client) UpdateRelationship(ctx context.Context, req *hermes.Relationshi
 		v := req.NewRelation.Value()
 		pbReq.NewRelation = &v
 	}
-	if req.ExpiresAt.IsPresent() {
-		if req.ExpiresAt.IsNull() {
-			// null → 清除过期时间（传零值 timestamp 表示清除）
-		} else {
-			exp, err := time.Parse(time.RFC3339, req.ExpiresAt.Value())
-			if err != nil {
-				return nil, fmt.Errorf("解析过期时间失败: %w", err)
-			}
-			pbReq.ExpiresAt = toTimestamp(exp)
+	if req.ExpiresAt.IsPresent() && !req.ExpiresAt.IsNull() {
+		exp, err := time.Parse(time.RFC3339, req.ExpiresAt.Value())
+		if err != nil {
+			return nil, fmt.Errorf("解析过期时间失败: %w", err)
 		}
+		pbReq.ExpiresAt = toTimestamp(exp)
 	}
 	resp, err := c.resource.UpdateRelationship(ctx, pbReq)
 	if err != nil {
@@ -207,7 +203,7 @@ func (c *Client) ListRelationships(ctx context.Context, req *hermes.ListRequest)
 		Filter: req.Filter,
 		Pagination: &hermesv1.Pagination{
 			Cursor: req.Token,
-			Limit:  int32(req.Size),
+			Limit:  safeInt32(req.Size),
 		},
 	}
 	resp, err := c.resource.ListRelationships(ctx, pbReq)
@@ -249,7 +245,7 @@ func (c *Client) ListAppServiceRelationships(ctx context.Context, appID, service
 		Filter:    req.Filter,
 		Pagination: &hermesv1.Pagination{
 			Cursor: req.Token,
-			Limit:  int32(req.Size),
+			Limit:  safeInt32(req.Size),
 		},
 	}
 	resp, err := c.resource.ListAppServiceRelationships(ctx, pbReq)
@@ -294,7 +290,7 @@ func (c *Client) UpdateAppServiceRelationship(ctx context.Context, appID, servic
 	pbReq := &hermesv1.UpdateAppServiceRelationshipRequest{
 		AppId:          appID,
 		ServiceId:      serviceID,
-		RelationshipId: uint32(relationshipID),
+		RelationshipId: safeUint32(relationshipID),
 	}
 	if req.NewRelation.IsPresent() && !req.NewRelation.IsNull() {
 		v := req.NewRelation.Value()
@@ -320,7 +316,7 @@ func (c *Client) DeleteAppServiceRelationship(ctx context.Context, appID, servic
 	_, err := c.resource.DeleteAppServiceRelationship(ctx, &hermesv1.DeleteAppServiceRelationshipRequest{
 		AppId:          appID,
 		ServiceId:      serviceID,
-		RelationshipId: uint32(relationshipID),
+		RelationshipId: safeUint32(relationshipID),
 	})
 	if err != nil {
 		return fmt.Errorf("删除应用服务关系失败: %w", err)
@@ -359,7 +355,7 @@ func (c *Client) ListGroups(ctx context.Context, req *hermes.ListRequest) (*pagi
 		Filter: req.Filter,
 		Pagination: &hermesv1.Pagination{
 			Cursor: req.Token,
-			Limit:  int32(req.Size),
+			Limit:  safeInt32(req.Size),
 		},
 	}
 	resp, err := c.resource.ListGroups(ctx, pbReq)

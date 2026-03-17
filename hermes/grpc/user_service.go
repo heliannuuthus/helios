@@ -2,13 +2,13 @@ package grpc
 
 import (
 	"context"
-	"time"
+
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
 	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
-	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type userServiceServer struct {
@@ -335,7 +335,7 @@ func (s *userServiceServer) SetupTOTP(ctx context.Context, req *hermesv1.SetupTO
 	return &hermesv1.SetupTOTPResponse{
 		Secret:       resp.Secret,
 		OtpauthUri:   resp.OTPAuthURI,
-		CredentialId: uint32(resp.CredentialID),
+		CredentialId: safeUint32(resp.CredentialID),
 	}, nil
 }
 
@@ -461,7 +461,7 @@ func (s *userServiceServer) GetUserCredentialSummaries(ctx context.Context, req 
 	out := make([]*hermesv1.CredentialSummary, 0, len(summaries))
 	for i := range summaries {
 		cs := &hermesv1.CredentialSummary{
-			Id:           uint32(summaries[i].ID),
+			Id:           safeUint32(summaries[i].ID),
 			Type:         summaries[i].Type,
 			CredentialId: summaries[i].CredentialID,
 			Enabled:      summaries[i].Enabled,
@@ -482,8 +482,8 @@ func (s *userServiceServer) GetUserMFAStatus(ctx context.Context, req *hermesv1.
 	}
 	return &hermesv1.MFAStatus{
 		TotpEnabled:   status.TOTPEnabled,
-		WebauthnCount: int32(status.WebAuthnCount),
-		PasskeyCount:  int32(status.PasskeyCount),
+		WebauthnCount: safeInt32(status.WebAuthnCount),
+		PasskeyCount:  safeInt32(status.PasskeyCount),
 	}, nil
 }
 
@@ -491,7 +491,7 @@ func (s *userServiceServer) GetUserMFAStatus(ctx context.Context, req *hermesv1.
 
 func userToProto(u *models.User) *hermesv1.User {
 	pb := &hermesv1.User{
-		Id:            uint32(u.ID),
+		Id:            safeUint32(u.ID),
 		Openid:        u.OpenID,
 		Status:        int32(u.Status),
 		Nickname:      u.Nickname,
@@ -516,7 +516,7 @@ func decryptedUserToProto(u *models.UserWithDecrypted) *hermesv1.DecryptedUser {
 
 func identityToProto(i *models.UserIdentity) *hermesv1.UserIdentity {
 	pb := &hermesv1.UserIdentity{
-		Id:        uint32(i.ID),
+		Id:        safeUint32(i.ID),
 		Domain:    i.Domain,
 		Openid:    i.UID,
 		Idp:       i.IDP,
@@ -557,7 +557,7 @@ func passwordStoreCredentialToProto(c *hermes.PasswordStoreCredential) *hermesv1
 
 func userCredentialToProto(c *models.UserCredential) *hermesv1.UserCredential {
 	pb := &hermesv1.UserCredential{
-		Id:           uint32(c.ID),
+		Id:           safeUint32(c.ID),
 		Openid:       c.OpenID,
 		CredentialId: c.CredentialID,
 		Type:         c.Type,
@@ -584,12 +584,4 @@ func ptrOrEmpty(p *string) string {
 		return ""
 	}
 	return *p
-}
-
-// timeToOptionalTimestamp converts a *time.Time to a *timestamppb.Timestamp
-func timeToOptionalTimestamp(t *time.Time) *timestamppb.Timestamp {
-	if t == nil {
-		return nil
-	}
-	return timestamppb.New(*t)
 }

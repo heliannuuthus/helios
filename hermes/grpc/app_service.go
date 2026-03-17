@@ -3,13 +3,14 @@ package grpc
 import (
 	"context"
 
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
 	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/pagination"
 	"github.com/heliannuuthus/helios/pkg/patch"
-	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type appServiceServer struct {
@@ -266,7 +267,7 @@ func domainToProto(d *models.Domain) *hermesv1.Domain {
 
 func applicationToProto(a *models.Application) *hermesv1.Application {
 	pb := &hermesv1.Application{
-		Id:                            uint32(a.ID),
+		Id:                            safeUint32(a.ID),
 		DomainId:                      a.DomainID,
 		AppId:                         a.AppID,
 		Name:                          a.Name,
@@ -275,9 +276,9 @@ func applicationToProto(a *models.Application) *hermesv1.Application {
 		AllowedRedirectUris:           a.GetAllowedRedirectURIs(),
 		AllowedOrigins:                a.GetAllowedOrigins(),
 		AllowedLogoutUris:             a.GetAllowedLogoutURIs(),
-		IdTokenExpiresIn:              uint32(a.IDTokenExpiresIn),
-		RefreshTokenExpiresIn:         uint32(a.RefreshTokenExpiresIn),
-		RefreshTokenAbsoluteExpiresIn: uint32(a.RefreshTokenAbsoluteExpiresIn),
+		IdTokenExpiresIn:              safeUint32(a.IDTokenExpiresIn),
+		RefreshTokenExpiresIn:         safeUint32(a.RefreshTokenExpiresIn),
+		RefreshTokenAbsoluteExpiresIn: safeUint32(a.RefreshTokenAbsoluteExpiresIn),
 		CreatedAt:                     timestamppb.New(a.CreatedAt),
 		UpdatedAt:                     timestamppb.New(a.UpdatedAt),
 	}
@@ -286,10 +287,10 @@ func applicationToProto(a *models.Application) *hermesv1.Application {
 
 func idpConfigToProto(cfg *models.ApplicationIDPConfig) *hermesv1.ApplicationIDPConfig {
 	return &hermesv1.ApplicationIDPConfig{
-		Id:        uint32(cfg.ID),
+		Id:        safeUint32(cfg.ID),
 		AppId:     cfg.AppID,
 		Type:      cfg.Type,
-		Priority:  int32(cfg.Priority),
+		Priority:  safeInt32(cfg.Priority),
 		Strategy:  cfg.Strategy,
 		Delegate:  cfg.Delegate,
 		Require:   cfg.Require,
@@ -300,7 +301,7 @@ func idpConfigToProto(cfg *models.ApplicationIDPConfig) *hermesv1.ApplicationIDP
 
 func appServiceRelationToProto(r *models.ApplicationServiceRelation) *hermesv1.ApplicationServiceRelation {
 	return &hermesv1.ApplicationServiceRelation{
-		Id:        uint32(r.ID),
+		Id:        safeUint32(r.ID),
 		AppId:     r.AppID,
 		ServiceId: r.ServiceID,
 		Relation:  r.Relation,

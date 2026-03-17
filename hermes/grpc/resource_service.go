@@ -4,13 +4,14 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
 	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
 	"github.com/heliannuuthus/helios/pkg/pagination"
 	"github.com/heliannuuthus/helios/pkg/patch"
-	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type resourceServiceServer struct {
@@ -361,13 +362,13 @@ func (s *resourceServiceServer) GetGroupMembers(ctx context.Context, req *hermes
 
 func serviceToProto(svc *models.Service) *hermesv1.Service {
 	pb := &hermesv1.Service{
-		Id:                    uint32(svc.ID),
+		Id:                    safeUint32(svc.ID),
 		DomainId:              svc.DomainID,
 		ServiceId:             svc.ServiceID,
 		Name:                  svc.Name,
 		Description:           svc.Description,
 		LogoUrl:               svc.LogoURL,
-		AccessTokenExpiresIn:  uint32(svc.AccessTokenExpiresIn),
+		AccessTokenExpiresIn:  safeUint32(svc.AccessTokenExpiresIn),
 		RequiredIdentityTypes: svc.GetRequiredIdentities(),
 		CreatedAt:             timestamppb.New(svc.CreatedAt),
 		UpdatedAt:             timestamppb.New(svc.UpdatedAt),
@@ -387,13 +388,13 @@ func serviceToProto(svc *models.Service) *hermesv1.Service {
 func challengeSettingToProto(cfg *models.ServiceChallengeSetting) *hermesv1.ServiceChallengeSetting {
 	limits := make(map[string]int32, len(cfg.Limits))
 	for k, v := range cfg.Limits {
-		limits[k] = int32(v)
+		limits[k] = safeInt32(v)
 	}
 	return &hermesv1.ServiceChallengeSetting{
-		Id:        uint32(cfg.ID),
+		Id:        safeUint32(cfg.ID),
 		ServiceId: cfg.ServiceID,
 		Type:      cfg.Type,
-		ExpiresIn: uint32(cfg.ExpiresIn),
+		ExpiresIn: safeUint32(cfg.ExpiresIn),
 		Limits:    limits,
 		CreatedAt: timestamppb.New(cfg.CreatedAt),
 		UpdatedAt: timestamppb.New(cfg.UpdatedAt),
@@ -402,7 +403,7 @@ func challengeSettingToProto(cfg *models.ServiceChallengeSetting) *hermesv1.Serv
 
 func relationshipToProto(r *models.Relationship) *hermesv1.Relationship {
 	pb := &hermesv1.Relationship{
-		Id:          uint32(r.ID),
+		Id:          safeUint32(r.ID),
 		ServiceId:   r.ServiceID,
 		SubjectType: r.SubjectType,
 		SubjectId:   r.SubjectID,
@@ -419,7 +420,7 @@ func relationshipToProto(r *models.Relationship) *hermesv1.Relationship {
 
 func groupToProto(g *models.Group) *hermesv1.Group {
 	return &hermesv1.Group{
-		Id:          uint32(g.ID),
+		Id:          safeUint32(g.ID),
 		GroupId:     g.GroupID,
 		ServiceId:   g.ServiceID,
 		Name:        g.Name,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -39,7 +40,8 @@ func main() {
 }
 
 func startGRPC(svc *hermes.Service, userSvc *hermes.UserService, credSvc *hermes.CredentialService) {
-	lis, err := net.Listen("tcp", ":50051")
+	lc := net.ListenConfig{}
+	lis, err := lc.Listen(context.Background(), "tcp", ":50051")
 	if err != nil {
 		logger.Fatalf("gRPC listen 失败: %v", err)
 	}

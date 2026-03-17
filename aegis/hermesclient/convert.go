@@ -1,6 +1,7 @@
 package hermesclient
 
 import (
+	"math"
 	"time"
 
 	"github.com/go-json-experiment/json"
@@ -9,6 +10,7 @@ import (
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
 	"github.com/heliannuuthus/helios/hermes"
 	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
 func domainFromProto(pb *hermesv1.Domain) *models.Domain {
@@ -221,7 +223,7 @@ func userFromProto(pb *hermesv1.User) *models.User {
 	u := &models.User{
 		ID:            uint(pb.Id),
 		OpenID:        pb.Openid,
-		Status:        int8(pb.Status),
+		Status:        safeInt8(pb.Status),
 		Nickname:      pb.Nickname,
 		Picture:       pb.Picture,
 		Email:         pb.Email,
@@ -350,7 +352,7 @@ func passwordStoreCredentialFromProto(pb *hermesv1.PasswordStoreCredential) *her
 	cred := &hermes.PasswordStoreCredential{
 		OpenID:       pb.Openid,
 		PasswordHash: pb.PasswordHash,
-		Status:       int8(pb.Status),
+		Status:       safeInt8(pb.Status),
 	}
 	if pb.Nickname != nil {
 		cred.Nickname = *pb.Nickname
@@ -383,9 +385,40 @@ func toTimestamp(t time.Time) *timestamppb.Timestamp {
 	return timestamppb.New(t)
 }
 
-func toTimestampPtr(t *time.Time) *timestamppb.Timestamp {
-	if t == nil {
-		return nil
+func safeInt8(v int32) int8 {
+	if v > 127 {
+		return 127
 	}
-	return timestamppb.New(*t)
+	if v < -128 {
+		return -128
+	}
+	return int8(v)
+}
+
+func safeInt32[T ~int | ~uint](v T) int32 {
+	if v > T(math.MaxInt32) {
+		return math.MaxInt32
+	}
+	return int32(v)
+}
+
+func safeUint32[T ~uint | ~int](v T) uint32 {
+	if v > T(math.MaxUint32) {
+		return math.MaxUint32
+	}
+	return uint32(v)
+}
+
+func setOptionalString(dst **string, src patch.Optional[string]) {
+	if src.IsPresent() && !src.IsNull() {
+		v := src.Value()
+		*dst = &v
+	}
+}
+
+func setOptionalUint32(dst **uint32, src patch.Optional[uint]) {
+	if src.IsPresent() && !src.IsNull() {
+		v := safeUint32(src.Value())
+		*dst = &v
+	}
 }

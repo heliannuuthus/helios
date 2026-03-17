@@ -569,7 +569,7 @@ func (s *Service) generateAccessToken(
 	if svc.AccessTokenExpiresIn == 0 {
 		return nil, autherrors.NewInvalidRequestf("access_token_expires_in not configured for service %s", svc.ServiceID)
 	}
-	accessExpiresIn := time.Duration(svc.AccessTokenExpiresIn) * time.Second //nolint:gosec // AccessTokenExpiresIn 是配置的小整数，不会溢出
+	accessExpiresIn := time.Duration(svc.AccessTokenExpiresIn) * time.Second
 
 	// 构建 UAT，用户信息根据 granted scope 过滤
 	scopes := parseScopeSet(scope)

@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
 	"github.com/heliannuuthus/helios/hermes"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type keyServiceServer struct {

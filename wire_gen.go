@@ -12,7 +12,6 @@ import (
 	"github.com/heliannuuthus/helios/chaos"
 	"github.com/heliannuuthus/helios/hermes"
 	config2 "github.com/heliannuuthus/helios/hermes/config"
-	"github.com/heliannuuthus/helios/iris"
 	"github.com/heliannuuthus/helios/zwei"
 	"github.com/heliannuuthus/helios/zwei/config"
 )
@@ -23,7 +22,6 @@ import (
 
 // Injectors from wire.go:
 
-// InitializeApp 初始化应用（由 wire 生成）
 func InitializeApp() (*App, error) {
 	zwei := provideZwei()
 	service := provideHermesService()
@@ -31,7 +29,6 @@ func InitializeApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	irisHandler := provideIrisHandler(handler)
 	hermesHandler := provideHermesHandler(service)
 	chaosHandler, err := provideChaosHandler()
 	if err != nil {
@@ -40,7 +37,6 @@ func InitializeApp() (*App, error) {
 	app := &App{
 		Zwei:          zwei,
 		AegisHandler:  handler,
-		IrisHandler:   irisHandler,
 		HermesHandler: hermesHandler,
 		ChaosHandler:  chaosHandler,
 	}
@@ -49,36 +45,29 @@ func InitializeApp() (*App, error) {
 
 // wire.go:
 
-// ProviderSet 提供者集合
 var ProviderSet = wire.NewSet(
 	provideZwei,
 	provideHermesService,
 	provideHermesHandler,
 	provideAegisHandler,
-	provideIrisHandler,
 	provideChaosHandler,
 )
 
-// App 应用依赖容器
 type App struct {
 	Zwei          *zwei.Zwei
 	AegisHandler  *aegis.Handler
-	IrisHandler   *iris.Handler
 	HermesHandler *hermes.Handler
 	ChaosHandler  *chaos.Handler
 }
 
-// Zwei 业务模块
 func provideZwei() *zwei.Zwei {
 	return zwei.New(config.InitDB())
 }
 
-// Hermes Service（供 aegis 模块复用）
 func provideHermesService() *hermes.Service {
 	return hermes.NewService(config2.InitDB())
 }
 
-// 认证模块 Handler（使用 Hermes 数据库，依赖 hermes.Service）
 func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
 	db := config2.InitDB()
 	userSvc := hermes.NewUserService(db)
@@ -90,15 +79,6 @@ func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
 	return hermes.NewHandler(hermesService)
 }
 
-// Iris 用户信息模块 Handler
-func provideIrisHandler(aegisHandler *aegis.Handler) *iris.Handler {
-	db := config2.InitDB()
-	userSvc := hermes.NewUserService(db)
-	credentialSvc := hermes.NewCredentialService(db)
-	return iris.NewHandler(userSvc, credentialSvc, aegisHandler.MFASvc())
-}
-
-// Chaos 业务聚合模块
 func provideChaosHandler() (*chaos.Handler, error) {
 	db := config2.InitDB()
 	chaosModule, err := chaos.New(db)

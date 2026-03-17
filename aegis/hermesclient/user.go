@@ -359,7 +359,7 @@ func (c *Client) SetupTOTP(ctx context.Context, req *hermes.TOTPSetupRequest) (*
 func (c *Client) ConfirmTOTP(ctx context.Context, req *hermes.ConfirmTOTPRequest) error {
 	_, err := c.user.ConfirmTOTP(ctx, &hermesv1.ConfirmTOTPRequest{
 		Openid:       req.OpenID,
-		CredentialId: uint32(req.CredentialID),
+		CredentialId: safeUint32(req.CredentialID),
 		Code:         req.Code,
 	})
 	return err

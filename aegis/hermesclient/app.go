@@ -88,15 +88,15 @@ func (c *Client) CreateApplication(ctx context.Context, req *hermes.ApplicationC
 		pbReq.AppId = &req.AppID
 	}
 	if req.IDTokenExpiresIn != nil {
-		v := uint32(*req.IDTokenExpiresIn)
+		v := safeUint32(*req.IDTokenExpiresIn)
 		pbReq.IdTokenExpiresIn = &v
 	}
 	if req.RefreshTokenExpiresIn != nil {
-		v := uint32(*req.RefreshTokenExpiresIn)
+		v := safeUint32(*req.RefreshTokenExpiresIn)
 		pbReq.RefreshTokenExpiresIn = &v
 	}
 	if req.RefreshTokenAbsoluteExpiresIn != nil {
-		v := uint32(*req.RefreshTokenAbsoluteExpiresIn)
+		v := safeUint32(*req.RefreshTokenAbsoluteExpiresIn)
 		pbReq.RefreshTokenAbsoluteExpiresIn = &v
 	}
 	resp, err := c.app.CreateApplication(ctx, pbReq)
@@ -132,7 +132,7 @@ func (c *Client) ListApplications(ctx context.Context, domainID string, req *her
 		Filter:   req.Filter,
 		Pagination: &hermesv1.Pagination{
 			Cursor: req.Token,
-			Limit:  int32(req.Size),
+			Limit:  safeInt32(req.Size),
 		},
 	}
 	resp, err := c.app.ListApplications(ctx, pbReq)
@@ -151,30 +151,12 @@ func (c *Client) ListApplications(ctx context.Context, domainID string, req *her
 
 func (c *Client) UpdateApplication(ctx context.Context, appID string, req *hermes.ApplicationUpdateRequest) error {
 	pbReq := &hermesv1.UpdateApplicationRequest{AppId: appID}
-	if req.Name.IsPresent() && !req.Name.IsNull() {
-		v := req.Name.Value()
-		pbReq.Name = &v
-	}
-	if req.Description.IsPresent() && !req.Description.IsNull() {
-		v := req.Description.Value()
-		pbReq.Description = &v
-	}
-	if req.LogoURL.IsPresent() && !req.LogoURL.IsNull() {
-		v := req.LogoURL.Value()
-		pbReq.LogoUrl = &v
-	}
-	if req.IDTokenExpiresIn.IsPresent() && !req.IDTokenExpiresIn.IsNull() {
-		v := uint32(req.IDTokenExpiresIn.Value())
-		pbReq.IdTokenExpiresIn = &v
-	}
-	if req.RefreshTokenExpiresIn.IsPresent() && !req.RefreshTokenExpiresIn.IsNull() {
-		v := uint32(req.RefreshTokenExpiresIn.Value())
-		pbReq.RefreshTokenExpiresIn = &v
-	}
-	if req.RefreshTokenAbsoluteExpiresIn.IsPresent() && !req.RefreshTokenAbsoluteExpiresIn.IsNull() {
-		v := uint32(req.RefreshTokenAbsoluteExpiresIn.Value())
-		pbReq.RefreshTokenAbsoluteExpiresIn = &v
-	}
+	setOptionalString(&pbReq.Name, req.Name)
+	setOptionalString(&pbReq.Description, req.Description)
+	setOptionalString(&pbReq.LogoUrl, req.LogoURL)
+	setOptionalUint32(&pbReq.IdTokenExpiresIn, req.IDTokenExpiresIn)
+	setOptionalUint32(&pbReq.RefreshTokenExpiresIn, req.RefreshTokenExpiresIn)
+	setOptionalUint32(&pbReq.RefreshTokenAbsoluteExpiresIn, req.RefreshTokenAbsoluteExpiresIn)
 	if req.AllowedRedirectURIs.IsPresent() {
 		pbReq.AllowedRedirectUris = optionalStringListToProto(req.AllowedRedirectURIs)
 	}
@@ -209,7 +191,7 @@ func (c *Client) CreateApplicationIDPConfig(ctx context.Context, appID string, r
 	pbReq := &hermesv1.CreateApplicationIDPConfigRequest{
 		AppId:    appID,
 		Type:     req.Type,
-		Priority: int32(req.Priority),
+		Priority: safeInt32(req.Priority),
 		Strategy: req.Strategy,
 		Delegate: req.Delegate,
 		Require:  req.Require,
@@ -227,7 +209,7 @@ func (c *Client) UpdateApplicationIDPConfig(ctx context.Context, appID, idpType 
 		Type:  idpType,
 	}
 	if req.Priority.IsPresent() && !req.Priority.IsNull() {
-		v := int32(req.Priority.Value())
+		v := safeInt32(req.Priority.Value())
 		pbReq.Priority = &v
 	}
 	if req.Strategy.IsPresent() && !req.Strategy.IsNull() {
