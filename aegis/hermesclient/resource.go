@@ -11,7 +11,7 @@ import (
 	"github.com/heliannuuthus/helios/pkg/pagination"
 )
 
-// ==================== Service ====================
+// ==================== Service (via ProvisionService) ====================
 
 func (c *Client) CreateService(ctx context.Context, req *dto.ServiceCreateRequest) (*models.Service, error) {
 	pbReq := &hermesv1.CreateServiceRequest{
@@ -25,7 +25,7 @@ func (c *Client) CreateService(ctx context.Context, req *dto.ServiceCreateReques
 		v := safeUint32(*req.AccessTokenExpiresIn)
 		pbReq.AccessTokenExpiresIn = &v
 	}
-	resp, err := c.resource.CreateService(ctx, pbReq)
+	resp, err := c.provision.CreateService(ctx, pbReq)
 	if err != nil {
 		return nil, fmt.Errorf("创建服务失败: %w", err)
 	}
@@ -33,23 +33,11 @@ func (c *Client) CreateService(ctx context.Context, req *dto.ServiceCreateReques
 }
 
 func (c *Client) GetService(ctx context.Context, serviceID string) (*models.Service, error) {
-	resp, err := c.resource.GetService(ctx, &hermesv1.GetServiceRequest{ServiceId: serviceID})
+	resp, err := c.provision.GetService(ctx, &hermesv1.GetServiceRequest{ServiceId: serviceID})
 	if err != nil {
 		return nil, fmt.Errorf("获取服务失败: %w", err)
 	}
 	return serviceFromProto(resp), nil
-}
-
-func (c *Client) GetServiceWithKey(ctx context.Context, serviceID string) (*models.ServiceWithKey, error) {
-	svc, err := c.resource.GetService(ctx, &hermesv1.GetServiceRequest{ServiceId: serviceID})
-	if err != nil {
-		return nil, fmt.Errorf("获取服务失败: %w", err)
-	}
-	keySet, err := c.key.GetKeys(ctx, &hermesv1.GetKeysRequest{OwnerType: "service", OwnerId: serviceID})
-	if err != nil {
-		return nil, fmt.Errorf("获取服务密钥失败: %w", err)
-	}
-	return serviceWithKeyFromProto(svc, keySet), nil
 }
 
 func (c *Client) ListServices(ctx context.Context, domainID string, req *dto.ListRequest) (*pagination.Items[models.Service], error) {
@@ -61,7 +49,7 @@ func (c *Client) ListServices(ctx context.Context, domainID string, req *dto.Lis
 			Limit:  safeInt32(req.Size),
 		},
 	}
-	resp, err := c.resource.ListServices(ctx, pbReq)
+	resp, err := c.provision.ListServices(ctx, pbReq)
 	if err != nil {
 		return nil, fmt.Errorf("列出服务失败: %w", err)
 	}
@@ -93,7 +81,7 @@ func (c *Client) UpdateService(ctx context.Context, serviceID string, req *dto.S
 		v := safeUint32(req.AccessTokenExpiresIn.Value())
 		pbReq.AccessTokenExpiresIn = &v
 	}
-	_, err := c.resource.UpdateService(ctx, pbReq)
+	_, err := c.provision.UpdateService(ctx, pbReq)
 	if err != nil {
 		return fmt.Errorf("更新服务失败: %w", err)
 	}
@@ -101,7 +89,7 @@ func (c *Client) UpdateService(ctx context.Context, serviceID string, req *dto.S
 }
 
 func (c *Client) DeleteService(ctx context.Context, serviceID string) error {
-	_, err := c.resource.DeleteService(ctx, &hermesv1.DeleteServiceRequest{ServiceId: serviceID})
+	_, err := c.provision.DeleteService(ctx, &hermesv1.DeleteServiceRequest{ServiceId: serviceID})
 	if err != nil {
 		return fmt.Errorf("删除服务失败: %w", err)
 	}
@@ -109,7 +97,7 @@ func (c *Client) DeleteService(ctx context.Context, serviceID string) error {
 }
 
 func (c *Client) GetServiceChallengeSetting(ctx context.Context, serviceID, challengeType string) (*models.ServiceChallengeSetting, error) {
-	resp, err := c.resource.GetServiceChallengeSetting(ctx, &hermesv1.GetServiceChallengeSettingRequest{
+	resp, err := c.provision.GetServiceChallengeSetting(ctx, &hermesv1.GetServiceChallengeSettingRequest{
 		ServiceId: serviceID,
 		Type:      challengeType,
 	})
@@ -120,7 +108,7 @@ func (c *Client) GetServiceChallengeSetting(ctx context.Context, serviceID, chal
 }
 
 func (c *Client) GetServiceApplicationRelations(ctx context.Context, serviceID string) ([]models.ApplicationServiceRelation, error) {
-	resp, err := c.resource.GetServiceApplicationRelations(ctx, &hermesv1.GetServiceRequest{ServiceId: serviceID})
+	resp, err := c.resource.GetServiceApplicationRelations(ctx, &hermesv1.GetServiceApplicationRelationsRequest{ServiceId: serviceID})
 	if err != nil {
 		return nil, fmt.Errorf("获取服务已授权应用失败: %w", err)
 	}
@@ -324,7 +312,7 @@ func (c *Client) DeleteAppServiceRelationship(ctx context.Context, appID, servic
 	return nil
 }
 
-// ==================== Group ====================
+// ==================== Group (via UserService) ====================
 
 func (c *Client) CreateGroup(ctx context.Context, req *dto.GroupCreateRequest) (*models.Group, error) {
 	pbReq := &hermesv1.CreateGroupRequest{
@@ -335,7 +323,7 @@ func (c *Client) CreateGroup(ctx context.Context, req *dto.GroupCreateRequest) (
 	if req.Description != nil {
 		pbReq.Description = req.Description
 	}
-	resp, err := c.resource.CreateGroup(ctx, pbReq)
+	resp, err := c.user.CreateGroup(ctx, pbReq)
 	if err != nil {
 		return nil, fmt.Errorf("创建组失败: %w", err)
 	}
@@ -343,7 +331,7 @@ func (c *Client) CreateGroup(ctx context.Context, req *dto.GroupCreateRequest) (
 }
 
 func (c *Client) GetGroup(ctx context.Context, groupID string) (*models.Group, error) {
-	resp, err := c.resource.GetGroup(ctx, &hermesv1.GetGroupRequest{GroupId: groupID})
+	resp, err := c.user.GetGroup(ctx, &hermesv1.GetGroupRequest{GroupId: groupID})
 	if err != nil {
 		return nil, fmt.Errorf("获取组失败: %w", err)
 	}
@@ -358,7 +346,7 @@ func (c *Client) ListGroups(ctx context.Context, req *dto.ListRequest) (*paginat
 			Limit:  safeInt32(req.Size),
 		},
 	}
-	resp, err := c.resource.ListGroups(ctx, pbReq)
+	resp, err := c.user.ListGroups(ctx, pbReq)
 	if err != nil {
 		return nil, fmt.Errorf("列出组失败: %w", err)
 	}
@@ -382,7 +370,7 @@ func (c *Client) UpdateGroup(ctx context.Context, groupID string, req *dto.Group
 		v := req.Description.Value()
 		pbReq.Description = &v
 	}
-	_, err := c.resource.UpdateGroup(ctx, pbReq)
+	_, err := c.user.UpdateGroup(ctx, pbReq)
 	if err != nil {
 		return fmt.Errorf("更新组失败: %w", err)
 	}
@@ -390,7 +378,7 @@ func (c *Client) UpdateGroup(ctx context.Context, groupID string, req *dto.Group
 }
 
 func (c *Client) DeleteGroup(ctx context.Context, groupID string) error {
-	_, err := c.resource.DeleteGroup(ctx, &hermesv1.GetGroupRequest{GroupId: groupID})
+	_, err := c.user.DeleteGroup(ctx, &hermesv1.GetGroupRequest{GroupId: groupID})
 	if err != nil {
 		return fmt.Errorf("删除组失败: %w", err)
 	}
@@ -398,7 +386,7 @@ func (c *Client) DeleteGroup(ctx context.Context, groupID string) error {
 }
 
 func (c *Client) SetGroupMembers(ctx context.Context, req *dto.GroupMemberRequest) error {
-	_, err := c.resource.SetGroupMembers(ctx, &hermesv1.SetGroupMembersRequest{
+	_, err := c.user.SetGroupMembers(ctx, &hermesv1.SetGroupMembersRequest{
 		GroupId: req.GroupID,
 		UserIds: req.UserIDs,
 	})
@@ -409,9 +397,46 @@ func (c *Client) SetGroupMembers(ctx context.Context, req *dto.GroupMemberReques
 }
 
 func (c *Client) GetGroupMembers(ctx context.Context, groupID string) ([]string, error) {
-	resp, err := c.resource.GetGroupMembers(ctx, &hermesv1.GetGroupRequest{GroupId: groupID})
+	resp, err := c.user.GetGroupMembers(ctx, &hermesv1.GetGroupRequest{GroupId: groupID})
 	if err != nil {
 		return nil, fmt.Errorf("获取组成员失败: %w", err)
+	}
+	return resp.Values, nil
+}
+
+// ==================== Application Service Relations ====================
+
+func (c *Client) SetApplicationServiceRelations(ctx context.Context, req *dto.ApplicationServiceRelationRequest) error {
+	_, err := c.resource.SetApplicationServiceRelations(ctx, &hermesv1.SetApplicationServiceRelationsRequest{
+		AppId:     req.AppID,
+		ServiceId: req.ServiceID,
+		Relations: req.Relations,
+	})
+	if err != nil {
+		return fmt.Errorf("设置应用服务关系失败: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) GetApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error) {
+	resp, err := c.resource.GetApplicationServiceRelations(ctx, &hermesv1.GetApplicationServiceRelationsRequest{AppId: appID})
+	if err != nil {
+		return nil, fmt.Errorf("获取应用服务关系失败: %w", err)
+	}
+	relations := make([]models.ApplicationServiceRelation, 0, len(resp.Relations))
+	for _, r := range resp.Relations {
+		relations = append(relations, appServiceRelationFromProto(r))
+	}
+	return relations, nil
+}
+
+func (c *Client) GetServiceAppRelations(ctx context.Context, serviceID, appID string) ([]string, error) {
+	resp, err := c.resource.GetServiceAppRelations(ctx, &hermesv1.GetServiceAppRelationsRequest{
+		ServiceId: serviceID,
+		AppId:     appID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("获取服务应用关系失败: %w", err)
 	}
 	return resp.Values, nil
 }

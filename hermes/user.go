@@ -366,6 +366,25 @@ func (s *UserService) GetOpenIDByCredentialID(ctx context.Context, credentialID 
 	return cred.OpenID, nil
 }
 
+// GetCredentialByInternalID 根据内部主键 ID 获取凭证
+func (s *UserService) GetCredentialByInternalID(ctx context.Context, id uint) (*models.UserCredential, error) {
+	var cred models.UserCredential
+	if err := s.db.WithContext(ctx).Where("_id = ?", id).First(&cred).Error; err != nil {
+		return nil, err
+	}
+	return &cred, nil
+}
+
+// UpdateCredentialByInternalID 根据内部主键 ID 更新凭证
+func (s *UserService) UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error {
+	return s.db.WithContext(ctx).Model(&models.UserCredential{}).Where("_id = ?", id).Updates(updates).Error
+}
+
+// DeleteCredentialByOpenIDAndType 根据 openid 和类型删除凭证
+func (s *UserService) DeleteCredentialByOpenIDAndType(ctx context.Context, openid string, credType string) error {
+	return s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Delete(&models.UserCredential{}).Error
+}
+
 // ==================== PasswordStore 接口实现（供 password IDP 使用）====================
 
 // GetUserByIdentifier 根据标识符获取 C 端用户凭证信息

@@ -10,6 +10,7 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -187,11 +188,459 @@ func (x *KeySet) GetKeys() [][]byte {
 	return nil
 }
 
+type GetIDPKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IdpType       string                 `protobuf:"bytes,1,opt,name=idp_type,json=idpType,proto3" json:"idp_type,omitempty"`
+	TAppId        string                 `protobuf:"bytes,2,opt,name=t_app_id,json=tAppId,proto3" json:"t_app_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetIDPKeyRequest) Reset() {
+	*x = GetIDPKeyRequest{}
+	mi := &file_hermes_v1_key_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetIDPKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetIDPKeyRequest) ProtoMessage() {}
+
+func (x *GetIDPKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_key_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetIDPKeyRequest.ProtoReflect.Descriptor instead.
+func (*GetIDPKeyRequest) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_key_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetIDPKeyRequest) GetIdpType() string {
+	if x != nil {
+		return x.IdpType
+	}
+	return ""
+}
+
+func (x *GetIDPKeyRequest) GetTAppId() string {
+	if x != nil {
+		return x.TAppId
+	}
+	return ""
+}
+
+type IDPKey struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	IdpType       string                 `protobuf:"bytes,2,opt,name=idp_type,json=idpType,proto3" json:"idp_type,omitempty"`
+	TAppId        string                 `protobuf:"bytes,3,opt,name=t_app_id,json=tAppId,proto3" json:"t_app_id,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IDPKey) Reset() {
+	*x = IDPKey{}
+	mi := &file_hermes_v1_key_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IDPKey) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IDPKey) ProtoMessage() {}
+
+func (x *IDPKey) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_key_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IDPKey.ProtoReflect.Descriptor instead.
+func (*IDPKey) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_key_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *IDPKey) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *IDPKey) GetIdpType() string {
+	if x != nil {
+		return x.IdpType
+	}
+	return ""
+}
+
+func (x *IDPKey) GetTAppId() string {
+	if x != nil {
+		return x.TAppId
+	}
+	return ""
+}
+
+func (x *IDPKey) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *IDPKey) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+type IDPKeyList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Keys          []*IDPKey              `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IDPKeyList) Reset() {
+	*x = IDPKeyList{}
+	mi := &file_hermes_v1_key_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IDPKeyList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IDPKeyList) ProtoMessage() {}
+
+func (x *IDPKeyList) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_key_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IDPKeyList.ProtoReflect.Descriptor instead.
+func (*IDPKeyList) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_key_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *IDPKeyList) GetKeys() []*IDPKey {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
+type CreateIDPKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IdpType       string                 `protobuf:"bytes,1,opt,name=idp_type,json=idpType,proto3" json:"idp_type,omitempty"`
+	TAppId        string                 `protobuf:"bytes,2,opt,name=t_app_id,json=tAppId,proto3" json:"t_app_id,omitempty"`
+	TSecret       string                 `protobuf:"bytes,3,opt,name=t_secret,json=tSecret,proto3" json:"t_secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateIDPKeyRequest) Reset() {
+	*x = CreateIDPKeyRequest{}
+	mi := &file_hermes_v1_key_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateIDPKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateIDPKeyRequest) ProtoMessage() {}
+
+func (x *CreateIDPKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_key_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateIDPKeyRequest.ProtoReflect.Descriptor instead.
+func (*CreateIDPKeyRequest) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_key_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *CreateIDPKeyRequest) GetIdpType() string {
+	if x != nil {
+		return x.IdpType
+	}
+	return ""
+}
+
+func (x *CreateIDPKeyRequest) GetTAppId() string {
+	if x != nil {
+		return x.TAppId
+	}
+	return ""
+}
+
+func (x *CreateIDPKeyRequest) GetTSecret() string {
+	if x != nil {
+		return x.TSecret
+	}
+	return ""
+}
+
+type UpdateIDPKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IdpType       string                 `protobuf:"bytes,1,opt,name=idp_type,json=idpType,proto3" json:"idp_type,omitempty"`
+	TAppId        string                 `protobuf:"bytes,2,opt,name=t_app_id,json=tAppId,proto3" json:"t_app_id,omitempty"`
+	TSecret       *string                `protobuf:"bytes,3,opt,name=t_secret,json=tSecret,proto3,oneof" json:"t_secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateIDPKeyRequest) Reset() {
+	*x = UpdateIDPKeyRequest{}
+	mi := &file_hermes_v1_key_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateIDPKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateIDPKeyRequest) ProtoMessage() {}
+
+func (x *UpdateIDPKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_key_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateIDPKeyRequest.ProtoReflect.Descriptor instead.
+func (*UpdateIDPKeyRequest) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_key_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *UpdateIDPKeyRequest) GetIdpType() string {
+	if x != nil {
+		return x.IdpType
+	}
+	return ""
+}
+
+func (x *UpdateIDPKeyRequest) GetTAppId() string {
+	if x != nil {
+		return x.TAppId
+	}
+	return ""
+}
+
+func (x *UpdateIDPKeyRequest) GetTSecret() string {
+	if x != nil && x.TSecret != nil {
+		return *x.TSecret
+	}
+	return ""
+}
+
+type DeleteIDPKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IdpType       string                 `protobuf:"bytes,1,opt,name=idp_type,json=idpType,proto3" json:"idp_type,omitempty"`
+	TAppId        string                 `protobuf:"bytes,2,opt,name=t_app_id,json=tAppId,proto3" json:"t_app_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteIDPKeyRequest) Reset() {
+	*x = DeleteIDPKeyRequest{}
+	mi := &file_hermes_v1_key_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteIDPKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteIDPKeyRequest) ProtoMessage() {}
+
+func (x *DeleteIDPKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_key_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteIDPKeyRequest.ProtoReflect.Descriptor instead.
+func (*DeleteIDPKeyRequest) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_key_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *DeleteIDPKeyRequest) GetIdpType() string {
+	if x != nil {
+		return x.IdpType
+	}
+	return ""
+}
+
+func (x *DeleteIDPKeyRequest) GetTAppId() string {
+	if x != nil {
+		return x.TAppId
+	}
+	return ""
+}
+
+type ResolveIDPKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AppId         string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	IdpType       string                 `protobuf:"bytes,2,opt,name=idp_type,json=idpType,proto3" json:"idp_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveIDPKeyRequest) Reset() {
+	*x = ResolveIDPKeyRequest{}
+	mi := &file_hermes_v1_key_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveIDPKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveIDPKeyRequest) ProtoMessage() {}
+
+func (x *ResolveIDPKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_key_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveIDPKeyRequest.ProtoReflect.Descriptor instead.
+func (*ResolveIDPKeyRequest) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_key_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ResolveIDPKeyRequest) GetAppId() string {
+	if x != nil {
+		return x.AppId
+	}
+	return ""
+}
+
+func (x *ResolveIDPKeyRequest) GetIdpType() string {
+	if x != nil {
+		return x.IdpType
+	}
+	return ""
+}
+
+type ResolveIDPKeyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TAppId        string                 `protobuf:"bytes,1,opt,name=t_app_id,json=tAppId,proto3" json:"t_app_id,omitempty"`
+	TSecret       string                 `protobuf:"bytes,2,opt,name=t_secret,json=tSecret,proto3" json:"t_secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveIDPKeyResponse) Reset() {
+	*x = ResolveIDPKeyResponse{}
+	mi := &file_hermes_v1_key_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveIDPKeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveIDPKeyResponse) ProtoMessage() {}
+
+func (x *ResolveIDPKeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_key_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveIDPKeyResponse.ProtoReflect.Descriptor instead.
+func (*ResolveIDPKeyResponse) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_key_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ResolveIDPKeyResponse) GetTAppId() string {
+	if x != nil {
+		return x.TAppId
+	}
+	return ""
+}
+
+func (x *ResolveIDPKeyResponse) GetTSecret() string {
+	if x != nil {
+		return x.TSecret
+	}
+	return ""
+}
+
 var File_hermes_v1_key_proto protoreflect.FileDescriptor
 
 const file_hermes_v1_key_proto_rawDesc = "" +
 	"\n" +
-	"\x13hermes/v1/key.proto\x12\thermes.v1\x1a\x1bgoogle/protobuf/empty.proto\"J\n" +
+	"\x13hermes/v1/key.proto\x12\thermes.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"J\n" +
 	"\x0eGetKeysRequest\x12\x1d\n" +
 	"\n" +
 	"owner_type\x18\x01 \x01(\tR\townerType\x12\x19\n" +
@@ -203,11 +652,49 @@ const file_hermes_v1_key_proto_rawDesc = "" +
 	"\x0ewindow_seconds\x18\x03 \x01(\x03R\rwindowSeconds\"0\n" +
 	"\x06KeySet\x12\x12\n" +
 	"\x04main\x18\x01 \x01(\fR\x04main\x12\x12\n" +
-	"\x04keys\x18\x02 \x03(\fR\x04keys2\x87\x01\n" +
+	"\x04keys\x18\x02 \x03(\fR\x04keys\"G\n" +
+	"\x10GetIDPKeyRequest\x12\x19\n" +
+	"\bidp_type\x18\x01 \x01(\tR\aidpType\x12\x18\n" +
+	"\bt_app_id\x18\x02 \x01(\tR\x06tAppId\"\xc3\x01\n" +
+	"\x06IDPKey\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x19\n" +
+	"\bidp_type\x18\x02 \x01(\tR\aidpType\x12\x18\n" +
+	"\bt_app_id\x18\x03 \x01(\tR\x06tAppId\x129\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"3\n" +
+	"\n" +
+	"IDPKeyList\x12%\n" +
+	"\x04keys\x18\x01 \x03(\v2\x11.hermes.v1.IDPKeyR\x04keys\"e\n" +
+	"\x13CreateIDPKeyRequest\x12\x19\n" +
+	"\bidp_type\x18\x01 \x01(\tR\aidpType\x12\x18\n" +
+	"\bt_app_id\x18\x02 \x01(\tR\x06tAppId\x12\x19\n" +
+	"\bt_secret\x18\x03 \x01(\tR\atSecret\"w\n" +
+	"\x13UpdateIDPKeyRequest\x12\x19\n" +
+	"\bidp_type\x18\x01 \x01(\tR\aidpType\x12\x18\n" +
+	"\bt_app_id\x18\x02 \x01(\tR\x06tAppId\x12\x1e\n" +
+	"\bt_secret\x18\x03 \x01(\tH\x00R\atSecret\x88\x01\x01B\v\n" +
+	"\t_t_secret\"J\n" +
+	"\x13DeleteIDPKeyRequest\x12\x19\n" +
+	"\bidp_type\x18\x01 \x01(\tR\aidpType\x12\x18\n" +
+	"\bt_app_id\x18\x02 \x01(\tR\x06tAppId\"H\n" +
+	"\x14ResolveIDPKeyRequest\x12\x15\n" +
+	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x19\n" +
+	"\bidp_type\x18\x02 \x01(\tR\aidpType\"L\n" +
+	"\x15ResolveIDPKeyResponse\x12\x18\n" +
+	"\bt_app_id\x18\x01 \x01(\tR\x06tAppId\x12\x19\n" +
+	"\bt_secret\x18\x02 \x01(\tR\atSecret2\xa9\x04\n" +
 	"\n" +
 	"KeyService\x127\n" +
 	"\aGetKeys\x12\x19.hermes.v1.GetKeysRequest\x1a\x11.hermes.v1.KeySet\x12@\n" +
-	"\tRotateKey\x12\x1b.hermes.v1.RotateKeyRequest\x1a\x16.google.protobuf.EmptyB\x98\x01\n" +
+	"\tRotateKey\x12\x1b.hermes.v1.RotateKeyRequest\x1a\x16.google.protobuf.Empty\x12<\n" +
+	"\vListIDPKeys\x12\x16.google.protobuf.Empty\x1a\x15.hermes.v1.IDPKeyList\x12;\n" +
+	"\tGetIDPKey\x12\x1b.hermes.v1.GetIDPKeyRequest\x1a\x11.hermes.v1.IDPKey\x12A\n" +
+	"\fCreateIDPKey\x12\x1e.hermes.v1.CreateIDPKeyRequest\x1a\x11.hermes.v1.IDPKey\x12F\n" +
+	"\fUpdateIDPKey\x12\x1e.hermes.v1.UpdateIDPKeyRequest\x1a\x16.google.protobuf.Empty\x12F\n" +
+	"\fDeleteIDPKey\x12\x1e.hermes.v1.DeleteIDPKeyRequest\x1a\x16.google.protobuf.Empty\x12R\n" +
+	"\rResolveIDPKey\x12\x1f.hermes.v1.ResolveIDPKeyRequest\x1a .hermes.v1.ResolveIDPKeyResponseB\x98\x01\n" +
 	"\rcom.hermes.v1B\bKeyProtoP\x01Z8github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1\xa2\x02\x03HXX\xaa\x02\tHermes.V1\xca\x02\tHermes\\V1\xe2\x02\x15Hermes\\V1\\GPBMetadata\xea\x02\n" +
 	"Hermes::V1b\x06proto3"
 
@@ -223,23 +710,47 @@ func file_hermes_v1_key_proto_rawDescGZIP() []byte {
 	return file_hermes_v1_key_proto_rawDescData
 }
 
-var file_hermes_v1_key_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_hermes_v1_key_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_hermes_v1_key_proto_goTypes = []any{
-	(*GetKeysRequest)(nil),   // 0: hermes.v1.GetKeysRequest
-	(*RotateKeyRequest)(nil), // 1: hermes.v1.RotateKeyRequest
-	(*KeySet)(nil),           // 2: hermes.v1.KeySet
-	(*emptypb.Empty)(nil),    // 3: google.protobuf.Empty
+	(*GetKeysRequest)(nil),        // 0: hermes.v1.GetKeysRequest
+	(*RotateKeyRequest)(nil),      // 1: hermes.v1.RotateKeyRequest
+	(*KeySet)(nil),                // 2: hermes.v1.KeySet
+	(*GetIDPKeyRequest)(nil),      // 3: hermes.v1.GetIDPKeyRequest
+	(*IDPKey)(nil),                // 4: hermes.v1.IDPKey
+	(*IDPKeyList)(nil),            // 5: hermes.v1.IDPKeyList
+	(*CreateIDPKeyRequest)(nil),   // 6: hermes.v1.CreateIDPKeyRequest
+	(*UpdateIDPKeyRequest)(nil),   // 7: hermes.v1.UpdateIDPKeyRequest
+	(*DeleteIDPKeyRequest)(nil),   // 8: hermes.v1.DeleteIDPKeyRequest
+	(*ResolveIDPKeyRequest)(nil),  // 9: hermes.v1.ResolveIDPKeyRequest
+	(*ResolveIDPKeyResponse)(nil), // 10: hermes.v1.ResolveIDPKeyResponse
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(*emptypb.Empty)(nil),         // 12: google.protobuf.Empty
 }
 var file_hermes_v1_key_proto_depIdxs = []int32{
-	0, // 0: hermes.v1.KeyService.GetKeys:input_type -> hermes.v1.GetKeysRequest
-	1, // 1: hermes.v1.KeyService.RotateKey:input_type -> hermes.v1.RotateKeyRequest
-	2, // 2: hermes.v1.KeyService.GetKeys:output_type -> hermes.v1.KeySet
-	3, // 3: hermes.v1.KeyService.RotateKey:output_type -> google.protobuf.Empty
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	11, // 0: hermes.v1.IDPKey.created_at:type_name -> google.protobuf.Timestamp
+	11, // 1: hermes.v1.IDPKey.updated_at:type_name -> google.protobuf.Timestamp
+	4,  // 2: hermes.v1.IDPKeyList.keys:type_name -> hermes.v1.IDPKey
+	0,  // 3: hermes.v1.KeyService.GetKeys:input_type -> hermes.v1.GetKeysRequest
+	1,  // 4: hermes.v1.KeyService.RotateKey:input_type -> hermes.v1.RotateKeyRequest
+	12, // 5: hermes.v1.KeyService.ListIDPKeys:input_type -> google.protobuf.Empty
+	3,  // 6: hermes.v1.KeyService.GetIDPKey:input_type -> hermes.v1.GetIDPKeyRequest
+	6,  // 7: hermes.v1.KeyService.CreateIDPKey:input_type -> hermes.v1.CreateIDPKeyRequest
+	7,  // 8: hermes.v1.KeyService.UpdateIDPKey:input_type -> hermes.v1.UpdateIDPKeyRequest
+	8,  // 9: hermes.v1.KeyService.DeleteIDPKey:input_type -> hermes.v1.DeleteIDPKeyRequest
+	9,  // 10: hermes.v1.KeyService.ResolveIDPKey:input_type -> hermes.v1.ResolveIDPKeyRequest
+	2,  // 11: hermes.v1.KeyService.GetKeys:output_type -> hermes.v1.KeySet
+	12, // 12: hermes.v1.KeyService.RotateKey:output_type -> google.protobuf.Empty
+	5,  // 13: hermes.v1.KeyService.ListIDPKeys:output_type -> hermes.v1.IDPKeyList
+	4,  // 14: hermes.v1.KeyService.GetIDPKey:output_type -> hermes.v1.IDPKey
+	4,  // 15: hermes.v1.KeyService.CreateIDPKey:output_type -> hermes.v1.IDPKey
+	12, // 16: hermes.v1.KeyService.UpdateIDPKey:output_type -> google.protobuf.Empty
+	12, // 17: hermes.v1.KeyService.DeleteIDPKey:output_type -> google.protobuf.Empty
+	10, // 18: hermes.v1.KeyService.ResolveIDPKey:output_type -> hermes.v1.ResolveIDPKeyResponse
+	11, // [11:19] is the sub-list for method output_type
+	3,  // [3:11] is the sub-list for method input_type
+	3,  // [3:3] is the sub-list for extension type_name
+	3,  // [3:3] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_hermes_v1_key_proto_init() }
@@ -247,13 +758,14 @@ func file_hermes_v1_key_proto_init() {
 	if File_hermes_v1_key_proto != nil {
 		return
 	}
+	file_hermes_v1_key_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hermes_v1_key_proto_rawDesc), len(file_hermes_v1_key_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

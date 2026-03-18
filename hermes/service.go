@@ -1125,9 +1125,9 @@ func (s *Service) DeleteApplicationIDPConfig(ctx context.Context, appID, idpType
 	return nil
 }
 
-// ResolveIDPCredential 解析应用的有效 IDP 凭证
+// ResolveIDPKey 解析应用的有效 IDP 密钥
 // 确定 t_app_id（app 覆盖 → domain 默认），再从 t_idp_key 查密钥
-func (s *Service) ResolveIDPCredential(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error) {
+func (s *Service) ResolveIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error) {
 	var appCfg models.ApplicationIDPConfig
 	if findErr := s.db.WithContext(ctx).
 		Where("app_id = ? AND `type` = ?", appID, idpType).
@@ -1181,6 +1181,22 @@ func (s *Service) GetServiceChallengeSetting(ctx context.Context, serviceID, cha
 }
 
 // ==================== 密钥管理 ====================
+
+// GetDomainKeys 获取域的所有有效密钥（已解密），回退到配置文件兼容旧部署
+func (s *Service) GetDomainKeys(ctx context.Context, domainID string) ([][]byte, error) {
+	keys, err := s.getKeys(ctx, models.KeyOwnerDomain, domainID)
+	if err != nil {
+		return nil, fmt.Errorf("获取域密钥失败: %w", err)
+	}
+	if len(keys) == 0 {
+		// 回退到配置文件（兼容未把域密钥写入 t_key 的旧部署）
+		keys, err = config.GetDomainSignKeysBytes(domainID)
+		if err != nil {
+			return nil, fmt.Errorf("获取域签名密钥失败: %w", err)
+		}
+	}
+	return keys, nil
+}
 
 // GetApplicationKeys 获取应用的所有有效密钥（已解密）
 func (s *Service) GetApplicationKeys(ctx context.Context, appID string) ([][]byte, error) {

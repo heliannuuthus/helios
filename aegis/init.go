@@ -64,7 +64,7 @@ func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 	ac := accessctl.NewManager(throttler)
 	logger.Info("[Auth] 访问控制管理器初始化完成")
 
-	registry := initRegistry(userSvc, cacheManager, emailSender, webauthnSvc, captchaVerifier, totpVerifier, ac, tokenSvc)
+	registry := initRegistry(hermesSvc, userSvc, cacheManager, emailSender, webauthnSvc, captchaVerifier, totpVerifier, ac, tokenSvc)
 
 	pool, err := async.NewPool(64)
 	if err != nil {
@@ -176,7 +176,7 @@ func initProviders(credentialSvc contract.CredentialProvider, cacheManager *cach
 }
 
 // initRegistry 初始化全局 Registry（注册胶水层 Authenticator）
-func initRegistry(userSvc contract.UserProvider, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier factor.TOTPVerifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
+func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier factor.TOTPVerifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
 	registry := authenticator.NewRegistry()
 
 	// ==================== IDP Authenticators ====================
@@ -185,11 +185,11 @@ func initRegistry(userSvc contract.UserProvider, cacheManager *cache.Manager, em
 		registry.Register(authenticate.NewIDPAuthenticator(p))
 	}
 
-	registerIDP(wechat.NewMPProvider())
-	registerIDP(tt.NewMPProvider())
-	registerIDP(alipay.NewMPProvider())
-	registerIDP(github.NewProvider())
-	registerIDP(google.NewProvider())
+	registerIDP(wechat.NewMPProvider(hermesSvc))
+	registerIDP(tt.NewMPProvider(hermesSvc))
+	registerIDP(alipay.NewMPProvider(hermesSvc))
+	registerIDP(github.NewProvider(hermesSvc))
+	registerIDP(google.NewProvider(hermesSvc))
 
 	if userSvc != nil {
 		registerIDP(idpuser.NewProvider(userSvc))

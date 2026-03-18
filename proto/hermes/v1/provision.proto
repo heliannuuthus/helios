@@ -1,0 +1,296 @@
+syntax = "proto3";
+
+package hermes.v1;
+
+option go_package = "github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+import "hermes/v1/common.proto";
+
+// ProvisionService 域 + 应用 + 服务 + IDP 配置管理
+service ProvisionService {
+  // ---- Domain ----
+
+  rpc GetDomain(GetDomainRequest) returns (Domain);
+  rpc ListDomains(google.protobuf.Empty) returns (DomainList);
+  rpc UpdateDomain(UpdateDomainRequest) returns (Domain);
+
+  // ---- Domain IDP Config ----
+
+  rpc GetDomainIDPConfigs(GetDomainRequest) returns (DomainIDPConfigList);
+  rpc CreateDomainIDPConfig(CreateDomainIDPConfigRequest) returns (DomainIDPConfig);
+  rpc UpdateDomainIDPConfig(UpdateDomainIDPConfigRequest) returns (DomainIDPConfig);
+  rpc DeleteDomainIDPConfig(DeleteDomainIDPConfigRequest) returns (google.protobuf.Empty);
+
+  // ---- Application ----
+
+  rpc CreateApplication(CreateApplicationRequest) returns (Application);
+  rpc GetApplication(GetApplicationRequest) returns (Application);
+  rpc ListApplications(ListApplicationsRequest) returns (ApplicationList);
+  rpc UpdateApplication(UpdateApplicationRequest) returns (Application);
+
+  // ---- Application IDP Config ----
+
+  rpc GetApplicationIDPConfigs(GetApplicationRequest) returns (ApplicationIDPConfigList);
+  rpc CreateApplicationIDPConfig(CreateApplicationIDPConfigRequest) returns (ApplicationIDPConfig);
+  rpc UpdateApplicationIDPConfig(UpdateApplicationIDPConfigRequest) returns (ApplicationIDPConfig);
+  rpc DeleteApplicationIDPConfig(DeleteApplicationIDPConfigRequest) returns (google.protobuf.Empty);
+
+  // ---- Service ----
+
+  rpc CreateService(CreateServiceRequest) returns (Service);
+  rpc GetService(GetServiceRequest) returns (Service);
+  rpc ListServices(ListServicesRequest) returns (ServiceList);
+  rpc UpdateService(UpdateServiceRequest) returns (Service);
+  rpc DeleteService(DeleteServiceRequest) returns (google.protobuf.Empty);
+  rpc GetServiceChallengeSetting(GetServiceChallengeSettingRequest) returns (ServiceChallengeSetting);
+
+}
+
+// ==================== Domain ====================
+
+message GetDomainRequest {
+  string domain_id = 1;
+}
+
+message Domain {
+  string domain_id = 1;
+  string name = 2;
+  optional string description = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+message DomainList {
+  repeated Domain domains = 1;
+}
+
+message UpdateDomainRequest {
+  string domain_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+}
+
+// ==================== Domain IDP Config ====================
+
+message DomainIDPConfig {
+  uint32 id = 1;
+  string domain_id = 2;
+  string type = 3;
+  int32 priority = 4;
+  optional string strategy = 5;
+  optional string delegate = 6;
+  optional string require = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message DomainIDPConfigList {
+  repeated DomainIDPConfig configs = 1;
+}
+
+// ---- Domain IDP Config requests ----
+
+message CreateDomainIDPConfigRequest {
+  string domain_id = 1;
+  string type = 2;
+  int32 priority = 3;
+  optional string strategy = 4;
+  optional string delegate = 5;
+  optional string require = 6;
+}
+
+message UpdateDomainIDPConfigRequest {
+  string domain_id = 1;
+  string type = 2;
+  optional int32 priority = 3;
+  optional string strategy = 4;
+  optional string delegate = 5;
+  optional string require = 6;
+}
+
+message DeleteDomainIDPConfigRequest {
+  string domain_id = 1;
+  string type = 2;
+}
+
+// ==================== Application IDP Config ====================
+
+message ApplicationIDPConfig {
+  uint32 id = 1;
+  string app_id = 2;
+  string type = 3;
+  int32 priority = 4;
+  optional string strategy = 5;
+  optional string delegate = 6;
+  optional string require = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message ApplicationIDPConfigList {
+  repeated ApplicationIDPConfig configs = 1;
+}
+
+// ---- Application IDP Config requests ----
+
+message CreateApplicationIDPConfigRequest {
+  string app_id = 1;
+  string type = 2;
+  int32 priority = 3;
+  optional string strategy = 4;
+  optional string delegate = 5;
+  optional string require = 6;
+}
+
+message UpdateApplicationIDPConfigRequest {
+  string app_id = 1;
+  string type = 2;
+  optional int32 priority = 3;
+  optional string strategy = 4;
+  optional string delegate = 5;
+  optional string require = 6;
+}
+
+message DeleteApplicationIDPConfigRequest {
+  string app_id = 1;
+  string type = 2;
+}
+
+// ==================== Application ====================
+
+message GetApplicationRequest {
+  string app_id = 1;
+}
+
+message Application {
+  uint32 id = 1;
+  string domain_id = 2;
+  string app_id = 3;
+  string name = 4;
+  optional string description = 5;
+  optional string logo_url = 6;
+  repeated string allowed_redirect_uris = 7;
+  repeated string allowed_origins = 8;
+  repeated string allowed_logout_uris = 9;
+  uint32 id_token_expires_in = 10;
+  uint32 refresh_token_expires_in = 11;
+  uint32 refresh_token_absolute_expires_in = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+}
+
+message ApplicationList {
+  repeated Application applications = 1;
+  string next_cursor = 2;
+}
+
+message CreateApplicationRequest {
+  string domain_id = 1;
+  optional string app_id = 2;
+  string name = 3;
+  string description = 4;
+  repeated string allowed_redirect_uris = 5;
+  repeated string allowed_origins = 6;
+  repeated string allowed_logout_uris = 7;
+  bool need_key = 8;
+  optional uint32 id_token_expires_in = 9;
+  optional uint32 refresh_token_expires_in = 10;
+  optional uint32 refresh_token_absolute_expires_in = 11;
+}
+
+message UpdateApplicationRequest {
+  string app_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string logo_url = 4;
+  OptionalStringList allowed_redirect_uris = 5;
+  OptionalStringList allowed_origins = 6;
+  OptionalStringList allowed_logout_uris = 7;
+  optional uint32 id_token_expires_in = 8;
+  optional uint32 refresh_token_expires_in = 9;
+  optional uint32 refresh_token_absolute_expires_in = 10;
+}
+
+// OptionalStringList 可选字符串列表（区分缺失 vs 空列表）
+message OptionalStringList {
+  bool present = 1;
+  repeated string values = 2;
+}
+
+message ListApplicationsRequest {
+  string domain_id = 1;
+  string filter = 2;
+  Pagination pagination = 3;
+}
+
+// ==================== Service ====================
+
+message GetServiceRequest {
+  string service_id = 1;
+}
+
+message Service {
+  uint32 id = 1;
+  string domain_id = 2;
+  string service_id = 3;
+  string name = 4;
+  optional string description = 5;
+  optional string logo_url = 6;
+  uint32 access_token_expires_in = 7;
+  repeated string required_identity_types = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  repeated ServiceChallengeSetting challenge_settings = 11;
+}
+
+message ServiceList {
+  repeated Service services = 1;
+  string next_cursor = 2;
+}
+
+message CreateServiceRequest {
+  string service_id = 1;
+  string domain_id = 2;
+  string name = 3;
+  string description = 4;
+  optional string logo_url = 5;
+  optional uint32 access_token_expires_in = 6;
+}
+
+message UpdateServiceRequest {
+  string service_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string logo_url = 4;
+  optional uint32 access_token_expires_in = 5;
+}
+
+message DeleteServiceRequest {
+  string service_id = 1;
+}
+
+message ListServicesRequest {
+  string domain_id = 1;
+  string filter = 2;
+  Pagination pagination = 3;
+}
+
+// ==================== Service Challenge Setting ====================
+
+message GetServiceChallengeSettingRequest {
+  string service_id = 1;
+  string type = 2;
+}
+
+message ServiceChallengeSetting {
+  uint32 id = 1;
+  string service_id = 2;
+  string type = 3;
+  uint32 expires_in = 4;
+  map<string, int32> limits = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+

@@ -22,11 +22,19 @@ func (cm *Manager) GetApplication(ctx context.Context, appID string) (*Applicati
 		}
 	}
 
-	raw, err := cm.hermesSvc.GetApplicationWithKey(ctx, appID)
+	app, err := cm.hermesSvc.GetApplication(ctx, appID)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := cm.hermesSvc.GetApplicationKeys(ctx, appID)
 	if err != nil {
 		return nil, err
 	}
 
+	raw := &models.ApplicationWithKey{Application: *app, Keys: keys}
+	if len(keys) > 0 {
+		raw.Main = keys[0]
+	}
 	result, err := DeriveApplicationKeys(raw)
 	if err != nil {
 		return nil, fmt.Errorf("derive application keys: %w", err)
@@ -50,11 +58,19 @@ func (cm *Manager) GetService(ctx context.Context, serviceID string) (*ServiceWi
 		}
 	}
 
-	raw, err := cm.hermesSvc.GetServiceWithKey(ctx, serviceID)
+	svc, err := cm.hermesSvc.GetService(ctx, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := cm.hermesSvc.GetServiceKeys(ctx, serviceID)
 	if err != nil {
 		return nil, err
 	}
 
+	raw := &models.ServiceWithKey{Service: *svc, Keys: keys}
+	if len(keys) > 0 {
+		raw.Main = keys[0]
+	}
 	result, err := DeriveServiceKeys(raw)
 	if err != nil {
 		return nil, fmt.Errorf("derive service keys: %w", err)
@@ -78,11 +94,19 @@ func (cm *Manager) GetDomain(ctx context.Context, domainID string) (*DomainWithK
 		}
 	}
 
-	raw, err := cm.hermesSvc.GetDomainWithKey(ctx, domainID)
+	domain, err := cm.hermesSvc.GetDomain(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+	keys, err := cm.hermesSvc.GetDomainKeys(ctx, domainID)
 	if err != nil {
 		return nil, err
 	}
 
+	raw := &models.DomainWithKey{Domain: *domain, Keys: keys}
+	if len(keys) > 0 {
+		raw.Main = keys[0]
+	}
 	result, err := DeriveDomainKeys(raw)
 	if err != nil {
 		return nil, fmt.Errorf("derive domain keys: %w", err)

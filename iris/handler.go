@@ -21,7 +21,7 @@ import (
 // Handler 用户信息处理器
 type Handler struct {
 	userSvc       *hermes.UserService
-	credentialSvc *hermes.CredentialService
+	credentialSvc *CredentialService
 	mfaSvc        *aegis.MFAService
 }
 
@@ -42,7 +42,7 @@ func encodeCredentialID(id []byte) string {
 }
 
 // NewHandler 创建用户信息处理器
-func NewHandler(userSvc *hermes.UserService, credentialSvc *hermes.CredentialService, mfaSvc *aegis.MFAService) *Handler {
+func NewHandler(userSvc *hermes.UserService, credentialSvc *CredentialService, mfaSvc *aegis.MFAService) *Handler {
 	return &Handler{
 		userSvc:       userSvc,
 		credentialSvc: credentialSvc,

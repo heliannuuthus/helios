@@ -60,7 +60,12 @@ func (a *IDPAuthenticator) Authenticate(ctx context.Context, flow *types.AuthFlo
 		return false, autherrors.NewInvalidRequest("proof must be a string")
 	}
 
-	extraParams := params[1:]
+	// 将 appID 作为第一个 extraParam 传递给 provider，用于动态解析 IDP 密钥
+	appID := ""
+	if flow.Request != nil {
+		appID = flow.Request.ClientID
+	}
+	extraParams := append([]any{appID}, params[1:]...)
 	connection := a.provider.Type()
 
 	userInfo, err := a.provider.Login(ctx, proof, extraParams...)

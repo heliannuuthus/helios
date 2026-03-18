@@ -18,6 +18,7 @@ import (
 	"github.com/heliannuuthus/helios/aegis/hermesclient"
 	"github.com/heliannuuthus/helios/aegis/middleware"
 	_ "github.com/heliannuuthus/helios/docs"
+	"github.com/heliannuuthus/helios/iris"
 	irisconfig "github.com/heliannuuthus/helios/iris/config"
 	"github.com/heliannuuthus/helios/pkg/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -48,7 +49,8 @@ func main() {
 
 	initTokenManager(client)
 
-	aegisHandler, err := aegis.Initialize(client, client, client)
+	credentialSvc := iris.NewCredentialService(client)
+	aegisHandler, err := aegis.Initialize(client, client, credentialSvc)
 	if err != nil {
 		logger.Fatalf("初始化 aegis 失败: %v", err)
 	}

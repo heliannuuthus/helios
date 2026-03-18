@@ -7,17 +7,17 @@ import (
 )
 
 type Client struct {
-	app      hermesv1.AppServiceClient
-	resource hermesv1.ResourceServiceClient
-	key      hermesv1.KeyServiceClient
-	user     hermesv1.UserServiceClient
+	provision hermesv1.ProvisionServiceClient
+	resource  hermesv1.ResourceServiceClient
+	key       hermesv1.KeyServiceClient
+	user      hermesv1.UserServiceClient
 }
 
 func New(conn grpc.ClientConnInterface) *Client {
 	return &Client{
-		app:      hermesv1.NewAppServiceClient(conn),
-		resource: hermesv1.NewResourceServiceClient(conn),
-		key:      hermesv1.NewKeyServiceClient(conn),
-		user:     hermesv1.NewUserServiceClient(conn),
+		provision: hermesv1.NewProvisionServiceClient(conn),
+		resource:  hermesv1.NewResourceServiceClient(conn),
+		key:       hermesv1.NewKeyServiceClient(conn),
+		user:      hermesv1.NewUserServiceClient(conn),
 	}
 }

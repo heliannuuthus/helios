@@ -12,6 +12,7 @@ import (
 	"github.com/heliannuuthus/helios/chaos"
 	"github.com/heliannuuthus/helios/hermes"
 	config2 "github.com/heliannuuthus/helios/hermes/config"
+	"github.com/heliannuuthus/helios/iris"
 	"github.com/heliannuuthus/helios/zwei"
 	"github.com/heliannuuthus/helios/zwei/config"
 )
@@ -71,7 +72,7 @@ func provideHermesService() *hermes.Service {
 func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
 	db := config2.InitDB()
 	userSvc := hermes.NewUserService(db)
-	credentialSvc := hermes.NewCredentialService(db)
+	credentialSvc := iris.NewCredentialService(userSvc)
 	return aegis.Initialize(hermesService, userSvc, credentialSvc)
 }
 

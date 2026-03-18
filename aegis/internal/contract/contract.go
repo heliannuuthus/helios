@@ -8,13 +8,17 @@ import (
 )
 
 type HermesProvider interface {
-	GetApplicationWithKey(ctx context.Context, appID string) (*models.ApplicationWithKey, error)
-	GetServiceWithKey(ctx context.Context, serviceID string) (*models.ServiceWithKey, error)
-	GetDomainWithKey(ctx context.Context, domainID string) (*models.DomainWithKey, error)
+	GetDomain(ctx context.Context, domainID string) (*models.Domain, error)
+	GetApplication(ctx context.Context, appID string) (*models.Application, error)
+	GetService(ctx context.Context, serviceID string) (*models.Service, error)
+	GetDomainKeys(ctx context.Context, domainID string) ([][]byte, error)
+	GetApplicationKeys(ctx context.Context, appID string) ([][]byte, error)
+	GetServiceKeys(ctx context.Context, serviceID string) ([][]byte, error)
 	GetApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error)
 	GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error)
 	GetServiceChallengeSetting(ctx context.Context, serviceID, challengeType string) (*models.ServiceChallengeSetting, error)
 	FindRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error)
+	ResolveIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error)
 }
 
 type UserProvider interface {
@@ -37,14 +41,15 @@ type UserProvider interface {
 	UpdatePassword(ctx context.Context, openid, oldPassword, newPassword string) error
 }
 
+// CredentialProvider 凭证业务接口（TOTP/WebAuthn 业务逻辑，由 iris 层实现）
 type CredentialProvider interface {
-	VerifyTOTP(ctx context.Context, req *dto.VerifyTOTPRequest) error
-	GetUserMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error)
-	GetUserCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error)
 	SetupTOTP(ctx context.Context, req *dto.TOTPSetupRequest) (*dto.TOTPSetupResponse, error)
 	ConfirmTOTP(ctx context.Context, req *dto.ConfirmTOTPRequest) error
+	VerifyTOTP(ctx context.Context, req *dto.VerifyTOTPRequest) error
+	DisableTOTP(ctx context.Context, openid string) error
 	SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error
 	SetWebAuthnEnabled(ctx context.Context, openid, credentialID string, enabled bool) error
-	DisableTOTP(ctx context.Context, openid string) error
 	DeleteWebAuthn(ctx context.Context, openid, credentialID string) error
+	GetUserMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error)
+	GetUserCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error)
 }

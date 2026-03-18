@@ -17,7 +17,6 @@ import (
 	"github.com/go-json-experiment/json"
 	"github.com/tidwall/gjson"
 
-	"github.com/heliannuuthus/helios/aegis/config"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -26,27 +25,14 @@ import (
 
 // MPProvider 抖音小程序 Provider
 type MPProvider struct {
-	appID      string
-	appSecret  string
-	privateKey *rsa.PrivateKey
+	resolver idp.KeyResolver
 }
 
 // NewMPProvider 创建抖音小程序 Provider
-func NewMPProvider() *MPProvider {
-	cfg := config.Cfg()
-	p := &MPProvider{
-		appID:     cfg.GetString("idps.tt.appid"),
-		appSecret: cfg.GetString("idps.tt.secret"),
+func NewMPProvider(resolver idp.KeyResolver) *MPProvider {
+	return &MPProvider{
+		resolver: resolver,
 	}
-	if pkData := cfg.GetString("idps.tt.private-key"); pkData != "" {
-		pk, err := parsePKCS1PrivateKey(pkData)
-		if err != nil {
-			logger.Errorf("[TT] 解析应用私钥失败: %v", err)
-		} else {
-			p.privateKey = pk
-		}
-	}
-	return p
 }
 
 // Type 返回 IDP 类型
@@ -56,20 +42,29 @@ func (p *MPProvider) Type() string {
 
 // Exchange 用授权码换取用户信息
 // proof: 小程序 login code
-func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*models.TUserInfo, error) {
+// params[0]: appID (string) — 用于动态解析 IDP 密钥
+func (p *MPProvider) Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error) {
 	if proof == "" {
 		return nil, errors.New("code is required")
 	}
 
-	if err := p.validateConfig(); err != nil {
-		return nil, err
+	appID := ""
+	if len(params) > 0 {
+		if v, ok := params[0].(string); ok {
+			appID = v
+		}
+	}
+
+	ttAppID, ttAppSecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeTTMP)
+	if err != nil {
+		return nil, fmt.Errorf("解析抖音小程序 IDP 密钥失败: %w", err)
 	}
 
 	code := proof
 	logger.Infof("[TT] 登录请求 - Code: %s...", code[:min(len(code), 10)])
 
 	// 发送请求
-	bodyBytes, err := p.sendSessionRequest(ctx, code)
+	bodyBytes, err := p.sendSessionRequest(ctx, code, ttAppID, ttAppSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -127,27 +122,18 @@ func (p *MPProvider) Exchange(ctx context.Context, proof string, _ ...any) (*idp
 	}, nil
 }
 
-// Prepare 准备前端所需的公开配置
+// Prepare 准备前端所需的公开配置（密钥动态解析，此处不含 Identifier）
 func (p *MPProvider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
 		Connection: "ttmp",
-		Identifier: p.appID,
 	}
-}
-
-// validateConfig 验证配置
-func (p *MPProvider) validateConfig() error {
-	if p.appID == "" || p.appSecret == "" {
-		return errors.New("TT 小程序 IdP 未配置")
-	}
-	return nil
 }
 
 // sendSessionRequest 发送会话请求
-func (p *MPProvider) sendSessionRequest(ctx context.Context, code string) ([]byte, error) {
+func (p *MPProvider) sendSessionRequest(ctx context.Context, code, ttAppID, ttAppSecret string) ([]byte, error) {
 	reqBody := map[string]string{
-		"appid":  p.appID,
-		"secret": p.appSecret,
+		"appid":  ttAppID,
+		"secret": ttAppSecret,
 		"code":   code,
 	}
 	reqBodyBytes, err := json.Marshal(reqBody)
@@ -228,11 +214,19 @@ func (p *MPProvider) parseUserInfo(bodyBytes []byte) (*models.TUserInfo, error) 
 // getPhoneNumber 获取抖音手机号
 // 新版 API：code → RSA 加密的密文 → 用应用私钥解密 → phoneNumber
 func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, error) {
-	if p.privateKey == nil {
-		return "", errors.New("TT 应用私钥未配置，无法解密手机号")
+	appID := idp.AppIDFromContext(ctx)
+	ttAppID, ttSecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeTTMP)
+	if err != nil {
+		return "", fmt.Errorf("解析抖音小程序 IDP 密钥失败: %w", err)
 	}
 
-	clientToken, err := p.getClientToken(ctx)
+	// ttSecret 中存储的是 RSA 私钥（base64 编码）
+	privateKey, err := parsePKCS1PrivateKey(ttSecret)
+	if err != nil {
+		return "", fmt.Errorf("解析 TT 应用私钥失败: %w", err)
+	}
+
+	clientToken, err := p.getClientToken(ctx, ttAppID, ttSecret)
 	if err != nil {
 		return "", err
 	}
@@ -275,7 +269,7 @@ func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, e
 		return "", errors.New("TT 返回的加密数据为空")
 	}
 
-	plaintext, err := rsaDecrypt(p.privateKey, encryptedData)
+	plaintext, err := rsaDecrypt(privateKey, encryptedData)
 	if err != nil {
 		logger.Errorf("[TT] RSA 解密手机号失败: %v", err)
 		return "", fmt.Errorf("RSA 解密失败: %w", err)
@@ -294,14 +288,14 @@ func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, e
 }
 
 // getClientToken 获取 TT client_token（不需要用户授权的接口凭证）
-func (p *MPProvider) getClientToken(ctx context.Context) (string, error) {
-	if p.appID == "" || p.appSecret == "" {
+func (p *MPProvider) getClientToken(ctx context.Context, ttAppID, ttAppSecret string) (string, error) {
+	if ttAppID == "" || ttAppSecret == "" {
 		return "", errors.New("TT 小程序配置缺失")
 	}
 
 	reqBody, _ := json.Marshal(map[string]string{
-		"client_key":    p.appID,
-		"client_secret": p.appSecret,
+		"client_key":    ttAppID,
+		"client_secret": ttAppSecret,
 		"grant_type":    "client_credential",
 	})
 

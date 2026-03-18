@@ -1110,7 +1110,9 @@ func (h *Handler) handleExchange(c *gin.Context, ctx context.Context, req *chall
 		return
 	}
 
-	principal, err := h.challengeSvc.Exchange(ctx, req.ChannelType, req.Channel)
+	// 将 appID 注入 context，供 IDP provider 动态解析密钥
+	exchangeCtx := idp.WithAppID(ctx, req.ClientID)
+	principal, err := h.challengeSvc.Exchange(exchangeCtx, req.ChannelType, req.Channel)
 	if err != nil {
 		h.errorResponse(c, err)
 		return

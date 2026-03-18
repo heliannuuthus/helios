@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-json-experiment/json"
 
-	"github.com/heliannuuthus/helios/aegis/config"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -19,16 +18,13 @@ import (
 
 // MPProvider 微信小程序 Provider
 type MPProvider struct {
-	appID     string
-	appSecret string
+	resolver idp.KeyResolver
 }
 
 // NewMPProvider 创建微信小程序 Provider
-func NewMPProvider() *MPProvider {
-	cfg := config.Cfg()
+func NewMPProvider(resolver idp.KeyResolver) *MPProvider {
 	return &MPProvider{
-		appID:     cfg.GetString("idps.wxmp.appid"),
-		appSecret: cfg.GetString("idps.wxmp.secret"),
+		resolver: resolver,
 	}
 }
 
@@ -39,20 +35,30 @@ func (p *MPProvider) Type() string {
 
 // Exchange 用授权码换取用户信息
 // proof: 小程序 login code
-func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*models.TUserInfo, error) {
+// params[0]: appID (string) — 用于动态解析 IDP 密钥
+func (p *MPProvider) Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error) {
 	if proof == "" {
 		return nil, errors.New("code is required")
 	}
-	if p.appID == "" || p.appSecret == "" {
-		return nil, errors.New("微信小程序 IdP 未配置")
+
+	appID := ""
+	if len(params) > 0 {
+		if v, ok := params[0].(string); ok {
+			appID = v
+		}
+	}
+
+	wxAppID, wxAppSecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeWechatMP)
+	if err != nil {
+		return nil, fmt.Errorf("解析微信小程序 IDP 密钥失败: %w", err)
 	}
 
 	code := proof
 	logger.Infof("[Wechat] 登录请求 - Code: %s...", code[:min(len(code), 10)])
 
 	reqParams := url.Values{}
-	reqParams.Set("appid", p.appID)
-	reqParams.Set("secret", p.appSecret)
+	reqParams.Set("appid", wxAppID)
+	reqParams.Set("secret", wxAppSecret)
 	reqParams.Set("js_code", code)
 	reqParams.Set("grant_type", "authorization_code")
 
@@ -122,11 +128,10 @@ func (p *MPProvider) FetchAdditionalInfo(ctx context.Context, infoType string, p
 	}
 }
 
-// Prepare 准备前端所需的公开配置
+// Prepare 准备前端所需的公开配置（密钥动态解析，此处不含 Identifier）
 func (p *MPProvider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
 		Connection: "wxmp",
-		Identifier: p.appID,
 	}
 }
 
@@ -147,7 +152,13 @@ func (p *MPProvider) Exchange(ctx context.Context, proof string, _ ...any) (*idp
 
 // getPhoneNumber 获取微信手机号（内部方法）
 func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, error) {
-	accessToken, err := p.getAccessToken(ctx)
+	appID := idp.AppIDFromContext(ctx)
+	wxAppID, wxAppSecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeWechatMP)
+	if err != nil {
+		return "", fmt.Errorf("解析微信小程序 IDP 密钥失败: %w", err)
+	}
+
+	accessToken, err := p.getAccessToken(ctx, wxAppID, wxAppSecret)
 	if err != nil {
 		return "", err
 	}
@@ -200,12 +211,12 @@ func maskPhone(phone string) string {
 }
 
 // getAccessToken 获取微信 access_token
-func (p *MPProvider) getAccessToken(ctx context.Context) (string, error) {
-	if p.appID == "" || p.appSecret == "" {
+func (p *MPProvider) getAccessToken(ctx context.Context, wxAppID, wxAppSecret string) (string, error) {
+	if wxAppID == "" || wxAppSecret == "" {
 		return "", errors.New("微信小程序配置缺失")
 	}
 
-	reqURL := fmt.Sprintf("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s", p.appID, p.appSecret)
+	reqURL := fmt.Sprintf("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s", wxAppID, wxAppSecret)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {

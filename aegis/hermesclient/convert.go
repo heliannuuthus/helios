@@ -21,21 +21,7 @@ func domainFromProto(pb *hermesv1.Domain) *models.Domain {
 		DomainID:    pb.DomainId,
 		Name:        pb.Name,
 		Description: pb.Description,
-		AllowedIDPs: pb.AllowedIdps,
 	}
-}
-
-func domainWithKeyFromProto(pb *hermesv1.Domain, keySet *hermesv1.KeySet) *models.DomainWithKey {
-	domain := domainFromProto(pb)
-	if domain == nil {
-		return nil
-	}
-	result := &models.DomainWithKey{Domain: *domain}
-	if keySet != nil {
-		result.Main = keySet.Main
-		result.Keys = keySet.Keys
-	}
-	return result
 }
 
 func applicationFromProto(pb *hermesv1.Application) *models.Application {
@@ -65,19 +51,6 @@ func applicationFromProto(pb *hermesv1.Application) *models.Application {
 	return app
 }
 
-func applicationWithKeyFromProto(pb *hermesv1.Application, keySet *hermesv1.KeySet) *models.ApplicationWithKey {
-	app := applicationFromProto(pb)
-	if app == nil {
-		return nil
-	}
-	result := &models.ApplicationWithKey{Application: *app}
-	if keySet != nil {
-		result.Main = keySet.Main
-		result.Keys = keySet.Keys
-	}
-	return result
-}
-
 func serviceFromProto(pb *hermesv1.Service) *models.Service {
 	if pb == nil {
 		return nil
@@ -105,19 +78,6 @@ func serviceFromProto(pb *hermesv1.Service) *models.Service {
 		svc.ChallengeSettings = append(svc.ChallengeSettings, *challengeSettingFromProto(cs))
 	}
 	return svc
-}
-
-func serviceWithKeyFromProto(pb *hermesv1.Service, keySet *hermesv1.KeySet) *models.ServiceWithKey {
-	svc := serviceFromProto(pb)
-	if svc == nil {
-		return nil
-	}
-	result := &models.ServiceWithKey{Service: *svc}
-	if keySet != nil {
-		result.Main = keySet.Main
-		result.Keys = keySet.Keys
-	}
-	return result
 }
 
 func challengeSettingFromProto(pb *hermesv1.ServiceChallengeSetting) *models.ServiceChallengeSetting {
@@ -199,6 +159,44 @@ func idpConfigFromProto(pb *hermesv1.ApplicationIDPConfig) *models.ApplicationID
 		Priority: int(pb.Priority),
 		Strategy: pb.Strategy,
 	}
+}
+
+func domainIDPConfigFromProto(pb *hermesv1.DomainIDPConfig) *models.DomainIDPConfig {
+	if pb == nil {
+		return nil
+	}
+	cfg := &models.DomainIDPConfig{
+		ID:       uint(pb.Id),
+		DomainID: pb.DomainId,
+		IDPType:  pb.Type,
+		Priority: int(pb.Priority),
+		Strategy: pb.Strategy,
+	}
+	if pb.CreatedAt != nil {
+		cfg.CreatedAt = pb.CreatedAt.AsTime()
+	}
+	if pb.UpdatedAt != nil {
+		cfg.UpdatedAt = pb.UpdatedAt.AsTime()
+	}
+	return cfg
+}
+
+func idpKeyFromProto(pb *hermesv1.IDPKey) *models.IDPKey {
+	if pb == nil {
+		return nil
+	}
+	k := &models.IDPKey{
+		ID:      uint(pb.Id),
+		IDPType: pb.IdpType,
+		TAppID:  pb.TAppId,
+	}
+	if pb.CreatedAt != nil {
+		k.CreatedAt = pb.CreatedAt.AsTime()
+	}
+	if pb.UpdatedAt != nil {
+		k.UpdatedAt = pb.UpdatedAt.AsTime()
+	}
+	return k
 }
 
 func appServiceRelationFromProto(pb *hermesv1.ApplicationServiceRelation) models.ApplicationServiceRelation {
@@ -300,47 +298,6 @@ func credentialFromProto(pb *hermesv1.UserCredential) *models.UserCredential {
 		c.UpdatedAt = pb.UpdatedAt.AsTime()
 	}
 	return c
-}
-
-func credentialSummaryFromProto(pb *hermesv1.CredentialSummary) models.CredentialSummary {
-	s := models.CredentialSummary{
-		ID:           uint(pb.Id),
-		Type:         pb.Type,
-		CredentialID: pb.CredentialId,
-		Enabled:      pb.Enabled,
-	}
-	if pb.LastUsedAt != nil {
-		t := pb.LastUsedAt.AsTime()
-		s.LastUsedAt = &t
-	}
-	if pb.CreatedAt != nil {
-		s.CreatedAt = pb.CreatedAt.AsTime()
-	}
-	return s
-}
-
-func mfaStatusFromProto(pb *hermesv1.MFAStatus) *models.MFAStatus {
-	if pb == nil {
-		return nil
-	}
-	return &models.MFAStatus{
-		TOTPEnabled:   pb.TotpEnabled,
-		WebAuthnCount: int(pb.WebauthnCount),
-		PasskeyCount:  int(pb.PasskeyCount),
-	}
-}
-
-func webAuthnSecretFromProto(pb *hermesv1.WebAuthnSecret) *models.WebAuthnSecret {
-	if pb == nil {
-		return nil
-	}
-	return &models.WebAuthnSecret{
-		PublicKey:       pb.PublicKey,
-		SignCount:       pb.SignCount,
-		AAGUID:          pb.Aaguid,
-		Transport:       pb.Transport,
-		AttestationType: pb.AttestationType,
-	}
 }
 
 func passwordStoreCredentialFromProto(pb *hermesv1.PasswordStoreCredential) *dto.PasswordStoreCredential {
