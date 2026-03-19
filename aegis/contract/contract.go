@@ -3,8 +3,7 @@ package contract
 import (
 	"context"
 
-	"github.com/heliannuuthus/helios/pkg/dto"
-	"github.com/heliannuuthus/helios/pkg/models"
+	"github.com/heliannuuthus/helios/aegis/models"
 )
 
 type HermesProvider interface {
@@ -22,30 +21,30 @@ type HermesProvider interface {
 }
 
 type UserProvider interface {
-	GetUserWithDecrypted(ctx context.Context, openid string) (*models.UserWithDecrypted, error)
-	GetIdentities(ctx context.Context, openid string) (models.Identities, error)
-	GetIdentitiesByIdentity(ctx context.Context, identity *models.UserIdentity) (models.Identities, error)
+	GetDecryptedUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error)
+	GetUserIdentitiesByOpenID(ctx context.Context, openid string) (models.Identities, error)
+	GetIdentities(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error)
 	UpdateLastLogin(ctx context.Context, openid string) error
-	GetByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error)
-	GetByPhonePlain(ctx context.Context, phone string) (*models.UserWithDecrypted, error)
+	GetUserByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error)
+	GetUserByPhone(ctx context.Context, phone string) (*models.UserWithDecrypted, error)
 	AddIdentity(ctx context.Context, identity *models.UserIdentity) error
 	CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error)
-	GetUserByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error)
-	GetStaffByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error)
+	GetUserByIdentifier(ctx context.Context, identifier string) (*models.PasswordStoreCredential, error)
+	GetStaffByIdentifier(ctx context.Context, identifier string) (*models.PasswordStoreCredential, error)
 	CreateCredential(ctx context.Context, cred *models.UserCredential) error
 	UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
 	GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error)
 	GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
-	Update(ctx context.Context, openid string, updates map[string]any) error
+	UpdateUser(ctx context.Context, openid string, updates map[string]any) error
 	UpdatePassword(ctx context.Context, openid, oldPassword, newPassword string) error
 }
 
 // CredentialProvider 凭证业务接口（TOTP/WebAuthn 业务逻辑，由 iris 层实现）
 type CredentialProvider interface {
-	SetupTOTP(ctx context.Context, req *dto.TOTPSetupRequest) (*dto.TOTPSetupResponse, error)
-	ConfirmTOTP(ctx context.Context, req *dto.ConfirmTOTPRequest) error
-	VerifyTOTP(ctx context.Context, req *dto.VerifyTOTPRequest) error
+	SetupTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error)
+	ConfirmTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error
+	VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error
 	DisableTOTP(ctx context.Context, openid string) error
 	SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error
 	SetWebAuthnEnabled(ctx context.Context, openid, credentialID string, enabled bool) error

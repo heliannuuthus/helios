@@ -2,22 +2,20 @@
 
 //go:generate go run -mod=mod github.com/google/wire/cmd/wire
 //go:build !wireinject
-// +build !wireinject
 
 package main
 
 import (
 	"github.com/google/wire"
 	"github.com/heliannuuthus/helios/aegis"
+	"github.com/heliannuuthus/helios/aegis/adapter"
 	"github.com/heliannuuthus/helios/chaos"
 	"github.com/heliannuuthus/helios/hermes"
 	config2 "github.com/heliannuuthus/helios/hermes/config"
 	"github.com/heliannuuthus/helios/iris"
 	"github.com/heliannuuthus/helios/zwei"
 	"github.com/heliannuuthus/helios/zwei/config"
-)
 
-import (
 	_ "github.com/heliannuuthus/helios/docs"
 )
 
@@ -70,10 +68,11 @@ func provideHermesService() *hermes.Service {
 }
 
 func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
-	db := config2.InitDB()
-	userSvc := hermes.NewUserService(db)
-	credentialSvc := iris.NewCredentialService(userSvc)
-	return aegis.Initialize(hermesService, userSvc, credentialSvc)
+	hermesAdapter := adapter.NewHermesAdapter(hermesService)
+	userAdapter := adapter.NewUserAdapter(hermesService)
+	credentialStore := adapter.NewCredentialStoreAdapter(hermesService)
+	credentialSvc := iris.NewCredentialService(credentialStore)
+	return aegis.Initialize(hermesAdapter, userAdapter, credentialSvc)
 }
 
 func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {

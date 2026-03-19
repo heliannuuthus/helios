@@ -1,4 +1,14 @@
-package dto
+package models
+
+// PasswordStoreCredential 密码存储凭证（IDP 身份解析结果）
+type PasswordStoreCredential struct {
+	OpenID       string
+	PasswordHash string
+	Nickname     string
+	Email        string
+	Picture      string
+	Status       int8
+}
 
 // TOTPSetupRequest TOTP 设置请求
 type TOTPSetupRequest struct {
@@ -34,14 +44,4 @@ type RegisterWebAuthnRequest struct {
 	AAGUID          string
 	Transport       []string
 	AttestationType string
-}
-
-// PasswordStoreCredential 密码存储凭证（IDP 身份解析结果）
-type PasswordStoreCredential struct {
-	OpenID       string
-	PasswordHash string
-	Nickname     string
-	Email        string
-	Picture      string
-	Status       int8
 }

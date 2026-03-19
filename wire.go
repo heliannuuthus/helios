@@ -6,6 +6,7 @@ import (
 	"github.com/google/wire"
 
 	"github.com/heliannuuthus/helios/aegis"
+	"github.com/heliannuuthus/helios/aegis/adapter"
 	"github.com/heliannuuthus/helios/chaos"
 	"github.com/heliannuuthus/helios/hermes"
 	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
@@ -46,10 +47,11 @@ func provideHermesService() *hermes.Service {
 }
 
 func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
-	db := hermesconfig.InitDB()
-	userSvc := hermes.NewUserService(db)
-	credentialSvc := iris.NewCredentialService(userSvc)
-	return aegis.Initialize(hermesService, userSvc, credentialSvc)
+	hermesAdapter := adapter.NewHermesAdapter(hermesService)
+	userAdapter := adapter.NewUserAdapter(hermesService)
+	credentialStore := adapter.NewCredentialStoreAdapter(hermesService)
+	credentialSvc := iris.NewCredentialService(credentialStore)
+	return aegis.Initialize(hermesAdapter, userAdapter, credentialSvc)
 }
 
 func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {

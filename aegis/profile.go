@@ -10,10 +10,9 @@ import (
 	"github.com/go-json-experiment/json/jsontext"
 	"github.com/heliannuuthus/aegis-go/guard"
 
+	"github.com/heliannuuthus/helios/aegis/contract"
 	"github.com/heliannuuthus/helios/aegis/errors"
-	"github.com/heliannuuthus/helios/aegis/internal/contract"
-	"github.com/heliannuuthus/helios/pkg/dto"
-	"github.com/heliannuuthus/helios/pkg/models"
+	"github.com/heliannuuthus/helios/aegis/models"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
@@ -56,7 +55,7 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userSvc.GetUserWithDecrypted(c.Request.Context(), openid)
+	user, err := h.userSvc.GetDecryptedUserByOpenID(c.Request.Context(), openid)
 	if err != nil {
 		profileError(c, errors.NewNotFound("user not found"))
 		return
@@ -115,7 +114,7 @@ func (h *ProfileHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	if hasProfileUpdates {
-		if err := h.userSvc.Update(ctx, openid, updates); err != nil {
+		if err := h.userSvc.UpdateUser(ctx, openid, updates); err != nil {
 			profileError(c, errors.NewServerError(err.Error()))
 			return
 		}
@@ -160,7 +159,7 @@ func (h *ProfileHandler) ListIdentities(c *gin.Context) {
 		return
 	}
 
-	identities, err := h.userSvc.GetIdentities(c.Request.Context(), openid)
+	identities, err := h.userSvc.GetUserIdentitiesByOpenID(c.Request.Context(), openid)
 	if err != nil {
 		profileError(c, errors.NewServerError(err.Error()))
 		return
@@ -244,7 +243,7 @@ func (h *ProfileHandler) SetupMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		resp, err := h.credentialSvc.SetupTOTP(ctx, &dto.TOTPSetupRequest{
+		resp, err := h.credentialSvc.SetupTOTP(ctx, &models.TOTPSetupRequest{
 			OpenID:  openid,
 			AppName: req.AppName,
 		})
@@ -303,7 +302,7 @@ func (h *ProfileHandler) VerifyMFA(c *gin.Context) {
 				profileError(c, errors.NewInvalidRequest("credential_id is required for confirm"))
 				return
 			}
-			err := h.credentialSvc.ConfirmTOTP(ctx, &dto.ConfirmTOTPRequest{
+			err := h.credentialSvc.ConfirmTOTP(ctx, &models.ConfirmTOTPRequest{
 				OpenID:       openid,
 				CredentialID: req.CredentialID,
 				Code:         req.Code,
@@ -313,7 +312,7 @@ func (h *ProfileHandler) VerifyMFA(c *gin.Context) {
 				return
 			}
 		} else {
-			err := h.credentialSvc.VerifyTOTP(ctx, &dto.VerifyTOTPRequest{
+			err := h.credentialSvc.VerifyTOTP(ctx, &models.VerifyTOTPRequest{
 				OpenID: openid,
 				Code:   req.Code,
 			})
@@ -434,7 +433,7 @@ func (h *ProfileHandler) setupWebAuthn(c *gin.Context, openID, credType, action,
 
 	switch action {
 	case "", "begin":
-		user, err := h.userSvc.GetUserWithDecrypted(ctx, openID)
+		user, err := h.userSvc.GetDecryptedUserByOpenID(ctx, openID)
 		if err != nil {
 			profileError(c, errors.NewNotFound("user not found"))
 			return
@@ -489,7 +488,7 @@ func (h *ProfileHandler) verifyWebAuthn(c *gin.Context, openID, credType, action
 
 	switch action {
 	case "", "begin":
-		user, err := h.userSvc.GetUserWithDecrypted(ctx, openID)
+		user, err := h.userSvc.GetDecryptedUserByOpenID(ctx, openID)
 		if err != nil {
 			profileError(c, errors.NewNotFound("user not found"))
 			return

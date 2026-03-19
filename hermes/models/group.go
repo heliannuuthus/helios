@@ -1,12 +1,9 @@
 package models
 
-import (
-	"time"
-)
+import "time"
 
 // Group 用户组
 type Group struct {
-	// 主键
 	ID          uint      `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
 	GroupID     string    `gorm:"column:group_id;size:64;not null;uniqueIndex" json:"group_id"`
 	ServiceID   string    `gorm:"column:service_id;size:32;not null;index" json:"service_id"`
@@ -16,8 +13,6 @@ type Group struct {
 	Description *string   `gorm:"column:description;size:512" json:"description,omitempty"`
 }
 
-func (Group) TableName() string {
-	return "t_group"
-}
+func (Group) TableName() string { return "t_group" }
 
 func (g Group) PrimaryKey() uint { return g.ID }

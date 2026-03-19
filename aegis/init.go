@@ -8,6 +8,7 @@ import (
 	"github.com/heliannuuthus/aegis-go/utilities/key"
 
 	"github.com/heliannuuthus/helios/aegis/config"
+	"github.com/heliannuuthus/helios/aegis/contract"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticate"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/captcha"
@@ -27,7 +28,6 @@ import (
 	"github.com/heliannuuthus/helios/aegis/internal/authorize"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
 	"github.com/heliannuuthus/helios/aegis/internal/challenge"
-	"github.com/heliannuuthus/helios/aegis/internal/contract"
 	"github.com/heliannuuthus/helios/aegis/internal/token"
 	"github.com/heliannuuthus/helios/aegis/internal/user"
 	"github.com/heliannuuthus/helios/pkg/accessctl"

@@ -11,16 +11,15 @@ import (
 	"github.com/heliannuuthus/aegis-go/guard"
 
 	"github.com/heliannuuthus/helios/aegis"
+	"github.com/heliannuuthus/helios/aegis/contract"
 	autherrors "github.com/heliannuuthus/helios/aegis/errors"
-	"github.com/heliannuuthus/helios/hermes"
-	"github.com/heliannuuthus/helios/pkg/dto"
-	"github.com/heliannuuthus/helios/pkg/models"
+	"github.com/heliannuuthus/helios/aegis/models"
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
 // Handler 用户信息处理器
 type Handler struct {
-	userSvc       *hermes.UserService
+	userSvc       contract.UserProvider
 	credentialSvc *CredentialService
 	mfaSvc        *aegis.MFAService
 }
@@ -42,7 +41,7 @@ func encodeCredentialID(id []byte) string {
 }
 
 // NewHandler 创建用户信息处理器
-func NewHandler(userSvc *hermes.UserService, credentialSvc *CredentialService, mfaSvc *aegis.MFAService) *Handler {
+func NewHandler(userSvc contract.UserProvider, credentialSvc *CredentialService, mfaSvc *aegis.MFAService) *Handler {
 	return &Handler{
 		userSvc:       userSvc,
 		credentialSvc: credentialSvc,
@@ -71,7 +70,7 @@ func (h *Handler) GetProfile(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userSvc.GetUserWithDecrypted(c.Request.Context(), openid)
+	user, err := h.userSvc.GetDecryptedUserByOpenID(c.Request.Context(), openid)
 	if err != nil {
 		errorResponse(c, autherrors.NewNotFound("user not found"))
 		return
@@ -136,7 +135,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 
 	// 处理其他字段更新
 	if hasProfileUpdates {
-		if err := h.userSvc.Update(ctx, openid, updates); err != nil {
+		if err := h.userSvc.UpdateUser(ctx, openid, updates); err != nil {
 			errorResponse(c, autherrors.NewServerError(err.Error()))
 			return
 		}
@@ -227,7 +226,7 @@ func (h *Handler) ListIdentities(c *gin.Context) {
 		return
 	}
 
-	identities, err := h.userSvc.GetIdentities(c.Request.Context(), openid)
+	identities, err := h.userSvc.GetUserIdentitiesByOpenID(c.Request.Context(), openid)
 	if err != nil {
 		errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
@@ -348,7 +347,7 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		resp, err := h.credentialSvc.SetupTOTP(ctx, &dto.TOTPSetupRequest{
+		resp, err := h.credentialSvc.SetupTOTP(ctx, &models.TOTPSetupRequest{
 			OpenID:  openid,
 			AppName: req.AppName,
 		})
@@ -417,7 +416,7 @@ func (h *Handler) VerifyMFA(c *gin.Context) {
 				errorResponse(c, autherrors.NewInvalidRequest("credential_id is required for confirm"))
 				return
 			}
-			err := h.credentialSvc.ConfirmTOTP(ctx, &dto.ConfirmTOTPRequest{
+			err := h.credentialSvc.ConfirmTOTP(ctx, &models.ConfirmTOTPRequest{
 				OpenID:       openid,
 				CredentialID: req.CredentialID,
 				Code:         req.Code,
@@ -427,7 +426,7 @@ func (h *Handler) VerifyMFA(c *gin.Context) {
 				return
 			}
 		} else {
-			err := h.credentialSvc.VerifyTOTP(ctx, &dto.VerifyTOTPRequest{
+			err := h.credentialSvc.VerifyTOTP(ctx, &models.VerifyTOTPRequest{
 				OpenID: openid,
 				Code:   req.Code,
 			})
@@ -563,7 +562,7 @@ func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challe
 
 	switch action {
 	case "", "begin":
-		user, err := h.userSvc.GetUserWithDecrypted(ctx, openID)
+		user, err := h.userSvc.GetDecryptedUserByOpenID(ctx, openID)
 		if err != nil {
 			errorResponse(c, autherrors.NewNotFound("user not found"))
 			return
@@ -623,7 +622,7 @@ func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, chall
 
 	switch action {
 	case "", "begin":
-		user, err := h.userSvc.GetUserWithDecrypted(ctx, openID)
+		user, err := h.userSvc.GetDecryptedUserByOpenID(ctx, openID)
 		if err != nil {
 			errorResponse(c, autherrors.NewNotFound("user not found"))
 			return

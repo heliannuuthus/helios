@@ -4,14 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/heliannuuthus/helios/aegis/models"
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
-	"github.com/heliannuuthus/helios/pkg/dto"
-	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // ==================== User Query ====================
 
-func (c *Client) GetUserWithDecrypted(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
+func (c *Client) GetDecryptedUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
 	resp, err := c.user.GetDecryptedUser(ctx, &hermesv1.OpenIDRequest{Openid: openid})
 	if err != nil {
 		return nil, err
@@ -19,7 +18,7 @@ func (c *Client) GetUserWithDecrypted(ctx context.Context, openid string) (*mode
 	return decryptedUserFromProto(resp), nil
 }
 
-func (c *Client) GetByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error) {
+func (c *Client) GetUserByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error) {
 	resp, err := c.user.GetByEmail(ctx, &hermesv1.GetByEmailRequest{Email: email})
 	if err != nil {
 		return nil, err
@@ -27,7 +26,7 @@ func (c *Client) GetByEmail(ctx context.Context, email string) (*models.UserWith
 	return decryptedUserFromProto(resp), nil
 }
 
-func (c *Client) GetByPhonePlain(ctx context.Context, phone string) (*models.UserWithDecrypted, error) {
+func (c *Client) GetUserByPhone(ctx context.Context, phone string) (*models.UserWithDecrypted, error) {
 	resp, err := c.user.GetByPhonePlain(ctx, &hermesv1.GetByPhonePlainRequest{Phone: phone})
 	if err != nil {
 		return nil, err
@@ -73,7 +72,7 @@ func (c *Client) CreateUser(ctx context.Context, identity *models.UserIdentity, 
 	return decryptedUserFromProto(resp), nil
 }
 
-func (c *Client) Update(ctx context.Context, openid string, updates map[string]any) error {
+func (c *Client) UpdateUser(ctx context.Context, openid string, updates map[string]any) error {
 	pbReq := &hermesv1.UpdateUserRequest{Openid: openid}
 	if v, ok := updates["nickname"]; ok {
 		if s, ok := v.(string); ok {
@@ -119,7 +118,7 @@ func (c *Client) UpdatePassword(ctx context.Context, openid, oldPassword, newPas
 
 // ==================== Identity ====================
 
-func (c *Client) GetIdentities(ctx context.Context, openid string) (models.Identities, error) {
+func (c *Client) GetUserIdentitiesByOpenID(ctx context.Context, openid string) (models.Identities, error) {
 	resp, err := c.user.GetIdentities(ctx, &hermesv1.OpenIDRequest{Openid: openid})
 	if err != nil {
 		return nil, err
@@ -131,11 +130,11 @@ func (c *Client) GetIdentities(ctx context.Context, openid string) (models.Ident
 	return identities, nil
 }
 
-func (c *Client) GetIdentitiesByIdentity(ctx context.Context, identity *models.UserIdentity) (models.Identities, error) {
+func (c *Client) GetIdentities(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error) {
 	resp, err := c.user.GetIdentitiesByIdentity(ctx, &hermesv1.GetByIdentityRequest{
-		Domain:  identity.Domain,
-		Idp:     identity.IDP,
-		TOpenid: identity.TOpenID,
+		Domain:  domain,
+		Idp:     idp,
+		TOpenid: tOpenID,
 	})
 	if err != nil {
 		return nil, err
@@ -163,7 +162,7 @@ func (c *Client) AddIdentity(ctx context.Context, identity *models.UserIdentity)
 
 // ==================== Password Store ====================
 
-func (c *Client) GetUserByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error) {
+func (c *Client) GetUserByIdentifier(ctx context.Context, identifier string) (*models.PasswordStoreCredential, error) {
 	resp, err := c.user.GetUserByIdentifier(ctx, &hermesv1.GetByIdentifierRequest{Identifier: identifier})
 	if err != nil {
 		return nil, err
@@ -171,7 +170,7 @@ func (c *Client) GetUserByIdentifier(ctx context.Context, identifier string) (*d
 	return passwordStoreCredentialFromProto(resp), nil
 }
 
-func (c *Client) GetStaffByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error) {
+func (c *Client) GetStaffByIdentifier(ctx context.Context, identifier string) (*models.PasswordStoreCredential, error) {
 	resp, err := c.user.GetStaffByIdentifier(ctx, &hermesv1.GetByIdentifierRequest{Identifier: identifier})
 	if err != nil {
 		return nil, err

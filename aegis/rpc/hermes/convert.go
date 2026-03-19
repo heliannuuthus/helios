@@ -1,11 +1,10 @@
 package hermes
 
 import (
-	"github.com/go-json-experiment/json"
+	"encoding/json"
 
+	"github.com/heliannuuthus/helios/aegis/models"
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
-	"github.com/heliannuuthus/helios/pkg/dto"
-	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 func domainFromProto(pb *hermesv1.Domain) *models.Domain {
@@ -237,11 +236,11 @@ func credentialFromProto(pb *hermesv1.UserCredential) *models.UserCredential {
 	return c
 }
 
-func passwordStoreCredentialFromProto(pb *hermesv1.PasswordStoreCredential) *dto.PasswordStoreCredential {
+func passwordStoreCredentialFromProto(pb *hermesv1.PasswordStoreCredential) *models.PasswordStoreCredential {
 	if pb == nil {
 		return nil
 	}
-	cred := &dto.PasswordStoreCredential{
+	cred := &models.PasswordStoreCredential{
 		OpenID:       pb.Openid,
 		PasswordHash: pb.PasswordHash,
 		Status:       int8(pb.Status),

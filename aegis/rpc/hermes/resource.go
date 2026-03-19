@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/heliannuuthus/helios/aegis/models"
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
-	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // ==================== Application Service Relations ====================

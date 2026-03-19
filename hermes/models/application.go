@@ -4,11 +4,37 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/go-json-experiment/json"
 
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
+
+// Application 应用（控制 id_token、refresh_token 有效期；access_token 由服务控制）
+type Application struct {
+	// 主键
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
+	// 业务字段
+	DomainID                      string  `gorm:"column:domain_id;size:32;not null" json:"domain_id"`
+	AppID                         string  `gorm:"column:app_id;size:64;not null;uniqueIndex" json:"app_id"`
+	Name                          string  `gorm:"column:name;size:128;not null" json:"name"`
+	Description                   *string `gorm:"column:description;size:512" json:"description,omitempty"`
+	LogoURL                       *string `gorm:"column:logo_url;size:512" json:"logo_url,omitempty"`
+	AllowedRedirectURIs           *string `gorm:"column:redirect_uris;size:2048" json:"allowed_redirect_uris,omitempty"`
+	AllowedOrigins                *string `gorm:"column:allowed_origins;size:1024" json:"allowed_origins,omitempty"`
+	AllowedLogoutURIs             *string `gorm:"column:allowed_logout_uris;size:1024" json:"allowed_logout_uris,omitempty"`
+	IDTokenExpiresIn              uint    `gorm:"column:id_token_expires_in;not null;default:3600" json:"id_token_expires_in"`
+	RefreshTokenExpiresIn         uint    `gorm:"column:refresh_token_expires_in;not null;default:604800" json:"refresh_token_expires_in"`
+	RefreshTokenAbsoluteExpiresIn uint    `gorm:"column:refresh_token_absolute_expires_in;not null;default:0" json:"refresh_token_absolute_expires_in"`
+	// 时间戳
+	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null" json:"updated_at"`
+}
+
+func (Application) TableName() string { return "t_application" }
+
+func (a Application) PrimaryKey() uint { return a.ID }
 
 // ApplicationWithKey 带密钥的 Application（Main/Keys 不序列化到 API）
 type ApplicationWithKey struct {
@@ -16,6 +42,40 @@ type ApplicationWithKey struct {
 	Main []byte   `json:"-"` // 当前主密钥（48 字节 seed）
 	Keys [][]byte `json:"-"` // 所有有效密钥（包括主密钥和轮换中的旧密钥）
 }
+
+// ApplicationIDPConfig 应用 IDP 配置 + 可选凭证覆盖
+type ApplicationIDPConfig struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
+	AppID     string    `gorm:"column:app_id;size:64;not null" json:"app_id"`
+	Type      string    `gorm:"column:type;size:32;not null" json:"type"`
+	Priority  int       `gorm:"column:priority;not null;default:0" json:"priority"`
+	Strategy  *string   `gorm:"column:strategy;size:256" json:"strategy,omitempty"`
+	TAppID    *string   `gorm:"column:t_app_id;size:256" json:"t_app_id,omitempty"`
+	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null" json:"updated_at"`
+}
+
+func (ApplicationIDPConfig) TableName() string { return "t_application_idp_config" }
+
+func (a *ApplicationIDPConfig) GetStrategyList() []string {
+	if a.Strategy == nil || *a.Strategy == "" {
+		return nil
+	}
+	return strings.Split(*a.Strategy, ",")
+}
+
+// ApplicationServiceRelation 应用服务关系
+type ApplicationServiceRelation struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
+	AppID     string    `gorm:"column:app_id;size:64;not null" json:"app_id"`
+	ServiceID string    `gorm:"column:service_id;size:32;not null;index" json:"service_id"`
+	Relation  string    `gorm:"column:relation;size:32;not null;default:*" json:"relation"`
+	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
+}
+
+func (ApplicationServiceRelation) TableName() string { return "t_application_service_relation" }
+
+// ==================== Application URI 方法 ====================
 
 // GetAllowedRedirectURIs 解析允许的重定向 URI 列表
 func (a *Application) GetAllowedRedirectURIs() []string {
@@ -33,7 +93,6 @@ func (a *Application) GetAllowedRedirectURIs() []string {
 // ValidateAllowedRedirectURI 验证重定向 URI 是否在允许列表中（规范化后比较）
 func (a *Application) ValidateAllowedRedirectURI(uri string) bool {
 	normalizedURI := normalizeURI(uri)
-
 	for _, allowed := range a.GetAllowedRedirectURIs() {
 		if normalizeURI(allowed) == normalizedURI {
 			return true
@@ -75,7 +134,6 @@ func (a *Application) ResolveLogoutRedirect(returnTo, referer string) (string, e
 	if len(allowed) == 0 {
 		return "", ErrLogoutURINotConfigured
 	}
-
 	try := func(uri string) string {
 		u, err := url.Parse(uri)
 		if err != nil || u.Scheme == "" || u.Host == "" {
@@ -86,7 +144,6 @@ func (a *Application) ResolveLogoutRedirect(returnTo, referer string) (string, e
 		}
 		return ""
 	}
-
 	if returnTo != "" {
 		if r := try(returnTo); r != "" {
 			return r, nil
@@ -116,17 +173,14 @@ func (a *Application) GetAllowedOrigins() []string {
 // ValidateOrigin 验证请求来源是否允许
 func (a *Application) ValidateOrigin(origin string) bool {
 	allowedOrigins := a.GetAllowedOrigins()
-	// 如果未配置，则不限制
 	if len(allowedOrigins) == 0 {
 		return true
 	}
-
 	normalizedOrigin := normalizeOrigin(origin)
 	for _, allowed := range allowedOrigins {
 		if normalizeOrigin(allowed) == normalizedOrigin {
 			return true
 		}
-		// 支持通配符 *
 		if allowed == "*" {
 			return true
 		}
@@ -134,95 +188,39 @@ func (a *Application) ValidateOrigin(origin string) bool {
 	return false
 }
 
-// ServiceWithKey 带密钥的 Service（Main/Keys 不序列化到 API）
-type ServiceWithKey struct {
-	Service
-	Main []byte   `json:"-"` // 当前主密钥（48 字节 seed）
-	Keys [][]byte `json:"-"` // 所有有效密钥（包括主密钥和轮换中的旧密钥）
-}
-
-// GetRequiredIdentities 解析访问该服务需要绑定的身份类型
-func (s *Service) GetRequiredIdentities() []string {
-	if s.RequiredIdentities == nil || *s.RequiredIdentities == "" {
-		return nil
-	}
-	var identities []string
-	if err := json.Unmarshal([]byte(*s.RequiredIdentities), &identities); err != nil {
-		logger.Warnf("[Service] unmarshal required identities failed: %v", err)
-		return nil
-	}
-	return identities
-}
-
-// Domain 域（元数据与允许的 IDP 来自数据库，签名密钥来自配置/密钥服务）
-type Domain struct {
-	DomainID    string   `json:"domain_id"`    // 域标识：consumer/platform
-	Name        string   `json:"name"`         // 域名称
-	Description *string  `json:"description"`  // 域描述
-	AllowedIDPs []string `json:"allowed_idps"` // 该域允许的 IDP 类型，应用添加 IDP 时只能从此列表选
-}
-
-// DomainWithKey 带签名密钥的 Domain（Main/Keys 不序列化到 API）
-type DomainWithKey struct {
-	Domain
-	Main []byte   `json:"-"` // 当前主密钥（48 字节 seed，用于签发新 token）
-	Keys [][]byte `json:"-"` // 所有有效密钥（包括主密钥和轮换中的旧密钥，用于验证）
-}
-
 // ==================== URI 规范化辅助函数 ====================
 
-// normalizeURI 规范化 URI
-// - 统一小写 scheme 和 host
-// - 移除默认端口（80/443）
-// - 移除末尾斜杠（除了根路径）
-// - 移除空的 query string
 func normalizeURI(uri string) string {
 	u, err := url.Parse(uri)
 	if err != nil {
 		return uri
 	}
-
-	// 小写 scheme 和 host
 	u.Scheme = strings.ToLower(u.Scheme)
 	u.Host = strings.ToLower(u.Host)
-
-	// 移除默认端口
 	if (u.Scheme == "https" && u.Port() == "443") ||
 		(u.Scheme == "http" && u.Port() == "80") {
 		u.Host = u.Hostname()
 	}
-
-	// 移除末尾斜杠（除了根路径）
 	u.Path = strings.TrimSuffix(u.Path, "/")
 	if u.Path == "" {
 		u.Path = "/"
 	}
-
-	// 移除空 query
 	if u.RawQuery == "" {
 		u.ForceQuery = false
 	}
-
 	return u.String()
 }
 
-// normalizeOrigin 规范化 Origin（只保留 scheme + host）
 func normalizeOrigin(origin string) string {
 	u, err := url.Parse(origin)
 	if err != nil {
 		return strings.ToLower(origin)
 	}
-
-	// 小写 scheme 和 host
 	u.Scheme = strings.ToLower(u.Scheme)
 	u.Host = strings.ToLower(u.Host)
-
-	// 移除默认端口
 	if (u.Scheme == "https" && u.Port() == "443") ||
 		(u.Scheme == "http" && u.Port() == "80") {
 		u.Host = u.Hostname()
 	}
-
-	// Origin 只包含 scheme + host
 	return u.Scheme + "://" + u.Host
 }

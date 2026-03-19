@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/pkg/models"
+	"github.com/heliannuuthus/helios/aegis/models"
 )
 
 // ==================== User（read-through 缓存）====================
@@ -30,7 +30,7 @@ func (cm *Manager) GetUser(ctx context.Context, openid string) (*models.UserWith
 	}
 
 	// 从 UserService 获取
-	result, err := cm.userSvc.GetUserWithDecrypted(ctx, openid)
+	result, err := cm.userSvc.GetDecryptedUserByOpenID(ctx, openid)
 	if err != nil {
 		return nil, err
 	}

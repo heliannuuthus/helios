@@ -19,8 +19,8 @@ import (
 
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
+	"github.com/heliannuuthus/helios/aegis/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // MPProvider 抖音小程序 Provider

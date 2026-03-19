@@ -15,8 +15,8 @@ import (
 
 	"github.com/heliannuuthus/helios/aegis"
 	aegisconfig "github.com/heliannuuthus/helios/aegis/config"
-	hermes "github.com/heliannuuthus/helios/aegis/rpc/hermes"
 	"github.com/heliannuuthus/helios/aegis/middleware"
+	hermes "github.com/heliannuuthus/helios/aegis/rpc/hermes"
 	_ "github.com/heliannuuthus/helios/docs"
 	"github.com/heliannuuthus/helios/iris"
 	irisconfig "github.com/heliannuuthus/helios/iris/config"

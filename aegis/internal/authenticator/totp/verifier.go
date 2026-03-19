@@ -4,8 +4,8 @@ package totp
 import (
 	"context"
 
-	"github.com/heliannuuthus/helios/aegis/internal/contract"
-	"github.com/heliannuuthus/helios/pkg/dto"
+	"github.com/heliannuuthus/helios/aegis/contract"
+	"github.com/heliannuuthus/helios/aegis/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -26,7 +26,7 @@ func (v *Verifier) Verify(ctx context.Context, openid, code string) (bool, error
 		return false, nil
 	}
 
-	err := v.credentialSvc.VerifyTOTP(ctx, &dto.VerifyTOTPRequest{
+	err := v.credentialSvc.VerifyTOTP(ctx, &models.VerifyTOTPRequest{
 		OpenID: openid,
 		Code:   code,
 	})

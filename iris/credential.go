@@ -12,11 +12,10 @@ import (
 	"github.com/go-json-experiment/json"
 	"github.com/pquerna/otp/totp"
 
+	"github.com/heliannuuthus/helios/aegis/models"
 	"github.com/heliannuuthus/helios/hermes/config"
 	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
-	"github.com/heliannuuthus/helios/pkg/dto"
 	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/pkg/models"
 )
 
 // CredentialStore 凭证 CRUD 存储接口
@@ -47,7 +46,7 @@ func NewCredentialService(store CredentialStore) *CredentialService {
 // ==================== TOTP ====================
 
 // SetupTOTP 初始化 TOTP（生成密钥，但尚未启用）
-func (s *CredentialService) SetupTOTP(ctx context.Context, req *dto.TOTPSetupRequest) (*dto.TOTPSetupResponse, error) {
+func (s *CredentialService) SetupTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
 	creds, err := s.store.GetEnabledUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
 	if err != nil {
 		return nil, fmt.Errorf("查询 TOTP 失败: %w", err)
@@ -86,7 +85,7 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *dto.TOTPSetupReq
 		return nil, fmt.Errorf("保存凭证失败: %w", err)
 	}
 
-	return &dto.TOTPSetupResponse{
+	return &models.TOTPSetupResponse{
 		Secret:       secret,
 		OTPAuthURI:   otpauthURI,
 		CredentialID: credential.ID,
@@ -94,7 +93,7 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *dto.TOTPSetupReq
 }
 
 // ConfirmTOTP 确认 TOTP 绑定（验证一次后启用）
-func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *dto.ConfirmTOTPRequest) error {
+func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error {
 	// 查找用户未启用的 TOTP 凭证
 	creds, err := s.store.GetUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
 	if err != nil {
@@ -143,7 +142,7 @@ func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *dto.ConfirmTOT
 }
 
 // VerifyTOTP 验证 TOTP
-func (s *CredentialService) VerifyTOTP(ctx context.Context, req *dto.VerifyTOTPRequest) error {
+func (s *CredentialService) VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error {
 	creds, err := s.store.GetEnabledUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
 	if err != nil {
 		return fmt.Errorf("查询凭证失败: %w", err)
@@ -172,7 +171,9 @@ func (s *CredentialService) DisableTOTP(ctx context.Context, openid string) erro
 	}
 	for _, cred := range creds {
 		if cred.CredentialID != nil {
-			_ = s.store.DeleteCredential(ctx, openid, *cred.CredentialID)
+			if err := s.store.DeleteCredential(ctx, openid, *cred.CredentialID); err != nil {
+				logger.Warnf("[Credential] 删除 TOTP 凭证失败 - OpenID: %s, Error: %v", openid, err)
+			}
 		}
 	}
 	logger.Infof("[Credential] TOTP 已禁用 - OpenID: %s", openid)
