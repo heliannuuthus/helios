@@ -47,28 +47,20 @@ const (
 	UserService_DisableCredential_FullMethodName               = "/hermes.v1.UserService/DisableCredential"
 	UserService_DeleteCredential_FullMethodName                = "/hermes.v1.UserService/DeleteCredential"
 	UserService_GetOpenIDByCredentialID_FullMethodName         = "/hermes.v1.UserService/GetOpenIDByCredentialID"
-	UserService_SetupTOTP_FullMethodName                       = "/hermes.v1.UserService/SetupTOTP"
-	UserService_ConfirmTOTP_FullMethodName                     = "/hermes.v1.UserService/ConfirmTOTP"
-	UserService_VerifyTOTP_FullMethodName                      = "/hermes.v1.UserService/VerifyTOTP"
-	UserService_DisableTOTP_FullMethodName                     = "/hermes.v1.UserService/DisableTOTP"
-	UserService_CheckTOTPEnabled_FullMethodName                = "/hermes.v1.UserService/CheckTOTPEnabled"
-	UserService_SetTOTPEnabled_FullMethodName                  = "/hermes.v1.UserService/SetTOTPEnabled"
-	UserService_RegisterWebAuthn_FullMethodName                = "/hermes.v1.UserService/RegisterWebAuthn"
-	UserService_GetWebAuthnByCredentialID_FullMethodName       = "/hermes.v1.UserService/GetWebAuthnByCredentialID"
-	UserService_UpdateWebAuthnSignCount_FullMethodName         = "/hermes.v1.UserService/UpdateWebAuthnSignCount"
-	UserService_ListUserWebAuthn_FullMethodName                = "/hermes.v1.UserService/ListUserWebAuthn"
-	UserService_DeleteWebAuthn_FullMethodName                  = "/hermes.v1.UserService/DeleteWebAuthn"
-	UserService_SetWebAuthnEnabled_FullMethodName              = "/hermes.v1.UserService/SetWebAuthnEnabled"
-	UserService_GetPublicKeyForCredential_FullMethodName       = "/hermes.v1.UserService/GetPublicKeyForCredential"
-	UserService_GetUserCredentialSummaries_FullMethodName      = "/hermes.v1.UserService/GetUserCredentialSummaries"
-	UserService_GetUserMFAStatus_FullMethodName                = "/hermes.v1.UserService/GetUserMFAStatus"
+	UserService_CreateGroup_FullMethodName                     = "/hermes.v1.UserService/CreateGroup"
+	UserService_GetGroup_FullMethodName                        = "/hermes.v1.UserService/GetGroup"
+	UserService_ListGroups_FullMethodName                      = "/hermes.v1.UserService/ListGroups"
+	UserService_UpdateGroup_FullMethodName                     = "/hermes.v1.UserService/UpdateGroup"
+	UserService_DeleteGroup_FullMethodName                     = "/hermes.v1.UserService/DeleteGroup"
+	UserService_SetGroupMembers_FullMethodName                 = "/hermes.v1.UserService/SetGroupMembers"
+	UserService_GetGroupMembers_FullMethodName                 = "/hermes.v1.UserService/GetGroupMembers"
 )
 
 // UserServiceClient is the client API for UserService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证
+// UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证 + 用户组
 type UserServiceClient interface {
 	GetByOpenID(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*User, error)
 	GetByIdentity(ctx context.Context, in *GetByIdentityRequest, opts ...grpc.CallOption) (*User, error)
@@ -97,21 +89,13 @@ type UserServiceClient interface {
 	DisableCredential(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteCredential(ctx context.Context, in *DeleteCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetOpenIDByCredentialID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*OpenIDResponse, error)
-	SetupTOTP(ctx context.Context, in *SetupTOTPRequest, opts ...grpc.CallOption) (*SetupTOTPResponse, error)
-	ConfirmTOTP(ctx context.Context, in *ConfirmTOTPRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	VerifyTOTP(ctx context.Context, in *VerifyTOTPRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	DisableTOTP(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	CheckTOTPEnabled(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*BoolValue, error)
-	SetTOTPEnabled(ctx context.Context, in *SetTOTPEnabledRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	RegisterWebAuthn(ctx context.Context, in *RegisterWebAuthnRequest, opts ...grpc.CallOption) (*UserCredential, error)
-	GetWebAuthnByCredentialID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*WebAuthnCredentialDetail, error)
-	UpdateWebAuthnSignCount(ctx context.Context, in *UpdateWebAuthnSignCountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	ListUserWebAuthn(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*UserCredentialList, error)
-	DeleteWebAuthn(ctx context.Context, in *DeleteWebAuthnRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	SetWebAuthnEnabled(ctx context.Context, in *SetWebAuthnEnabledRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	GetPublicKeyForCredential(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*PublicKeyResponse, error)
-	GetUserCredentialSummaries(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*CredentialSummaryList, error)
-	GetUserMFAStatus(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*MFAStatus, error)
+	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Group, error)
+	GetGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*Group, error)
+	ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*GroupList, error)
+	UpdateGroup(ctx context.Context, in *UpdateGroupRequest, opts ...grpc.CallOption) (*Group, error)
+	DeleteGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	SetGroupMembers(ctx context.Context, in *SetGroupMembersRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	GetGroupMembers(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*StringList, error)
 }
 
 type userServiceClient struct {
@@ -392,150 +376,70 @@ func (c *userServiceClient) GetOpenIDByCredentialID(ctx context.Context, in *Cre
 	return out, nil
 }
 
-func (c *userServiceClient) SetupTOTP(ctx context.Context, in *SetupTOTPRequest, opts ...grpc.CallOption) (*SetupTOTPResponse, error) {
+func (c *userServiceClient) CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Group, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(SetupTOTPResponse)
-	err := c.cc.Invoke(ctx, UserService_SetupTOTP_FullMethodName, in, out, cOpts...)
+	out := new(Group)
+	err := c.cc.Invoke(ctx, UserService_CreateGroup_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *userServiceClient) ConfirmTOTP(ctx context.Context, in *ConfirmTOTPRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *userServiceClient) GetGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*Group, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Group)
+	err := c.cc.Invoke(ctx, UserService_GetGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*GroupList, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GroupList)
+	err := c.cc.Invoke(ctx, UserService_ListGroups_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) UpdateGroup(ctx context.Context, in *UpdateGroupRequest, opts ...grpc.CallOption) (*Group, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(Group)
+	err := c.cc.Invoke(ctx, UserService_UpdateGroup_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) DeleteGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_ConfirmTOTP_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, UserService_DeleteGroup_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *userServiceClient) VerifyTOTP(ctx context.Context, in *VerifyTOTPRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *userServiceClient) SetGroupMembers(ctx context.Context, in *SetGroupMembersRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_VerifyTOTP_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, UserService_SetGroupMembers_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *userServiceClient) DisableTOTP(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *userServiceClient) GetGroupMembers(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*StringList, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_DisableTOTP_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) CheckTOTPEnabled(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*BoolValue, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(BoolValue)
-	err := c.cc.Invoke(ctx, UserService_CheckTOTPEnabled_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) SetTOTPEnabled(ctx context.Context, in *SetTOTPEnabledRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_SetTOTPEnabled_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) RegisterWebAuthn(ctx context.Context, in *RegisterWebAuthnRequest, opts ...grpc.CallOption) (*UserCredential, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UserCredential)
-	err := c.cc.Invoke(ctx, UserService_RegisterWebAuthn_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetWebAuthnByCredentialID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*WebAuthnCredentialDetail, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(WebAuthnCredentialDetail)
-	err := c.cc.Invoke(ctx, UserService_GetWebAuthnByCredentialID_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) UpdateWebAuthnSignCount(ctx context.Context, in *UpdateWebAuthnSignCountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_UpdateWebAuthnSignCount_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) ListUserWebAuthn(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*UserCredentialList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UserCredentialList)
-	err := c.cc.Invoke(ctx, UserService_ListUserWebAuthn_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) DeleteWebAuthn(ctx context.Context, in *DeleteWebAuthnRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_DeleteWebAuthn_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) SetWebAuthnEnabled(ctx context.Context, in *SetWebAuthnEnabledRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_SetWebAuthnEnabled_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetPublicKeyForCredential(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*PublicKeyResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PublicKeyResponse)
-	err := c.cc.Invoke(ctx, UserService_GetPublicKeyForCredential_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetUserCredentialSummaries(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*CredentialSummaryList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CredentialSummaryList)
-	err := c.cc.Invoke(ctx, UserService_GetUserCredentialSummaries_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetUserMFAStatus(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*MFAStatus, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(MFAStatus)
-	err := c.cc.Invoke(ctx, UserService_GetUserMFAStatus_FullMethodName, in, out, cOpts...)
+	out := new(StringList)
+	err := c.cc.Invoke(ctx, UserService_GetGroupMembers_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -546,7 +450,7 @@ func (c *userServiceClient) GetUserMFAStatus(ctx context.Context, in *OpenIDRequ
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
 //
-// UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证
+// UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证 + 用户组
 type UserServiceServer interface {
 	GetByOpenID(context.Context, *OpenIDRequest) (*User, error)
 	GetByIdentity(context.Context, *GetByIdentityRequest) (*User, error)
@@ -575,21 +479,13 @@ type UserServiceServer interface {
 	DisableCredential(context.Context, *CredentialIDRequest) (*emptypb.Empty, error)
 	DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error)
 	GetOpenIDByCredentialID(context.Context, *CredentialIDRequest) (*OpenIDResponse, error)
-	SetupTOTP(context.Context, *SetupTOTPRequest) (*SetupTOTPResponse, error)
-	ConfirmTOTP(context.Context, *ConfirmTOTPRequest) (*emptypb.Empty, error)
-	VerifyTOTP(context.Context, *VerifyTOTPRequest) (*emptypb.Empty, error)
-	DisableTOTP(context.Context, *OpenIDRequest) (*emptypb.Empty, error)
-	CheckTOTPEnabled(context.Context, *OpenIDRequest) (*BoolValue, error)
-	SetTOTPEnabled(context.Context, *SetTOTPEnabledRequest) (*emptypb.Empty, error)
-	RegisterWebAuthn(context.Context, *RegisterWebAuthnRequest) (*UserCredential, error)
-	GetWebAuthnByCredentialID(context.Context, *CredentialIDRequest) (*WebAuthnCredentialDetail, error)
-	UpdateWebAuthnSignCount(context.Context, *UpdateWebAuthnSignCountRequest) (*emptypb.Empty, error)
-	ListUserWebAuthn(context.Context, *OpenIDRequest) (*UserCredentialList, error)
-	DeleteWebAuthn(context.Context, *DeleteWebAuthnRequest) (*emptypb.Empty, error)
-	SetWebAuthnEnabled(context.Context, *SetWebAuthnEnabledRequest) (*emptypb.Empty, error)
-	GetPublicKeyForCredential(context.Context, *CredentialIDRequest) (*PublicKeyResponse, error)
-	GetUserCredentialSummaries(context.Context, *OpenIDRequest) (*CredentialSummaryList, error)
-	GetUserMFAStatus(context.Context, *OpenIDRequest) (*MFAStatus, error)
+	CreateGroup(context.Context, *CreateGroupRequest) (*Group, error)
+	GetGroup(context.Context, *GetGroupRequest) (*Group, error)
+	ListGroups(context.Context, *ListGroupsRequest) (*GroupList, error)
+	UpdateGroup(context.Context, *UpdateGroupRequest) (*Group, error)
+	DeleteGroup(context.Context, *GetGroupRequest) (*emptypb.Empty, error)
+	SetGroupMembers(context.Context, *SetGroupMembersRequest) (*emptypb.Empty, error)
+	GetGroupMembers(context.Context, *GetGroupRequest) (*StringList, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -681,50 +577,26 @@ func (UnimplementedUserServiceServer) DeleteCredential(context.Context, *DeleteC
 func (UnimplementedUserServiceServer) GetOpenIDByCredentialID(context.Context, *CredentialIDRequest) (*OpenIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOpenIDByCredentialID not implemented")
 }
-func (UnimplementedUserServiceServer) SetupTOTP(context.Context, *SetupTOTPRequest) (*SetupTOTPResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetupTOTP not implemented")
+func (UnimplementedUserServiceServer) CreateGroup(context.Context, *CreateGroupRequest) (*Group, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateGroup not implemented")
 }
-func (UnimplementedUserServiceServer) ConfirmTOTP(context.Context, *ConfirmTOTPRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method ConfirmTOTP not implemented")
+func (UnimplementedUserServiceServer) GetGroup(context.Context, *GetGroupRequest) (*Group, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetGroup not implemented")
 }
-func (UnimplementedUserServiceServer) VerifyTOTP(context.Context, *VerifyTOTPRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method VerifyTOTP not implemented")
+func (UnimplementedUserServiceServer) ListGroups(context.Context, *ListGroupsRequest) (*GroupList, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListGroups not implemented")
 }
-func (UnimplementedUserServiceServer) DisableTOTP(context.Context, *OpenIDRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DisableTOTP not implemented")
+func (UnimplementedUserServiceServer) UpdateGroup(context.Context, *UpdateGroupRequest) (*Group, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateGroup not implemented")
 }
-func (UnimplementedUserServiceServer) CheckTOTPEnabled(context.Context, *OpenIDRequest) (*BoolValue, error) {
-	return nil, status.Error(codes.Unimplemented, "method CheckTOTPEnabled not implemented")
+func (UnimplementedUserServiceServer) DeleteGroup(context.Context, *GetGroupRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteGroup not implemented")
 }
-func (UnimplementedUserServiceServer) SetTOTPEnabled(context.Context, *SetTOTPEnabledRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetTOTPEnabled not implemented")
+func (UnimplementedUserServiceServer) SetGroupMembers(context.Context, *SetGroupMembersRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetGroupMembers not implemented")
 }
-func (UnimplementedUserServiceServer) RegisterWebAuthn(context.Context, *RegisterWebAuthnRequest) (*UserCredential, error) {
-	return nil, status.Error(codes.Unimplemented, "method RegisterWebAuthn not implemented")
-}
-func (UnimplementedUserServiceServer) GetWebAuthnByCredentialID(context.Context, *CredentialIDRequest) (*WebAuthnCredentialDetail, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetWebAuthnByCredentialID not implemented")
-}
-func (UnimplementedUserServiceServer) UpdateWebAuthnSignCount(context.Context, *UpdateWebAuthnSignCountRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateWebAuthnSignCount not implemented")
-}
-func (UnimplementedUserServiceServer) ListUserWebAuthn(context.Context, *OpenIDRequest) (*UserCredentialList, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListUserWebAuthn not implemented")
-}
-func (UnimplementedUserServiceServer) DeleteWebAuthn(context.Context, *DeleteWebAuthnRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteWebAuthn not implemented")
-}
-func (UnimplementedUserServiceServer) SetWebAuthnEnabled(context.Context, *SetWebAuthnEnabledRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetWebAuthnEnabled not implemented")
-}
-func (UnimplementedUserServiceServer) GetPublicKeyForCredential(context.Context, *CredentialIDRequest) (*PublicKeyResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetPublicKeyForCredential not implemented")
-}
-func (UnimplementedUserServiceServer) GetUserCredentialSummaries(context.Context, *OpenIDRequest) (*CredentialSummaryList, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetUserCredentialSummaries not implemented")
-}
-func (UnimplementedUserServiceServer) GetUserMFAStatus(context.Context, *OpenIDRequest) (*MFAStatus, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetUserMFAStatus not implemented")
+func (UnimplementedUserServiceServer) GetGroupMembers(context.Context, *GetGroupRequest) (*StringList, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetGroupMembers not implemented")
 }
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
@@ -1233,272 +1105,128 @@ func _UserService_GetOpenIDByCredentialID_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_SetupTOTP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetupTOTPRequest)
+func _UserService_CreateGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateGroupRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(UserServiceServer).SetupTOTP(ctx, in)
+		return srv.(UserServiceServer).CreateGroup(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: UserService_SetupTOTP_FullMethodName,
+		FullMethod: UserService_CreateGroup_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).SetupTOTP(ctx, req.(*SetupTOTPRequest))
+		return srv.(UserServiceServer).CreateGroup(ctx, req.(*CreateGroupRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_ConfirmTOTP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConfirmTOTPRequest)
+func _UserService_GetGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetGroupRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(UserServiceServer).ConfirmTOTP(ctx, in)
+		return srv.(UserServiceServer).GetGroup(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: UserService_ConfirmTOTP_FullMethodName,
+		FullMethod: UserService_GetGroup_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).ConfirmTOTP(ctx, req.(*ConfirmTOTPRequest))
+		return srv.(UserServiceServer).GetGroup(ctx, req.(*GetGroupRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_VerifyTOTP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(VerifyTOTPRequest)
+func _UserService_ListGroups_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListGroupsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(UserServiceServer).VerifyTOTP(ctx, in)
+		return srv.(UserServiceServer).ListGroups(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: UserService_VerifyTOTP_FullMethodName,
+		FullMethod: UserService_ListGroups_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).VerifyTOTP(ctx, req.(*VerifyTOTPRequest))
+		return srv.(UserServiceServer).ListGroups(ctx, req.(*ListGroupsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_DisableTOTP_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OpenIDRequest)
+func _UserService_UpdateGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateGroupRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(UserServiceServer).DisableTOTP(ctx, in)
+		return srv.(UserServiceServer).UpdateGroup(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: UserService_DisableTOTP_FullMethodName,
+		FullMethod: UserService_UpdateGroup_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).DisableTOTP(ctx, req.(*OpenIDRequest))
+		return srv.(UserServiceServer).UpdateGroup(ctx, req.(*UpdateGroupRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_CheckTOTPEnabled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OpenIDRequest)
+func _UserService_DeleteGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetGroupRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(UserServiceServer).CheckTOTPEnabled(ctx, in)
+		return srv.(UserServiceServer).DeleteGroup(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: UserService_CheckTOTPEnabled_FullMethodName,
+		FullMethod: UserService_DeleteGroup_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).CheckTOTPEnabled(ctx, req.(*OpenIDRequest))
+		return srv.(UserServiceServer).DeleteGroup(ctx, req.(*GetGroupRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_SetTOTPEnabled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetTOTPEnabledRequest)
+func _UserService_SetGroupMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetGroupMembersRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(UserServiceServer).SetTOTPEnabled(ctx, in)
+		return srv.(UserServiceServer).SetGroupMembers(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: UserService_SetTOTPEnabled_FullMethodName,
+		FullMethod: UserService_SetGroupMembers_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).SetTOTPEnabled(ctx, req.(*SetTOTPEnabledRequest))
+		return srv.(UserServiceServer).SetGroupMembers(ctx, req.(*SetGroupMembersRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_RegisterWebAuthn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RegisterWebAuthnRequest)
+func _UserService_GetGroupMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetGroupRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(UserServiceServer).RegisterWebAuthn(ctx, in)
+		return srv.(UserServiceServer).GetGroupMembers(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: UserService_RegisterWebAuthn_FullMethodName,
+		FullMethod: UserService_GetGroupMembers_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).RegisterWebAuthn(ctx, req.(*RegisterWebAuthnRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetWebAuthnByCredentialID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CredentialIDRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetWebAuthnByCredentialID(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetWebAuthnByCredentialID_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetWebAuthnByCredentialID(ctx, req.(*CredentialIDRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_UpdateWebAuthnSignCount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateWebAuthnSignCountRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).UpdateWebAuthnSignCount(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_UpdateWebAuthnSignCount_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).UpdateWebAuthnSignCount(ctx, req.(*UpdateWebAuthnSignCountRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_ListUserWebAuthn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OpenIDRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).ListUserWebAuthn(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_ListUserWebAuthn_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).ListUserWebAuthn(ctx, req.(*OpenIDRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_DeleteWebAuthn_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteWebAuthnRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).DeleteWebAuthn(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_DeleteWebAuthn_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).DeleteWebAuthn(ctx, req.(*DeleteWebAuthnRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_SetWebAuthnEnabled_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetWebAuthnEnabledRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).SetWebAuthnEnabled(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_SetWebAuthnEnabled_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).SetWebAuthnEnabled(ctx, req.(*SetWebAuthnEnabledRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetPublicKeyForCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CredentialIDRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetPublicKeyForCredential(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetPublicKeyForCredential_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetPublicKeyForCredential(ctx, req.(*CredentialIDRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetUserCredentialSummaries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OpenIDRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetUserCredentialSummaries(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetUserCredentialSummaries_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetUserCredentialSummaries(ctx, req.(*OpenIDRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetUserMFAStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OpenIDRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetUserMFAStatus(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetUserMFAStatus_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetUserMFAStatus(ctx, req.(*OpenIDRequest))
+		return srv.(UserServiceServer).GetGroupMembers(ctx, req.(*GetGroupRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1619,64 +1347,32 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _UserService_GetOpenIDByCredentialID_Handler,
 		},
 		{
-			MethodName: "SetupTOTP",
-			Handler:    _UserService_SetupTOTP_Handler,
+			MethodName: "CreateGroup",
+			Handler:    _UserService_CreateGroup_Handler,
 		},
 		{
-			MethodName: "ConfirmTOTP",
-			Handler:    _UserService_ConfirmTOTP_Handler,
+			MethodName: "GetGroup",
+			Handler:    _UserService_GetGroup_Handler,
 		},
 		{
-			MethodName: "VerifyTOTP",
-			Handler:    _UserService_VerifyTOTP_Handler,
+			MethodName: "ListGroups",
+			Handler:    _UserService_ListGroups_Handler,
 		},
 		{
-			MethodName: "DisableTOTP",
-			Handler:    _UserService_DisableTOTP_Handler,
+			MethodName: "UpdateGroup",
+			Handler:    _UserService_UpdateGroup_Handler,
 		},
 		{
-			MethodName: "CheckTOTPEnabled",
-			Handler:    _UserService_CheckTOTPEnabled_Handler,
+			MethodName: "DeleteGroup",
+			Handler:    _UserService_DeleteGroup_Handler,
 		},
 		{
-			MethodName: "SetTOTPEnabled",
-			Handler:    _UserService_SetTOTPEnabled_Handler,
+			MethodName: "SetGroupMembers",
+			Handler:    _UserService_SetGroupMembers_Handler,
 		},
 		{
-			MethodName: "RegisterWebAuthn",
-			Handler:    _UserService_RegisterWebAuthn_Handler,
-		},
-		{
-			MethodName: "GetWebAuthnByCredentialID",
-			Handler:    _UserService_GetWebAuthnByCredentialID_Handler,
-		},
-		{
-			MethodName: "UpdateWebAuthnSignCount",
-			Handler:    _UserService_UpdateWebAuthnSignCount_Handler,
-		},
-		{
-			MethodName: "ListUserWebAuthn",
-			Handler:    _UserService_ListUserWebAuthn_Handler,
-		},
-		{
-			MethodName: "DeleteWebAuthn",
-			Handler:    _UserService_DeleteWebAuthn_Handler,
-		},
-		{
-			MethodName: "SetWebAuthnEnabled",
-			Handler:    _UserService_SetWebAuthnEnabled_Handler,
-		},
-		{
-			MethodName: "GetPublicKeyForCredential",
-			Handler:    _UserService_GetPublicKeyForCredential_Handler,
-		},
-		{
-			MethodName: "GetUserCredentialSummaries",
-			Handler:    _UserService_GetUserCredentialSummaries_Handler,
-		},
-		{
-			MethodName: "GetUserMFAStatus",
-			Handler:    _UserService_GetUserMFAStatus_Handler,
+			MethodName: "GetGroupMembers",
+			Handler:    _UserService_GetGroupMembers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

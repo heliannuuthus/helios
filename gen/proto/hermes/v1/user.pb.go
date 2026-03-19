@@ -1560,28 +1560,33 @@ func (x *OpenIDResponse) GetOpenid() string {
 	return ""
 }
 
-type SetupTOTPRequest struct {
+type Group struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Openid        string                 `protobuf:"bytes,1,opt,name=openid,proto3" json:"openid,omitempty"`
-	AppName       string                 `protobuf:"bytes,2,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	GroupId       string                 `protobuf:"bytes,2,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	ServiceId     string                 `protobuf:"bytes,3,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	Description   *string                `protobuf:"bytes,5,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SetupTOTPRequest) Reset() {
-	*x = SetupTOTPRequest{}
+func (x *Group) Reset() {
+	*x = Group{}
 	mi := &file_hermes_v1_user_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SetupTOTPRequest) String() string {
+func (x *Group) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SetupTOTPRequest) ProtoMessage() {}
+func (*Group) ProtoMessage() {}
 
-func (x *SetupTOTPRequest) ProtoReflect() protoreflect.Message {
+func (x *Group) ProtoReflect() protoreflect.Message {
 	mi := &file_hermes_v1_user_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1593,822 +1598,83 @@ func (x *SetupTOTPRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SetupTOTPRequest.ProtoReflect.Descriptor instead.
-func (*SetupTOTPRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use Group.ProtoReflect.Descriptor instead.
+func (*Group) Descriptor() ([]byte, []int) {
 	return file_hermes_v1_user_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *SetupTOTPRequest) GetOpenid() string {
-	if x != nil {
-		return x.Openid
-	}
-	return ""
-}
-
-func (x *SetupTOTPRequest) GetAppName() string {
-	if x != nil {
-		return x.AppName
-	}
-	return ""
-}
-
-type SetupTOTPResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Secret        string                 `protobuf:"bytes,1,opt,name=secret,proto3" json:"secret,omitempty"`
-	OtpauthUri    string                 `protobuf:"bytes,2,opt,name=otpauth_uri,json=otpauthUri,proto3" json:"otpauth_uri,omitempty"`
-	CredentialId  uint32                 `protobuf:"varint,3,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetupTOTPResponse) Reset() {
-	*x = SetupTOTPResponse{}
-	mi := &file_hermes_v1_user_proto_msgTypes[25]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetupTOTPResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetupTOTPResponse) ProtoMessage() {}
-
-func (x *SetupTOTPResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[25]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetupTOTPResponse.ProtoReflect.Descriptor instead.
-func (*SetupTOTPResponse) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *SetupTOTPResponse) GetSecret() string {
-	if x != nil {
-		return x.Secret
-	}
-	return ""
-}
-
-func (x *SetupTOTPResponse) GetOtpauthUri() string {
-	if x != nil {
-		return x.OtpauthUri
-	}
-	return ""
-}
-
-func (x *SetupTOTPResponse) GetCredentialId() uint32 {
-	if x != nil {
-		return x.CredentialId
-	}
-	return 0
-}
-
-type ConfirmTOTPRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Openid        string                 `protobuf:"bytes,1,opt,name=openid,proto3" json:"openid,omitempty"`
-	CredentialId  uint32                 `protobuf:"varint,2,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
-	Code          string                 `protobuf:"bytes,3,opt,name=code,proto3" json:"code,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ConfirmTOTPRequest) Reset() {
-	*x = ConfirmTOTPRequest{}
-	mi := &file_hermes_v1_user_proto_msgTypes[26]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ConfirmTOTPRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ConfirmTOTPRequest) ProtoMessage() {}
-
-func (x *ConfirmTOTPRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[26]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ConfirmTOTPRequest.ProtoReflect.Descriptor instead.
-func (*ConfirmTOTPRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{26}
-}
-
-func (x *ConfirmTOTPRequest) GetOpenid() string {
-	if x != nil {
-		return x.Openid
-	}
-	return ""
-}
-
-func (x *ConfirmTOTPRequest) GetCredentialId() uint32 {
-	if x != nil {
-		return x.CredentialId
-	}
-	return 0
-}
-
-func (x *ConfirmTOTPRequest) GetCode() string {
-	if x != nil {
-		return x.Code
-	}
-	return ""
-}
-
-type VerifyTOTPRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Openid        string                 `protobuf:"bytes,1,opt,name=openid,proto3" json:"openid,omitempty"`
-	Code          string                 `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *VerifyTOTPRequest) Reset() {
-	*x = VerifyTOTPRequest{}
-	mi := &file_hermes_v1_user_proto_msgTypes[27]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *VerifyTOTPRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*VerifyTOTPRequest) ProtoMessage() {}
-
-func (x *VerifyTOTPRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[27]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use VerifyTOTPRequest.ProtoReflect.Descriptor instead.
-func (*VerifyTOTPRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{27}
-}
-
-func (x *VerifyTOTPRequest) GetOpenid() string {
-	if x != nil {
-		return x.Openid
-	}
-	return ""
-}
-
-func (x *VerifyTOTPRequest) GetCode() string {
-	if x != nil {
-		return x.Code
-	}
-	return ""
-}
-
-type SetTOTPEnabledRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Openid        string                 `protobuf:"bytes,1,opt,name=openid,proto3" json:"openid,omitempty"`
-	Enabled       bool                   `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetTOTPEnabledRequest) Reset() {
-	*x = SetTOTPEnabledRequest{}
-	mi := &file_hermes_v1_user_proto_msgTypes[28]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetTOTPEnabledRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetTOTPEnabledRequest) ProtoMessage() {}
-
-func (x *SetTOTPEnabledRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[28]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetTOTPEnabledRequest.ProtoReflect.Descriptor instead.
-func (*SetTOTPEnabledRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{28}
-}
-
-func (x *SetTOTPEnabledRequest) GetOpenid() string {
-	if x != nil {
-		return x.Openid
-	}
-	return ""
-}
-
-func (x *SetTOTPEnabledRequest) GetEnabled() bool {
-	if x != nil {
-		return x.Enabled
-	}
-	return false
-}
-
-type RegisterWebAuthnRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Openid          string                 `protobuf:"bytes,1,opt,name=openid,proto3" json:"openid,omitempty"`
-	CredentialId    string                 `protobuf:"bytes,2,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
-	PublicKey       string                 `protobuf:"bytes,3,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
-	Aaguid          string                 `protobuf:"bytes,4,opt,name=aaguid,proto3" json:"aaguid,omitempty"`
-	Transport       []string               `protobuf:"bytes,5,rep,name=transport,proto3" json:"transport,omitempty"`
-	AttestationType string                 `protobuf:"bytes,6,opt,name=attestation_type,json=attestationType,proto3" json:"attestation_type,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *RegisterWebAuthnRequest) Reset() {
-	*x = RegisterWebAuthnRequest{}
-	mi := &file_hermes_v1_user_proto_msgTypes[29]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RegisterWebAuthnRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RegisterWebAuthnRequest) ProtoMessage() {}
-
-func (x *RegisterWebAuthnRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[29]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RegisterWebAuthnRequest.ProtoReflect.Descriptor instead.
-func (*RegisterWebAuthnRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{29}
-}
-
-func (x *RegisterWebAuthnRequest) GetOpenid() string {
-	if x != nil {
-		return x.Openid
-	}
-	return ""
-}
-
-func (x *RegisterWebAuthnRequest) GetCredentialId() string {
-	if x != nil {
-		return x.CredentialId
-	}
-	return ""
-}
-
-func (x *RegisterWebAuthnRequest) GetPublicKey() string {
-	if x != nil {
-		return x.PublicKey
-	}
-	return ""
-}
-
-func (x *RegisterWebAuthnRequest) GetAaguid() string {
-	if x != nil {
-		return x.Aaguid
-	}
-	return ""
-}
-
-func (x *RegisterWebAuthnRequest) GetTransport() []string {
-	if x != nil {
-		return x.Transport
-	}
-	return nil
-}
-
-func (x *RegisterWebAuthnRequest) GetAttestationType() string {
-	if x != nil {
-		return x.AttestationType
-	}
-	return ""
-}
-
-type WebAuthnSecret struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	PublicKey       string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
-	SignCount       uint32                 `protobuf:"varint,2,opt,name=sign_count,json=signCount,proto3" json:"sign_count,omitempty"`
-	Aaguid          string                 `protobuf:"bytes,3,opt,name=aaguid,proto3" json:"aaguid,omitempty"`
-	Transport       []string               `protobuf:"bytes,4,rep,name=transport,proto3" json:"transport,omitempty"`
-	AttestationType string                 `protobuf:"bytes,5,opt,name=attestation_type,json=attestationType,proto3" json:"attestation_type,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *WebAuthnSecret) Reset() {
-	*x = WebAuthnSecret{}
-	mi := &file_hermes_v1_user_proto_msgTypes[30]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WebAuthnSecret) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WebAuthnSecret) ProtoMessage() {}
-
-func (x *WebAuthnSecret) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[30]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WebAuthnSecret.ProtoReflect.Descriptor instead.
-func (*WebAuthnSecret) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{30}
-}
-
-func (x *WebAuthnSecret) GetPublicKey() string {
-	if x != nil {
-		return x.PublicKey
-	}
-	return ""
-}
-
-func (x *WebAuthnSecret) GetSignCount() uint32 {
-	if x != nil {
-		return x.SignCount
-	}
-	return 0
-}
-
-func (x *WebAuthnSecret) GetAaguid() string {
-	if x != nil {
-		return x.Aaguid
-	}
-	return ""
-}
-
-func (x *WebAuthnSecret) GetTransport() []string {
-	if x != nil {
-		return x.Transport
-	}
-	return nil
-}
-
-func (x *WebAuthnSecret) GetAttestationType() string {
-	if x != nil {
-		return x.AttestationType
-	}
-	return ""
-}
-
-// WebAuthnCredentialDetail 凭证 + 解密后的 secret
-type WebAuthnCredentialDetail struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Credential    *UserCredential        `protobuf:"bytes,1,opt,name=credential,proto3" json:"credential,omitempty"`
-	Secret        *WebAuthnSecret        `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *WebAuthnCredentialDetail) Reset() {
-	*x = WebAuthnCredentialDetail{}
-	mi := &file_hermes_v1_user_proto_msgTypes[31]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *WebAuthnCredentialDetail) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*WebAuthnCredentialDetail) ProtoMessage() {}
-
-func (x *WebAuthnCredentialDetail) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[31]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use WebAuthnCredentialDetail.ProtoReflect.Descriptor instead.
-func (*WebAuthnCredentialDetail) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{31}
-}
-
-func (x *WebAuthnCredentialDetail) GetCredential() *UserCredential {
-	if x != nil {
-		return x.Credential
-	}
-	return nil
-}
-
-func (x *WebAuthnCredentialDetail) GetSecret() *WebAuthnSecret {
-	if x != nil {
-		return x.Secret
-	}
-	return nil
-}
-
-type UpdateWebAuthnSignCountRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CredentialId  string                 `protobuf:"bytes,1,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
-	SignCount     uint32                 `protobuf:"varint,2,opt,name=sign_count,json=signCount,proto3" json:"sign_count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateWebAuthnSignCountRequest) Reset() {
-	*x = UpdateWebAuthnSignCountRequest{}
-	mi := &file_hermes_v1_user_proto_msgTypes[32]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateWebAuthnSignCountRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateWebAuthnSignCountRequest) ProtoMessage() {}
-
-func (x *UpdateWebAuthnSignCountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[32]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateWebAuthnSignCountRequest.ProtoReflect.Descriptor instead.
-func (*UpdateWebAuthnSignCountRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{32}
-}
-
-func (x *UpdateWebAuthnSignCountRequest) GetCredentialId() string {
-	if x != nil {
-		return x.CredentialId
-	}
-	return ""
-}
-
-func (x *UpdateWebAuthnSignCountRequest) GetSignCount() uint32 {
-	if x != nil {
-		return x.SignCount
-	}
-	return 0
-}
-
-type DeleteWebAuthnRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Openid        string                 `protobuf:"bytes,1,opt,name=openid,proto3" json:"openid,omitempty"`
-	CredentialId  string                 `protobuf:"bytes,2,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeleteWebAuthnRequest) Reset() {
-	*x = DeleteWebAuthnRequest{}
-	mi := &file_hermes_v1_user_proto_msgTypes[33]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeleteWebAuthnRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeleteWebAuthnRequest) ProtoMessage() {}
-
-func (x *DeleteWebAuthnRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[33]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeleteWebAuthnRequest.ProtoReflect.Descriptor instead.
-func (*DeleteWebAuthnRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{33}
-}
-
-func (x *DeleteWebAuthnRequest) GetOpenid() string {
-	if x != nil {
-		return x.Openid
-	}
-	return ""
-}
-
-func (x *DeleteWebAuthnRequest) GetCredentialId() string {
-	if x != nil {
-		return x.CredentialId
-	}
-	return ""
-}
-
-type SetWebAuthnEnabledRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Openid        string                 `protobuf:"bytes,1,opt,name=openid,proto3" json:"openid,omitempty"`
-	CredentialId  string                 `protobuf:"bytes,2,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
-	Enabled       bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetWebAuthnEnabledRequest) Reset() {
-	*x = SetWebAuthnEnabledRequest{}
-	mi := &file_hermes_v1_user_proto_msgTypes[34]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetWebAuthnEnabledRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetWebAuthnEnabledRequest) ProtoMessage() {}
-
-func (x *SetWebAuthnEnabledRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[34]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetWebAuthnEnabledRequest.ProtoReflect.Descriptor instead.
-func (*SetWebAuthnEnabledRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{34}
-}
-
-func (x *SetWebAuthnEnabledRequest) GetOpenid() string {
-	if x != nil {
-		return x.Openid
-	}
-	return ""
-}
-
-func (x *SetWebAuthnEnabledRequest) GetCredentialId() string {
-	if x != nil {
-		return x.CredentialId
-	}
-	return ""
-}
-
-func (x *SetWebAuthnEnabledRequest) GetEnabled() bool {
-	if x != nil {
-		return x.Enabled
-	}
-	return false
-}
-
-type PublicKeyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PublicKey     []byte                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PublicKeyResponse) Reset() {
-	*x = PublicKeyResponse{}
-	mi := &file_hermes_v1_user_proto_msgTypes[35]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PublicKeyResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PublicKeyResponse) ProtoMessage() {}
-
-func (x *PublicKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[35]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PublicKeyResponse.ProtoReflect.Descriptor instead.
-func (*PublicKeyResponse) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{35}
-}
-
-func (x *PublicKeyResponse) GetPublicKey() []byte {
-	if x != nil {
-		return x.PublicKey
-	}
-	return nil
-}
-
-type CredentialSummary struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	CredentialId  string                 `protobuf:"bytes,3,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
-	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_used_at,json=lastUsedAt,proto3,oneof" json:"last_used_at,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CredentialSummary) Reset() {
-	*x = CredentialSummary{}
-	mi := &file_hermes_v1_user_proto_msgTypes[36]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CredentialSummary) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CredentialSummary) ProtoMessage() {}
-
-func (x *CredentialSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[36]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CredentialSummary.ProtoReflect.Descriptor instead.
-func (*CredentialSummary) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{36}
-}
-
-func (x *CredentialSummary) GetId() uint32 {
+func (x *Group) GetId() uint32 {
 	if x != nil {
 		return x.Id
 	}
 	return 0
 }
 
-func (x *CredentialSummary) GetType() string {
+func (x *Group) GetGroupId() string {
 	if x != nil {
-		return x.Type
+		return x.GroupId
 	}
 	return ""
 }
 
-func (x *CredentialSummary) GetCredentialId() string {
+func (x *Group) GetServiceId() string {
 	if x != nil {
-		return x.CredentialId
+		return x.ServiceId
 	}
 	return ""
 }
 
-func (x *CredentialSummary) GetEnabled() bool {
+func (x *Group) GetName() string {
 	if x != nil {
-		return x.Enabled
+		return x.Name
 	}
-	return false
+	return ""
 }
 
-func (x *CredentialSummary) GetLastUsedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.LastUsedAt
+func (x *Group) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
 	}
-	return nil
+	return ""
 }
 
-func (x *CredentialSummary) GetCreatedAt() *timestamppb.Timestamp {
+func (x *Group) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-type CredentialSummaryList struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Summaries     []*CredentialSummary   `protobuf:"bytes,1,rep,name=summaries,proto3" json:"summaries,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CredentialSummaryList) Reset() {
-	*x = CredentialSummaryList{}
-	mi := &file_hermes_v1_user_proto_msgTypes[37]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CredentialSummaryList) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CredentialSummaryList) ProtoMessage() {}
-
-func (x *CredentialSummaryList) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[37]
+func (x *Group) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CredentialSummaryList.ProtoReflect.Descriptor instead.
-func (*CredentialSummaryList) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{37}
-}
-
-func (x *CredentialSummaryList) GetSummaries() []*CredentialSummary {
-	if x != nil {
-		return x.Summaries
+		return x.UpdatedAt
 	}
 	return nil
 }
 
-type MFAStatus struct {
+type GroupList struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TotpEnabled   bool                   `protobuf:"varint,1,opt,name=totp_enabled,json=totpEnabled,proto3" json:"totp_enabled,omitempty"`
-	WebauthnCount int32                  `protobuf:"varint,2,opt,name=webauthn_count,json=webauthnCount,proto3" json:"webauthn_count,omitempty"`
-	PasskeyCount  int32                  `protobuf:"varint,3,opt,name=passkey_count,json=passkeyCount,proto3" json:"passkey_count,omitempty"`
+	Groups        []*Group               `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
+	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *MFAStatus) Reset() {
-	*x = MFAStatus{}
-	mi := &file_hermes_v1_user_proto_msgTypes[38]
+func (x *GroupList) Reset() {
+	*x = GroupList{}
+	mi := &file_hermes_v1_user_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MFAStatus) String() string {
+func (x *GroupList) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MFAStatus) ProtoMessage() {}
+func (*GroupList) ProtoMessage() {}
 
-func (x *MFAStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_user_proto_msgTypes[38]
+func (x *GroupList) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_user_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2419,30 +1685,299 @@ func (x *MFAStatus) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MFAStatus.ProtoReflect.Descriptor instead.
-func (*MFAStatus) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_user_proto_rawDescGZIP(), []int{38}
+// Deprecated: Use GroupList.ProtoReflect.Descriptor instead.
+func (*GroupList) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_user_proto_rawDescGZIP(), []int{25}
 }
 
-func (x *MFAStatus) GetTotpEnabled() bool {
+func (x *GroupList) GetGroups() []*Group {
 	if x != nil {
-		return x.TotpEnabled
+		return x.Groups
 	}
-	return false
+	return nil
 }
 
-func (x *MFAStatus) GetWebauthnCount() int32 {
+func (x *GroupList) GetNextCursor() string {
 	if x != nil {
-		return x.WebauthnCount
+		return x.NextCursor
 	}
-	return 0
+	return ""
 }
 
-func (x *MFAStatus) GetPasskeyCount() int32 {
+type GetGroupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetGroupRequest) Reset() {
+	*x = GetGroupRequest{}
+	mi := &file_hermes_v1_user_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetGroupRequest) ProtoMessage() {}
+
+func (x *GetGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_user_proto_msgTypes[26]
 	if x != nil {
-		return x.PasskeyCount
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	return 0
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetGroupRequest.ProtoReflect.Descriptor instead.
+func (*GetGroupRequest) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_user_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *GetGroupRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+type CreateGroupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	ServiceId     string                 `protobuf:"bytes,2,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description   *string                `protobuf:"bytes,4,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateGroupRequest) Reset() {
+	*x = CreateGroupRequest{}
+	mi := &file_hermes_v1_user_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateGroupRequest) ProtoMessage() {}
+
+func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_user_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateGroupRequest.ProtoReflect.Descriptor instead.
+func (*CreateGroupRequest) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_user_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CreateGroupRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *CreateGroupRequest) GetServiceId() string {
+	if x != nil {
+		return x.ServiceId
+	}
+	return ""
+}
+
+func (x *CreateGroupRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CreateGroupRequest) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
+type UpdateGroupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	Name          *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
+	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateGroupRequest) Reset() {
+	*x = UpdateGroupRequest{}
+	mi := &file_hermes_v1_user_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateGroupRequest) ProtoMessage() {}
+
+func (x *UpdateGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_user_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateGroupRequest.ProtoReflect.Descriptor instead.
+func (*UpdateGroupRequest) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_user_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *UpdateGroupRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *UpdateGroupRequest) GetName() string {
+	if x != nil && x.Name != nil {
+		return *x.Name
+	}
+	return ""
+}
+
+func (x *UpdateGroupRequest) GetDescription() string {
+	if x != nil && x.Description != nil {
+		return *x.Description
+	}
+	return ""
+}
+
+type ListGroupsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Filter        string                 `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
+	Pagination    *Pagination            `protobuf:"bytes,2,opt,name=pagination,proto3" json:"pagination,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListGroupsRequest) Reset() {
+	*x = ListGroupsRequest{}
+	mi := &file_hermes_v1_user_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListGroupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListGroupsRequest) ProtoMessage() {}
+
+func (x *ListGroupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_user_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListGroupsRequest.ProtoReflect.Descriptor instead.
+func (*ListGroupsRequest) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_user_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ListGroupsRequest) GetFilter() string {
+	if x != nil {
+		return x.Filter
+	}
+	return ""
+}
+
+func (x *ListGroupsRequest) GetPagination() *Pagination {
+	if x != nil {
+		return x.Pagination
+	}
+	return nil
+}
+
+type SetGroupMembersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupId       string                 `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	UserIds       []string               `protobuf:"bytes,2,rep,name=user_ids,json=userIds,proto3" json:"user_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetGroupMembersRequest) Reset() {
+	*x = SetGroupMembersRequest{}
+	mi := &file_hermes_v1_user_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetGroupMembersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetGroupMembersRequest) ProtoMessage() {}
+
+func (x *SetGroupMembersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_user_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetGroupMembersRequest.ProtoReflect.Descriptor instead.
+func (*SetGroupMembersRequest) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_user_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *SetGroupMembersRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *SetGroupMembersRequest) GetUserIds() []string {
+	if x != nil {
+		return x.UserIds
+	}
+	return nil
 }
 
 var File_hermes_v1_user_proto protoreflect.FileDescriptor
@@ -2602,76 +2137,46 @@ const file_hermes_v1_user_proto_rawDesc = "" +
 	"\x06openid\x18\x01 \x01(\tR\x06openid\x12#\n" +
 	"\rcredential_id\x18\x02 \x01(\tR\fcredentialId\"(\n" +
 	"\x0eOpenIDResponse\x12\x16\n" +
-	"\x06openid\x18\x01 \x01(\tR\x06openid\"E\n" +
-	"\x10SetupTOTPRequest\x12\x16\n" +
-	"\x06openid\x18\x01 \x01(\tR\x06openid\x12\x19\n" +
-	"\bapp_name\x18\x02 \x01(\tR\aappName\"q\n" +
-	"\x11SetupTOTPResponse\x12\x16\n" +
-	"\x06secret\x18\x01 \x01(\tR\x06secret\x12\x1f\n" +
-	"\votpauth_uri\x18\x02 \x01(\tR\n" +
-	"otpauthUri\x12#\n" +
-	"\rcredential_id\x18\x03 \x01(\rR\fcredentialId\"e\n" +
-	"\x12ConfirmTOTPRequest\x12\x16\n" +
-	"\x06openid\x18\x01 \x01(\tR\x06openid\x12#\n" +
-	"\rcredential_id\x18\x02 \x01(\rR\fcredentialId\x12\x12\n" +
-	"\x04code\x18\x03 \x01(\tR\x04code\"?\n" +
-	"\x11VerifyTOTPRequest\x12\x16\n" +
-	"\x06openid\x18\x01 \x01(\tR\x06openid\x12\x12\n" +
-	"\x04code\x18\x02 \x01(\tR\x04code\"I\n" +
-	"\x15SetTOTPEnabledRequest\x12\x16\n" +
-	"\x06openid\x18\x01 \x01(\tR\x06openid\x12\x18\n" +
-	"\aenabled\x18\x02 \x01(\bR\aenabled\"\xd6\x01\n" +
-	"\x17RegisterWebAuthnRequest\x12\x16\n" +
-	"\x06openid\x18\x01 \x01(\tR\x06openid\x12#\n" +
-	"\rcredential_id\x18\x02 \x01(\tR\fcredentialId\x12\x1d\n" +
+	"\x06openid\x18\x01 \x01(\tR\x06openid\"\x92\x02\n" +
+	"\x05Group\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x19\n" +
+	"\bgroup_id\x18\x02 \x01(\tR\agroupId\x12\x1d\n" +
 	"\n" +
-	"public_key\x18\x03 \x01(\tR\tpublicKey\x12\x16\n" +
-	"\x06aaguid\x18\x04 \x01(\tR\x06aaguid\x12\x1c\n" +
-	"\ttransport\x18\x05 \x03(\tR\ttransport\x12)\n" +
-	"\x10attestation_type\x18\x06 \x01(\tR\x0fattestationType\"\xaf\x01\n" +
-	"\x0eWebAuthnSecret\x12\x1d\n" +
+	"service_id\x18\x03 \x01(\tR\tserviceId\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12%\n" +
+	"\vdescription\x18\x05 \x01(\tH\x00R\vdescription\x88\x01\x01\x129\n" +
 	"\n" +
-	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x1d\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"sign_count\x18\x02 \x01(\rR\tsignCount\x12\x16\n" +
-	"\x06aaguid\x18\x03 \x01(\tR\x06aaguid\x12\x1c\n" +
-	"\ttransport\x18\x04 \x03(\tR\ttransport\x12)\n" +
-	"\x10attestation_type\x18\x05 \x01(\tR\x0fattestationType\"\x88\x01\n" +
-	"\x18WebAuthnCredentialDetail\x129\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x0e\n" +
+	"\f_description\"V\n" +
+	"\tGroupList\x12(\n" +
+	"\x06groups\x18\x01 \x03(\v2\x10.hermes.v1.GroupR\x06groups\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\",\n" +
+	"\x0fGetGroupRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\"\x99\x01\n" +
+	"\x12CreateGroupRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x1d\n" +
 	"\n" +
-	"credential\x18\x01 \x01(\v2\x19.hermes.v1.UserCredentialR\n" +
-	"credential\x121\n" +
-	"\x06secret\x18\x02 \x01(\v2\x19.hermes.v1.WebAuthnSecretR\x06secret\"d\n" +
-	"\x1eUpdateWebAuthnSignCountRequest\x12#\n" +
-	"\rcredential_id\x18\x01 \x01(\tR\fcredentialId\x12\x1d\n" +
+	"service_id\x18\x02 \x01(\tR\tserviceId\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12%\n" +
+	"\vdescription\x18\x04 \x01(\tH\x00R\vdescription\x88\x01\x01B\x0e\n" +
+	"\f_description\"\x88\x01\n" +
+	"\x12UpdateGroupRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x17\n" +
+	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
+	"\vdescription\x18\x03 \x01(\tH\x01R\vdescription\x88\x01\x01B\a\n" +
+	"\x05_nameB\x0e\n" +
+	"\f_description\"b\n" +
+	"\x11ListGroupsRequest\x12\x16\n" +
+	"\x06filter\x18\x01 \x01(\tR\x06filter\x125\n" +
 	"\n" +
-	"sign_count\x18\x02 \x01(\rR\tsignCount\"T\n" +
-	"\x15DeleteWebAuthnRequest\x12\x16\n" +
-	"\x06openid\x18\x01 \x01(\tR\x06openid\x12#\n" +
-	"\rcredential_id\x18\x02 \x01(\tR\fcredentialId\"r\n" +
-	"\x19SetWebAuthnEnabledRequest\x12\x16\n" +
-	"\x06openid\x18\x01 \x01(\tR\x06openid\x12#\n" +
-	"\rcredential_id\x18\x02 \x01(\tR\fcredentialId\x12\x18\n" +
-	"\aenabled\x18\x03 \x01(\bR\aenabled\"2\n" +
-	"\x11PublicKeyResponse\x12\x1d\n" +
-	"\n" +
-	"public_key\x18\x01 \x01(\fR\tpublicKey\"\x85\x02\n" +
-	"\x11CredentialSummary\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\rR\x02id\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12#\n" +
-	"\rcredential_id\x18\x03 \x01(\tR\fcredentialId\x12\x18\n" +
-	"\aenabled\x18\x04 \x01(\bR\aenabled\x12A\n" +
-	"\flast_used_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\n" +
-	"lastUsedAt\x88\x01\x01\x129\n" +
-	"\n" +
-	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAtB\x0f\n" +
-	"\r_last_used_at\"S\n" +
-	"\x15CredentialSummaryList\x12:\n" +
-	"\tsummaries\x18\x01 \x03(\v2\x1c.hermes.v1.CredentialSummaryR\tsummaries\"z\n" +
-	"\tMFAStatus\x12!\n" +
-	"\ftotp_enabled\x18\x01 \x01(\bR\vtotpEnabled\x12%\n" +
-	"\x0ewebauthn_count\x18\x02 \x01(\x05R\rwebauthnCount\x12#\n" +
-	"\rpasskey_count\x18\x03 \x01(\x05R\fpasskeyCount2\x8d\x1a\n" +
+	"pagination\x18\x02 \x01(\v2\x15.hermes.v1.PaginationR\n" +
+	"pagination\"N\n" +
+	"\x16SetGroupMembersRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x19\n" +
+	"\buser_ids\x18\x02 \x03(\tR\auserIds2\xc4\x14\n" +
 	"\vUserService\x128\n" +
 	"\vGetByOpenID\x12\x18.hermes.v1.OpenIDRequest\x1a\x0f.hermes.v1.User\x12A\n" +
 	"\rGetByIdentity\x12\x1f.hermes.v1.GetByIdentityRequest\x1a\x0f.hermes.v1.User\x12D\n" +
@@ -2702,23 +2207,15 @@ const file_hermes_v1_user_proto_rawDesc = "" +
 	"\x10EnableCredential\x12\x1e.hermes.v1.CredentialIDRequest\x1a\x16.google.protobuf.Empty\x12K\n" +
 	"\x11DisableCredential\x12\x1e.hermes.v1.CredentialIDRequest\x1a\x16.google.protobuf.Empty\x12N\n" +
 	"\x10DeleteCredential\x12\".hermes.v1.DeleteCredentialRequest\x1a\x16.google.protobuf.Empty\x12T\n" +
-	"\x17GetOpenIDByCredentialID\x12\x1e.hermes.v1.CredentialIDRequest\x1a\x19.hermes.v1.OpenIDResponse\x12F\n" +
-	"\tSetupTOTP\x12\x1b.hermes.v1.SetupTOTPRequest\x1a\x1c.hermes.v1.SetupTOTPResponse\x12D\n" +
-	"\vConfirmTOTP\x12\x1d.hermes.v1.ConfirmTOTPRequest\x1a\x16.google.protobuf.Empty\x12B\n" +
+	"\x17GetOpenIDByCredentialID\x12\x1e.hermes.v1.CredentialIDRequest\x1a\x19.hermes.v1.OpenIDResponse\x12>\n" +
+	"\vCreateGroup\x12\x1d.hermes.v1.CreateGroupRequest\x1a\x10.hermes.v1.Group\x128\n" +
+	"\bGetGroup\x12\x1a.hermes.v1.GetGroupRequest\x1a\x10.hermes.v1.Group\x12@\n" +
 	"\n" +
-	"VerifyTOTP\x12\x1c.hermes.v1.VerifyTOTPRequest\x1a\x16.google.protobuf.Empty\x12?\n" +
-	"\vDisableTOTP\x12\x18.hermes.v1.OpenIDRequest\x1a\x16.google.protobuf.Empty\x12B\n" +
-	"\x10CheckTOTPEnabled\x12\x18.hermes.v1.OpenIDRequest\x1a\x14.hermes.v1.BoolValue\x12J\n" +
-	"\x0eSetTOTPEnabled\x12 .hermes.v1.SetTOTPEnabledRequest\x1a\x16.google.protobuf.Empty\x12Q\n" +
-	"\x10RegisterWebAuthn\x12\".hermes.v1.RegisterWebAuthnRequest\x1a\x19.hermes.v1.UserCredential\x12`\n" +
-	"\x19GetWebAuthnByCredentialID\x12\x1e.hermes.v1.CredentialIDRequest\x1a#.hermes.v1.WebAuthnCredentialDetail\x12\\\n" +
-	"\x17UpdateWebAuthnSignCount\x12).hermes.v1.UpdateWebAuthnSignCountRequest\x1a\x16.google.protobuf.Empty\x12K\n" +
-	"\x10ListUserWebAuthn\x12\x18.hermes.v1.OpenIDRequest\x1a\x1d.hermes.v1.UserCredentialList\x12J\n" +
-	"\x0eDeleteWebAuthn\x12 .hermes.v1.DeleteWebAuthnRequest\x1a\x16.google.protobuf.Empty\x12R\n" +
-	"\x12SetWebAuthnEnabled\x12$.hermes.v1.SetWebAuthnEnabledRequest\x1a\x16.google.protobuf.Empty\x12Y\n" +
-	"\x19GetPublicKeyForCredential\x12\x1e.hermes.v1.CredentialIDRequest\x1a\x1c.hermes.v1.PublicKeyResponse\x12X\n" +
-	"\x1aGetUserCredentialSummaries\x12\x18.hermes.v1.OpenIDRequest\x1a .hermes.v1.CredentialSummaryList\x12B\n" +
-	"\x10GetUserMFAStatus\x12\x18.hermes.v1.OpenIDRequest\x1a\x14.hermes.v1.MFAStatusB\x99\x01\n" +
+	"ListGroups\x12\x1c.hermes.v1.ListGroupsRequest\x1a\x14.hermes.v1.GroupList\x12>\n" +
+	"\vUpdateGroup\x12\x1d.hermes.v1.UpdateGroupRequest\x1a\x10.hermes.v1.Group\x12A\n" +
+	"\vDeleteGroup\x12\x1a.hermes.v1.GetGroupRequest\x1a\x16.google.protobuf.Empty\x12L\n" +
+	"\x0fSetGroupMembers\x12!.hermes.v1.SetGroupMembersRequest\x1a\x16.google.protobuf.Empty\x12D\n" +
+	"\x0fGetGroupMembers\x12\x1a.hermes.v1.GetGroupRequest\x1a\x15.hermes.v1.StringListB\x99\x01\n" +
 	"\rcom.hermes.v1B\tUserProtoP\x01Z8github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1\xa2\x02\x03HXX\xaa\x02\tHermes.V1\xca\x02\tHermes\\V1\xe2\x02\x15Hermes\\V1\\GPBMetadata\xea\x02\n" +
 	"Hermes::V1b\x06proto3"
 
@@ -2734,7 +2231,7 @@ func file_hermes_v1_user_proto_rawDescGZIP() []byte {
 	return file_hermes_v1_user_proto_rawDescData
 }
 
-var file_hermes_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
+var file_hermes_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
 var file_hermes_v1_user_proto_goTypes = []any{
 	(*User)(nil),                             // 0: hermes.v1.User
 	(*DecryptedUser)(nil),                    // 1: hermes.v1.DecryptedUser
@@ -2760,135 +2257,111 @@ var file_hermes_v1_user_proto_goTypes = []any{
 	(*UpdateCredentialSignCountRequest)(nil), // 21: hermes.v1.UpdateCredentialSignCountRequest
 	(*DeleteCredentialRequest)(nil),          // 22: hermes.v1.DeleteCredentialRequest
 	(*OpenIDResponse)(nil),                   // 23: hermes.v1.OpenIDResponse
-	(*SetupTOTPRequest)(nil),                 // 24: hermes.v1.SetupTOTPRequest
-	(*SetupTOTPResponse)(nil),                // 25: hermes.v1.SetupTOTPResponse
-	(*ConfirmTOTPRequest)(nil),               // 26: hermes.v1.ConfirmTOTPRequest
-	(*VerifyTOTPRequest)(nil),                // 27: hermes.v1.VerifyTOTPRequest
-	(*SetTOTPEnabledRequest)(nil),            // 28: hermes.v1.SetTOTPEnabledRequest
-	(*RegisterWebAuthnRequest)(nil),          // 29: hermes.v1.RegisterWebAuthnRequest
-	(*WebAuthnSecret)(nil),                   // 30: hermes.v1.WebAuthnSecret
-	(*WebAuthnCredentialDetail)(nil),         // 31: hermes.v1.WebAuthnCredentialDetail
-	(*UpdateWebAuthnSignCountRequest)(nil),   // 32: hermes.v1.UpdateWebAuthnSignCountRequest
-	(*DeleteWebAuthnRequest)(nil),            // 33: hermes.v1.DeleteWebAuthnRequest
-	(*SetWebAuthnEnabledRequest)(nil),        // 34: hermes.v1.SetWebAuthnEnabledRequest
-	(*PublicKeyResponse)(nil),                // 35: hermes.v1.PublicKeyResponse
-	(*CredentialSummary)(nil),                // 36: hermes.v1.CredentialSummary
-	(*CredentialSummaryList)(nil),            // 37: hermes.v1.CredentialSummaryList
-	(*MFAStatus)(nil),                        // 38: hermes.v1.MFAStatus
-	(*timestamppb.Timestamp)(nil),            // 39: google.protobuf.Timestamp
-	(*OpenIDRequest)(nil),                    // 40: hermes.v1.OpenIDRequest
-	(*emptypb.Empty)(nil),                    // 41: google.protobuf.Empty
-	(*BoolValue)(nil),                        // 42: hermes.v1.BoolValue
+	(*Group)(nil),                            // 24: hermes.v1.Group
+	(*GroupList)(nil),                        // 25: hermes.v1.GroupList
+	(*GetGroupRequest)(nil),                  // 26: hermes.v1.GetGroupRequest
+	(*CreateGroupRequest)(nil),               // 27: hermes.v1.CreateGroupRequest
+	(*UpdateGroupRequest)(nil),               // 28: hermes.v1.UpdateGroupRequest
+	(*ListGroupsRequest)(nil),                // 29: hermes.v1.ListGroupsRequest
+	(*SetGroupMembersRequest)(nil),           // 30: hermes.v1.SetGroupMembersRequest
+	(*timestamppb.Timestamp)(nil),            // 31: google.protobuf.Timestamp
+	(*Pagination)(nil),                       // 32: hermes.v1.Pagination
+	(*OpenIDRequest)(nil),                    // 33: hermes.v1.OpenIDRequest
+	(*emptypb.Empty)(nil),                    // 34: google.protobuf.Empty
+	(*StringList)(nil),                       // 35: hermes.v1.StringList
 }
 var file_hermes_v1_user_proto_depIdxs = []int32{
-	39, // 0: hermes.v1.User.last_login_at:type_name -> google.protobuf.Timestamp
-	39, // 1: hermes.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	39, // 2: hermes.v1.User.updated_at:type_name -> google.protobuf.Timestamp
+	31, // 0: hermes.v1.User.last_login_at:type_name -> google.protobuf.Timestamp
+	31, // 1: hermes.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	31, // 2: hermes.v1.User.updated_at:type_name -> google.protobuf.Timestamp
 	0,  // 3: hermes.v1.DecryptedUser.user:type_name -> hermes.v1.User
 	9,  // 4: hermes.v1.CreateUserRequest.identity:type_name -> hermes.v1.UserIdentity
 	6,  // 5: hermes.v1.CreateUserRequest.user_info:type_name -> hermes.v1.TUserInfo
-	39, // 6: hermes.v1.UserIdentity.created_at:type_name -> google.protobuf.Timestamp
-	39, // 7: hermes.v1.UserIdentity.updated_at:type_name -> google.protobuf.Timestamp
+	31, // 6: hermes.v1.UserIdentity.created_at:type_name -> google.protobuf.Timestamp
+	31, // 7: hermes.v1.UserIdentity.updated_at:type_name -> google.protobuf.Timestamp
 	9,  // 8: hermes.v1.IdentityList.identities:type_name -> hermes.v1.UserIdentity
-	39, // 9: hermes.v1.UserCredential.last_used_at:type_name -> google.protobuf.Timestamp
-	39, // 10: hermes.v1.UserCredential.created_at:type_name -> google.protobuf.Timestamp
-	39, // 11: hermes.v1.UserCredential.updated_at:type_name -> google.protobuf.Timestamp
+	31, // 9: hermes.v1.UserCredential.last_used_at:type_name -> google.protobuf.Timestamp
+	31, // 10: hermes.v1.UserCredential.created_at:type_name -> google.protobuf.Timestamp
+	31, // 11: hermes.v1.UserCredential.updated_at:type_name -> google.protobuf.Timestamp
 	16, // 12: hermes.v1.UserCredentialList.credentials:type_name -> hermes.v1.UserCredential
-	39, // 13: hermes.v1.UpdateCredentialRequest.last_used_at:type_name -> google.protobuf.Timestamp
-	16, // 14: hermes.v1.WebAuthnCredentialDetail.credential:type_name -> hermes.v1.UserCredential
-	30, // 15: hermes.v1.WebAuthnCredentialDetail.secret:type_name -> hermes.v1.WebAuthnSecret
-	39, // 16: hermes.v1.CredentialSummary.last_used_at:type_name -> google.protobuf.Timestamp
-	39, // 17: hermes.v1.CredentialSummary.created_at:type_name -> google.protobuf.Timestamp
-	36, // 18: hermes.v1.CredentialSummaryList.summaries:type_name -> hermes.v1.CredentialSummary
-	40, // 19: hermes.v1.UserService.GetByOpenID:input_type -> hermes.v1.OpenIDRequest
-	2,  // 20: hermes.v1.UserService.GetByIdentity:input_type -> hermes.v1.GetByIdentityRequest
-	3,  // 21: hermes.v1.UserService.GetByEmail:input_type -> hermes.v1.GetByEmailRequest
-	4,  // 22: hermes.v1.UserService.GetByPhonePlain:input_type -> hermes.v1.GetByPhonePlainRequest
-	40, // 23: hermes.v1.UserService.GetDecryptedUser:input_type -> hermes.v1.OpenIDRequest
-	2,  // 24: hermes.v1.UserService.GetDecryptedUserByIdentity:input_type -> hermes.v1.GetByIdentityRequest
-	5,  // 25: hermes.v1.UserService.CreateUser:input_type -> hermes.v1.CreateUserRequest
-	7,  // 26: hermes.v1.UserService.UpdateUser:input_type -> hermes.v1.UpdateUserRequest
-	40, // 27: hermes.v1.UserService.UpdateLastLogin:input_type -> hermes.v1.OpenIDRequest
-	8,  // 28: hermes.v1.UserService.UpdatePassword:input_type -> hermes.v1.UpdatePasswordRequest
-	40, // 29: hermes.v1.UserService.GetIdentities:input_type -> hermes.v1.OpenIDRequest
-	2,  // 30: hermes.v1.UserService.GetIdentitiesByIdentity:input_type -> hermes.v1.GetByIdentityRequest
-	11, // 31: hermes.v1.UserService.GetIdentityByType:input_type -> hermes.v1.GetIdentityByTypeRequest
-	12, // 32: hermes.v1.UserService.AddIdentity:input_type -> hermes.v1.AddIdentityRequest
-	13, // 33: hermes.v1.UserService.GetUserByIdentifier:input_type -> hermes.v1.GetByIdentifierRequest
-	13, // 34: hermes.v1.UserService.GetStaffByIdentifier:input_type -> hermes.v1.GetByIdentifierRequest
-	18, // 35: hermes.v1.UserService.CreateCredential:input_type -> hermes.v1.CreateCredentialRequest
-	15, // 36: hermes.v1.UserService.GetCredentialByID:input_type -> hermes.v1.CredentialIDRequest
-	40, // 37: hermes.v1.UserService.GetUserCredentials:input_type -> hermes.v1.OpenIDRequest
-	19, // 38: hermes.v1.UserService.GetUserCredentialsByType:input_type -> hermes.v1.GetCredentialsByTypeRequest
-	19, // 39: hermes.v1.UserService.GetEnabledUserCredentialsByType:input_type -> hermes.v1.GetCredentialsByTypeRequest
-	20, // 40: hermes.v1.UserService.UpdateCredential:input_type -> hermes.v1.UpdateCredentialRequest
-	21, // 41: hermes.v1.UserService.UpdateCredentialSignCount:input_type -> hermes.v1.UpdateCredentialSignCountRequest
-	15, // 42: hermes.v1.UserService.EnableCredential:input_type -> hermes.v1.CredentialIDRequest
-	15, // 43: hermes.v1.UserService.DisableCredential:input_type -> hermes.v1.CredentialIDRequest
-	22, // 44: hermes.v1.UserService.DeleteCredential:input_type -> hermes.v1.DeleteCredentialRequest
-	15, // 45: hermes.v1.UserService.GetOpenIDByCredentialID:input_type -> hermes.v1.CredentialIDRequest
-	24, // 46: hermes.v1.UserService.SetupTOTP:input_type -> hermes.v1.SetupTOTPRequest
-	26, // 47: hermes.v1.UserService.ConfirmTOTP:input_type -> hermes.v1.ConfirmTOTPRequest
-	27, // 48: hermes.v1.UserService.VerifyTOTP:input_type -> hermes.v1.VerifyTOTPRequest
-	40, // 49: hermes.v1.UserService.DisableTOTP:input_type -> hermes.v1.OpenIDRequest
-	40, // 50: hermes.v1.UserService.CheckTOTPEnabled:input_type -> hermes.v1.OpenIDRequest
-	28, // 51: hermes.v1.UserService.SetTOTPEnabled:input_type -> hermes.v1.SetTOTPEnabledRequest
-	29, // 52: hermes.v1.UserService.RegisterWebAuthn:input_type -> hermes.v1.RegisterWebAuthnRequest
-	15, // 53: hermes.v1.UserService.GetWebAuthnByCredentialID:input_type -> hermes.v1.CredentialIDRequest
-	32, // 54: hermes.v1.UserService.UpdateWebAuthnSignCount:input_type -> hermes.v1.UpdateWebAuthnSignCountRequest
-	40, // 55: hermes.v1.UserService.ListUserWebAuthn:input_type -> hermes.v1.OpenIDRequest
-	33, // 56: hermes.v1.UserService.DeleteWebAuthn:input_type -> hermes.v1.DeleteWebAuthnRequest
-	34, // 57: hermes.v1.UserService.SetWebAuthnEnabled:input_type -> hermes.v1.SetWebAuthnEnabledRequest
-	15, // 58: hermes.v1.UserService.GetPublicKeyForCredential:input_type -> hermes.v1.CredentialIDRequest
-	40, // 59: hermes.v1.UserService.GetUserCredentialSummaries:input_type -> hermes.v1.OpenIDRequest
-	40, // 60: hermes.v1.UserService.GetUserMFAStatus:input_type -> hermes.v1.OpenIDRequest
-	0,  // 61: hermes.v1.UserService.GetByOpenID:output_type -> hermes.v1.User
-	0,  // 62: hermes.v1.UserService.GetByIdentity:output_type -> hermes.v1.User
-	1,  // 63: hermes.v1.UserService.GetByEmail:output_type -> hermes.v1.DecryptedUser
-	1,  // 64: hermes.v1.UserService.GetByPhonePlain:output_type -> hermes.v1.DecryptedUser
-	1,  // 65: hermes.v1.UserService.GetDecryptedUser:output_type -> hermes.v1.DecryptedUser
-	1,  // 66: hermes.v1.UserService.GetDecryptedUserByIdentity:output_type -> hermes.v1.DecryptedUser
-	1,  // 67: hermes.v1.UserService.CreateUser:output_type -> hermes.v1.DecryptedUser
-	0,  // 68: hermes.v1.UserService.UpdateUser:output_type -> hermes.v1.User
-	41, // 69: hermes.v1.UserService.UpdateLastLogin:output_type -> google.protobuf.Empty
-	41, // 70: hermes.v1.UserService.UpdatePassword:output_type -> google.protobuf.Empty
-	10, // 71: hermes.v1.UserService.GetIdentities:output_type -> hermes.v1.IdentityList
-	10, // 72: hermes.v1.UserService.GetIdentitiesByIdentity:output_type -> hermes.v1.IdentityList
-	9,  // 73: hermes.v1.UserService.GetIdentityByType:output_type -> hermes.v1.UserIdentity
-	41, // 74: hermes.v1.UserService.AddIdentity:output_type -> google.protobuf.Empty
-	14, // 75: hermes.v1.UserService.GetUserByIdentifier:output_type -> hermes.v1.PasswordStoreCredential
-	14, // 76: hermes.v1.UserService.GetStaffByIdentifier:output_type -> hermes.v1.PasswordStoreCredential
-	41, // 77: hermes.v1.UserService.CreateCredential:output_type -> google.protobuf.Empty
-	16, // 78: hermes.v1.UserService.GetCredentialByID:output_type -> hermes.v1.UserCredential
-	17, // 79: hermes.v1.UserService.GetUserCredentials:output_type -> hermes.v1.UserCredentialList
-	17, // 80: hermes.v1.UserService.GetUserCredentialsByType:output_type -> hermes.v1.UserCredentialList
-	17, // 81: hermes.v1.UserService.GetEnabledUserCredentialsByType:output_type -> hermes.v1.UserCredentialList
-	41, // 82: hermes.v1.UserService.UpdateCredential:output_type -> google.protobuf.Empty
-	41, // 83: hermes.v1.UserService.UpdateCredentialSignCount:output_type -> google.protobuf.Empty
-	41, // 84: hermes.v1.UserService.EnableCredential:output_type -> google.protobuf.Empty
-	41, // 85: hermes.v1.UserService.DisableCredential:output_type -> google.protobuf.Empty
-	41, // 86: hermes.v1.UserService.DeleteCredential:output_type -> google.protobuf.Empty
-	23, // 87: hermes.v1.UserService.GetOpenIDByCredentialID:output_type -> hermes.v1.OpenIDResponse
-	25, // 88: hermes.v1.UserService.SetupTOTP:output_type -> hermes.v1.SetupTOTPResponse
-	41, // 89: hermes.v1.UserService.ConfirmTOTP:output_type -> google.protobuf.Empty
-	41, // 90: hermes.v1.UserService.VerifyTOTP:output_type -> google.protobuf.Empty
-	41, // 91: hermes.v1.UserService.DisableTOTP:output_type -> google.protobuf.Empty
-	42, // 92: hermes.v1.UserService.CheckTOTPEnabled:output_type -> hermes.v1.BoolValue
-	41, // 93: hermes.v1.UserService.SetTOTPEnabled:output_type -> google.protobuf.Empty
-	16, // 94: hermes.v1.UserService.RegisterWebAuthn:output_type -> hermes.v1.UserCredential
-	31, // 95: hermes.v1.UserService.GetWebAuthnByCredentialID:output_type -> hermes.v1.WebAuthnCredentialDetail
-	41, // 96: hermes.v1.UserService.UpdateWebAuthnSignCount:output_type -> google.protobuf.Empty
-	17, // 97: hermes.v1.UserService.ListUserWebAuthn:output_type -> hermes.v1.UserCredentialList
-	41, // 98: hermes.v1.UserService.DeleteWebAuthn:output_type -> google.protobuf.Empty
-	41, // 99: hermes.v1.UserService.SetWebAuthnEnabled:output_type -> google.protobuf.Empty
-	35, // 100: hermes.v1.UserService.GetPublicKeyForCredential:output_type -> hermes.v1.PublicKeyResponse
-	37, // 101: hermes.v1.UserService.GetUserCredentialSummaries:output_type -> hermes.v1.CredentialSummaryList
-	38, // 102: hermes.v1.UserService.GetUserMFAStatus:output_type -> hermes.v1.MFAStatus
-	61, // [61:103] is the sub-list for method output_type
-	19, // [19:61] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	31, // 13: hermes.v1.UpdateCredentialRequest.last_used_at:type_name -> google.protobuf.Timestamp
+	31, // 14: hermes.v1.Group.created_at:type_name -> google.protobuf.Timestamp
+	31, // 15: hermes.v1.Group.updated_at:type_name -> google.protobuf.Timestamp
+	24, // 16: hermes.v1.GroupList.groups:type_name -> hermes.v1.Group
+	32, // 17: hermes.v1.ListGroupsRequest.pagination:type_name -> hermes.v1.Pagination
+	33, // 18: hermes.v1.UserService.GetByOpenID:input_type -> hermes.v1.OpenIDRequest
+	2,  // 19: hermes.v1.UserService.GetByIdentity:input_type -> hermes.v1.GetByIdentityRequest
+	3,  // 20: hermes.v1.UserService.GetByEmail:input_type -> hermes.v1.GetByEmailRequest
+	4,  // 21: hermes.v1.UserService.GetByPhonePlain:input_type -> hermes.v1.GetByPhonePlainRequest
+	33, // 22: hermes.v1.UserService.GetDecryptedUser:input_type -> hermes.v1.OpenIDRequest
+	2,  // 23: hermes.v1.UserService.GetDecryptedUserByIdentity:input_type -> hermes.v1.GetByIdentityRequest
+	5,  // 24: hermes.v1.UserService.CreateUser:input_type -> hermes.v1.CreateUserRequest
+	7,  // 25: hermes.v1.UserService.UpdateUser:input_type -> hermes.v1.UpdateUserRequest
+	33, // 26: hermes.v1.UserService.UpdateLastLogin:input_type -> hermes.v1.OpenIDRequest
+	8,  // 27: hermes.v1.UserService.UpdatePassword:input_type -> hermes.v1.UpdatePasswordRequest
+	33, // 28: hermes.v1.UserService.GetIdentities:input_type -> hermes.v1.OpenIDRequest
+	2,  // 29: hermes.v1.UserService.GetIdentitiesByIdentity:input_type -> hermes.v1.GetByIdentityRequest
+	11, // 30: hermes.v1.UserService.GetIdentityByType:input_type -> hermes.v1.GetIdentityByTypeRequest
+	12, // 31: hermes.v1.UserService.AddIdentity:input_type -> hermes.v1.AddIdentityRequest
+	13, // 32: hermes.v1.UserService.GetUserByIdentifier:input_type -> hermes.v1.GetByIdentifierRequest
+	13, // 33: hermes.v1.UserService.GetStaffByIdentifier:input_type -> hermes.v1.GetByIdentifierRequest
+	18, // 34: hermes.v1.UserService.CreateCredential:input_type -> hermes.v1.CreateCredentialRequest
+	15, // 35: hermes.v1.UserService.GetCredentialByID:input_type -> hermes.v1.CredentialIDRequest
+	33, // 36: hermes.v1.UserService.GetUserCredentials:input_type -> hermes.v1.OpenIDRequest
+	19, // 37: hermes.v1.UserService.GetUserCredentialsByType:input_type -> hermes.v1.GetCredentialsByTypeRequest
+	19, // 38: hermes.v1.UserService.GetEnabledUserCredentialsByType:input_type -> hermes.v1.GetCredentialsByTypeRequest
+	20, // 39: hermes.v1.UserService.UpdateCredential:input_type -> hermes.v1.UpdateCredentialRequest
+	21, // 40: hermes.v1.UserService.UpdateCredentialSignCount:input_type -> hermes.v1.UpdateCredentialSignCountRequest
+	15, // 41: hermes.v1.UserService.EnableCredential:input_type -> hermes.v1.CredentialIDRequest
+	15, // 42: hermes.v1.UserService.DisableCredential:input_type -> hermes.v1.CredentialIDRequest
+	22, // 43: hermes.v1.UserService.DeleteCredential:input_type -> hermes.v1.DeleteCredentialRequest
+	15, // 44: hermes.v1.UserService.GetOpenIDByCredentialID:input_type -> hermes.v1.CredentialIDRequest
+	27, // 45: hermes.v1.UserService.CreateGroup:input_type -> hermes.v1.CreateGroupRequest
+	26, // 46: hermes.v1.UserService.GetGroup:input_type -> hermes.v1.GetGroupRequest
+	29, // 47: hermes.v1.UserService.ListGroups:input_type -> hermes.v1.ListGroupsRequest
+	28, // 48: hermes.v1.UserService.UpdateGroup:input_type -> hermes.v1.UpdateGroupRequest
+	26, // 49: hermes.v1.UserService.DeleteGroup:input_type -> hermes.v1.GetGroupRequest
+	30, // 50: hermes.v1.UserService.SetGroupMembers:input_type -> hermes.v1.SetGroupMembersRequest
+	26, // 51: hermes.v1.UserService.GetGroupMembers:input_type -> hermes.v1.GetGroupRequest
+	0,  // 52: hermes.v1.UserService.GetByOpenID:output_type -> hermes.v1.User
+	0,  // 53: hermes.v1.UserService.GetByIdentity:output_type -> hermes.v1.User
+	1,  // 54: hermes.v1.UserService.GetByEmail:output_type -> hermes.v1.DecryptedUser
+	1,  // 55: hermes.v1.UserService.GetByPhonePlain:output_type -> hermes.v1.DecryptedUser
+	1,  // 56: hermes.v1.UserService.GetDecryptedUser:output_type -> hermes.v1.DecryptedUser
+	1,  // 57: hermes.v1.UserService.GetDecryptedUserByIdentity:output_type -> hermes.v1.DecryptedUser
+	1,  // 58: hermes.v1.UserService.CreateUser:output_type -> hermes.v1.DecryptedUser
+	0,  // 59: hermes.v1.UserService.UpdateUser:output_type -> hermes.v1.User
+	34, // 60: hermes.v1.UserService.UpdateLastLogin:output_type -> google.protobuf.Empty
+	34, // 61: hermes.v1.UserService.UpdatePassword:output_type -> google.protobuf.Empty
+	10, // 62: hermes.v1.UserService.GetIdentities:output_type -> hermes.v1.IdentityList
+	10, // 63: hermes.v1.UserService.GetIdentitiesByIdentity:output_type -> hermes.v1.IdentityList
+	9,  // 64: hermes.v1.UserService.GetIdentityByType:output_type -> hermes.v1.UserIdentity
+	34, // 65: hermes.v1.UserService.AddIdentity:output_type -> google.protobuf.Empty
+	14, // 66: hermes.v1.UserService.GetUserByIdentifier:output_type -> hermes.v1.PasswordStoreCredential
+	14, // 67: hermes.v1.UserService.GetStaffByIdentifier:output_type -> hermes.v1.PasswordStoreCredential
+	34, // 68: hermes.v1.UserService.CreateCredential:output_type -> google.protobuf.Empty
+	16, // 69: hermes.v1.UserService.GetCredentialByID:output_type -> hermes.v1.UserCredential
+	17, // 70: hermes.v1.UserService.GetUserCredentials:output_type -> hermes.v1.UserCredentialList
+	17, // 71: hermes.v1.UserService.GetUserCredentialsByType:output_type -> hermes.v1.UserCredentialList
+	17, // 72: hermes.v1.UserService.GetEnabledUserCredentialsByType:output_type -> hermes.v1.UserCredentialList
+	34, // 73: hermes.v1.UserService.UpdateCredential:output_type -> google.protobuf.Empty
+	34, // 74: hermes.v1.UserService.UpdateCredentialSignCount:output_type -> google.protobuf.Empty
+	34, // 75: hermes.v1.UserService.EnableCredential:output_type -> google.protobuf.Empty
+	34, // 76: hermes.v1.UserService.DisableCredential:output_type -> google.protobuf.Empty
+	34, // 77: hermes.v1.UserService.DeleteCredential:output_type -> google.protobuf.Empty
+	23, // 78: hermes.v1.UserService.GetOpenIDByCredentialID:output_type -> hermes.v1.OpenIDResponse
+	24, // 79: hermes.v1.UserService.CreateGroup:output_type -> hermes.v1.Group
+	24, // 80: hermes.v1.UserService.GetGroup:output_type -> hermes.v1.Group
+	25, // 81: hermes.v1.UserService.ListGroups:output_type -> hermes.v1.GroupList
+	24, // 82: hermes.v1.UserService.UpdateGroup:output_type -> hermes.v1.Group
+	34, // 83: hermes.v1.UserService.DeleteGroup:output_type -> google.protobuf.Empty
+	34, // 84: hermes.v1.UserService.SetGroupMembers:output_type -> google.protobuf.Empty
+	35, // 85: hermes.v1.UserService.GetGroupMembers:output_type -> hermes.v1.StringList
+	52, // [52:86] is the sub-list for method output_type
+	18, // [18:52] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_hermes_v1_user_proto_init() }
@@ -2907,14 +2380,16 @@ func file_hermes_v1_user_proto_init() {
 	file_hermes_v1_user_proto_msgTypes[16].OneofWrappers = []any{}
 	file_hermes_v1_user_proto_msgTypes[18].OneofWrappers = []any{}
 	file_hermes_v1_user_proto_msgTypes[20].OneofWrappers = []any{}
-	file_hermes_v1_user_proto_msgTypes[36].OneofWrappers = []any{}
+	file_hermes_v1_user_proto_msgTypes[24].OneofWrappers = []any{}
+	file_hermes_v1_user_proto_msgTypes[27].OneofWrappers = []any{}
+	file_hermes_v1_user_proto_msgTypes[28].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hermes_v1_user_proto_rawDesc), len(file_hermes_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   39,
+			NumMessages:   31,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

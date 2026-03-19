@@ -1,12 +1,11 @@
-package hermesclient
+package hermes
 
 import (
 	"context"
 	"fmt"
-	"time"
 
+	"github.com/heliannuuthus/helios/aegis/models"
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
-	"github.com/heliannuuthus/helios/hermes/models"
 )
 
 func (c *Client) GetDomainKeys(ctx context.Context, domainID string) ([][]byte, error) {
@@ -21,18 +20,6 @@ func (c *Client) GetServiceKeys(ctx context.Context, serviceID string) ([][]byte
 	return c.getKeysByOwner(ctx, models.KeyOwnerService, serviceID)
 }
 
-func (c *Client) RotateKey(ctx context.Context, ownerType, ownerID string, window time.Duration) error {
-	_, err := c.key.RotateKey(ctx, &hermesv1.RotateKeyRequest{
-		OwnerType:     ownerType,
-		OwnerId:       ownerID,
-		WindowSeconds: int64(window.Seconds()),
-	})
-	if err != nil {
-		return fmt.Errorf("轮换密钥失败: %w", err)
-	}
-	return nil
-}
-
 func (c *Client) getKeysByOwner(ctx context.Context, ownerType, ownerID string) ([][]byte, error) {
 	resp, err := c.key.GetKeys(ctx, &hermesv1.GetKeysRequest{
 		OwnerType: ownerType,
@@ -42,4 +29,15 @@ func (c *Client) getKeysByOwner(ctx context.Context, ownerType, ownerID string) 
 		return nil, fmt.Errorf("获取密钥失败: %w", err)
 	}
 	return resp.Keys, nil
+}
+
+func (c *Client) ResolveIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error) {
+	resp, err := c.key.ResolveIDPKey(ctx, &hermesv1.ResolveIDPKeyRequest{
+		AppId:   appID,
+		IdpType: idpType,
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("解析 IDP 密钥失败: %w", err)
+	}
+	return resp.TAppId, resp.TSecret, nil
 }

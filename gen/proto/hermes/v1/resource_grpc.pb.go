@@ -20,12 +20,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ResourceService_CreateService_FullMethodName                  = "/hermes.v1.ResourceService/CreateService"
-	ResourceService_GetService_FullMethodName                     = "/hermes.v1.ResourceService/GetService"
-	ResourceService_ListServices_FullMethodName                   = "/hermes.v1.ResourceService/ListServices"
-	ResourceService_UpdateService_FullMethodName                  = "/hermes.v1.ResourceService/UpdateService"
-	ResourceService_DeleteService_FullMethodName                  = "/hermes.v1.ResourceService/DeleteService"
-	ResourceService_GetServiceChallengeSetting_FullMethodName     = "/hermes.v1.ResourceService/GetServiceChallengeSetting"
+	ResourceService_SetApplicationServiceRelations_FullMethodName = "/hermes.v1.ResourceService/SetApplicationServiceRelations"
+	ResourceService_GetApplicationServiceRelations_FullMethodName = "/hermes.v1.ResourceService/GetApplicationServiceRelations"
+	ResourceService_GetServiceAppRelations_FullMethodName         = "/hermes.v1.ResourceService/GetServiceAppRelations"
 	ResourceService_GetServiceApplicationRelations_FullMethodName = "/hermes.v1.ResourceService/GetServiceApplicationRelations"
 	ResourceService_CreateRelationship_FullMethodName             = "/hermes.v1.ResourceService/CreateRelationship"
 	ResourceService_DeleteRelationship_FullMethodName             = "/hermes.v1.ResourceService/DeleteRelationship"
@@ -36,28 +33,18 @@ const (
 	ResourceService_CreateAppServiceRelationship_FullMethodName   = "/hermes.v1.ResourceService/CreateAppServiceRelationship"
 	ResourceService_UpdateAppServiceRelationship_FullMethodName   = "/hermes.v1.ResourceService/UpdateAppServiceRelationship"
 	ResourceService_DeleteAppServiceRelationship_FullMethodName   = "/hermes.v1.ResourceService/DeleteAppServiceRelationship"
-	ResourceService_CreateGroup_FullMethodName                    = "/hermes.v1.ResourceService/CreateGroup"
-	ResourceService_GetGroup_FullMethodName                       = "/hermes.v1.ResourceService/GetGroup"
-	ResourceService_ListGroups_FullMethodName                     = "/hermes.v1.ResourceService/ListGroups"
-	ResourceService_UpdateGroup_FullMethodName                    = "/hermes.v1.ResourceService/UpdateGroup"
-	ResourceService_DeleteGroup_FullMethodName                    = "/hermes.v1.ResourceService/DeleteGroup"
-	ResourceService_SetGroupMembers_FullMethodName                = "/hermes.v1.ResourceService/SetGroupMembers"
-	ResourceService_GetGroupMembers_FullMethodName                = "/hermes.v1.ResourceService/GetGroupMembers"
 )
 
 // ResourceServiceClient is the client API for ResourceService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// ResourceService 服务（资源）+ Challenge 配置 + Relationship + Group
+// ResourceService 关系（ReBAC）+ 应用-服务关系管理
 type ResourceServiceClient interface {
-	CreateService(ctx context.Context, in *CreateServiceRequest, opts ...grpc.CallOption) (*Service, error)
-	GetService(ctx context.Context, in *GetServiceRequest, opts ...grpc.CallOption) (*Service, error)
-	ListServices(ctx context.Context, in *ListServicesRequest, opts ...grpc.CallOption) (*ServiceList, error)
-	UpdateService(ctx context.Context, in *UpdateServiceRequest, opts ...grpc.CallOption) (*Service, error)
-	DeleteService(ctx context.Context, in *DeleteServiceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	GetServiceChallengeSetting(ctx context.Context, in *GetServiceChallengeSettingRequest, opts ...grpc.CallOption) (*ServiceChallengeSetting, error)
-	GetServiceApplicationRelations(ctx context.Context, in *GetServiceRequest, opts ...grpc.CallOption) (*ApplicationServiceRelationList, error)
+	SetApplicationServiceRelations(ctx context.Context, in *SetApplicationServiceRelationsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	GetApplicationServiceRelations(ctx context.Context, in *GetApplicationServiceRelationsRequest, opts ...grpc.CallOption) (*ApplicationServiceRelationList, error)
+	GetServiceAppRelations(ctx context.Context, in *GetServiceAppRelationsRequest, opts ...grpc.CallOption) (*StringList, error)
+	GetServiceApplicationRelations(ctx context.Context, in *GetServiceApplicationRelationsRequest, opts ...grpc.CallOption) (*ApplicationServiceRelationList, error)
 	CreateRelationship(ctx context.Context, in *CreateRelationshipRequest, opts ...grpc.CallOption) (*Relationship, error)
 	DeleteRelationship(ctx context.Context, in *DeleteRelationshipRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	UpdateRelationship(ctx context.Context, in *UpdateRelationshipRequest, opts ...grpc.CallOption) (*Relationship, error)
@@ -67,13 +54,6 @@ type ResourceServiceClient interface {
 	CreateAppServiceRelationship(ctx context.Context, in *CreateAppServiceRelationshipRequest, opts ...grpc.CallOption) (*Relationship, error)
 	UpdateAppServiceRelationship(ctx context.Context, in *UpdateAppServiceRelationshipRequest, opts ...grpc.CallOption) (*Relationship, error)
 	DeleteAppServiceRelationship(ctx context.Context, in *DeleteAppServiceRelationshipRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Group, error)
-	GetGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*Group, error)
-	ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*GroupList, error)
-	UpdateGroup(ctx context.Context, in *UpdateGroupRequest, opts ...grpc.CallOption) (*Group, error)
-	DeleteGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	SetGroupMembers(ctx context.Context, in *SetGroupMembersRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	GetGroupMembers(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*StringList, error)
 }
 
 type resourceServiceClient struct {
@@ -84,67 +64,37 @@ func NewResourceServiceClient(cc grpc.ClientConnInterface) ResourceServiceClient
 	return &resourceServiceClient{cc}
 }
 
-func (c *resourceServiceClient) CreateService(ctx context.Context, in *CreateServiceRequest, opts ...grpc.CallOption) (*Service, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Service)
-	err := c.cc.Invoke(ctx, ResourceService_CreateService_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *resourceServiceClient) GetService(ctx context.Context, in *GetServiceRequest, opts ...grpc.CallOption) (*Service, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Service)
-	err := c.cc.Invoke(ctx, ResourceService_GetService_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *resourceServiceClient) ListServices(ctx context.Context, in *ListServicesRequest, opts ...grpc.CallOption) (*ServiceList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ServiceList)
-	err := c.cc.Invoke(ctx, ResourceService_ListServices_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *resourceServiceClient) UpdateService(ctx context.Context, in *UpdateServiceRequest, opts ...grpc.CallOption) (*Service, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Service)
-	err := c.cc.Invoke(ctx, ResourceService_UpdateService_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *resourceServiceClient) DeleteService(ctx context.Context, in *DeleteServiceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *resourceServiceClient) SetApplicationServiceRelations(ctx context.Context, in *SetApplicationServiceRelationsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, ResourceService_DeleteService_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ResourceService_SetApplicationServiceRelations_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *resourceServiceClient) GetServiceChallengeSetting(ctx context.Context, in *GetServiceChallengeSettingRequest, opts ...grpc.CallOption) (*ServiceChallengeSetting, error) {
+func (c *resourceServiceClient) GetApplicationServiceRelations(ctx context.Context, in *GetApplicationServiceRelationsRequest, opts ...grpc.CallOption) (*ApplicationServiceRelationList, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ServiceChallengeSetting)
-	err := c.cc.Invoke(ctx, ResourceService_GetServiceChallengeSetting_FullMethodName, in, out, cOpts...)
+	out := new(ApplicationServiceRelationList)
+	err := c.cc.Invoke(ctx, ResourceService_GetApplicationServiceRelations_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *resourceServiceClient) GetServiceApplicationRelations(ctx context.Context, in *GetServiceRequest, opts ...grpc.CallOption) (*ApplicationServiceRelationList, error) {
+func (c *resourceServiceClient) GetServiceAppRelations(ctx context.Context, in *GetServiceAppRelationsRequest, opts ...grpc.CallOption) (*StringList, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(StringList)
+	err := c.cc.Invoke(ctx, ResourceService_GetServiceAppRelations_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *resourceServiceClient) GetServiceApplicationRelations(ctx context.Context, in *GetServiceApplicationRelationsRequest, opts ...grpc.CallOption) (*ApplicationServiceRelationList, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ApplicationServiceRelationList)
 	err := c.cc.Invoke(ctx, ResourceService_GetServiceApplicationRelations_FullMethodName, in, out, cOpts...)
@@ -244,89 +194,16 @@ func (c *resourceServiceClient) DeleteAppServiceRelationship(ctx context.Context
 	return out, nil
 }
 
-func (c *resourceServiceClient) CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Group, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Group)
-	err := c.cc.Invoke(ctx, ResourceService_CreateGroup_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *resourceServiceClient) GetGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*Group, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Group)
-	err := c.cc.Invoke(ctx, ResourceService_GetGroup_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *resourceServiceClient) ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*GroupList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GroupList)
-	err := c.cc.Invoke(ctx, ResourceService_ListGroups_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *resourceServiceClient) UpdateGroup(ctx context.Context, in *UpdateGroupRequest, opts ...grpc.CallOption) (*Group, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Group)
-	err := c.cc.Invoke(ctx, ResourceService_UpdateGroup_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *resourceServiceClient) DeleteGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, ResourceService_DeleteGroup_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *resourceServiceClient) SetGroupMembers(ctx context.Context, in *SetGroupMembersRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, ResourceService_SetGroupMembers_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *resourceServiceClient) GetGroupMembers(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*StringList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(StringList)
-	err := c.cc.Invoke(ctx, ResourceService_GetGroupMembers_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // ResourceServiceServer is the server API for ResourceService service.
 // All implementations must embed UnimplementedResourceServiceServer
 // for forward compatibility.
 //
-// ResourceService 服务（资源）+ Challenge 配置 + Relationship + Group
+// ResourceService 关系（ReBAC）+ 应用-服务关系管理
 type ResourceServiceServer interface {
-	CreateService(context.Context, *CreateServiceRequest) (*Service, error)
-	GetService(context.Context, *GetServiceRequest) (*Service, error)
-	ListServices(context.Context, *ListServicesRequest) (*ServiceList, error)
-	UpdateService(context.Context, *UpdateServiceRequest) (*Service, error)
-	DeleteService(context.Context, *DeleteServiceRequest) (*emptypb.Empty, error)
-	GetServiceChallengeSetting(context.Context, *GetServiceChallengeSettingRequest) (*ServiceChallengeSetting, error)
-	GetServiceApplicationRelations(context.Context, *GetServiceRequest) (*ApplicationServiceRelationList, error)
+	SetApplicationServiceRelations(context.Context, *SetApplicationServiceRelationsRequest) (*emptypb.Empty, error)
+	GetApplicationServiceRelations(context.Context, *GetApplicationServiceRelationsRequest) (*ApplicationServiceRelationList, error)
+	GetServiceAppRelations(context.Context, *GetServiceAppRelationsRequest) (*StringList, error)
+	GetServiceApplicationRelations(context.Context, *GetServiceApplicationRelationsRequest) (*ApplicationServiceRelationList, error)
 	CreateRelationship(context.Context, *CreateRelationshipRequest) (*Relationship, error)
 	DeleteRelationship(context.Context, *DeleteRelationshipRequest) (*emptypb.Empty, error)
 	UpdateRelationship(context.Context, *UpdateRelationshipRequest) (*Relationship, error)
@@ -336,13 +213,6 @@ type ResourceServiceServer interface {
 	CreateAppServiceRelationship(context.Context, *CreateAppServiceRelationshipRequest) (*Relationship, error)
 	UpdateAppServiceRelationship(context.Context, *UpdateAppServiceRelationshipRequest) (*Relationship, error)
 	DeleteAppServiceRelationship(context.Context, *DeleteAppServiceRelationshipRequest) (*emptypb.Empty, error)
-	CreateGroup(context.Context, *CreateGroupRequest) (*Group, error)
-	GetGroup(context.Context, *GetGroupRequest) (*Group, error)
-	ListGroups(context.Context, *ListGroupsRequest) (*GroupList, error)
-	UpdateGroup(context.Context, *UpdateGroupRequest) (*Group, error)
-	DeleteGroup(context.Context, *GetGroupRequest) (*emptypb.Empty, error)
-	SetGroupMembers(context.Context, *SetGroupMembersRequest) (*emptypb.Empty, error)
-	GetGroupMembers(context.Context, *GetGroupRequest) (*StringList, error)
 	mustEmbedUnimplementedResourceServiceServer()
 }
 
@@ -353,25 +223,16 @@ type ResourceServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedResourceServiceServer struct{}
 
-func (UnimplementedResourceServiceServer) CreateService(context.Context, *CreateServiceRequest) (*Service, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateService not implemented")
+func (UnimplementedResourceServiceServer) SetApplicationServiceRelations(context.Context, *SetApplicationServiceRelationsRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetApplicationServiceRelations not implemented")
 }
-func (UnimplementedResourceServiceServer) GetService(context.Context, *GetServiceRequest) (*Service, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetService not implemented")
+func (UnimplementedResourceServiceServer) GetApplicationServiceRelations(context.Context, *GetApplicationServiceRelationsRequest) (*ApplicationServiceRelationList, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetApplicationServiceRelations not implemented")
 }
-func (UnimplementedResourceServiceServer) ListServices(context.Context, *ListServicesRequest) (*ServiceList, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListServices not implemented")
+func (UnimplementedResourceServiceServer) GetServiceAppRelations(context.Context, *GetServiceAppRelationsRequest) (*StringList, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetServiceAppRelations not implemented")
 }
-func (UnimplementedResourceServiceServer) UpdateService(context.Context, *UpdateServiceRequest) (*Service, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateService not implemented")
-}
-func (UnimplementedResourceServiceServer) DeleteService(context.Context, *DeleteServiceRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteService not implemented")
-}
-func (UnimplementedResourceServiceServer) GetServiceChallengeSetting(context.Context, *GetServiceChallengeSettingRequest) (*ServiceChallengeSetting, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetServiceChallengeSetting not implemented")
-}
-func (UnimplementedResourceServiceServer) GetServiceApplicationRelations(context.Context, *GetServiceRequest) (*ApplicationServiceRelationList, error) {
+func (UnimplementedResourceServiceServer) GetServiceApplicationRelations(context.Context, *GetServiceApplicationRelationsRequest) (*ApplicationServiceRelationList, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetServiceApplicationRelations not implemented")
 }
 func (UnimplementedResourceServiceServer) CreateRelationship(context.Context, *CreateRelationshipRequest) (*Relationship, error) {
@@ -401,27 +262,6 @@ func (UnimplementedResourceServiceServer) UpdateAppServiceRelationship(context.C
 func (UnimplementedResourceServiceServer) DeleteAppServiceRelationship(context.Context, *DeleteAppServiceRelationshipRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteAppServiceRelationship not implemented")
 }
-func (UnimplementedResourceServiceServer) CreateGroup(context.Context, *CreateGroupRequest) (*Group, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateGroup not implemented")
-}
-func (UnimplementedResourceServiceServer) GetGroup(context.Context, *GetGroupRequest) (*Group, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetGroup not implemented")
-}
-func (UnimplementedResourceServiceServer) ListGroups(context.Context, *ListGroupsRequest) (*GroupList, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListGroups not implemented")
-}
-func (UnimplementedResourceServiceServer) UpdateGroup(context.Context, *UpdateGroupRequest) (*Group, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateGroup not implemented")
-}
-func (UnimplementedResourceServiceServer) DeleteGroup(context.Context, *GetGroupRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteGroup not implemented")
-}
-func (UnimplementedResourceServiceServer) SetGroupMembers(context.Context, *SetGroupMembersRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetGroupMembers not implemented")
-}
-func (UnimplementedResourceServiceServer) GetGroupMembers(context.Context, *GetGroupRequest) (*StringList, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetGroupMembers not implemented")
-}
 func (UnimplementedResourceServiceServer) mustEmbedUnimplementedResourceServiceServer() {}
 func (UnimplementedResourceServiceServer) testEmbeddedByValue()                         {}
 
@@ -443,116 +283,62 @@ func RegisterResourceServiceServer(s grpc.ServiceRegistrar, srv ResourceServiceS
 	s.RegisterService(&ResourceService_ServiceDesc, srv)
 }
 
-func _ResourceService_CreateService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateServiceRequest)
+func _ResourceService_SetApplicationServiceRelations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetApplicationServiceRelationsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ResourceServiceServer).CreateService(ctx, in)
+		return srv.(ResourceServiceServer).SetApplicationServiceRelations(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ResourceService_CreateService_FullMethodName,
+		FullMethod: ResourceService_SetApplicationServiceRelations_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).CreateService(ctx, req.(*CreateServiceRequest))
+		return srv.(ResourceServiceServer).SetApplicationServiceRelations(ctx, req.(*SetApplicationServiceRelationsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ResourceService_GetService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetServiceRequest)
+func _ResourceService_GetApplicationServiceRelations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetApplicationServiceRelationsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ResourceServiceServer).GetService(ctx, in)
+		return srv.(ResourceServiceServer).GetApplicationServiceRelations(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ResourceService_GetService_FullMethodName,
+		FullMethod: ResourceService_GetApplicationServiceRelations_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).GetService(ctx, req.(*GetServiceRequest))
+		return srv.(ResourceServiceServer).GetApplicationServiceRelations(ctx, req.(*GetApplicationServiceRelationsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ResourceService_ListServices_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListServicesRequest)
+func _ResourceService_GetServiceAppRelations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetServiceAppRelationsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ResourceServiceServer).ListServices(ctx, in)
+		return srv.(ResourceServiceServer).GetServiceAppRelations(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ResourceService_ListServices_FullMethodName,
+		FullMethod: ResourceService_GetServiceAppRelations_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).ListServices(ctx, req.(*ListServicesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ResourceService_UpdateService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateServiceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceServiceServer).UpdateService(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ResourceService_UpdateService_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).UpdateService(ctx, req.(*UpdateServiceRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ResourceService_DeleteService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteServiceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceServiceServer).DeleteService(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ResourceService_DeleteService_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).DeleteService(ctx, req.(*DeleteServiceRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ResourceService_GetServiceChallengeSetting_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetServiceChallengeSettingRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceServiceServer).GetServiceChallengeSetting(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ResourceService_GetServiceChallengeSetting_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).GetServiceChallengeSetting(ctx, req.(*GetServiceChallengeSettingRequest))
+		return srv.(ResourceServiceServer).GetServiceAppRelations(ctx, req.(*GetServiceAppRelationsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
 func _ResourceService_GetServiceApplicationRelations_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetServiceRequest)
+	in := new(GetServiceApplicationRelationsRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -564,7 +350,7 @@ func _ResourceService_GetServiceApplicationRelations_Handler(srv interface{}, ct
 		FullMethod: ResourceService_GetServiceApplicationRelations_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).GetServiceApplicationRelations(ctx, req.(*GetServiceRequest))
+		return srv.(ResourceServiceServer).GetServiceApplicationRelations(ctx, req.(*GetServiceApplicationRelationsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -731,132 +517,6 @@ func _ResourceService_DeleteAppServiceRelationship_Handler(srv interface{}, ctx 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ResourceService_CreateGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateGroupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceServiceServer).CreateGroup(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ResourceService_CreateGroup_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).CreateGroup(ctx, req.(*CreateGroupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ResourceService_GetGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetGroupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceServiceServer).GetGroup(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ResourceService_GetGroup_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).GetGroup(ctx, req.(*GetGroupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ResourceService_ListGroups_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListGroupsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceServiceServer).ListGroups(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ResourceService_ListGroups_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).ListGroups(ctx, req.(*ListGroupsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ResourceService_UpdateGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateGroupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceServiceServer).UpdateGroup(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ResourceService_UpdateGroup_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).UpdateGroup(ctx, req.(*UpdateGroupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ResourceService_DeleteGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetGroupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceServiceServer).DeleteGroup(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ResourceService_DeleteGroup_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).DeleteGroup(ctx, req.(*GetGroupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ResourceService_SetGroupMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetGroupMembersRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceServiceServer).SetGroupMembers(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ResourceService_SetGroupMembers_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).SetGroupMembers(ctx, req.(*SetGroupMembersRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ResourceService_GetGroupMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetGroupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ResourceServiceServer).GetGroupMembers(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ResourceService_GetGroupMembers_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ResourceServiceServer).GetGroupMembers(ctx, req.(*GetGroupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // ResourceService_ServiceDesc is the grpc.ServiceDesc for ResourceService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -865,28 +525,16 @@ var ResourceService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*ResourceServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "CreateService",
-			Handler:    _ResourceService_CreateService_Handler,
+			MethodName: "SetApplicationServiceRelations",
+			Handler:    _ResourceService_SetApplicationServiceRelations_Handler,
 		},
 		{
-			MethodName: "GetService",
-			Handler:    _ResourceService_GetService_Handler,
+			MethodName: "GetApplicationServiceRelations",
+			Handler:    _ResourceService_GetApplicationServiceRelations_Handler,
 		},
 		{
-			MethodName: "ListServices",
-			Handler:    _ResourceService_ListServices_Handler,
-		},
-		{
-			MethodName: "UpdateService",
-			Handler:    _ResourceService_UpdateService_Handler,
-		},
-		{
-			MethodName: "DeleteService",
-			Handler:    _ResourceService_DeleteService_Handler,
-		},
-		{
-			MethodName: "GetServiceChallengeSetting",
-			Handler:    _ResourceService_GetServiceChallengeSetting_Handler,
+			MethodName: "GetServiceAppRelations",
+			Handler:    _ResourceService_GetServiceAppRelations_Handler,
 		},
 		{
 			MethodName: "GetServiceApplicationRelations",
@@ -927,34 +575,6 @@ var ResourceService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteAppServiceRelationship",
 			Handler:    _ResourceService_DeleteAppServiceRelationship_Handler,
-		},
-		{
-			MethodName: "CreateGroup",
-			Handler:    _ResourceService_CreateGroup_Handler,
-		},
-		{
-			MethodName: "GetGroup",
-			Handler:    _ResourceService_GetGroup_Handler,
-		},
-		{
-			MethodName: "ListGroups",
-			Handler:    _ResourceService_ListGroups_Handler,
-		},
-		{
-			MethodName: "UpdateGroup",
-			Handler:    _ResourceService_UpdateGroup_Handler,
-		},
-		{
-			MethodName: "DeleteGroup",
-			Handler:    _ResourceService_DeleteGroup_Handler,
-		},
-		{
-			MethodName: "SetGroupMembers",
-			Handler:    _ResourceService_SetGroupMembers_Handler,
-		},
-		{
-			MethodName: "GetGroupMembers",
-			Handler:    _ResourceService_GetGroupMembers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

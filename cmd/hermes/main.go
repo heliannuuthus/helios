@@ -32,14 +32,12 @@ func main() {
 	db := hermesconfig.InitDB()
 
 	svc := hermes.NewService(db)
-	userSvc := hermes.NewUserService(db)
-	credSvc := hermes.NewCredentialService(db)
 
-	go startGRPC(svc, userSvc, credSvc)
+	go startGRPC(svc)
 	startHTTP(svc)
 }
 
-func startGRPC(svc *hermes.Service, userSvc *hermes.UserService, credSvc *hermes.CredentialService) {
+func startGRPC(svc *hermes.Service) {
 	lc := net.ListenConfig{}
 	lis, err := lc.Listen(context.Background(), "tcp", ":50051")
 	if err != nil {
@@ -47,10 +45,10 @@ func startGRPC(svc *hermes.Service, userSvc *hermes.UserService, credSvc *hermes
 	}
 
 	s := grpc.NewServer()
-	hermesv1.RegisterAppServiceServer(s, hermesgrpc.NewAppServiceServer(svc))
+	hermesv1.RegisterProvisionServiceServer(s, hermesgrpc.NewProvisionServiceServer(svc))
 	hermesv1.RegisterResourceServiceServer(s, hermesgrpc.NewResourceServiceServer(svc))
 	hermesv1.RegisterKeyServiceServer(s, hermesgrpc.NewKeyServiceServer(svc))
-	hermesv1.RegisterUserServiceServer(s, hermesgrpc.NewUserServiceServer(userSvc, credSvc))
+	hermesv1.RegisterUserServiceServer(s, hermesgrpc.NewUserServiceServer(svc))
 
 	logger.Infof("hermes gRPC 服务启动: :50051")
 	if err := s.Serve(lis); err != nil {

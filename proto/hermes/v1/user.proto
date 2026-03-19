@@ -8,7 +8,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "hermes/v1/common.proto";
 
-// UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证
+// UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证 + 用户组
 service UserService {
   // ---- 用户查询 ----
 
@@ -52,29 +52,17 @@ service UserService {
   rpc DeleteCredential(DeleteCredentialRequest) returns (google.protobuf.Empty);
   rpc GetOpenIDByCredentialID(CredentialIDRequest) returns (OpenIDResponse);
 
-  // ---- TOTP ----
 
-  rpc SetupTOTP(SetupTOTPRequest) returns (SetupTOTPResponse);
-  rpc ConfirmTOTP(ConfirmTOTPRequest) returns (google.protobuf.Empty);
-  rpc VerifyTOTP(VerifyTOTPRequest) returns (google.protobuf.Empty);
-  rpc DisableTOTP(OpenIDRequest) returns (google.protobuf.Empty);
-  rpc CheckTOTPEnabled(OpenIDRequest) returns (BoolValue);
-  rpc SetTOTPEnabled(SetTOTPEnabledRequest) returns (google.protobuf.Empty);
 
-  // ---- WebAuthn ----
+  // ---- Group ----
 
-  rpc RegisterWebAuthn(RegisterWebAuthnRequest) returns (UserCredential);
-  rpc GetWebAuthnByCredentialID(CredentialIDRequest) returns (WebAuthnCredentialDetail);
-  rpc UpdateWebAuthnSignCount(UpdateWebAuthnSignCountRequest) returns (google.protobuf.Empty);
-  rpc ListUserWebAuthn(OpenIDRequest) returns (UserCredentialList);
-  rpc DeleteWebAuthn(DeleteWebAuthnRequest) returns (google.protobuf.Empty);
-  rpc SetWebAuthnEnabled(SetWebAuthnEnabledRequest) returns (google.protobuf.Empty);
-  rpc GetPublicKeyForCredential(CredentialIDRequest) returns (PublicKeyResponse);
-
-  // ---- MFA 状态 ----
-
-  rpc GetUserCredentialSummaries(OpenIDRequest) returns (CredentialSummaryList);
-  rpc GetUserMFAStatus(OpenIDRequest) returns (MFAStatus);
+  rpc CreateGroup(CreateGroupRequest) returns (Group);
+  rpc GetGroup(GetGroupRequest) returns (Group);
+  rpc ListGroups(ListGroupsRequest) returns (GroupList);
+  rpc UpdateGroup(UpdateGroupRequest) returns (Group);
+  rpc DeleteGroup(GetGroupRequest) returns (google.protobuf.Empty);
+  rpc SetGroupMembers(SetGroupMembersRequest) returns (google.protobuf.Empty);
+  rpc GetGroupMembers(GetGroupRequest) returns (StringList);
 }
 
 // ==================== User ====================
@@ -242,97 +230,48 @@ message OpenIDResponse {
   string openid = 1;
 }
 
-// ==================== TOTP ====================
 
-message SetupTOTPRequest {
-  string openid = 1;
-  string app_name = 2;
-}
 
-message SetupTOTPResponse {
-  string secret = 1;
-  string otpauth_uri = 2;
-  uint32 credential_id = 3;
-}
+// ==================== Group ====================
 
-message ConfirmTOTPRequest {
-  string openid = 1;
-  uint32 credential_id = 2;
-  string code = 3;
-}
-
-message VerifyTOTPRequest {
-  string openid = 1;
-  string code = 2;
-}
-
-message SetTOTPEnabledRequest {
-  string openid = 1;
-  bool enabled = 2;
-}
-
-// ==================== WebAuthn ====================
-
-message RegisterWebAuthnRequest {
-  string openid = 1;
-  string credential_id = 2;
-  string public_key = 3;
-  string aaguid = 4;
-  repeated string transport = 5;
-  string attestation_type = 6;
-}
-
-message WebAuthnSecret {
-  string public_key = 1;
-  uint32 sign_count = 2;
-  string aaguid = 3;
-  repeated string transport = 4;
-  string attestation_type = 5;
-}
-
-// WebAuthnCredentialDetail 凭证 + 解密后的 secret
-message WebAuthnCredentialDetail {
-  UserCredential credential = 1;
-  WebAuthnSecret secret = 2;
-}
-
-message UpdateWebAuthnSignCountRequest {
-  string credential_id = 1;
-  uint32 sign_count = 2;
-}
-
-message DeleteWebAuthnRequest {
-  string openid = 1;
-  string credential_id = 2;
-}
-
-message SetWebAuthnEnabledRequest {
-  string openid = 1;
-  string credential_id = 2;
-  bool enabled = 3;
-}
-
-message PublicKeyResponse {
-  bytes public_key = 1;
-}
-
-// ==================== MFA Status ====================
-
-message CredentialSummary {
+message Group {
   uint32 id = 1;
-  string type = 2;
-  string credential_id = 3;
-  bool enabled = 4;
-  optional google.protobuf.Timestamp last_used_at = 5;
+  string group_id = 2;
+  string service_id = 3;
+  string name = 4;
+  optional string description = 5;
   google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
 }
 
-message CredentialSummaryList {
-  repeated CredentialSummary summaries = 1;
+message GroupList {
+  repeated Group groups = 1;
+  string next_cursor = 2;
 }
 
-message MFAStatus {
-  bool totp_enabled = 1;
-  int32 webauthn_count = 2;
-  int32 passkey_count = 3;
+message GetGroupRequest {
+  string group_id = 1;
+}
+
+message CreateGroupRequest {
+  string group_id = 1;
+  string service_id = 2;
+  string name = 3;
+  optional string description = 4;
+}
+
+message UpdateGroupRequest {
+  string group_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+}
+
+message ListGroupsRequest {
+  string filter = 1;
+  Pagination pagination = 2;
+}
+
+message SetGroupMembersRequest {
+  string group_id = 1;
+  repeated string user_ids = 2;
 }

@@ -11,10 +11,9 @@ import (
 
 	"github.com/tidwall/gjson"
 
-	"github.com/heliannuuthus/helios/aegis/config"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/aegis/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -26,16 +25,13 @@ const (
 
 // Provider GitHub OAuth Provider
 type Provider struct {
-	clientID     string
-	clientSecret string
+	resolver idp.KeyResolver
 }
 
 // NewProvider 创建 GitHub Provider
-func NewProvider() *Provider {
-	cfg := config.Cfg()
+func NewProvider(resolver idp.KeyResolver) *Provider {
 	return &Provider{
-		clientID:     cfg.GetString("idps.github.client-id"),
-		clientSecret: cfg.GetString("idps.github.client-secret"),
+		resolver: resolver,
 	}
 }
 
@@ -46,20 +42,29 @@ func (*Provider) Type() string {
 
 // Login 用授权码换取用户信息
 // proof: OAuth authorization code
-func (p *Provider) Login(ctx context.Context, proof string, _ ...any) (*models.TUserInfo, error) {
+// params[0]: appID (string) — 用于动态解析 IDP 密钥
+func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error) {
 	if proof == "" {
 		return nil, errors.New("code is required")
 	}
 
-	if p.clientID == "" || p.clientSecret == "" {
-		return nil, errors.New("GitHub IdP 未配置")
+	appID := ""
+	if len(params) > 0 {
+		if v, ok := params[0].(string); ok {
+			appID = v
+		}
+	}
+
+	clientID, clientSecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeGithub)
+	if err != nil {
+		return nil, fmt.Errorf("解析 GitHub IDP 密钥失败: %w", err)
 	}
 
 	code := proof
 	logger.Infof("[GitHub] 登录请求 - Code: %s...", code[:min(len(code), 10)])
 
 	// 第一步：用 code 换取 access_token
-	accessToken, err := p.getAccessToken(ctx, code)
+	accessToken, err := p.getAccessToken(ctx, code, clientID, clientSecret)
 	if err != nil {
 		return nil, err
 	}
@@ -78,19 +83,18 @@ func (*Provider) FetchAdditionalInfo(ctx context.Context, infoType string, param
 	return nil, fmt.Errorf("GitHub does not support fetching %s", infoType)
 }
 
-// Prepare 准备前端所需的公开配置
+// Prepare 准备前端所需的公开配置（密钥动态解析，此处不含 Identifier）
 func (p *Provider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
 		Connection: idp.TypeGithub,
-		Identifier: p.clientID,
 	}
 }
 
 // getAccessToken 用 code 换取 access_token
-func (p *Provider) getAccessToken(ctx context.Context, code string) (string, error) {
+func (p *Provider) getAccessToken(ctx context.Context, code, clientID, clientSecret string) (string, error) {
 	form := url.Values{}
-	form.Set("client_id", p.clientID)
-	form.Set("client_secret", p.clientSecret)
+	form.Set("client_id", clientID)
+	form.Set("client_secret", clientSecret)
 	form.Set("code", code)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))

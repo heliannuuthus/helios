@@ -16,33 +16,21 @@ import (
 	"github.com/heliannuuthus/helios/aegis/config"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/aegis/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
 // MPProvider 支付宝小程序 Provider
 type MPProvider struct {
-	appID      string
-	privateKey *rsa.PrivateKey
-	publicKey  *rsa.PublicKey // 支付宝公钥，用于验签
+	resolver  idp.KeyResolver
+	publicKey *rsa.PublicKey // 支付宝公钥，用于验签
 }
 
 // NewMPProvider 创建支付宝小程序 Provider
-func NewMPProvider() *MPProvider {
+func NewMPProvider(resolver idp.KeyResolver) *MPProvider {
 	cfg := config.Cfg()
 	p := &MPProvider{
-		appID: cfg.GetString("idps.alipay.appid"),
-	}
-
-	// 解析私钥
-	privateKeyData := cfg.GetString("idps.alipay.secret")
-	if privateKeyData != "" {
-		privateKey, err := parsePrivateKey(privateKeyData)
-		if err != nil {
-			logger.Errorf("[Alipay] 解析私钥失败: %v", err)
-		} else {
-			p.privateKey = privateKey
-		}
+		resolver: resolver,
 	}
 
 	// 解析公钥（可选，用于验签）
@@ -66,20 +54,34 @@ func (*MPProvider) Type() string {
 
 // Exchange 用授权码换取用户信息
 // proof: 小程序 login code
-func (p *MPProvider) Login(ctx context.Context, proof string, _ ...any) (*models.TUserInfo, error) {
+// params[0]: appID (string) — 用于动态解析 IDP 密钥
+func (p *MPProvider) Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error) {
 	if proof == "" {
 		return nil, errors.New("code is required")
 	}
 
-	if err := p.validateConfig(); err != nil {
-		return nil, err
+	appID := ""
+	if len(params) > 0 {
+		if v, ok := params[0].(string); ok {
+			appID = v
+		}
+	}
+
+	alipayAppID, alipaySecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeAlipayMP)
+	if err != nil {
+		return nil, fmt.Errorf("解析支付宝小程序 IDP 密钥失败: %w", err)
+	}
+
+	privateKey, err := parsePrivateKey(alipaySecret)
+	if err != nil {
+		return nil, fmt.Errorf("解析支付宝私钥失败: %w", err)
 	}
 
 	code := proof
 	logger.Infof("[Alipay] 登录请求 - Code: %s...", code[:min(len(code), 10)])
 
 	// 发送请求
-	bodyStr, err := p.sendOAuthRequest(ctx, code)
+	bodyStr, err := p.sendOAuthRequest(ctx, code, alipayAppID, privateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -115,16 +117,24 @@ func (p *MPProvider) Exchange(ctx context.Context, proof string, _ ...any) (*idp
 	if proof == "" {
 		return nil, errors.New("auth code is required")
 	}
-	if err := p.validateConfig(); err != nil {
-		return nil, err
+
+	appID := idp.AppIDFromContext(ctx)
+	alipayAppID, alipaySecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeAlipayMP)
+	if err != nil {
+		return nil, fmt.Errorf("解析支付宝小程序 IDP 密钥失败: %w", err)
 	}
 
-	accessToken, err := p.getAccessToken(ctx, proof)
+	privateKey, err := parsePrivateKey(alipaySecret)
+	if err != nil {
+		return nil, fmt.Errorf("解析支付宝私钥失败: %w", err)
+	}
+
+	accessToken, err := p.getAccessToken(ctx, proof, alipayAppID, privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("换取 access_token 失败: %w", err)
 	}
 
-	phone, err := p.getUserPhone(ctx, accessToken)
+	phone, err := p.getUserPhone(ctx, accessToken, alipayAppID, privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("获取手机号失败: %w", err)
 	}
@@ -132,30 +142,21 @@ func (p *MPProvider) Exchange(ctx context.Context, proof string, _ ...any) (*idp
 	return &idp.ExchangeResult{Value: phone}, nil
 }
 
-// Prepare 准备前端所需的公开配置
+// Prepare 准备前端所需的公开配置（密钥动态解析，此处不含 Identifier）
 func (p *MPProvider) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
 		Connection: "almp",
-		Identifier: p.appID,
 	}
-}
-
-// validateConfig 验证配置
-func (p *MPProvider) validateConfig() error {
-	if p.appID == "" || p.privateKey == nil {
-		return errors.New("支付宝小程序 IdP 未配置")
-	}
-	return nil
 }
 
 // sendOAuthRequest 发送 OAuth 请求
-func (p *MPProvider) sendOAuthRequest(ctx context.Context, code string) (string, error) {
-	reqParams := p.buildRequestParams(code)
+func (p *MPProvider) sendOAuthRequest(ctx context.Context, code, alipayAppID string, privateKey *rsa.PrivateKey) (string, error) {
+	reqParams := p.buildRequestParams(code, alipayAppID)
 
 	signContent := buildSignContent(reqParams)
 	logger.Debugf("[Alipay] 待签名字符串: %s", signContent)
 
-	sign, err := signWithRSA2(p.privateKey, signContent)
+	sign, err := signWithRSA2(privateKey, signContent)
 	if err != nil {
 		logger.Errorf("[Alipay] 签名失败: %v", err)
 		return "", fmt.Errorf("签名失败: %w", err)
@@ -198,9 +199,9 @@ func (p *MPProvider) sendOAuthRequest(ctx context.Context, code string) (string,
 }
 
 // buildRequestParams 构建请求参数
-func (p *MPProvider) buildRequestParams(code string) map[string]string {
+func (p *MPProvider) buildRequestParams(code, alipayAppID string) map[string]string {
 	return map[string]string{
-		"app_id":     p.appID,
+		"app_id":     alipayAppID,
 		"method":     "alipay.system.oauth.token",
 		"format":     "JSON",
 		"charset":    "utf-8",
@@ -271,8 +272,8 @@ func (p *MPProvider) parseUserID(bodyStr string) (*models.TUserInfo, error) {
 }
 
 // getAccessToken 用授权码换取 access_token
-func (p *MPProvider) getAccessToken(ctx context.Context, code string) (string, error) {
-	bodyStr, err := p.sendOAuthRequest(ctx, code)
+func (p *MPProvider) getAccessToken(ctx context.Context, code, alipayAppID string, privateKey *rsa.PrivateKey) (string, error) {
+	bodyStr, err := p.sendOAuthRequest(ctx, code, alipayAppID, privateKey)
 	if err != nil {
 		return "", err
 	}
@@ -288,9 +289,9 @@ func (p *MPProvider) getAccessToken(ctx context.Context, code string) (string, e
 }
 
 // getUserPhone 调用 alipay.user.info.share 获取用户手机号
-func (p *MPProvider) getUserPhone(ctx context.Context, accessToken string) (string, error) {
+func (p *MPProvider) getUserPhone(ctx context.Context, accessToken, alipayAppID string, privateKey *rsa.PrivateKey) (string, error) {
 	reqParams := map[string]string{
-		"app_id":     p.appID,
+		"app_id":     alipayAppID,
 		"method":     "alipay.user.info.share",
 		"format":     "JSON",
 		"charset":    "utf-8",
@@ -301,7 +302,7 @@ func (p *MPProvider) getUserPhone(ctx context.Context, accessToken string) (stri
 	}
 
 	signContent := buildSignContent(reqParams)
-	sign, err := signWithRSA2(p.privateKey, signContent)
+	sign, err := signWithRSA2(privateKey, signContent)
 	if err != nil {
 		return "", fmt.Errorf("签名失败: %w", err)
 	}

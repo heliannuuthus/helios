@@ -8,21 +8,22 @@ import (
 
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
 	"github.com/heliannuuthus/helios/hermes"
+	"github.com/heliannuuthus/helios/hermes/dto"
 	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/pkg/pagination"
 )
 
 type userServiceServer struct {
 	hermesv1.UnimplementedUserServiceServer
-	userSvc *hermes.UserService
-	credSvc *hermes.CredentialService
+	svc *hermes.Service
 }
 
-func NewUserServiceServer(userSvc *hermes.UserService, credSvc *hermes.CredentialService) hermesv1.UserServiceServer {
-	return &userServiceServer{userSvc: userSvc, credSvc: credSvc}
+func NewUserServiceServer(svc *hermes.Service) hermesv1.UserServiceServer {
+	return &userServiceServer{svc: svc}
 }
 
 func (s *userServiceServer) GetByOpenID(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.User, error) {
-	u, err := s.userSvc.GetByOpenID(ctx, req.GetOpenid())
+	u, err := s.svc.GetUserByOpenID(ctx, req.GetOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -30,12 +31,7 @@ func (s *userServiceServer) GetByOpenID(ctx context.Context, req *hermesv1.OpenI
 }
 
 func (s *userServiceServer) GetByIdentity(ctx context.Context, req *hermesv1.GetByIdentityRequest) (*hermesv1.User, error) {
-	identity := &models.UserIdentity{
-		Domain:  req.GetDomain(),
-		IDP:     req.GetIdp(),
-		TOpenID: req.GetTOpenid(),
-	}
-	u, err := s.userSvc.GetByIdentity(ctx, identity)
+	u, err := s.svc.GetUserByIdentity(ctx, req.GetDomain(), req.GetIdp(), req.GetTOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -43,7 +39,7 @@ func (s *userServiceServer) GetByIdentity(ctx context.Context, req *hermesv1.Get
 }
 
 func (s *userServiceServer) GetByEmail(ctx context.Context, req *hermesv1.GetByEmailRequest) (*hermesv1.DecryptedUser, error) {
-	u, err := s.userSvc.GetByEmail(ctx, req.GetEmail())
+	u, err := s.svc.GetUserByEmail(ctx, req.GetEmail())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -51,7 +47,7 @@ func (s *userServiceServer) GetByEmail(ctx context.Context, req *hermesv1.GetByE
 }
 
 func (s *userServiceServer) GetByPhonePlain(ctx context.Context, req *hermesv1.GetByPhonePlainRequest) (*hermesv1.DecryptedUser, error) {
-	u, err := s.userSvc.GetByPhonePlain(ctx, req.GetPhone())
+	u, err := s.svc.GetUserByPhone(ctx, req.GetPhone())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -59,7 +55,7 @@ func (s *userServiceServer) GetByPhonePlain(ctx context.Context, req *hermesv1.G
 }
 
 func (s *userServiceServer) GetDecryptedUser(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.DecryptedUser, error) {
-	u, err := s.userSvc.GetUserWithDecrypted(ctx, req.GetOpenid())
+	u, err := s.svc.GetDecryptedUserByOpenID(ctx, req.GetOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -67,12 +63,7 @@ func (s *userServiceServer) GetDecryptedUser(ctx context.Context, req *hermesv1.
 }
 
 func (s *userServiceServer) GetDecryptedUserByIdentity(ctx context.Context, req *hermesv1.GetByIdentityRequest) (*hermesv1.DecryptedUser, error) {
-	identity := &models.UserIdentity{
-		Domain:  req.GetDomain(),
-		IDP:     req.GetIdp(),
-		TOpenID: req.GetTOpenid(),
-	}
-	u, err := s.userSvc.GetUserWithDecryptedByIdentity(ctx, identity)
+	u, err := s.svc.GetDecryptedUserByIdentity(ctx, req.GetDomain(), req.GetIdp(), req.GetTOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -110,7 +101,7 @@ func (s *userServiceServer) CreateUser(ctx context.Context, req *hermesv1.Create
 		}
 	}
 
-	u, err := s.userSvc.CreateUser(ctx, identity, userInfo)
+	u, err := s.svc.CreateUser(ctx, identity, userInfo)
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -133,12 +124,12 @@ func (s *userServiceServer) UpdateUser(ctx context.Context, req *hermesv1.Update
 	}
 
 	if len(updates) > 0 {
-		if err := s.userSvc.Update(ctx, req.GetOpenid(), updates); err != nil {
+		if err := s.svc.UpdateUser(ctx, req.GetOpenid(), updates); err != nil {
 			return nil, toStatus(err)
 		}
 	}
 
-	u, err := s.userSvc.GetByOpenID(ctx, req.GetOpenid())
+	u, err := s.svc.GetUserByOpenID(ctx, req.GetOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -146,21 +137,21 @@ func (s *userServiceServer) UpdateUser(ctx context.Context, req *hermesv1.Update
 }
 
 func (s *userServiceServer) UpdateLastLogin(ctx context.Context, req *hermesv1.OpenIDRequest) (*emptypb.Empty, error) {
-	if err := s.userSvc.UpdateLastLogin(ctx, req.GetOpenid()); err != nil {
+	if err := s.svc.UpdateLastLogin(ctx, req.GetOpenid()); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *userServiceServer) UpdatePassword(ctx context.Context, req *hermesv1.UpdatePasswordRequest) (*emptypb.Empty, error) {
-	if err := s.userSvc.UpdatePassword(ctx, req.GetOpenid(), req.GetOldPassword(), req.GetNewPassword()); err != nil {
+	if err := s.svc.UpdatePassword(ctx, req.GetOpenid(), req.GetOldPassword(), req.GetNewPassword()); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *userServiceServer) GetIdentities(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.IdentityList, error) {
-	identities, err := s.userSvc.GetIdentities(ctx, req.GetOpenid())
+	identities, err := s.svc.GetUserIdentitiesByOpenID(ctx, req.GetOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -168,12 +159,7 @@ func (s *userServiceServer) GetIdentities(ctx context.Context, req *hermesv1.Ope
 }
 
 func (s *userServiceServer) GetIdentitiesByIdentity(ctx context.Context, req *hermesv1.GetByIdentityRequest) (*hermesv1.IdentityList, error) {
-	identity := &models.UserIdentity{
-		Domain:  req.GetDomain(),
-		IDP:     req.GetIdp(),
-		TOpenID: req.GetTOpenid(),
-	}
-	identities, err := s.userSvc.GetIdentitiesByIdentity(ctx, identity)
+	identities, err := s.svc.GetIdentities(ctx, req.GetDomain(), req.GetIdp(), req.GetTOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -181,7 +167,7 @@ func (s *userServiceServer) GetIdentitiesByIdentity(ctx context.Context, req *he
 }
 
 func (s *userServiceServer) GetIdentityByType(ctx context.Context, req *hermesv1.GetIdentityByTypeRequest) (*hermesv1.UserIdentity, error) {
-	identity, err := s.userSvc.GetIdentityByType(ctx, req.GetDomain(), req.GetOpenid(), req.GetIdpType())
+	identity, err := s.svc.GetUserIdentityByType(ctx, req.GetDomain(), req.GetOpenid(), req.GetIdpType())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -196,14 +182,14 @@ func (s *userServiceServer) AddIdentity(ctx context.Context, req *hermesv1.AddId
 		TOpenID: req.GetTOpenid(),
 		RawData: ptrOrEmpty(req.RawData),
 	}
-	if err := s.userSvc.AddIdentity(ctx, identity); err != nil {
+	if err := s.svc.AddIdentity(ctx, identity); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *userServiceServer) GetUserByIdentifier(ctx context.Context, req *hermesv1.GetByIdentifierRequest) (*hermesv1.PasswordStoreCredential, error) {
-	cred, err := s.userSvc.GetUserByIdentifier(ctx, req.GetIdentifier())
+	cred, err := s.svc.GetUserByIdentifier(ctx, req.GetIdentifier())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -211,7 +197,7 @@ func (s *userServiceServer) GetUserByIdentifier(ctx context.Context, req *hermes
 }
 
 func (s *userServiceServer) GetStaffByIdentifier(ctx context.Context, req *hermesv1.GetByIdentifierRequest) (*hermesv1.PasswordStoreCredential, error) {
-	cred, err := s.userSvc.GetStaffByIdentifier(ctx, req.GetIdentifier())
+	cred, err := s.svc.GetStaffByIdentifier(ctx, req.GetIdentifier())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -228,14 +214,14 @@ func (s *userServiceServer) CreateCredential(ctx context.Context, req *hermesv1.
 	if req.CredentialId != nil {
 		cred.CredentialID = req.CredentialId
 	}
-	if err := s.userSvc.CreateCredential(ctx, cred); err != nil {
+	if err := s.svc.CreateCredential(ctx, cred); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *userServiceServer) GetCredentialByID(ctx context.Context, req *hermesv1.CredentialIDRequest) (*hermesv1.UserCredential, error) {
-	cred, err := s.userSvc.GetCredentialByID(ctx, req.GetCredentialId())
+	cred, err := s.svc.GetCredentialByID(ctx, req.GetCredentialId())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -243,7 +229,7 @@ func (s *userServiceServer) GetCredentialByID(ctx context.Context, req *hermesv1
 }
 
 func (s *userServiceServer) GetUserCredentials(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.UserCredentialList, error) {
-	creds, err := s.userSvc.GetUserCredentials(ctx, req.GetOpenid())
+	creds, err := s.svc.GetUserCredentials(ctx, req.GetOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -251,7 +237,7 @@ func (s *userServiceServer) GetUserCredentials(ctx context.Context, req *hermesv
 }
 
 func (s *userServiceServer) GetUserCredentialsByType(ctx context.Context, req *hermesv1.GetCredentialsByTypeRequest) (*hermesv1.UserCredentialList, error) {
-	creds, err := s.userSvc.GetUserCredentialsByType(ctx, req.GetOpenid(), req.GetType())
+	creds, err := s.svc.GetUserCredentialsByType(ctx, req.GetOpenid(), req.GetType())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -259,7 +245,7 @@ func (s *userServiceServer) GetUserCredentialsByType(ctx context.Context, req *h
 }
 
 func (s *userServiceServer) GetEnabledUserCredentialsByType(ctx context.Context, req *hermesv1.GetCredentialsByTypeRequest) (*hermesv1.UserCredentialList, error) {
-	creds, err := s.userSvc.GetEnabledUserCredentialsByType(ctx, req.GetOpenid(), req.GetType())
+	creds, err := s.svc.GetEnabledUserCredentialsByType(ctx, req.GetOpenid(), req.GetType())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -279,7 +265,7 @@ func (s *userServiceServer) UpdateCredential(ctx context.Context, req *hermesv1.
 	}
 
 	if len(updates) > 0 {
-		if err := s.userSvc.UpdateCredential(ctx, req.GetCredentialId(), updates); err != nil {
+		if err := s.svc.UpdateCredential(ctx, req.GetCredentialId(), updates); err != nil {
 			return nil, toStatus(err)
 		}
 	}
@@ -287,204 +273,123 @@ func (s *userServiceServer) UpdateCredential(ctx context.Context, req *hermesv1.
 }
 
 func (s *userServiceServer) UpdateCredentialSignCount(ctx context.Context, req *hermesv1.UpdateCredentialSignCountRequest) (*emptypb.Empty, error) {
-	if err := s.userSvc.UpdateCredentialSignCount(ctx, req.GetCredentialId(), req.GetSignCount()); err != nil {
+	if err := s.svc.UpdateCredentialSignCount(ctx, req.GetCredentialId(), req.GetSignCount()); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *userServiceServer) EnableCredential(ctx context.Context, req *hermesv1.CredentialIDRequest) (*emptypb.Empty, error) {
-	if err := s.userSvc.EnableCredential(ctx, req.GetCredentialId()); err != nil {
+	if err := s.svc.EnableCredential(ctx, req.GetCredentialId()); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *userServiceServer) DisableCredential(ctx context.Context, req *hermesv1.CredentialIDRequest) (*emptypb.Empty, error) {
-	if err := s.userSvc.DisableCredential(ctx, req.GetCredentialId()); err != nil {
+	if err := s.svc.DisableCredential(ctx, req.GetCredentialId()); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *userServiceServer) DeleteCredential(ctx context.Context, req *hermesv1.DeleteCredentialRequest) (*emptypb.Empty, error) {
-	if err := s.userSvc.DeleteCredential(ctx, req.GetOpenid(), req.GetCredentialId()); err != nil {
+	if err := s.svc.DeleteCredential(ctx, req.GetOpenid(), req.GetCredentialId()); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *userServiceServer) GetOpenIDByCredentialID(ctx context.Context, req *hermesv1.CredentialIDRequest) (*hermesv1.OpenIDResponse, error) {
-	openid, err := s.userSvc.GetOpenIDByCredentialID(ctx, req.GetCredentialId())
+	openid, err := s.svc.GetOpenIDByCredentialID(ctx, req.GetCredentialId())
 	if err != nil {
 		return nil, toStatus(err)
 	}
 	return &hermesv1.OpenIDResponse{Openid: openid}, nil
 }
 
-// ==================== TOTP delegates ====================
+// ==================== Group ====================
 
-func (s *userServiceServer) SetupTOTP(ctx context.Context, req *hermesv1.SetupTOTPRequest) (*hermesv1.SetupTOTPResponse, error) {
-	resp, err := s.credSvc.SetupTOTP(ctx, &hermes.TOTPSetupRequest{
-		OpenID:  req.GetOpenid(),
-		AppName: req.GetAppName(),
-	})
+func (s *userServiceServer) CreateGroup(ctx context.Context, req *hermesv1.CreateGroupRequest) (*hermesv1.Group, error) {
+	createReq := &dto.GroupCreateRequest{
+		GroupID:     req.GetGroupId(),
+		ServiceID:   req.GetServiceId(),
+		Name:        req.GetName(),
+		Description: req.Description,
+	}
+
+	g, err := s.svc.CreateGroup(ctx, createReq)
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	return &hermesv1.SetupTOTPResponse{
-		Secret:       resp.Secret,
-		OtpauthUri:   resp.OTPAuthURI,
-		CredentialId: safeUint32(resp.CredentialID),
-	}, nil
+	return groupToProto(g), nil
 }
 
-func (s *userServiceServer) ConfirmTOTP(ctx context.Context, req *hermesv1.ConfirmTOTPRequest) (*emptypb.Empty, error) {
-	if err := s.credSvc.ConfirmTOTP(ctx, &hermes.ConfirmTOTPRequest{
-		OpenID:       req.GetOpenid(),
-		CredentialID: uint(req.GetCredentialId()),
-		Code:         req.GetCode(),
-	}); err != nil {
+func (s *userServiceServer) GetGroup(ctx context.Context, req *hermesv1.GetGroupRequest) (*hermesv1.Group, error) {
+	g, err := s.svc.GetGroup(ctx, req.GetGroupId())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return groupToProto(g), nil
+}
+
+func (s *userServiceServer) ListGroups(ctx context.Context, req *hermesv1.ListGroupsRequest) (*hermesv1.GroupList, error) {
+	listReq := &dto.ListRequest{Filter: req.GetFilter()}
+	if p := req.GetPagination(); p != nil {
+		listReq.Pagination = pagination.Pagination{Token: p.GetCursor(), Size: int(p.GetLimit())}
+	}
+
+	items, err := s.svc.ListGroups(ctx, listReq)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+
+	out := make([]*hermesv1.Group, 0, len(items.Items))
+	for i := range items.Items {
+		out = append(out, groupToProto(&items.Items[i]))
+	}
+	return &hermesv1.GroupList{Groups: out, NextCursor: items.Next}, nil
+}
+
+func (s *userServiceServer) UpdateGroup(ctx context.Context, req *hermesv1.UpdateGroupRequest) (*hermesv1.Group, error) {
+	updateReq := &dto.GroupUpdateRequest{
+		Name:        optionalFromPtr(req.Name),
+		Description: optionalFromPtr(req.Description),
+	}
+	if err := s.svc.UpdateGroup(ctx, req.GetGroupId(), updateReq); err != nil {
+		return nil, toStatus(err)
+	}
+	g, err := s.svc.GetGroup(ctx, req.GetGroupId())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return groupToProto(g), nil
+}
+
+func (s *userServiceServer) DeleteGroup(ctx context.Context, req *hermesv1.GetGroupRequest) (*emptypb.Empty, error) {
+	if err := s.svc.DeleteGroup(ctx, req.GetGroupId()); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
-func (s *userServiceServer) VerifyTOTP(ctx context.Context, req *hermesv1.VerifyTOTPRequest) (*emptypb.Empty, error) {
-	if err := s.credSvc.VerifyTOTP(ctx, &hermes.VerifyTOTPRequest{
-		OpenID: req.GetOpenid(),
-		Code:   req.GetCode(),
-	}); err != nil {
+func (s *userServiceServer) SetGroupMembers(ctx context.Context, req *hermesv1.SetGroupMembersRequest) (*emptypb.Empty, error) {
+	memberReq := &dto.GroupMemberRequest{
+		GroupID: req.GetGroupId(),
+		UserIDs: req.GetUserIds(),
+	}
+	if err := s.svc.SetGroupMembers(ctx, memberReq); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
-func (s *userServiceServer) DisableTOTP(ctx context.Context, req *hermesv1.OpenIDRequest) (*emptypb.Empty, error) {
-	if err := s.credSvc.DisableTOTP(ctx, req.GetOpenid()); err != nil {
-		return nil, toStatus(err)
-	}
-	return &emptypb.Empty{}, nil
-}
-
-func (s *userServiceServer) CheckTOTPEnabled(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.BoolValue, error) {
-	enabled, err := s.credSvc.HasTOTP(ctx, req.GetOpenid())
+func (s *userServiceServer) GetGroupMembers(ctx context.Context, req *hermesv1.GetGroupRequest) (*hermesv1.StringList, error) {
+	members, err := s.svc.GetGroupMembers(ctx, req.GetGroupId())
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	return &hermesv1.BoolValue{Value: enabled}, nil
-}
-
-func (s *userServiceServer) SetTOTPEnabled(ctx context.Context, req *hermesv1.SetTOTPEnabledRequest) (*emptypb.Empty, error) {
-	if err := s.credSvc.SetTOTPEnabled(ctx, req.GetOpenid(), req.GetEnabled()); err != nil {
-		return nil, toStatus(err)
-	}
-	return &emptypb.Empty{}, nil
-}
-
-// ==================== WebAuthn delegates ====================
-
-func (s *userServiceServer) RegisterWebAuthn(ctx context.Context, req *hermesv1.RegisterWebAuthnRequest) (*hermesv1.UserCredential, error) {
-	cred, err := s.credSvc.RegisterWebAuthn(ctx, &hermes.RegisterWebAuthnRequest{
-		OpenID:          req.GetOpenid(),
-		CredentialID:    req.GetCredentialId(),
-		PublicKey:       req.GetPublicKey(),
-		AAGUID:          req.GetAaguid(),
-		Transport:       req.GetTransport(),
-		AttestationType: req.GetAttestationType(),
-	})
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	return userCredentialToProto(cred), nil
-}
-
-func (s *userServiceServer) GetWebAuthnByCredentialID(ctx context.Context, req *hermesv1.CredentialIDRequest) (*hermesv1.WebAuthnCredentialDetail, error) {
-	cred, secret, err := s.credSvc.GetWebAuthnByCredentialID(ctx, req.GetCredentialId())
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	return &hermesv1.WebAuthnCredentialDetail{
-		Credential: userCredentialToProto(cred),
-		Secret: &hermesv1.WebAuthnSecret{
-			PublicKey:       secret.PublicKey,
-			SignCount:       secret.SignCount,
-			Aaguid:          secret.AAGUID,
-			Transport:       secret.Transport,
-			AttestationType: secret.AttestationType,
-		},
-	}, nil
-}
-
-func (s *userServiceServer) UpdateWebAuthnSignCount(ctx context.Context, req *hermesv1.UpdateWebAuthnSignCountRequest) (*emptypb.Empty, error) {
-	if err := s.credSvc.UpdateWebAuthnSignCount(ctx, req.GetCredentialId(), req.GetSignCount()); err != nil {
-		return nil, toStatus(err)
-	}
-	return &emptypb.Empty{}, nil
-}
-
-func (s *userServiceServer) ListUserWebAuthn(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.UserCredentialList, error) {
-	creds, err := s.credSvc.ListUserWebAuthn(ctx, req.GetOpenid())
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	return userCredentialListToProto(creds), nil
-}
-
-func (s *userServiceServer) DeleteWebAuthn(ctx context.Context, req *hermesv1.DeleteWebAuthnRequest) (*emptypb.Empty, error) {
-	if err := s.credSvc.DeleteWebAuthn(ctx, req.GetOpenid(), req.GetCredentialId()); err != nil {
-		return nil, toStatus(err)
-	}
-	return &emptypb.Empty{}, nil
-}
-
-func (s *userServiceServer) SetWebAuthnEnabled(ctx context.Context, req *hermesv1.SetWebAuthnEnabledRequest) (*emptypb.Empty, error) {
-	if err := s.credSvc.SetWebAuthnEnabled(ctx, req.GetOpenid(), req.GetCredentialId(), req.GetEnabled()); err != nil {
-		return nil, toStatus(err)
-	}
-	return &emptypb.Empty{}, nil
-}
-
-func (s *userServiceServer) GetPublicKeyForCredential(ctx context.Context, req *hermesv1.CredentialIDRequest) (*hermesv1.PublicKeyResponse, error) {
-	pk, err := s.credSvc.GetPublicKeyForCredential(ctx, req.GetCredentialId())
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	return &hermesv1.PublicKeyResponse{PublicKey: pk}, nil
-}
-
-func (s *userServiceServer) GetUserCredentialSummaries(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.CredentialSummaryList, error) {
-	summaries, err := s.credSvc.GetUserCredentialSummaries(ctx, req.GetOpenid())
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	out := make([]*hermesv1.CredentialSummary, 0, len(summaries))
-	for i := range summaries {
-		cs := &hermesv1.CredentialSummary{
-			Id:           safeUint32(summaries[i].ID),
-			Type:         summaries[i].Type,
-			CredentialId: summaries[i].CredentialID,
-			Enabled:      summaries[i].Enabled,
-			CreatedAt:    timestamppb.New(summaries[i].CreatedAt),
-		}
-		if summaries[i].LastUsedAt != nil {
-			cs.LastUsedAt = timestamppb.New(*summaries[i].LastUsedAt)
-		}
-		out = append(out, cs)
-	}
-	return &hermesv1.CredentialSummaryList{Summaries: out}, nil
-}
-
-func (s *userServiceServer) GetUserMFAStatus(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.MFAStatus, error) {
-	status, err := s.credSvc.GetUserMFAStatus(ctx, req.GetOpenid())
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	return &hermesv1.MFAStatus{
-		TotpEnabled:   status.TOTPEnabled,
-		WebauthnCount: safeInt32(status.WebAuthnCount),
-		PasskeyCount:  safeInt32(status.PasskeyCount),
-	}, nil
+	return &hermesv1.StringList{Values: members}, nil
 }
 
 // ==================== conversion helpers ====================
@@ -537,7 +442,7 @@ func identitiesToProto(identities models.Identities) *hermesv1.IdentityList {
 	return &hermesv1.IdentityList{Identities: out}
 }
 
-func passwordStoreCredentialToProto(c *hermes.PasswordStoreCredential) *hermesv1.PasswordStoreCredential {
+func passwordStoreCredentialToProto(c *dto.PasswordStoreCredential) *hermesv1.PasswordStoreCredential {
 	pb := &hermesv1.PasswordStoreCredential{
 		Openid:       c.OpenID,
 		PasswordHash: c.PasswordHash,
@@ -584,4 +489,16 @@ func ptrOrEmpty(p *string) string {
 		return ""
 	}
 	return *p
+}
+
+func groupToProto(g *models.Group) *hermesv1.Group {
+	return &hermesv1.Group{
+		Id:          safeUint32(g.ID),
+		GroupId:     g.GroupID,
+		ServiceId:   g.ServiceID,
+		Name:        g.Name,
+		Description: g.Description,
+		CreatedAt:   timestamppb.New(g.CreatedAt),
+		UpdatedAt:   timestamppb.New(g.UpdatedAt),
+	}
 }

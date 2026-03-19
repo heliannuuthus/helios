@@ -15,9 +15,10 @@ import (
 
 	"github.com/heliannuuthus/helios/aegis"
 	aegisconfig "github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/aegis/hermesclient"
 	"github.com/heliannuuthus/helios/aegis/middleware"
+	hermes "github.com/heliannuuthus/helios/aegis/rpc/hermes"
 	_ "github.com/heliannuuthus/helios/docs"
+	"github.com/heliannuuthus/helios/iris"
 	irisconfig "github.com/heliannuuthus/helios/iris/config"
 	"github.com/heliannuuthus/helios/pkg/config"
 	"github.com/heliannuuthus/helios/pkg/logger"
@@ -44,11 +45,12 @@ func main() {
 	}
 	defer conn.Close()
 
-	client := hermesclient.New(conn)
+	client := hermes.New(conn)
 
 	initTokenManager(client)
 
-	aegisHandler, err := aegis.Initialize(client, client, client)
+	credentialSvc := iris.NewCredentialService(client)
+	aegisHandler, err := aegis.Initialize(client, client, credentialSvc)
 	if err != nil {
 		logger.Fatalf("初始化 aegis 失败: %v", err)
 	}
@@ -137,7 +139,7 @@ func main() {
 	}
 }
 
-func initTokenManager(client *hermesclient.Client) {
+func initTokenManager(client *hermes.Client) {
 	endpoint := aegisconfig.GetIssuer()
 	seed := key.SingleOf(func(_ context.Context, _ string) ([]byte, error) {
 		keys, err := client.GetDomainKeys(context.Background(), "consumer")

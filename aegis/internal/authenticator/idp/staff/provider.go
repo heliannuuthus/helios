@@ -8,10 +8,10 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/heliannuuthus/helios/aegis/contract"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
-	"github.com/heliannuuthus/helios/aegis/internal/contract"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/hermes/models"
+	"github.com/heliannuuthus/helios/aegis/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
