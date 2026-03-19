@@ -2,6 +2,7 @@
 
 //go:generate go run -mod=mod github.com/google/wire/cmd/wire
 //go:build !wireinject
+// +build !wireinject
 
 package main
 
@@ -15,7 +16,9 @@ import (
 	"github.com/heliannuuthus/helios/iris"
 	"github.com/heliannuuthus/helios/zwei"
 	"github.com/heliannuuthus/helios/zwei/config"
+)
 
+import (
 	_ "github.com/heliannuuthus/helios/docs"
 )
 
