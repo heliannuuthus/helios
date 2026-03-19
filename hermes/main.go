@@ -34,17 +34,17 @@ func main() {
 
 	db := hermesconfig.InitDB()
 
-	svc, err := hermes.NewService(db)
+	services, err := hermes.NewServices(db)
 	if err != nil {
 		logger.Fatalf("初始化 Hermes 失败: %v", err)
 	}
 
-	grpcServer, lis, err := newGRPCServer(svc)
+	grpcServer, lis, err := newGRPCServer(services)
 	if err != nil {
 		logger.Fatalf("初始化 Hermes gRPC 服务失败: %v", err)
 	}
 	go serveGRPC(grpcServer, lis)
-	startHTTP(svc)
+	startHTTP(services)
 }
 
 func initTokenManager() {
@@ -57,7 +57,7 @@ func initTokenManager() {
 	}
 }
 
-func newGRPCServer(svc *hermes.Service) (*grpc.Server, net.Listener, error) {
+func newGRPCServer(services *hermes.Services) (*grpc.Server, net.Listener, error) {
 	lc := net.ListenConfig{}
 	lis, err := lc.Listen(context.Background(), "tcp", ":50051")
 	if err != nil {
@@ -65,10 +65,10 @@ func newGRPCServer(svc *hermes.Service) (*grpc.Server, net.Listener, error) {
 	}
 
 	s := grpc.NewServer()
-	hermesv1.RegisterProvisionServiceServer(s, hermesgrpc.NewProvisionServiceServer(svc))
-	hermesv1.RegisterResourceServiceServer(s, hermesgrpc.NewResourceServiceServer(svc))
-	hermesv1.RegisterKeyServiceServer(s, hermesgrpc.NewKeyServiceServer(svc))
-	hermesv1.RegisterUserServiceServer(s, hermesgrpc.NewUserServiceServer(svc))
+	hermesv1.RegisterProvisionServiceServer(s, hermesgrpc.NewProvisionServiceServer(services.Provision))
+	hermesv1.RegisterResourceServiceServer(s, hermesgrpc.NewResourceServiceServer(services.Resource))
+	hermesv1.RegisterKeyServiceServer(s, hermesgrpc.NewKeyServiceServer(services.Key))
+	hermesv1.RegisterUserServiceServer(s, hermesgrpc.NewUserServiceServer(services.User))
 	return s, lis, nil
 }
 
@@ -79,7 +79,7 @@ func serveGRPC(s *grpc.Server, lis net.Listener) {
 	}
 }
 
-func startHTTP(svc *hermes.Service) {
+func startHTTP(services *hermes.Services) {
 	if !config.IsDebug() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -91,7 +91,7 @@ func startHTTP(svc *hermes.Service) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 
-	handler := hermes.NewHandler(svc)
+	handler := hermes.NewHandler(services)
 
 	hermesAud := hermesconfig.GetAegisAudience()
 	hermesGuard, err := guard.NewGin(hermesAud)

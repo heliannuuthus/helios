@@ -17,10 +17,10 @@ import (
 
 type provisionServiceServer struct {
 	hermesv1.UnimplementedProvisionServiceServer
-	svc *hermes.Service
+	svc *hermes.ProvisionService
 }
 
-func NewProvisionServiceServer(svc *hermes.Service) hermesv1.ProvisionServiceServer {
+func NewProvisionServiceServer(svc *hermes.ProvisionService) hermesv1.ProvisionServiceServer {
 	return &provisionServiceServer{svc: svc}
 }
 
