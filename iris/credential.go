@@ -20,7 +20,7 @@ import (
 )
 
 // CredentialStore 凭证 CRUD 存储接口
-// hermes.UserService（直连）和 hermesclient.Client（gRPC）均可实现
+// hermes.UserService（直连）和 rpc/hermes.Client（gRPC）均可实现
 type CredentialStore interface {
 	CreateCredential(ctx context.Context, cred *models.UserCredential) error
 	GetUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error)

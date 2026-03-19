@@ -1,16 +1,11 @@
-package hermesclient
+package hermes
 
 import (
-	"math"
-	"time"
-
 	"github.com/go-json-experiment/json"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
 	"github.com/heliannuuthus/helios/pkg/dto"
 	"github.com/heliannuuthus/helios/pkg/models"
-	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
 func domainFromProto(pb *hermesv1.Domain) *models.Domain {
@@ -105,6 +100,19 @@ func challengeSettingFromProto(pb *hermesv1.ServiceChallengeSetting) *models.Ser
 	return cs
 }
 
+func idpConfigFromProto(pb *hermesv1.ApplicationIDPConfig) *models.ApplicationIDPConfig {
+	if pb == nil {
+		return nil
+	}
+	return &models.ApplicationIDPConfig{
+		ID:       uint(pb.Id),
+		AppID:    pb.AppId,
+		Type:     pb.Type,
+		Priority: int(pb.Priority),
+		Strategy: pb.Strategy,
+	}
+}
+
 func relationshipFromProto(pb *hermesv1.Relationship) *models.Relationship {
 	if pb == nil {
 		return nil
@@ -128,77 +136,6 @@ func relationshipFromProto(pb *hermesv1.Relationship) *models.Relationship {
 	return rel
 }
 
-func groupFromProto(pb *hermesv1.Group) *models.Group {
-	if pb == nil {
-		return nil
-	}
-	g := &models.Group{
-		ID:          uint(pb.Id),
-		GroupID:     pb.GroupId,
-		ServiceID:   pb.ServiceId,
-		Name:        pb.Name,
-		Description: pb.Description,
-	}
-	if pb.CreatedAt != nil {
-		g.CreatedAt = pb.CreatedAt.AsTime()
-	}
-	if pb.UpdatedAt != nil {
-		g.UpdatedAt = pb.UpdatedAt.AsTime()
-	}
-	return g
-}
-
-func idpConfigFromProto(pb *hermesv1.ApplicationIDPConfig) *models.ApplicationIDPConfig {
-	if pb == nil {
-		return nil
-	}
-	return &models.ApplicationIDPConfig{
-		ID:       uint(pb.Id),
-		AppID:    pb.AppId,
-		Type:     pb.Type,
-		Priority: int(pb.Priority),
-		Strategy: pb.Strategy,
-	}
-}
-
-func domainIDPConfigFromProto(pb *hermesv1.DomainIDPConfig) *models.DomainIDPConfig {
-	if pb == nil {
-		return nil
-	}
-	cfg := &models.DomainIDPConfig{
-		ID:       uint(pb.Id),
-		DomainID: pb.DomainId,
-		IDPType:  pb.Type,
-		Priority: int(pb.Priority),
-		Strategy: pb.Strategy,
-	}
-	if pb.CreatedAt != nil {
-		cfg.CreatedAt = pb.CreatedAt.AsTime()
-	}
-	if pb.UpdatedAt != nil {
-		cfg.UpdatedAt = pb.UpdatedAt.AsTime()
-	}
-	return cfg
-}
-
-func idpKeyFromProto(pb *hermesv1.IDPKey) *models.IDPKey {
-	if pb == nil {
-		return nil
-	}
-	k := &models.IDPKey{
-		ID:      uint(pb.Id),
-		IDPType: pb.IdpType,
-		TAppID:  pb.TAppId,
-	}
-	if pb.CreatedAt != nil {
-		k.CreatedAt = pb.CreatedAt.AsTime()
-	}
-	if pb.UpdatedAt != nil {
-		k.UpdatedAt = pb.UpdatedAt.AsTime()
-	}
-	return k
-}
-
 func appServiceRelationFromProto(pb *hermesv1.ApplicationServiceRelation) models.ApplicationServiceRelation {
 	r := models.ApplicationServiceRelation{
 		ID:        uint(pb.Id),
@@ -212,6 +149,20 @@ func appServiceRelationFromProto(pb *hermesv1.ApplicationServiceRelation) models
 	return r
 }
 
+func decryptedUserFromProto(pb *hermesv1.DecryptedUser) *models.UserWithDecrypted {
+	if pb == nil {
+		return nil
+	}
+	u := userFromProto(pb.User)
+	if u == nil {
+		return nil
+	}
+	return &models.UserWithDecrypted{
+		User:  *u,
+		Phone: pb.Phone,
+	}
+}
+
 func userFromProto(pb *hermesv1.User) *models.User {
 	if pb == nil {
 		return nil
@@ -219,7 +170,7 @@ func userFromProto(pb *hermesv1.User) *models.User {
 	u := &models.User{
 		ID:            uint(pb.Id),
 		OpenID:        pb.Openid,
-		Status:        safeInt8(pb.Status),
+		Status:        int8(pb.Status),
 		Nickname:      pb.Nickname,
 		Picture:       pb.Picture,
 		Email:         pb.Email,
@@ -236,20 +187,6 @@ func userFromProto(pb *hermesv1.User) *models.User {
 		u.UpdatedAt = pb.UpdatedAt.AsTime()
 	}
 	return u
-}
-
-func decryptedUserFromProto(pb *hermesv1.DecryptedUser) *models.UserWithDecrypted {
-	if pb == nil {
-		return nil
-	}
-	u := userFromProto(pb.User)
-	if u == nil {
-		return nil
-	}
-	return &models.UserWithDecrypted{
-		User:  *u,
-		Phone: pb.Phone,
-	}
 }
 
 func identityFromProto(pb *hermesv1.UserIdentity) *models.UserIdentity {
@@ -307,7 +244,7 @@ func passwordStoreCredentialFromProto(pb *hermesv1.PasswordStoreCredential) *dto
 	cred := &dto.PasswordStoreCredential{
 		OpenID:       pb.Openid,
 		PasswordHash: pb.PasswordHash,
-		Status:       safeInt8(pb.Status),
+		Status:       int8(pb.Status),
 	}
 	if pb.Nickname != nil {
 		cred.Nickname = *pb.Nickname
@@ -321,6 +258,8 @@ func passwordStoreCredentialFromProto(pb *hermesv1.PasswordStoreCredential) *dto
 	return cred
 }
 
+// ==================== helpers ====================
+
 func marshalStringSlice(s []string) *string {
 	if len(s) == 0 {
 		return nil
@@ -331,49 +270,4 @@ func marshalStringSlice(s []string) *string {
 	}
 	str := string(b)
 	return &str
-}
-
-func toTimestamp(t time.Time) *timestamppb.Timestamp {
-	if t.IsZero() {
-		return nil
-	}
-	return timestamppb.New(t)
-}
-
-func safeInt8(v int32) int8 {
-	if v > 127 {
-		return 127
-	}
-	if v < -128 {
-		return -128
-	}
-	return int8(v)
-}
-
-func safeInt32[T ~int | ~uint](v T) int32 {
-	if v > T(math.MaxInt32) {
-		return math.MaxInt32
-	}
-	return int32(v)
-}
-
-func safeUint32[T ~uint | ~int](v T) uint32 {
-	if v > T(math.MaxUint32) {
-		return math.MaxUint32
-	}
-	return uint32(v)
-}
-
-func setOptionalString(dst **string, src patch.Optional[string]) {
-	if src.IsPresent() && !src.IsNull() {
-		v := src.Value()
-		*dst = &v
-	}
-}
-
-func setOptionalUint32(dst **uint32, src patch.Optional[uint]) {
-	if src.IsPresent() && !src.IsNull() {
-		v := safeUint32(src.Value())
-		*dst = &v
-	}
 }

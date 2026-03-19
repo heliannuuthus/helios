@@ -1,4 +1,4 @@
-package hermesclient
+package hermes
 
 import (
 	"google.golang.org/grpc"

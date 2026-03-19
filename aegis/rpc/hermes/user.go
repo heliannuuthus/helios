@@ -1,4 +1,4 @@
-package hermesclient
+package hermes
 
 import (
 	"context"
@@ -11,24 +11,12 @@ import (
 
 // ==================== User Query ====================
 
-func (c *Client) GetByOpenID(ctx context.Context, openid string) (*models.User, error) {
-	resp, err := c.user.GetByOpenID(ctx, &hermesv1.OpenIDRequest{Openid: openid})
+func (c *Client) GetUserWithDecrypted(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
+	resp, err := c.user.GetDecryptedUser(ctx, &hermesv1.OpenIDRequest{Openid: openid})
 	if err != nil {
 		return nil, err
 	}
-	return userFromProto(resp), nil
-}
-
-func (c *Client) GetByIdentity(ctx context.Context, identity *models.UserIdentity) (*models.User, error) {
-	resp, err := c.user.GetByIdentity(ctx, &hermesv1.GetByIdentityRequest{
-		Domain:  identity.Domain,
-		Idp:     identity.IDP,
-		TOpenid: identity.TOpenID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return userFromProto(resp), nil
+	return decryptedUserFromProto(resp), nil
 }
 
 func (c *Client) GetByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error) {
@@ -41,26 +29,6 @@ func (c *Client) GetByEmail(ctx context.Context, email string) (*models.UserWith
 
 func (c *Client) GetByPhonePlain(ctx context.Context, phone string) (*models.UserWithDecrypted, error) {
 	resp, err := c.user.GetByPhonePlain(ctx, &hermesv1.GetByPhonePlainRequest{Phone: phone})
-	if err != nil {
-		return nil, err
-	}
-	return decryptedUserFromProto(resp), nil
-}
-
-func (c *Client) GetUserWithDecrypted(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
-	resp, err := c.user.GetDecryptedUser(ctx, &hermesv1.OpenIDRequest{Openid: openid})
-	if err != nil {
-		return nil, err
-	}
-	return decryptedUserFromProto(resp), nil
-}
-
-func (c *Client) GetUserWithDecryptedByIdentity(ctx context.Context, identity *models.UserIdentity) (*models.UserWithDecrypted, error) {
-	resp, err := c.user.GetDecryptedUserByIdentity(ctx, &hermesv1.GetByIdentityRequest{
-		Domain:  identity.Domain,
-		Idp:     identity.IDP,
-		TOpenid: identity.TOpenID,
-	})
 	if err != nil {
 		return nil, err
 	}
@@ -179,18 +147,6 @@ func (c *Client) GetIdentitiesByIdentity(ctx context.Context, identity *models.U
 	return identities, nil
 }
 
-func (c *Client) GetIdentityByType(ctx context.Context, domain, openid, idpType string) (*models.UserIdentity, error) {
-	resp, err := c.user.GetIdentityByType(ctx, &hermesv1.GetIdentityByTypeRequest{
-		Domain:  domain,
-		Openid:  openid,
-		IdpType: idpType,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return identityFromProto(resp), nil
-}
-
 func (c *Client) AddIdentity(ctx context.Context, identity *models.UserIdentity) error {
 	pbReq := &hermesv1.AddIdentityRequest{
 		Domain:  identity.Domain,
@@ -223,7 +179,7 @@ func (c *Client) GetStaffByIdentifier(ctx context.Context, identifier string) (*
 	return passwordStoreCredentialFromProto(resp), nil
 }
 
-// ==================== Credential CRUD ====================
+// ==================== Credential ====================
 
 func (c *Client) CreateCredential(ctx context.Context, cred *models.UserCredential) error {
 	pbReq := &hermesv1.CreateCredentialRequest{
@@ -239,12 +195,43 @@ func (c *Client) CreateCredential(ctx context.Context, cred *models.UserCredenti
 	return err
 }
 
-func (c *Client) GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error) {
-	resp, err := c.user.GetCredentialByID(ctx, &hermesv1.CredentialIDRequest{CredentialId: credentialID})
+func (c *Client) GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
+	resp, err := c.user.GetEnabledUserCredentialsByType(ctx, &hermesv1.GetCredentialsByTypeRequest{
+		Openid: openid,
+		Type:   credType,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return credentialFromProto(resp), nil
+	creds := make([]models.UserCredential, 0, len(resp.Credentials))
+	for _, cr := range resp.Credentials {
+		creds = append(creds, *credentialFromProto(cr))
+	}
+	return creds, nil
+}
+
+func (c *Client) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
+	_, err := c.user.UpdateCredentialSignCount(ctx, &hermesv1.UpdateCredentialSignCountRequest{
+		CredentialId: credentialID,
+		SignCount:    signCount,
+	})
+	return err
+}
+
+func (c *Client) DeleteCredential(ctx context.Context, openid, credentialID string) error {
+	_, err := c.user.DeleteCredential(ctx, &hermesv1.DeleteCredentialRequest{
+		Openid:       openid,
+		CredentialId: credentialID,
+	})
+	return err
+}
+
+func (c *Client) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
+	resp, err := c.user.GetOpenIDByCredentialID(ctx, &hermesv1.CredentialIDRequest{CredentialId: credentialID})
+	if err != nil {
+		return "", err
+	}
+	return resp.Openid, nil
 }
 
 func (c *Client) GetUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
@@ -274,19 +261,12 @@ func (c *Client) GetUserCredentialsByType(ctx context.Context, openid, credType 
 	return creds, nil
 }
 
-func (c *Client) GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
-	resp, err := c.user.GetEnabledUserCredentialsByType(ctx, &hermesv1.GetCredentialsByTypeRequest{
-		Openid: openid,
-		Type:   credType,
-	})
+func (c *Client) GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error) {
+	resp, err := c.user.GetCredentialByID(ctx, &hermesv1.CredentialIDRequest{CredentialId: credentialID})
 	if err != nil {
 		return nil, err
 	}
-	creds := make([]models.UserCredential, 0, len(resp.Credentials))
-	for _, cr := range resp.Credentials {
-		creds = append(creds, *credentialFromProto(cr))
-	}
-	return creds, nil
+	return credentialFromProto(resp), nil
 }
 
 func (c *Client) UpdateCredential(ctx context.Context, credentialID string, updates map[string]any) error {
@@ -305,14 +285,6 @@ func (c *Client) UpdateCredential(ctx context.Context, credentialID string, upda
 	return err
 }
 
-func (c *Client) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
-	_, err := c.user.UpdateCredentialSignCount(ctx, &hermesv1.UpdateCredentialSignCountRequest{
-		CredentialId: credentialID,
-		SignCount:    signCount,
-	})
-	return err
-}
-
 func (c *Client) EnableCredential(ctx context.Context, credentialID string) error {
 	_, err := c.user.EnableCredential(ctx, &hermesv1.CredentialIDRequest{CredentialId: credentialID})
 	return err
@@ -322,23 +294,3 @@ func (c *Client) DisableCredential(ctx context.Context, credentialID string) err
 	_, err := c.user.DisableCredential(ctx, &hermesv1.CredentialIDRequest{CredentialId: credentialID})
 	return err
 }
-
-func (c *Client) DeleteCredential(ctx context.Context, openid, credentialID string) error {
-	_, err := c.user.DeleteCredential(ctx, &hermesv1.DeleteCredentialRequest{
-		Openid:       openid,
-		CredentialId: credentialID,
-	})
-	return err
-}
-
-func (c *Client) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
-	resp, err := c.user.GetOpenIDByCredentialID(ctx, &hermesv1.CredentialIDRequest{CredentialId: credentialID})
-	if err != nil {
-		return "", err
-	}
-	return resp.Openid, nil
-}
-
-// ==================== Credential Summary & MFA ====================
-// NOTE: Business logic (TOTP setup/verify, WebAuthn register/verify, MFA status)
-// has been moved to iris layer. hermesclient only provides CRUD operations.
