@@ -6,18 +6,14 @@ option go_package = "github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
-import "hermes/v1/common.proto";
 
-// UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证 + 用户组
+// UserService aegis 用户 + 身份 + 凭证管理接口
 service UserService {
   // ---- 用户查询 ----
 
-  rpc GetByOpenID(OpenIDRequest) returns (User);
-  rpc GetByIdentity(GetByIdentityRequest) returns (User);
   rpc GetByEmail(GetByEmailRequest) returns (DecryptedUser);
   rpc GetByPhonePlain(GetByPhonePlainRequest) returns (DecryptedUser);
   rpc GetDecryptedUser(OpenIDRequest) returns (DecryptedUser);
-  rpc GetDecryptedUserByIdentity(GetByIdentityRequest) returns (DecryptedUser);
 
   // ---- 用户写入 ----
 
@@ -30,7 +26,6 @@ service UserService {
 
   rpc GetIdentities(OpenIDRequest) returns (IdentityList);
   rpc GetIdentitiesByIdentity(GetByIdentityRequest) returns (IdentityList);
-  rpc GetIdentityByType(GetIdentityByTypeRequest) returns (UserIdentity);
   rpc AddIdentity(AddIdentityRequest) returns (google.protobuf.Empty);
 
   // ---- 密码认证（PasswordStore） ----
@@ -38,7 +33,7 @@ service UserService {
   rpc GetUserByIdentifier(GetByIdentifierRequest) returns (PasswordStoreCredential);
   rpc GetStaffByIdentifier(GetByIdentifierRequest) returns (PasswordStoreCredential);
 
-  // ---- 凭证通用 ----
+  // ---- 凭证 ----
 
   rpc CreateCredential(CreateCredentialRequest) returns (google.protobuf.Empty);
   rpc GetCredentialByID(CredentialIDRequest) returns (UserCredential);
@@ -51,21 +46,13 @@ service UserService {
   rpc DisableCredential(CredentialIDRequest) returns (google.protobuf.Empty);
   rpc DeleteCredential(DeleteCredentialRequest) returns (google.protobuf.Empty);
   rpc GetOpenIDByCredentialID(CredentialIDRequest) returns (OpenIDResponse);
-
-
-
-  // ---- Group ----
-
-  rpc CreateGroup(CreateGroupRequest) returns (Group);
-  rpc GetGroup(GetGroupRequest) returns (Group);
-  rpc ListGroups(ListGroupsRequest) returns (GroupList);
-  rpc UpdateGroup(UpdateGroupRequest) returns (Group);
-  rpc DeleteGroup(GetGroupRequest) returns (google.protobuf.Empty);
-  rpc SetGroupMembers(SetGroupMembersRequest) returns (google.protobuf.Empty);
-  rpc GetGroupMembers(GetGroupRequest) returns (StringList);
 }
 
 // ==================== User ====================
+
+message OpenIDRequest {
+  string openid = 1;
+}
 
 message User {
   uint32 id = 1;
@@ -80,7 +67,6 @@ message User {
   google.protobuf.Timestamp updated_at = 10;
 }
 
-// DecryptedUser 解密后的用户（含明文手机号）
 message DecryptedUser {
   User user = 1;
   string phone = 2;
@@ -133,7 +119,7 @@ message UpdatePasswordRequest {
 message UserIdentity {
   uint32 id = 1;
   string domain = 2;
-  string openid = 3; // 用户的 openid（对应 Go 模型中的 uid 字段）
+  string openid = 3;
   string idp = 4;
   string t_openid = 5;
   optional string raw_data = 6;
@@ -143,12 +129,6 @@ message UserIdentity {
 
 message IdentityList {
   repeated UserIdentity identities = 1;
-}
-
-message GetIdentityByTypeRequest {
-  string domain = 1;
-  string openid = 2;
-  string idp_type = 3;
 }
 
 message AddIdentityRequest {
@@ -189,7 +169,7 @@ message UserCredential {
   optional google.protobuf.Timestamp last_used_at = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
-  string secret = 9; // 加密后的密文（gRPC 内部传输，不暴露给前端）
+  string secret = 9;
 }
 
 message UserCredentialList {
@@ -228,50 +208,4 @@ message DeleteCredentialRequest {
 
 message OpenIDResponse {
   string openid = 1;
-}
-
-
-
-// ==================== Group ====================
-
-message Group {
-  uint32 id = 1;
-  string group_id = 2;
-  string service_id = 3;
-  string name = 4;
-  optional string description = 5;
-  google.protobuf.Timestamp created_at = 6;
-  google.protobuf.Timestamp updated_at = 7;
-}
-
-message GroupList {
-  repeated Group groups = 1;
-  string next_cursor = 2;
-}
-
-message GetGroupRequest {
-  string group_id = 1;
-}
-
-message CreateGroupRequest {
-  string group_id = 1;
-  string service_id = 2;
-  string name = 3;
-  optional string description = 4;
-}
-
-message UpdateGroupRequest {
-  string group_id = 1;
-  optional string name = 2;
-  optional string description = 3;
-}
-
-message ListGroupsRequest {
-  string filter = 1;
-  Pagination pagination = 2;
-}
-
-message SetGroupMembersRequest {
-  string group_id = 1;
-  repeated string user_ids = 2;
 }

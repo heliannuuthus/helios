@@ -11,7 +11,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -21,25 +20,10 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	ProvisionService_GetDomain_FullMethodName                  = "/hermes.v1.ProvisionService/GetDomain"
-	ProvisionService_ListDomains_FullMethodName                = "/hermes.v1.ProvisionService/ListDomains"
-	ProvisionService_UpdateDomain_FullMethodName               = "/hermes.v1.ProvisionService/UpdateDomain"
 	ProvisionService_GetDomainIDPConfigs_FullMethodName        = "/hermes.v1.ProvisionService/GetDomainIDPConfigs"
-	ProvisionService_CreateDomainIDPConfig_FullMethodName      = "/hermes.v1.ProvisionService/CreateDomainIDPConfig"
-	ProvisionService_UpdateDomainIDPConfig_FullMethodName      = "/hermes.v1.ProvisionService/UpdateDomainIDPConfig"
-	ProvisionService_DeleteDomainIDPConfig_FullMethodName      = "/hermes.v1.ProvisionService/DeleteDomainIDPConfig"
-	ProvisionService_CreateApplication_FullMethodName          = "/hermes.v1.ProvisionService/CreateApplication"
 	ProvisionService_GetApplication_FullMethodName             = "/hermes.v1.ProvisionService/GetApplication"
-	ProvisionService_ListApplications_FullMethodName           = "/hermes.v1.ProvisionService/ListApplications"
-	ProvisionService_UpdateApplication_FullMethodName          = "/hermes.v1.ProvisionService/UpdateApplication"
 	ProvisionService_GetApplicationIDPConfigs_FullMethodName   = "/hermes.v1.ProvisionService/GetApplicationIDPConfigs"
-	ProvisionService_CreateApplicationIDPConfig_FullMethodName = "/hermes.v1.ProvisionService/CreateApplicationIDPConfig"
-	ProvisionService_UpdateApplicationIDPConfig_FullMethodName = "/hermes.v1.ProvisionService/UpdateApplicationIDPConfig"
-	ProvisionService_DeleteApplicationIDPConfig_FullMethodName = "/hermes.v1.ProvisionService/DeleteApplicationIDPConfig"
-	ProvisionService_CreateService_FullMethodName              = "/hermes.v1.ProvisionService/CreateService"
 	ProvisionService_GetService_FullMethodName                 = "/hermes.v1.ProvisionService/GetService"
-	ProvisionService_ListServices_FullMethodName               = "/hermes.v1.ProvisionService/ListServices"
-	ProvisionService_UpdateService_FullMethodName              = "/hermes.v1.ProvisionService/UpdateService"
-	ProvisionService_DeleteService_FullMethodName              = "/hermes.v1.ProvisionService/DeleteService"
 	ProvisionService_GetServiceChallengeSetting_FullMethodName = "/hermes.v1.ProvisionService/GetServiceChallengeSetting"
 )
 
@@ -47,28 +31,13 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// ProvisionService 域 + 应用 + 服务 + IDP 配置管理
+// ProvisionService aegis 读取域/应用/服务/IDP 配置的只读接口
 type ProvisionServiceClient interface {
 	GetDomain(ctx context.Context, in *GetDomainRequest, opts ...grpc.CallOption) (*Domain, error)
-	ListDomains(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*DomainList, error)
-	UpdateDomain(ctx context.Context, in *UpdateDomainRequest, opts ...grpc.CallOption) (*Domain, error)
 	GetDomainIDPConfigs(ctx context.Context, in *GetDomainRequest, opts ...grpc.CallOption) (*DomainIDPConfigList, error)
-	CreateDomainIDPConfig(ctx context.Context, in *CreateDomainIDPConfigRequest, opts ...grpc.CallOption) (*DomainIDPConfig, error)
-	UpdateDomainIDPConfig(ctx context.Context, in *UpdateDomainIDPConfigRequest, opts ...grpc.CallOption) (*DomainIDPConfig, error)
-	DeleteDomainIDPConfig(ctx context.Context, in *DeleteDomainIDPConfigRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	CreateApplication(ctx context.Context, in *CreateApplicationRequest, opts ...grpc.CallOption) (*Application, error)
 	GetApplication(ctx context.Context, in *GetApplicationRequest, opts ...grpc.CallOption) (*Application, error)
-	ListApplications(ctx context.Context, in *ListApplicationsRequest, opts ...grpc.CallOption) (*ApplicationList, error)
-	UpdateApplication(ctx context.Context, in *UpdateApplicationRequest, opts ...grpc.CallOption) (*Application, error)
 	GetApplicationIDPConfigs(ctx context.Context, in *GetApplicationRequest, opts ...grpc.CallOption) (*ApplicationIDPConfigList, error)
-	CreateApplicationIDPConfig(ctx context.Context, in *CreateApplicationIDPConfigRequest, opts ...grpc.CallOption) (*ApplicationIDPConfig, error)
-	UpdateApplicationIDPConfig(ctx context.Context, in *UpdateApplicationIDPConfigRequest, opts ...grpc.CallOption) (*ApplicationIDPConfig, error)
-	DeleteApplicationIDPConfig(ctx context.Context, in *DeleteApplicationIDPConfigRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	CreateService(ctx context.Context, in *CreateServiceRequest, opts ...grpc.CallOption) (*Service, error)
 	GetService(ctx context.Context, in *GetServiceRequest, opts ...grpc.CallOption) (*Service, error)
-	ListServices(ctx context.Context, in *ListServicesRequest, opts ...grpc.CallOption) (*ServiceList, error)
-	UpdateService(ctx context.Context, in *UpdateServiceRequest, opts ...grpc.CallOption) (*Service, error)
-	DeleteService(ctx context.Context, in *DeleteServiceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetServiceChallengeSetting(ctx context.Context, in *GetServiceChallengeSettingRequest, opts ...grpc.CallOption) (*ServiceChallengeSetting, error)
 }
 
@@ -90,70 +59,10 @@ func (c *provisionServiceClient) GetDomain(ctx context.Context, in *GetDomainReq
 	return out, nil
 }
 
-func (c *provisionServiceClient) ListDomains(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*DomainList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DomainList)
-	err := c.cc.Invoke(ctx, ProvisionService_ListDomains_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) UpdateDomain(ctx context.Context, in *UpdateDomainRequest, opts ...grpc.CallOption) (*Domain, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Domain)
-	err := c.cc.Invoke(ctx, ProvisionService_UpdateDomain_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *provisionServiceClient) GetDomainIDPConfigs(ctx context.Context, in *GetDomainRequest, opts ...grpc.CallOption) (*DomainIDPConfigList, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DomainIDPConfigList)
 	err := c.cc.Invoke(ctx, ProvisionService_GetDomainIDPConfigs_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) CreateDomainIDPConfig(ctx context.Context, in *CreateDomainIDPConfigRequest, opts ...grpc.CallOption) (*DomainIDPConfig, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DomainIDPConfig)
-	err := c.cc.Invoke(ctx, ProvisionService_CreateDomainIDPConfig_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) UpdateDomainIDPConfig(ctx context.Context, in *UpdateDomainIDPConfigRequest, opts ...grpc.CallOption) (*DomainIDPConfig, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DomainIDPConfig)
-	err := c.cc.Invoke(ctx, ProvisionService_UpdateDomainIDPConfig_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) DeleteDomainIDPConfig(ctx context.Context, in *DeleteDomainIDPConfigRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, ProvisionService_DeleteDomainIDPConfig_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) CreateApplication(ctx context.Context, in *CreateApplicationRequest, opts ...grpc.CallOption) (*Application, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Application)
-	err := c.cc.Invoke(ctx, ProvisionService_CreateApplication_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -170,26 +79,6 @@ func (c *provisionServiceClient) GetApplication(ctx context.Context, in *GetAppl
 	return out, nil
 }
 
-func (c *provisionServiceClient) ListApplications(ctx context.Context, in *ListApplicationsRequest, opts ...grpc.CallOption) (*ApplicationList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ApplicationList)
-	err := c.cc.Invoke(ctx, ProvisionService_ListApplications_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) UpdateApplication(ctx context.Context, in *UpdateApplicationRequest, opts ...grpc.CallOption) (*Application, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Application)
-	err := c.cc.Invoke(ctx, ProvisionService_UpdateApplication_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *provisionServiceClient) GetApplicationIDPConfigs(ctx context.Context, in *GetApplicationRequest, opts ...grpc.CallOption) (*ApplicationIDPConfigList, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ApplicationIDPConfigList)
@@ -200,80 +89,10 @@ func (c *provisionServiceClient) GetApplicationIDPConfigs(ctx context.Context, i
 	return out, nil
 }
 
-func (c *provisionServiceClient) CreateApplicationIDPConfig(ctx context.Context, in *CreateApplicationIDPConfigRequest, opts ...grpc.CallOption) (*ApplicationIDPConfig, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ApplicationIDPConfig)
-	err := c.cc.Invoke(ctx, ProvisionService_CreateApplicationIDPConfig_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) UpdateApplicationIDPConfig(ctx context.Context, in *UpdateApplicationIDPConfigRequest, opts ...grpc.CallOption) (*ApplicationIDPConfig, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ApplicationIDPConfig)
-	err := c.cc.Invoke(ctx, ProvisionService_UpdateApplicationIDPConfig_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) DeleteApplicationIDPConfig(ctx context.Context, in *DeleteApplicationIDPConfigRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, ProvisionService_DeleteApplicationIDPConfig_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) CreateService(ctx context.Context, in *CreateServiceRequest, opts ...grpc.CallOption) (*Service, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Service)
-	err := c.cc.Invoke(ctx, ProvisionService_CreateService_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *provisionServiceClient) GetService(ctx context.Context, in *GetServiceRequest, opts ...grpc.CallOption) (*Service, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(Service)
 	err := c.cc.Invoke(ctx, ProvisionService_GetService_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) ListServices(ctx context.Context, in *ListServicesRequest, opts ...grpc.CallOption) (*ServiceList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ServiceList)
-	err := c.cc.Invoke(ctx, ProvisionService_ListServices_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) UpdateService(ctx context.Context, in *UpdateServiceRequest, opts ...grpc.CallOption) (*Service, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Service)
-	err := c.cc.Invoke(ctx, ProvisionService_UpdateService_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *provisionServiceClient) DeleteService(ctx context.Context, in *DeleteServiceRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, ProvisionService_DeleteService_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -294,28 +113,13 @@ func (c *provisionServiceClient) GetServiceChallengeSetting(ctx context.Context,
 // All implementations must embed UnimplementedProvisionServiceServer
 // for forward compatibility.
 //
-// ProvisionService 域 + 应用 + 服务 + IDP 配置管理
+// ProvisionService aegis 读取域/应用/服务/IDP 配置的只读接口
 type ProvisionServiceServer interface {
 	GetDomain(context.Context, *GetDomainRequest) (*Domain, error)
-	ListDomains(context.Context, *emptypb.Empty) (*DomainList, error)
-	UpdateDomain(context.Context, *UpdateDomainRequest) (*Domain, error)
 	GetDomainIDPConfigs(context.Context, *GetDomainRequest) (*DomainIDPConfigList, error)
-	CreateDomainIDPConfig(context.Context, *CreateDomainIDPConfigRequest) (*DomainIDPConfig, error)
-	UpdateDomainIDPConfig(context.Context, *UpdateDomainIDPConfigRequest) (*DomainIDPConfig, error)
-	DeleteDomainIDPConfig(context.Context, *DeleteDomainIDPConfigRequest) (*emptypb.Empty, error)
-	CreateApplication(context.Context, *CreateApplicationRequest) (*Application, error)
 	GetApplication(context.Context, *GetApplicationRequest) (*Application, error)
-	ListApplications(context.Context, *ListApplicationsRequest) (*ApplicationList, error)
-	UpdateApplication(context.Context, *UpdateApplicationRequest) (*Application, error)
 	GetApplicationIDPConfigs(context.Context, *GetApplicationRequest) (*ApplicationIDPConfigList, error)
-	CreateApplicationIDPConfig(context.Context, *CreateApplicationIDPConfigRequest) (*ApplicationIDPConfig, error)
-	UpdateApplicationIDPConfig(context.Context, *UpdateApplicationIDPConfigRequest) (*ApplicationIDPConfig, error)
-	DeleteApplicationIDPConfig(context.Context, *DeleteApplicationIDPConfigRequest) (*emptypb.Empty, error)
-	CreateService(context.Context, *CreateServiceRequest) (*Service, error)
 	GetService(context.Context, *GetServiceRequest) (*Service, error)
-	ListServices(context.Context, *ListServicesRequest) (*ServiceList, error)
-	UpdateService(context.Context, *UpdateServiceRequest) (*Service, error)
-	DeleteService(context.Context, *DeleteServiceRequest) (*emptypb.Empty, error)
 	GetServiceChallengeSetting(context.Context, *GetServiceChallengeSettingRequest) (*ServiceChallengeSetting, error)
 	mustEmbedUnimplementedProvisionServiceServer()
 }
@@ -330,62 +134,17 @@ type UnimplementedProvisionServiceServer struct{}
 func (UnimplementedProvisionServiceServer) GetDomain(context.Context, *GetDomainRequest) (*Domain, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDomain not implemented")
 }
-func (UnimplementedProvisionServiceServer) ListDomains(context.Context, *emptypb.Empty) (*DomainList, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListDomains not implemented")
-}
-func (UnimplementedProvisionServiceServer) UpdateDomain(context.Context, *UpdateDomainRequest) (*Domain, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateDomain not implemented")
-}
 func (UnimplementedProvisionServiceServer) GetDomainIDPConfigs(context.Context, *GetDomainRequest) (*DomainIDPConfigList, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDomainIDPConfigs not implemented")
-}
-func (UnimplementedProvisionServiceServer) CreateDomainIDPConfig(context.Context, *CreateDomainIDPConfigRequest) (*DomainIDPConfig, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateDomainIDPConfig not implemented")
-}
-func (UnimplementedProvisionServiceServer) UpdateDomainIDPConfig(context.Context, *UpdateDomainIDPConfigRequest) (*DomainIDPConfig, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateDomainIDPConfig not implemented")
-}
-func (UnimplementedProvisionServiceServer) DeleteDomainIDPConfig(context.Context, *DeleteDomainIDPConfigRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteDomainIDPConfig not implemented")
-}
-func (UnimplementedProvisionServiceServer) CreateApplication(context.Context, *CreateApplicationRequest) (*Application, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateApplication not implemented")
 }
 func (UnimplementedProvisionServiceServer) GetApplication(context.Context, *GetApplicationRequest) (*Application, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetApplication not implemented")
 }
-func (UnimplementedProvisionServiceServer) ListApplications(context.Context, *ListApplicationsRequest) (*ApplicationList, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListApplications not implemented")
-}
-func (UnimplementedProvisionServiceServer) UpdateApplication(context.Context, *UpdateApplicationRequest) (*Application, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateApplication not implemented")
-}
 func (UnimplementedProvisionServiceServer) GetApplicationIDPConfigs(context.Context, *GetApplicationRequest) (*ApplicationIDPConfigList, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetApplicationIDPConfigs not implemented")
 }
-func (UnimplementedProvisionServiceServer) CreateApplicationIDPConfig(context.Context, *CreateApplicationIDPConfigRequest) (*ApplicationIDPConfig, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateApplicationIDPConfig not implemented")
-}
-func (UnimplementedProvisionServiceServer) UpdateApplicationIDPConfig(context.Context, *UpdateApplicationIDPConfigRequest) (*ApplicationIDPConfig, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateApplicationIDPConfig not implemented")
-}
-func (UnimplementedProvisionServiceServer) DeleteApplicationIDPConfig(context.Context, *DeleteApplicationIDPConfigRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteApplicationIDPConfig not implemented")
-}
-func (UnimplementedProvisionServiceServer) CreateService(context.Context, *CreateServiceRequest) (*Service, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateService not implemented")
-}
 func (UnimplementedProvisionServiceServer) GetService(context.Context, *GetServiceRequest) (*Service, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetService not implemented")
-}
-func (UnimplementedProvisionServiceServer) ListServices(context.Context, *ListServicesRequest) (*ServiceList, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListServices not implemented")
-}
-func (UnimplementedProvisionServiceServer) UpdateService(context.Context, *UpdateServiceRequest) (*Service, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateService not implemented")
-}
-func (UnimplementedProvisionServiceServer) DeleteService(context.Context, *DeleteServiceRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteService not implemented")
 }
 func (UnimplementedProvisionServiceServer) GetServiceChallengeSetting(context.Context, *GetServiceChallengeSettingRequest) (*ServiceChallengeSetting, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetServiceChallengeSetting not implemented")
@@ -429,42 +188,6 @@ func _ProvisionService_GetDomain_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ProvisionService_ListDomains_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).ListDomains(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_ListDomains_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).ListDomains(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_UpdateDomain_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateDomainRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).UpdateDomain(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_UpdateDomain_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).UpdateDomain(ctx, req.(*UpdateDomainRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _ProvisionService_GetDomainIDPConfigs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetDomainRequest)
 	if err := dec(in); err != nil {
@@ -479,78 +202,6 @@ func _ProvisionService_GetDomainIDPConfigs_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ProvisionServiceServer).GetDomainIDPConfigs(ctx, req.(*GetDomainRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_CreateDomainIDPConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateDomainIDPConfigRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).CreateDomainIDPConfig(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_CreateDomainIDPConfig_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).CreateDomainIDPConfig(ctx, req.(*CreateDomainIDPConfigRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_UpdateDomainIDPConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateDomainIDPConfigRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).UpdateDomainIDPConfig(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_UpdateDomainIDPConfig_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).UpdateDomainIDPConfig(ctx, req.(*UpdateDomainIDPConfigRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_DeleteDomainIDPConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteDomainIDPConfigRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).DeleteDomainIDPConfig(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_DeleteDomainIDPConfig_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).DeleteDomainIDPConfig(ctx, req.(*DeleteDomainIDPConfigRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_CreateApplication_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateApplicationRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).CreateApplication(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_CreateApplication_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).CreateApplication(ctx, req.(*CreateApplicationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -573,42 +224,6 @@ func _ProvisionService_GetApplication_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ProvisionService_ListApplications_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListApplicationsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).ListApplications(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_ListApplications_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).ListApplications(ctx, req.(*ListApplicationsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_UpdateApplication_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateApplicationRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).UpdateApplication(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_UpdateApplication_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).UpdateApplication(ctx, req.(*UpdateApplicationRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _ProvisionService_GetApplicationIDPConfigs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetApplicationRequest)
 	if err := dec(in); err != nil {
@@ -627,78 +242,6 @@ func _ProvisionService_GetApplicationIDPConfigs_Handler(srv interface{}, ctx con
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ProvisionService_CreateApplicationIDPConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateApplicationIDPConfigRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).CreateApplicationIDPConfig(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_CreateApplicationIDPConfig_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).CreateApplicationIDPConfig(ctx, req.(*CreateApplicationIDPConfigRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_UpdateApplicationIDPConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateApplicationIDPConfigRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).UpdateApplicationIDPConfig(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_UpdateApplicationIDPConfig_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).UpdateApplicationIDPConfig(ctx, req.(*UpdateApplicationIDPConfigRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_DeleteApplicationIDPConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteApplicationIDPConfigRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).DeleteApplicationIDPConfig(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_DeleteApplicationIDPConfig_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).DeleteApplicationIDPConfig(ctx, req.(*DeleteApplicationIDPConfigRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_CreateService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateServiceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).CreateService(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_CreateService_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).CreateService(ctx, req.(*CreateServiceRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _ProvisionService_GetService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetServiceRequest)
 	if err := dec(in); err != nil {
@@ -713,60 +256,6 @@ func _ProvisionService_GetService_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ProvisionServiceServer).GetService(ctx, req.(*GetServiceRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_ListServices_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListServicesRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).ListServices(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_ListServices_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).ListServices(ctx, req.(*ListServicesRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_UpdateService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateServiceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).UpdateService(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_UpdateService_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).UpdateService(ctx, req.(*UpdateServiceRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ProvisionService_DeleteService_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteServiceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ProvisionServiceServer).DeleteService(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ProvisionService_DeleteService_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProvisionServiceServer).DeleteService(ctx, req.(*DeleteServiceRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -801,80 +290,20 @@ var ProvisionService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ProvisionService_GetDomain_Handler,
 		},
 		{
-			MethodName: "ListDomains",
-			Handler:    _ProvisionService_ListDomains_Handler,
-		},
-		{
-			MethodName: "UpdateDomain",
-			Handler:    _ProvisionService_UpdateDomain_Handler,
-		},
-		{
 			MethodName: "GetDomainIDPConfigs",
 			Handler:    _ProvisionService_GetDomainIDPConfigs_Handler,
-		},
-		{
-			MethodName: "CreateDomainIDPConfig",
-			Handler:    _ProvisionService_CreateDomainIDPConfig_Handler,
-		},
-		{
-			MethodName: "UpdateDomainIDPConfig",
-			Handler:    _ProvisionService_UpdateDomainIDPConfig_Handler,
-		},
-		{
-			MethodName: "DeleteDomainIDPConfig",
-			Handler:    _ProvisionService_DeleteDomainIDPConfig_Handler,
-		},
-		{
-			MethodName: "CreateApplication",
-			Handler:    _ProvisionService_CreateApplication_Handler,
 		},
 		{
 			MethodName: "GetApplication",
 			Handler:    _ProvisionService_GetApplication_Handler,
 		},
 		{
-			MethodName: "ListApplications",
-			Handler:    _ProvisionService_ListApplications_Handler,
-		},
-		{
-			MethodName: "UpdateApplication",
-			Handler:    _ProvisionService_UpdateApplication_Handler,
-		},
-		{
 			MethodName: "GetApplicationIDPConfigs",
 			Handler:    _ProvisionService_GetApplicationIDPConfigs_Handler,
 		},
 		{
-			MethodName: "CreateApplicationIDPConfig",
-			Handler:    _ProvisionService_CreateApplicationIDPConfig_Handler,
-		},
-		{
-			MethodName: "UpdateApplicationIDPConfig",
-			Handler:    _ProvisionService_UpdateApplicationIDPConfig_Handler,
-		},
-		{
-			MethodName: "DeleteApplicationIDPConfig",
-			Handler:    _ProvisionService_DeleteApplicationIDPConfig_Handler,
-		},
-		{
-			MethodName: "CreateService",
-			Handler:    _ProvisionService_CreateService_Handler,
-		},
-		{
 			MethodName: "GetService",
 			Handler:    _ProvisionService_GetService_Handler,
-		},
-		{
-			MethodName: "ListServices",
-			Handler:    _ProvisionService_ListServices_Handler,
-		},
-		{
-			MethodName: "UpdateService",
-			Handler:    _ProvisionService_UpdateService_Handler,
-		},
-		{
-			MethodName: "DeleteService",
-			Handler:    _ProvisionService_DeleteService_Handler,
 		},
 		{
 			MethodName: "GetServiceChallengeSetting",

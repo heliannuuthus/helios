@@ -7,12 +7,12 @@ import (
 	"github.com/heliannuuthus/helios/hermes"
 )
 
-// UserAdapter 将 hermes.Service 适配为 contract.UserProvider
+// UserAdapter 将 hermes.UserService 适配为 contract.UserProvider
 type UserAdapter struct {
-	svc *hermes.Service
+	svc *hermes.UserService
 }
 
-func NewUserAdapter(svc *hermes.Service) *UserAdapter {
+func NewUserAdapter(svc *hermes.UserService) *UserAdapter {
 	return &UserAdapter{svc: svc}
 }
 

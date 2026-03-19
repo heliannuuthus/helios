@@ -11,27 +11,24 @@ import (
 	"github.com/heliannuuthus/helios/aegis"
 	"github.com/heliannuuthus/helios/aegis/adapter"
 	"github.com/heliannuuthus/helios/chaos"
+	_ "github.com/heliannuuthus/helios/docs"
 	"github.com/heliannuuthus/helios/hermes"
-	config2 "github.com/heliannuuthus/helios/hermes/config"
+	hermesconfig "github.com/heliannuuthus/helios/hermes/config"
 	"github.com/heliannuuthus/helios/iris"
 	"github.com/heliannuuthus/helios/zwei"
-	"github.com/heliannuuthus/helios/zwei/config"
-)
-
-import (
-	_ "github.com/heliannuuthus/helios/docs"
+	zweiconfig "github.com/heliannuuthus/helios/zwei/config"
 )
 
 // Injectors from wire.go:
 
 func InitializeApp() (*App, error) {
 	zwei := provideZwei()
-	service := provideHermesService()
-	handler, err := provideAegisHandler(service)
+	hermesServices := provideHermesServices()
+	handler, err := provideAegisHandler(hermesServices)
 	if err != nil {
 		return nil, err
 	}
-	hermesHandler := provideHermesHandler(service)
+	hermesHandler := provideHermesHandler(hermesServices)
 	chaosHandler, err := provideChaosHandler()
 	if err != nil {
 		return nil, err
@@ -49,11 +46,18 @@ func InitializeApp() (*App, error) {
 
 var ProviderSet = wire.NewSet(
 	provideZwei,
-	provideHermesService,
+	provideHermesServices,
 	provideHermesHandler,
 	provideAegisHandler,
 	provideChaosHandler,
 )
+
+type HermesServices struct {
+	User      *hermes.UserService
+	Provision *hermes.ProvisionService
+	Resource  *hermes.ResourceService
+	Key       *hermes.KeyService
+}
 
 type App struct {
 	Zwei          *zwei.Zwei
@@ -63,27 +67,34 @@ type App struct {
 }
 
 func provideZwei() *zwei.Zwei {
-	return zwei.New(config.InitDB())
+	return zwei.New(zweiconfig.InitDB())
 }
 
-func provideHermesService() *hermes.Service {
-	return hermes.NewService(config2.InitDB())
+func provideHermesServices() *HermesServices {
+	db := hermesconfig.InitDB()
+	keySvc := hermes.NewKeyService(db)
+	return &HermesServices{
+		User:      hermes.NewUserService(db),
+		Provision: hermes.NewProvisionService(db, keySvc),
+		Resource:  hermes.NewResourceService(db),
+		Key:       keySvc,
+	}
 }
 
-func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
-	hermesAdapter := adapter.NewHermesAdapter(hermesService)
-	userAdapter := adapter.NewUserAdapter(hermesService)
-	credentialStore := adapter.NewCredentialStoreAdapter(hermesService)
+func provideAegisHandler(svc *HermesServices) (*aegis.Handler, error) {
+	hermesAdapter := adapter.NewHermesAdapter(svc.Provision, svc.Key, svc.Resource)
+	userAdapter := adapter.NewUserAdapter(svc.User)
+	credentialStore := adapter.NewCredentialStoreAdapter(svc.User)
 	credentialSvc := iris.NewCredentialService(credentialStore)
 	return aegis.Initialize(hermesAdapter, userAdapter, credentialSvc)
 }
 
-func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
-	return hermes.NewHandler(hermesService)
+func provideHermesHandler(svc *HermesServices) *hermes.Handler {
+	return hermes.NewHandler(svc.Provision, svc.Resource, svc.Key, svc.User)
 }
 
 func provideChaosHandler() (*chaos.Handler, error) {
-	db := config2.InitDB()
+	db := hermesconfig.InitDB()
 	chaosModule, err := chaos.New(db)
 	if err != nil {
 		return nil, err

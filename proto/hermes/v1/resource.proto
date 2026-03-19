@@ -4,43 +4,18 @@ package hermes.v1;
 
 option go_package = "github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1";
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
-import "hermes/v1/common.proto";
 
-// ResourceService 关系（ReBAC）+ 应用-服务关系管理
+// ResourceService aegis 读取应用-服务关系 + 查询 ReBAC 关系的只读接口
 service ResourceService {
-  // ---- Application-Service Relation ----
-
-  rpc SetApplicationServiceRelations(SetApplicationServiceRelationsRequest) returns (google.protobuf.Empty);
   rpc GetApplicationServiceRelations(GetApplicationServiceRelationsRequest) returns (ApplicationServiceRelationList);
-  rpc GetServiceAppRelations(GetServiceAppRelationsRequest) returns (StringList);
-  rpc GetServiceApplicationRelations(GetServiceApplicationRelationsRequest) returns (ApplicationServiceRelationList);
-
-  // ---- Relationship (ReBAC) ----
-
-  rpc CreateRelationship(CreateRelationshipRequest) returns (Relationship);
-  rpc DeleteRelationship(DeleteRelationshipRequest) returns (google.protobuf.Empty);
-  rpc UpdateRelationship(UpdateRelationshipRequest) returns (Relationship);
-  rpc ListRelationships(ListRelationshipsRequest) returns (RelationshipList);
   rpc FindRelationships(FindRelationshipsRequest) returns (Relationships);
-
-  // ---- AppService Relationship (RESTful 嵌套) ----
-
-  rpc ListAppServiceRelationships(ListAppServiceRelationshipsRequest) returns (RelationshipList);
-  rpc CreateAppServiceRelationship(CreateAppServiceRelationshipRequest) returns (Relationship);
-  rpc UpdateAppServiceRelationship(UpdateAppServiceRelationshipRequest) returns (Relationship);
-  rpc DeleteAppServiceRelationship(DeleteAppServiceRelationshipRequest) returns (google.protobuf.Empty);
 }
 
 // ==================== Application-Service Relation ====================
 
 message GetApplicationServiceRelationsRequest {
   string app_id = 1;
-}
-
-message GetServiceApplicationRelationsRequest {
-  string service_id = 1;
 }
 
 message ApplicationServiceRelation {
@@ -53,17 +28,6 @@ message ApplicationServiceRelation {
 
 message ApplicationServiceRelationList {
   repeated ApplicationServiceRelation relations = 1;
-}
-
-message SetApplicationServiceRelationsRequest {
-  string app_id = 1;
-  string service_id = 2;
-  repeated string relations = 3;
-}
-
-message GetServiceAppRelationsRequest {
-  string service_id = 1;
-  string app_id = 2;
 }
 
 // ==================== Relationship ====================
@@ -80,46 +44,6 @@ message Relationship {
   optional google.protobuf.Timestamp expires_at = 9;
 }
 
-message RelationshipList {
-  repeated Relationship relationships = 1;
-  string next_cursor = 2;
-}
-
-message CreateRelationshipRequest {
-  string service_id = 1;
-  string subject_type = 2;
-  string subject_id = 3;
-  string relation = 4;
-  string object_type = 5;
-  string object_id = 6;
-  optional google.protobuf.Timestamp expires_at = 7;
-}
-
-message DeleteRelationshipRequest {
-  string service_id = 1;
-  string subject_type = 2;
-  string subject_id = 3;
-  string relation = 4;
-  string object_type = 5;
-  string object_id = 6;
-}
-
-message UpdateRelationshipRequest {
-  string service_id = 1;
-  string subject_type = 2;
-  string subject_id = 3;
-  string relation = 4;
-  string object_type = 5;
-  string object_id = 6;
-  optional string new_relation = 7;
-  optional google.protobuf.Timestamp expires_at = 8;
-}
-
-message ListRelationshipsRequest {
-  string filter = 1;
-  Pagination pagination = 2;
-}
-
 message FindRelationshipsRequest {
   string service_id = 1;
   string subject_type = 2;
@@ -128,38 +52,4 @@ message FindRelationshipsRequest {
 
 message Relationships {
   repeated Relationship items = 1;
-}
-
-// ==================== AppService Relationship (嵌套资源) ====================
-
-message ListAppServiceRelationshipsRequest {
-  string app_id = 1;
-  string service_id = 2;
-  string filter = 3;
-  Pagination pagination = 4;
-}
-
-message CreateAppServiceRelationshipRequest {
-  string app_id = 1;
-  string service_id = 2;
-  string subject_type = 3;
-  string subject_id = 4;
-  string relation = 5;
-  string object_type = 6;
-  string object_id = 7;
-  optional google.protobuf.Timestamp expires_at = 8;
-}
-
-message UpdateAppServiceRelationshipRequest {
-  string app_id = 1;
-  string service_id = 2;
-  uint32 relationship_id = 3;
-  optional string new_relation = 4;
-  optional google.protobuf.Timestamp expires_at = 5;
-}
-
-message DeleteAppServiceRelationshipRequest {
-  string app_id = 1;
-  string service_id = 2;
-  uint32 relationship_id = 3;
 }

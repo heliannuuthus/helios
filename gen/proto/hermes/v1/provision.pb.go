@@ -9,7 +9,6 @@ package hermesv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -143,110 +142,6 @@ func (x *Domain) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-type DomainList struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Domains       []*Domain              `protobuf:"bytes,1,rep,name=domains,proto3" json:"domains,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DomainList) Reset() {
-	*x = DomainList{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DomainList) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DomainList) ProtoMessage() {}
-
-func (x *DomainList) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DomainList.ProtoReflect.Descriptor instead.
-func (*DomainList) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *DomainList) GetDomains() []*Domain {
-	if x != nil {
-		return x.Domains
-	}
-	return nil
-}
-
-type UpdateDomainRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DomainId      string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	Name          *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateDomainRequest) Reset() {
-	*x = UpdateDomainRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateDomainRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateDomainRequest) ProtoMessage() {}
-
-func (x *UpdateDomainRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateDomainRequest.ProtoReflect.Descriptor instead.
-func (*UpdateDomainRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *UpdateDomainRequest) GetDomainId() string {
-	if x != nil {
-		return x.DomainId
-	}
-	return ""
-}
-
-func (x *UpdateDomainRequest) GetName() string {
-	if x != nil && x.Name != nil {
-		return *x.Name
-	}
-	return ""
-}
-
-func (x *UpdateDomainRequest) GetDescription() string {
-	if x != nil && x.Description != nil {
-		return *x.Description
-	}
-	return ""
-}
-
 type DomainIDPConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -264,7 +159,7 @@ type DomainIDPConfig struct {
 
 func (x *DomainIDPConfig) Reset() {
 	*x = DomainIDPConfig{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[4]
+	mi := &file_hermes_v1_provision_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -276,7 +171,7 @@ func (x *DomainIDPConfig) String() string {
 func (*DomainIDPConfig) ProtoMessage() {}
 
 func (x *DomainIDPConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[4]
+	mi := &file_hermes_v1_provision_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -289,7 +184,7 @@ func (x *DomainIDPConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainIDPConfig.ProtoReflect.Descriptor instead.
 func (*DomainIDPConfig) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{4}
+	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *DomainIDPConfig) GetId() uint32 {
@@ -364,7 +259,7 @@ type DomainIDPConfigList struct {
 
 func (x *DomainIDPConfigList) Reset() {
 	*x = DomainIDPConfigList{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[5]
+	mi := &file_hermes_v1_provision_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -376,7 +271,7 @@ func (x *DomainIDPConfigList) String() string {
 func (*DomainIDPConfigList) ProtoMessage() {}
 
 func (x *DomainIDPConfigList) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[5]
+	mi := &file_hermes_v1_provision_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -389,7 +284,7 @@ func (x *DomainIDPConfigList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DomainIDPConfigList.ProtoReflect.Descriptor instead.
 func (*DomainIDPConfigList) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{5}
+	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DomainIDPConfigList) GetConfigs() []*DomainIDPConfig {
@@ -397,598 +292,6 @@ func (x *DomainIDPConfigList) GetConfigs() []*DomainIDPConfig {
 		return x.Configs
 	}
 	return nil
-}
-
-type CreateDomainIDPConfigRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DomainId      string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Priority      int32                  `protobuf:"varint,3,opt,name=priority,proto3" json:"priority,omitempty"`
-	Strategy      *string                `protobuf:"bytes,4,opt,name=strategy,proto3,oneof" json:"strategy,omitempty"`
-	Delegate      *string                `protobuf:"bytes,5,opt,name=delegate,proto3,oneof" json:"delegate,omitempty"`
-	Require       *string                `protobuf:"bytes,6,opt,name=require,proto3,oneof" json:"require,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateDomainIDPConfigRequest) Reset() {
-	*x = CreateDomainIDPConfigRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateDomainIDPConfigRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateDomainIDPConfigRequest) ProtoMessage() {}
-
-func (x *CreateDomainIDPConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateDomainIDPConfigRequest.ProtoReflect.Descriptor instead.
-func (*CreateDomainIDPConfigRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *CreateDomainIDPConfigRequest) GetDomainId() string {
-	if x != nil {
-		return x.DomainId
-	}
-	return ""
-}
-
-func (x *CreateDomainIDPConfigRequest) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *CreateDomainIDPConfigRequest) GetPriority() int32 {
-	if x != nil {
-		return x.Priority
-	}
-	return 0
-}
-
-func (x *CreateDomainIDPConfigRequest) GetStrategy() string {
-	if x != nil && x.Strategy != nil {
-		return *x.Strategy
-	}
-	return ""
-}
-
-func (x *CreateDomainIDPConfigRequest) GetDelegate() string {
-	if x != nil && x.Delegate != nil {
-		return *x.Delegate
-	}
-	return ""
-}
-
-func (x *CreateDomainIDPConfigRequest) GetRequire() string {
-	if x != nil && x.Require != nil {
-		return *x.Require
-	}
-	return ""
-}
-
-type UpdateDomainIDPConfigRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DomainId      string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Priority      *int32                 `protobuf:"varint,3,opt,name=priority,proto3,oneof" json:"priority,omitempty"`
-	Strategy      *string                `protobuf:"bytes,4,opt,name=strategy,proto3,oneof" json:"strategy,omitempty"`
-	Delegate      *string                `protobuf:"bytes,5,opt,name=delegate,proto3,oneof" json:"delegate,omitempty"`
-	Require       *string                `protobuf:"bytes,6,opt,name=require,proto3,oneof" json:"require,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateDomainIDPConfigRequest) Reset() {
-	*x = UpdateDomainIDPConfigRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateDomainIDPConfigRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateDomainIDPConfigRequest) ProtoMessage() {}
-
-func (x *UpdateDomainIDPConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateDomainIDPConfigRequest.ProtoReflect.Descriptor instead.
-func (*UpdateDomainIDPConfigRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *UpdateDomainIDPConfigRequest) GetDomainId() string {
-	if x != nil {
-		return x.DomainId
-	}
-	return ""
-}
-
-func (x *UpdateDomainIDPConfigRequest) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *UpdateDomainIDPConfigRequest) GetPriority() int32 {
-	if x != nil && x.Priority != nil {
-		return *x.Priority
-	}
-	return 0
-}
-
-func (x *UpdateDomainIDPConfigRequest) GetStrategy() string {
-	if x != nil && x.Strategy != nil {
-		return *x.Strategy
-	}
-	return ""
-}
-
-func (x *UpdateDomainIDPConfigRequest) GetDelegate() string {
-	if x != nil && x.Delegate != nil {
-		return *x.Delegate
-	}
-	return ""
-}
-
-func (x *UpdateDomainIDPConfigRequest) GetRequire() string {
-	if x != nil && x.Require != nil {
-		return *x.Require
-	}
-	return ""
-}
-
-type DeleteDomainIDPConfigRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DomainId      string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeleteDomainIDPConfigRequest) Reset() {
-	*x = DeleteDomainIDPConfigRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeleteDomainIDPConfigRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeleteDomainIDPConfigRequest) ProtoMessage() {}
-
-func (x *DeleteDomainIDPConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeleteDomainIDPConfigRequest.ProtoReflect.Descriptor instead.
-func (*DeleteDomainIDPConfigRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *DeleteDomainIDPConfigRequest) GetDomainId() string {
-	if x != nil {
-		return x.DomainId
-	}
-	return ""
-}
-
-func (x *DeleteDomainIDPConfigRequest) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-type ApplicationIDPConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	AppId         string                 `protobuf:"bytes,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Priority      int32                  `protobuf:"varint,4,opt,name=priority,proto3" json:"priority,omitempty"`
-	Strategy      *string                `protobuf:"bytes,5,opt,name=strategy,proto3,oneof" json:"strategy,omitempty"`
-	Delegate      *string                `protobuf:"bytes,6,opt,name=delegate,proto3,oneof" json:"delegate,omitempty"`
-	Require       *string                `protobuf:"bytes,7,opt,name=require,proto3,oneof" json:"require,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ApplicationIDPConfig) Reset() {
-	*x = ApplicationIDPConfig{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ApplicationIDPConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ApplicationIDPConfig) ProtoMessage() {}
-
-func (x *ApplicationIDPConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ApplicationIDPConfig.ProtoReflect.Descriptor instead.
-func (*ApplicationIDPConfig) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *ApplicationIDPConfig) GetId() uint32 {
-	if x != nil {
-		return x.Id
-	}
-	return 0
-}
-
-func (x *ApplicationIDPConfig) GetAppId() string {
-	if x != nil {
-		return x.AppId
-	}
-	return ""
-}
-
-func (x *ApplicationIDPConfig) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *ApplicationIDPConfig) GetPriority() int32 {
-	if x != nil {
-		return x.Priority
-	}
-	return 0
-}
-
-func (x *ApplicationIDPConfig) GetStrategy() string {
-	if x != nil && x.Strategy != nil {
-		return *x.Strategy
-	}
-	return ""
-}
-
-func (x *ApplicationIDPConfig) GetDelegate() string {
-	if x != nil && x.Delegate != nil {
-		return *x.Delegate
-	}
-	return ""
-}
-
-func (x *ApplicationIDPConfig) GetRequire() string {
-	if x != nil && x.Require != nil {
-		return *x.Require
-	}
-	return ""
-}
-
-func (x *ApplicationIDPConfig) GetCreatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return nil
-}
-
-func (x *ApplicationIDPConfig) GetUpdatedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.UpdatedAt
-	}
-	return nil
-}
-
-type ApplicationIDPConfigList struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Configs       []*ApplicationIDPConfig `protobuf:"bytes,1,rep,name=configs,proto3" json:"configs,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ApplicationIDPConfigList) Reset() {
-	*x = ApplicationIDPConfigList{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ApplicationIDPConfigList) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ApplicationIDPConfigList) ProtoMessage() {}
-
-func (x *ApplicationIDPConfigList) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ApplicationIDPConfigList.ProtoReflect.Descriptor instead.
-func (*ApplicationIDPConfigList) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *ApplicationIDPConfigList) GetConfigs() []*ApplicationIDPConfig {
-	if x != nil {
-		return x.Configs
-	}
-	return nil
-}
-
-type CreateApplicationIDPConfigRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AppId         string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Priority      int32                  `protobuf:"varint,3,opt,name=priority,proto3" json:"priority,omitempty"`
-	Strategy      *string                `protobuf:"bytes,4,opt,name=strategy,proto3,oneof" json:"strategy,omitempty"`
-	Delegate      *string                `protobuf:"bytes,5,opt,name=delegate,proto3,oneof" json:"delegate,omitempty"`
-	Require       *string                `protobuf:"bytes,6,opt,name=require,proto3,oneof" json:"require,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateApplicationIDPConfigRequest) Reset() {
-	*x = CreateApplicationIDPConfigRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateApplicationIDPConfigRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateApplicationIDPConfigRequest) ProtoMessage() {}
-
-func (x *CreateApplicationIDPConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateApplicationIDPConfigRequest.ProtoReflect.Descriptor instead.
-func (*CreateApplicationIDPConfigRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *CreateApplicationIDPConfigRequest) GetAppId() string {
-	if x != nil {
-		return x.AppId
-	}
-	return ""
-}
-
-func (x *CreateApplicationIDPConfigRequest) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *CreateApplicationIDPConfigRequest) GetPriority() int32 {
-	if x != nil {
-		return x.Priority
-	}
-	return 0
-}
-
-func (x *CreateApplicationIDPConfigRequest) GetStrategy() string {
-	if x != nil && x.Strategy != nil {
-		return *x.Strategy
-	}
-	return ""
-}
-
-func (x *CreateApplicationIDPConfigRequest) GetDelegate() string {
-	if x != nil && x.Delegate != nil {
-		return *x.Delegate
-	}
-	return ""
-}
-
-func (x *CreateApplicationIDPConfigRequest) GetRequire() string {
-	if x != nil && x.Require != nil {
-		return *x.Require
-	}
-	return ""
-}
-
-type UpdateApplicationIDPConfigRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AppId         string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	Priority      *int32                 `protobuf:"varint,3,opt,name=priority,proto3,oneof" json:"priority,omitempty"`
-	Strategy      *string                `protobuf:"bytes,4,opt,name=strategy,proto3,oneof" json:"strategy,omitempty"`
-	Delegate      *string                `protobuf:"bytes,5,opt,name=delegate,proto3,oneof" json:"delegate,omitempty"`
-	Require       *string                `protobuf:"bytes,6,opt,name=require,proto3,oneof" json:"require,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateApplicationIDPConfigRequest) Reset() {
-	*x = UpdateApplicationIDPConfigRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateApplicationIDPConfigRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateApplicationIDPConfigRequest) ProtoMessage() {}
-
-func (x *UpdateApplicationIDPConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateApplicationIDPConfigRequest.ProtoReflect.Descriptor instead.
-func (*UpdateApplicationIDPConfigRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *UpdateApplicationIDPConfigRequest) GetAppId() string {
-	if x != nil {
-		return x.AppId
-	}
-	return ""
-}
-
-func (x *UpdateApplicationIDPConfigRequest) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *UpdateApplicationIDPConfigRequest) GetPriority() int32 {
-	if x != nil && x.Priority != nil {
-		return *x.Priority
-	}
-	return 0
-}
-
-func (x *UpdateApplicationIDPConfigRequest) GetStrategy() string {
-	if x != nil && x.Strategy != nil {
-		return *x.Strategy
-	}
-	return ""
-}
-
-func (x *UpdateApplicationIDPConfigRequest) GetDelegate() string {
-	if x != nil && x.Delegate != nil {
-		return *x.Delegate
-	}
-	return ""
-}
-
-func (x *UpdateApplicationIDPConfigRequest) GetRequire() string {
-	if x != nil && x.Require != nil {
-		return *x.Require
-	}
-	return ""
-}
-
-type DeleteApplicationIDPConfigRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AppId         string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeleteApplicationIDPConfigRequest) Reset() {
-	*x = DeleteApplicationIDPConfigRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeleteApplicationIDPConfigRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeleteApplicationIDPConfigRequest) ProtoMessage() {}
-
-func (x *DeleteApplicationIDPConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeleteApplicationIDPConfigRequest.ProtoReflect.Descriptor instead.
-func (*DeleteApplicationIDPConfigRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *DeleteApplicationIDPConfigRequest) GetAppId() string {
-	if x != nil {
-		return x.AppId
-	}
-	return ""
-}
-
-func (x *DeleteApplicationIDPConfigRequest) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
 }
 
 type GetApplicationRequest struct {
@@ -1000,7 +303,7 @@ type GetApplicationRequest struct {
 
 func (x *GetApplicationRequest) Reset() {
 	*x = GetApplicationRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[14]
+	mi := &file_hermes_v1_provision_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1012,7 +315,7 @@ func (x *GetApplicationRequest) String() string {
 func (*GetApplicationRequest) ProtoMessage() {}
 
 func (x *GetApplicationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[14]
+	mi := &file_hermes_v1_provision_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1025,7 +328,7 @@ func (x *GetApplicationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetApplicationRequest.ProtoReflect.Descriptor instead.
 func (*GetApplicationRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{14}
+	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetApplicationRequest) GetAppId() string {
@@ -1057,7 +360,7 @@ type Application struct {
 
 func (x *Application) Reset() {
 	*x = Application{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[15]
+	mi := &file_hermes_v1_provision_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1069,7 +372,7 @@ func (x *Application) String() string {
 func (*Application) ProtoMessage() {}
 
 func (x *Application) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[15]
+	mi := &file_hermes_v1_provision_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1082,7 +385,7 @@ func (x *Application) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Application.ProtoReflect.Descriptor instead.
 func (*Application) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{15}
+	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Application) GetId() uint32 {
@@ -1183,29 +486,36 @@ func (x *Application) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-type ApplicationList struct {
+type ApplicationIDPConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Applications  []*Application         `protobuf:"bytes,1,rep,name=applications,proto3" json:"applications,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	AppId         string                 `protobuf:"bytes,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
+	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Priority      int32                  `protobuf:"varint,4,opt,name=priority,proto3" json:"priority,omitempty"`
+	Strategy      *string                `protobuf:"bytes,5,opt,name=strategy,proto3,oneof" json:"strategy,omitempty"`
+	Delegate      *string                `protobuf:"bytes,6,opt,name=delegate,proto3,oneof" json:"delegate,omitempty"`
+	Require       *string                `protobuf:"bytes,7,opt,name=require,proto3,oneof" json:"require,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ApplicationList) Reset() {
-	*x = ApplicationList{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[16]
+func (x *ApplicationIDPConfig) Reset() {
+	*x = ApplicationIDPConfig{}
+	mi := &file_hermes_v1_provision_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ApplicationList) String() string {
+func (x *ApplicationIDPConfig) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ApplicationList) ProtoMessage() {}
+func (*ApplicationIDPConfig) ProtoMessage() {}
 
-func (x *ApplicationList) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[16]
+func (x *ApplicationIDPConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_provision_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1216,289 +526,96 @@ func (x *ApplicationList) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ApplicationList.ProtoReflect.Descriptor instead.
-func (*ApplicationList) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{16}
+// Deprecated: Use ApplicationIDPConfig.ProtoReflect.Descriptor instead.
+func (*ApplicationIDPConfig) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *ApplicationList) GetApplications() []*Application {
+func (x *ApplicationIDPConfig) GetId() uint32 {
 	if x != nil {
-		return x.Applications
-	}
-	return nil
-}
-
-func (x *ApplicationList) GetNextCursor() string {
-	if x != nil {
-		return x.NextCursor
-	}
-	return ""
-}
-
-type CreateApplicationRequest struct {
-	state                         protoimpl.MessageState `protogen:"open.v1"`
-	DomainId                      string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	AppId                         *string                `protobuf:"bytes,2,opt,name=app_id,json=appId,proto3,oneof" json:"app_id,omitempty"`
-	Name                          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Description                   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	AllowedRedirectUris           []string               `protobuf:"bytes,5,rep,name=allowed_redirect_uris,json=allowedRedirectUris,proto3" json:"allowed_redirect_uris,omitempty"`
-	AllowedOrigins                []string               `protobuf:"bytes,6,rep,name=allowed_origins,json=allowedOrigins,proto3" json:"allowed_origins,omitempty"`
-	AllowedLogoutUris             []string               `protobuf:"bytes,7,rep,name=allowed_logout_uris,json=allowedLogoutUris,proto3" json:"allowed_logout_uris,omitempty"`
-	NeedKey                       bool                   `protobuf:"varint,8,opt,name=need_key,json=needKey,proto3" json:"need_key,omitempty"`
-	IdTokenExpiresIn              *uint32                `protobuf:"varint,9,opt,name=id_token_expires_in,json=idTokenExpiresIn,proto3,oneof" json:"id_token_expires_in,omitempty"`
-	RefreshTokenExpiresIn         *uint32                `protobuf:"varint,10,opt,name=refresh_token_expires_in,json=refreshTokenExpiresIn,proto3,oneof" json:"refresh_token_expires_in,omitempty"`
-	RefreshTokenAbsoluteExpiresIn *uint32                `protobuf:"varint,11,opt,name=refresh_token_absolute_expires_in,json=refreshTokenAbsoluteExpiresIn,proto3,oneof" json:"refresh_token_absolute_expires_in,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
-}
-
-func (x *CreateApplicationRequest) Reset() {
-	*x = CreateApplicationRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateApplicationRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateApplicationRequest) ProtoMessage() {}
-
-func (x *CreateApplicationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateApplicationRequest.ProtoReflect.Descriptor instead.
-func (*CreateApplicationRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *CreateApplicationRequest) GetDomainId() string {
-	if x != nil {
-		return x.DomainId
-	}
-	return ""
-}
-
-func (x *CreateApplicationRequest) GetAppId() string {
-	if x != nil && x.AppId != nil {
-		return *x.AppId
-	}
-	return ""
-}
-
-func (x *CreateApplicationRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *CreateApplicationRequest) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-func (x *CreateApplicationRequest) GetAllowedRedirectUris() []string {
-	if x != nil {
-		return x.AllowedRedirectUris
-	}
-	return nil
-}
-
-func (x *CreateApplicationRequest) GetAllowedOrigins() []string {
-	if x != nil {
-		return x.AllowedOrigins
-	}
-	return nil
-}
-
-func (x *CreateApplicationRequest) GetAllowedLogoutUris() []string {
-	if x != nil {
-		return x.AllowedLogoutUris
-	}
-	return nil
-}
-
-func (x *CreateApplicationRequest) GetNeedKey() bool {
-	if x != nil {
-		return x.NeedKey
-	}
-	return false
-}
-
-func (x *CreateApplicationRequest) GetIdTokenExpiresIn() uint32 {
-	if x != nil && x.IdTokenExpiresIn != nil {
-		return *x.IdTokenExpiresIn
+		return x.Id
 	}
 	return 0
 }
 
-func (x *CreateApplicationRequest) GetRefreshTokenExpiresIn() uint32 {
-	if x != nil && x.RefreshTokenExpiresIn != nil {
-		return *x.RefreshTokenExpiresIn
-	}
-	return 0
-}
-
-func (x *CreateApplicationRequest) GetRefreshTokenAbsoluteExpiresIn() uint32 {
-	if x != nil && x.RefreshTokenAbsoluteExpiresIn != nil {
-		return *x.RefreshTokenAbsoluteExpiresIn
-	}
-	return 0
-}
-
-type UpdateApplicationRequest struct {
-	state                         protoimpl.MessageState `protogen:"open.v1"`
-	AppId                         string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	Name                          *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	Description                   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	LogoUrl                       *string                `protobuf:"bytes,4,opt,name=logo_url,json=logoUrl,proto3,oneof" json:"logo_url,omitempty"`
-	AllowedRedirectUris           *OptionalStringList    `protobuf:"bytes,5,opt,name=allowed_redirect_uris,json=allowedRedirectUris,proto3" json:"allowed_redirect_uris,omitempty"`
-	AllowedOrigins                *OptionalStringList    `protobuf:"bytes,6,opt,name=allowed_origins,json=allowedOrigins,proto3" json:"allowed_origins,omitempty"`
-	AllowedLogoutUris             *OptionalStringList    `protobuf:"bytes,7,opt,name=allowed_logout_uris,json=allowedLogoutUris,proto3" json:"allowed_logout_uris,omitempty"`
-	IdTokenExpiresIn              *uint32                `protobuf:"varint,8,opt,name=id_token_expires_in,json=idTokenExpiresIn,proto3,oneof" json:"id_token_expires_in,omitempty"`
-	RefreshTokenExpiresIn         *uint32                `protobuf:"varint,9,opt,name=refresh_token_expires_in,json=refreshTokenExpiresIn,proto3,oneof" json:"refresh_token_expires_in,omitempty"`
-	RefreshTokenAbsoluteExpiresIn *uint32                `protobuf:"varint,10,opt,name=refresh_token_absolute_expires_in,json=refreshTokenAbsoluteExpiresIn,proto3,oneof" json:"refresh_token_absolute_expires_in,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
-}
-
-func (x *UpdateApplicationRequest) Reset() {
-	*x = UpdateApplicationRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[18]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateApplicationRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateApplicationRequest) ProtoMessage() {}
-
-func (x *UpdateApplicationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[18]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateApplicationRequest.ProtoReflect.Descriptor instead.
-func (*UpdateApplicationRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *UpdateApplicationRequest) GetAppId() string {
+func (x *ApplicationIDPConfig) GetAppId() string {
 	if x != nil {
 		return x.AppId
 	}
 	return ""
 }
 
-func (x *UpdateApplicationRequest) GetName() string {
-	if x != nil && x.Name != nil {
-		return *x.Name
+func (x *ApplicationIDPConfig) GetType() string {
+	if x != nil {
+		return x.Type
 	}
 	return ""
 }
 
-func (x *UpdateApplicationRequest) GetDescription() string {
-	if x != nil && x.Description != nil {
-		return *x.Description
+func (x *ApplicationIDPConfig) GetPriority() int32 {
+	if x != nil {
+		return x.Priority
+	}
+	return 0
+}
+
+func (x *ApplicationIDPConfig) GetStrategy() string {
+	if x != nil && x.Strategy != nil {
+		return *x.Strategy
 	}
 	return ""
 }
 
-func (x *UpdateApplicationRequest) GetLogoUrl() string {
-	if x != nil && x.LogoUrl != nil {
-		return *x.LogoUrl
+func (x *ApplicationIDPConfig) GetDelegate() string {
+	if x != nil && x.Delegate != nil {
+		return *x.Delegate
 	}
 	return ""
 }
 
-func (x *UpdateApplicationRequest) GetAllowedRedirectUris() *OptionalStringList {
+func (x *ApplicationIDPConfig) GetRequire() string {
+	if x != nil && x.Require != nil {
+		return *x.Require
+	}
+	return ""
+}
+
+func (x *ApplicationIDPConfig) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
-		return x.AllowedRedirectUris
+		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *UpdateApplicationRequest) GetAllowedOrigins() *OptionalStringList {
+func (x *ApplicationIDPConfig) GetUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
-		return x.AllowedOrigins
+		return x.UpdatedAt
 	}
 	return nil
 }
 
-func (x *UpdateApplicationRequest) GetAllowedLogoutUris() *OptionalStringList {
-	if x != nil {
-		return x.AllowedLogoutUris
-	}
-	return nil
-}
-
-func (x *UpdateApplicationRequest) GetIdTokenExpiresIn() uint32 {
-	if x != nil && x.IdTokenExpiresIn != nil {
-		return *x.IdTokenExpiresIn
-	}
-	return 0
-}
-
-func (x *UpdateApplicationRequest) GetRefreshTokenExpiresIn() uint32 {
-	if x != nil && x.RefreshTokenExpiresIn != nil {
-		return *x.RefreshTokenExpiresIn
-	}
-	return 0
-}
-
-func (x *UpdateApplicationRequest) GetRefreshTokenAbsoluteExpiresIn() uint32 {
-	if x != nil && x.RefreshTokenAbsoluteExpiresIn != nil {
-		return *x.RefreshTokenAbsoluteExpiresIn
-	}
-	return 0
-}
-
-// OptionalStringList 可选字符串列表（区分缺失 vs 空列表）
-type OptionalStringList struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Present       bool                   `protobuf:"varint,1,opt,name=present,proto3" json:"present,omitempty"`
-	Values        []string               `protobuf:"bytes,2,rep,name=values,proto3" json:"values,omitempty"`
+type ApplicationIDPConfigList struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Configs       []*ApplicationIDPConfig `protobuf:"bytes,1,rep,name=configs,proto3" json:"configs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *OptionalStringList) Reset() {
-	*x = OptionalStringList{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[19]
+func (x *ApplicationIDPConfigList) Reset() {
+	*x = ApplicationIDPConfigList{}
+	mi := &file_hermes_v1_provision_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *OptionalStringList) String() string {
+func (x *ApplicationIDPConfigList) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*OptionalStringList) ProtoMessage() {}
+func (*ApplicationIDPConfigList) ProtoMessage() {}
 
-func (x *OptionalStringList) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[19]
+func (x *ApplicationIDPConfigList) ProtoReflect() protoreflect.Message {
+	mi := &file_hermes_v1_provision_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1509,81 +626,14 @@ func (x *OptionalStringList) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use OptionalStringList.ProtoReflect.Descriptor instead.
-func (*OptionalStringList) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{19}
+// Deprecated: Use ApplicationIDPConfigList.ProtoReflect.Descriptor instead.
+func (*ApplicationIDPConfigList) Descriptor() ([]byte, []int) {
+	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *OptionalStringList) GetPresent() bool {
+func (x *ApplicationIDPConfigList) GetConfigs() []*ApplicationIDPConfig {
 	if x != nil {
-		return x.Present
-	}
-	return false
-}
-
-func (x *OptionalStringList) GetValues() []string {
-	if x != nil {
-		return x.Values
-	}
-	return nil
-}
-
-type ListApplicationsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DomainId      string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	Filter        string                 `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
-	Pagination    *Pagination            `protobuf:"bytes,3,opt,name=pagination,proto3" json:"pagination,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListApplicationsRequest) Reset() {
-	*x = ListApplicationsRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[20]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListApplicationsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListApplicationsRequest) ProtoMessage() {}
-
-func (x *ListApplicationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[20]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListApplicationsRequest.ProtoReflect.Descriptor instead.
-func (*ListApplicationsRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{20}
-}
-
-func (x *ListApplicationsRequest) GetDomainId() string {
-	if x != nil {
-		return x.DomainId
-	}
-	return ""
-}
-
-func (x *ListApplicationsRequest) GetFilter() string {
-	if x != nil {
-		return x.Filter
-	}
-	return ""
-}
-
-func (x *ListApplicationsRequest) GetPagination() *Pagination {
-	if x != nil {
-		return x.Pagination
+		return x.Configs
 	}
 	return nil
 }
@@ -1597,7 +647,7 @@ type GetServiceRequest struct {
 
 func (x *GetServiceRequest) Reset() {
 	*x = GetServiceRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[21]
+	mi := &file_hermes_v1_provision_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1609,7 +659,7 @@ func (x *GetServiceRequest) String() string {
 func (*GetServiceRequest) ProtoMessage() {}
 
 func (x *GetServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[21]
+	mi := &file_hermes_v1_provision_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1622,7 +672,7 @@ func (x *GetServiceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetServiceRequest.ProtoReflect.Descriptor instead.
 func (*GetServiceRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{21}
+	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetServiceRequest) GetServiceId() string {
@@ -1651,7 +701,7 @@ type Service struct {
 
 func (x *Service) Reset() {
 	*x = Service{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[22]
+	mi := &file_hermes_v1_provision_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1663,7 +713,7 @@ func (x *Service) String() string {
 func (*Service) ProtoMessage() {}
 
 func (x *Service) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[22]
+	mi := &file_hermes_v1_provision_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1676,7 +726,7 @@ func (x *Service) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Service.ProtoReflect.Descriptor instead.
 func (*Service) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{22}
+	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Service) GetId() uint32 {
@@ -1756,322 +806,6 @@ func (x *Service) GetChallengeSettings() []*ServiceChallengeSetting {
 	return nil
 }
 
-type ServiceList struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Services      []*Service             `protobuf:"bytes,1,rep,name=services,proto3" json:"services,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ServiceList) Reset() {
-	*x = ServiceList{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ServiceList) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ServiceList) ProtoMessage() {}
-
-func (x *ServiceList) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ServiceList.ProtoReflect.Descriptor instead.
-func (*ServiceList) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *ServiceList) GetServices() []*Service {
-	if x != nil {
-		return x.Services
-	}
-	return nil
-}
-
-func (x *ServiceList) GetNextCursor() string {
-	if x != nil {
-		return x.NextCursor
-	}
-	return ""
-}
-
-type CreateServiceRequest struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId            string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	DomainId             string                 `protobuf:"bytes,2,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	Name                 string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Description          string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	LogoUrl              *string                `protobuf:"bytes,5,opt,name=logo_url,json=logoUrl,proto3,oneof" json:"logo_url,omitempty"`
-	AccessTokenExpiresIn *uint32                `protobuf:"varint,6,opt,name=access_token_expires_in,json=accessTokenExpiresIn,proto3,oneof" json:"access_token_expires_in,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
-}
-
-func (x *CreateServiceRequest) Reset() {
-	*x = CreateServiceRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateServiceRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateServiceRequest) ProtoMessage() {}
-
-func (x *CreateServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateServiceRequest.ProtoReflect.Descriptor instead.
-func (*CreateServiceRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *CreateServiceRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *CreateServiceRequest) GetDomainId() string {
-	if x != nil {
-		return x.DomainId
-	}
-	return ""
-}
-
-func (x *CreateServiceRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *CreateServiceRequest) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-func (x *CreateServiceRequest) GetLogoUrl() string {
-	if x != nil && x.LogoUrl != nil {
-		return *x.LogoUrl
-	}
-	return ""
-}
-
-func (x *CreateServiceRequest) GetAccessTokenExpiresIn() uint32 {
-	if x != nil && x.AccessTokenExpiresIn != nil {
-		return *x.AccessTokenExpiresIn
-	}
-	return 0
-}
-
-type UpdateServiceRequest struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId            string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	Name                 *string                `protobuf:"bytes,2,opt,name=name,proto3,oneof" json:"name,omitempty"`
-	Description          *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	LogoUrl              *string                `protobuf:"bytes,4,opt,name=logo_url,json=logoUrl,proto3,oneof" json:"logo_url,omitempty"`
-	AccessTokenExpiresIn *uint32                `protobuf:"varint,5,opt,name=access_token_expires_in,json=accessTokenExpiresIn,proto3,oneof" json:"access_token_expires_in,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
-}
-
-func (x *UpdateServiceRequest) Reset() {
-	*x = UpdateServiceRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[25]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateServiceRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateServiceRequest) ProtoMessage() {}
-
-func (x *UpdateServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[25]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateServiceRequest.ProtoReflect.Descriptor instead.
-func (*UpdateServiceRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *UpdateServiceRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *UpdateServiceRequest) GetName() string {
-	if x != nil && x.Name != nil {
-		return *x.Name
-	}
-	return ""
-}
-
-func (x *UpdateServiceRequest) GetDescription() string {
-	if x != nil && x.Description != nil {
-		return *x.Description
-	}
-	return ""
-}
-
-func (x *UpdateServiceRequest) GetLogoUrl() string {
-	if x != nil && x.LogoUrl != nil {
-		return *x.LogoUrl
-	}
-	return ""
-}
-
-func (x *UpdateServiceRequest) GetAccessTokenExpiresIn() uint32 {
-	if x != nil && x.AccessTokenExpiresIn != nil {
-		return *x.AccessTokenExpiresIn
-	}
-	return 0
-}
-
-type DeleteServiceRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId     string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeleteServiceRequest) Reset() {
-	*x = DeleteServiceRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[26]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeleteServiceRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeleteServiceRequest) ProtoMessage() {}
-
-func (x *DeleteServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[26]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeleteServiceRequest.ProtoReflect.Descriptor instead.
-func (*DeleteServiceRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{26}
-}
-
-func (x *DeleteServiceRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-type ListServicesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DomainId      string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	Filter        string                 `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
-	Pagination    *Pagination            `protobuf:"bytes,3,opt,name=pagination,proto3" json:"pagination,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListServicesRequest) Reset() {
-	*x = ListServicesRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[27]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListServicesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListServicesRequest) ProtoMessage() {}
-
-func (x *ListServicesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[27]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListServicesRequest.ProtoReflect.Descriptor instead.
-func (*ListServicesRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{27}
-}
-
-func (x *ListServicesRequest) GetDomainId() string {
-	if x != nil {
-		return x.DomainId
-	}
-	return ""
-}
-
-func (x *ListServicesRequest) GetFilter() string {
-	if x != nil {
-		return x.Filter
-	}
-	return ""
-}
-
-func (x *ListServicesRequest) GetPagination() *Pagination {
-	if x != nil {
-		return x.Pagination
-	}
-	return nil
-}
-
 type GetServiceChallengeSettingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ServiceId     string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
@@ -2082,7 +816,7 @@ type GetServiceChallengeSettingRequest struct {
 
 func (x *GetServiceChallengeSettingRequest) Reset() {
 	*x = GetServiceChallengeSettingRequest{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[28]
+	mi := &file_hermes_v1_provision_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2094,7 +828,7 @@ func (x *GetServiceChallengeSettingRequest) String() string {
 func (*GetServiceChallengeSettingRequest) ProtoMessage() {}
 
 func (x *GetServiceChallengeSettingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[28]
+	mi := &file_hermes_v1_provision_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2107,7 +841,7 @@ func (x *GetServiceChallengeSettingRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetServiceChallengeSettingRequest.ProtoReflect.Descriptor instead.
 func (*GetServiceChallengeSettingRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{28}
+	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetServiceChallengeSettingRequest) GetServiceId() string {
@@ -2139,7 +873,7 @@ type ServiceChallengeSetting struct {
 
 func (x *ServiceChallengeSetting) Reset() {
 	*x = ServiceChallengeSetting{}
-	mi := &file_hermes_v1_provision_proto_msgTypes[29]
+	mi := &file_hermes_v1_provision_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2151,7 +885,7 @@ func (x *ServiceChallengeSetting) String() string {
 func (*ServiceChallengeSetting) ProtoMessage() {}
 
 func (x *ServiceChallengeSetting) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_provision_proto_msgTypes[29]
+	mi := &file_hermes_v1_provision_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2164,7 +898,7 @@ func (x *ServiceChallengeSetting) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceChallengeSetting.ProtoReflect.Descriptor instead.
 func (*ServiceChallengeSetting) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{29}
+	return file_hermes_v1_provision_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ServiceChallengeSetting) GetId() uint32 {
@@ -2220,7 +954,7 @@ var File_hermes_v1_provision_proto protoreflect.FileDescriptor
 
 const file_hermes_v1_provision_proto_rawDesc = "" +
 	"\n" +
-	"\x19hermes/v1/provision.proto\x12\thermes.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16hermes/v1/common.proto\"/\n" +
+	"\x19hermes/v1/provision.proto\x12\thermes.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"/\n" +
 	"\x10GetDomainRequest\x12\x1b\n" +
 	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\"\xe6\x01\n" +
 	"\x06Domain\x12\x1b\n" +
@@ -2231,15 +965,6 @@ const file_hermes_v1_provision_proto_rawDesc = "" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x0e\n" +
-	"\f_description\"9\n" +
-	"\n" +
-	"DomainList\x12+\n" +
-	"\adomains\x18\x01 \x03(\v2\x11.hermes.v1.DomainR\adomains\"\x8b\x01\n" +
-	"\x13UpdateDomainRequest\x12\x1b\n" +
-	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12\x17\n" +
-	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
-	"\vdescription\x18\x03 \x01(\tH\x01R\vdescription\x88\x01\x01B\a\n" +
-	"\x05_nameB\x0e\n" +
 	"\f_description\"\xeb\x02\n" +
 	"\x0fDomainIDPConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1b\n" +
@@ -2258,77 +983,7 @@ const file_hermes_v1_provision_proto_rawDesc = "" +
 	"\n" +
 	"\b_require\"K\n" +
 	"\x13DomainIDPConfigList\x124\n" +
-	"\aconfigs\x18\x01 \x03(\v2\x1a.hermes.v1.DomainIDPConfigR\aconfigs\"\xf2\x01\n" +
-	"\x1cCreateDomainIDPConfigRequest\x12\x1b\n" +
-	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
-	"\bpriority\x18\x03 \x01(\x05R\bpriority\x12\x1f\n" +
-	"\bstrategy\x18\x04 \x01(\tH\x00R\bstrategy\x88\x01\x01\x12\x1f\n" +
-	"\bdelegate\x18\x05 \x01(\tH\x01R\bdelegate\x88\x01\x01\x12\x1d\n" +
-	"\arequire\x18\x06 \x01(\tH\x02R\arequire\x88\x01\x01B\v\n" +
-	"\t_strategyB\v\n" +
-	"\t_delegateB\n" +
-	"\n" +
-	"\b_require\"\x84\x02\n" +
-	"\x1cUpdateDomainIDPConfigRequest\x12\x1b\n" +
-	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1f\n" +
-	"\bpriority\x18\x03 \x01(\x05H\x00R\bpriority\x88\x01\x01\x12\x1f\n" +
-	"\bstrategy\x18\x04 \x01(\tH\x01R\bstrategy\x88\x01\x01\x12\x1f\n" +
-	"\bdelegate\x18\x05 \x01(\tH\x02R\bdelegate\x88\x01\x01\x12\x1d\n" +
-	"\arequire\x18\x06 \x01(\tH\x03R\arequire\x88\x01\x01B\v\n" +
-	"\t_priorityB\v\n" +
-	"\t_strategyB\v\n" +
-	"\t_delegateB\n" +
-	"\n" +
-	"\b_require\"O\n" +
-	"\x1cDeleteDomainIDPConfigRequest\x12\x1b\n" +
-	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\"\xea\x02\n" +
-	"\x14ApplicationIDPConfig\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\rR\x02id\x12\x15\n" +
-	"\x06app_id\x18\x02 \x01(\tR\x05appId\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1a\n" +
-	"\bpriority\x18\x04 \x01(\x05R\bpriority\x12\x1f\n" +
-	"\bstrategy\x18\x05 \x01(\tH\x00R\bstrategy\x88\x01\x01\x12\x1f\n" +
-	"\bdelegate\x18\x06 \x01(\tH\x01R\bdelegate\x88\x01\x01\x12\x1d\n" +
-	"\arequire\x18\a \x01(\tH\x02R\arequire\x88\x01\x01\x129\n" +
-	"\n" +
-	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
-	"\n" +
-	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\v\n" +
-	"\t_strategyB\v\n" +
-	"\t_delegateB\n" +
-	"\n" +
-	"\b_require\"U\n" +
-	"\x18ApplicationIDPConfigList\x129\n" +
-	"\aconfigs\x18\x01 \x03(\v2\x1f.hermes.v1.ApplicationIDPConfigR\aconfigs\"\xf1\x01\n" +
-	"!CreateApplicationIDPConfigRequest\x12\x15\n" +
-	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
-	"\bpriority\x18\x03 \x01(\x05R\bpriority\x12\x1f\n" +
-	"\bstrategy\x18\x04 \x01(\tH\x00R\bstrategy\x88\x01\x01\x12\x1f\n" +
-	"\bdelegate\x18\x05 \x01(\tH\x01R\bdelegate\x88\x01\x01\x12\x1d\n" +
-	"\arequire\x18\x06 \x01(\tH\x02R\arequire\x88\x01\x01B\v\n" +
-	"\t_strategyB\v\n" +
-	"\t_delegateB\n" +
-	"\n" +
-	"\b_require\"\x83\x02\n" +
-	"!UpdateApplicationIDPConfigRequest\x12\x15\n" +
-	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1f\n" +
-	"\bpriority\x18\x03 \x01(\x05H\x00R\bpriority\x88\x01\x01\x12\x1f\n" +
-	"\bstrategy\x18\x04 \x01(\tH\x01R\bstrategy\x88\x01\x01\x12\x1f\n" +
-	"\bdelegate\x18\x05 \x01(\tH\x02R\bdelegate\x88\x01\x01\x12\x1d\n" +
-	"\arequire\x18\x06 \x01(\tH\x03R\arequire\x88\x01\x01B\v\n" +
-	"\t_priorityB\v\n" +
-	"\t_strategyB\v\n" +
-	"\t_delegateB\n" +
-	"\n" +
-	"\b_require\"N\n" +
-	"!DeleteApplicationIDPConfigRequest\x12\x15\n" +
-	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\".\n" +
+	"\aconfigs\x18\x01 \x03(\v2\x1a.hermes.v1.DomainIDPConfigR\aconfigs\".\n" +
 	"\x15GetApplicationRequest\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\tR\x05appId\"\xfe\x04\n" +
 	"\vApplication\x12\x0e\n" +
@@ -2350,55 +1005,25 @@ const file_hermes_v1_provision_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x0e\n" +
 	"\f_descriptionB\v\n" +
-	"\t_logo_url\"n\n" +
-	"\x0fApplicationList\x12:\n" +
-	"\fapplications\x18\x01 \x03(\v2\x16.hermes.v1.ApplicationR\fapplications\x12\x1f\n" +
-	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"\xd8\x04\n" +
-	"\x18CreateApplicationRequest\x12\x1b\n" +
-	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12\x1a\n" +
-	"\x06app_id\x18\x02 \x01(\tH\x00R\x05appId\x88\x01\x01\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x04 \x01(\tR\vdescription\x122\n" +
-	"\x15allowed_redirect_uris\x18\x05 \x03(\tR\x13allowedRedirectUris\x12'\n" +
-	"\x0fallowed_origins\x18\x06 \x03(\tR\x0eallowedOrigins\x12.\n" +
-	"\x13allowed_logout_uris\x18\a \x03(\tR\x11allowedLogoutUris\x12\x19\n" +
-	"\bneed_key\x18\b \x01(\bR\aneedKey\x122\n" +
-	"\x13id_token_expires_in\x18\t \x01(\rH\x01R\x10idTokenExpiresIn\x88\x01\x01\x12<\n" +
-	"\x18refresh_token_expires_in\x18\n" +
-	" \x01(\rH\x02R\x15refreshTokenExpiresIn\x88\x01\x01\x12M\n" +
-	"!refresh_token_absolute_expires_in\x18\v \x01(\rH\x03R\x1drefreshTokenAbsoluteExpiresIn\x88\x01\x01B\t\n" +
-	"\a_app_idB\x16\n" +
-	"\x14_id_token_expires_inB\x1b\n" +
-	"\x19_refresh_token_expires_inB$\n" +
-	"\"_refresh_token_absolute_expires_in\"\xbd\x05\n" +
-	"\x18UpdateApplicationRequest\x12\x15\n" +
-	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x17\n" +
-	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
-	"\vdescription\x18\x03 \x01(\tH\x01R\vdescription\x88\x01\x01\x12\x1e\n" +
-	"\blogo_url\x18\x04 \x01(\tH\x02R\alogoUrl\x88\x01\x01\x12Q\n" +
-	"\x15allowed_redirect_uris\x18\x05 \x01(\v2\x1d.hermes.v1.OptionalStringListR\x13allowedRedirectUris\x12F\n" +
-	"\x0fallowed_origins\x18\x06 \x01(\v2\x1d.hermes.v1.OptionalStringListR\x0eallowedOrigins\x12M\n" +
-	"\x13allowed_logout_uris\x18\a \x01(\v2\x1d.hermes.v1.OptionalStringListR\x11allowedLogoutUris\x122\n" +
-	"\x13id_token_expires_in\x18\b \x01(\rH\x03R\x10idTokenExpiresIn\x88\x01\x01\x12<\n" +
-	"\x18refresh_token_expires_in\x18\t \x01(\rH\x04R\x15refreshTokenExpiresIn\x88\x01\x01\x12M\n" +
-	"!refresh_token_absolute_expires_in\x18\n" +
-	" \x01(\rH\x05R\x1drefreshTokenAbsoluteExpiresIn\x88\x01\x01B\a\n" +
-	"\x05_nameB\x0e\n" +
-	"\f_descriptionB\v\n" +
-	"\t_logo_urlB\x16\n" +
-	"\x14_id_token_expires_inB\x1b\n" +
-	"\x19_refresh_token_expires_inB$\n" +
-	"\"_refresh_token_absolute_expires_in\"F\n" +
-	"\x12OptionalStringList\x12\x18\n" +
-	"\apresent\x18\x01 \x01(\bR\apresent\x12\x16\n" +
-	"\x06values\x18\x02 \x03(\tR\x06values\"\x85\x01\n" +
-	"\x17ListApplicationsRequest\x12\x1b\n" +
-	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\x125\n" +
+	"\t_logo_url\"\xea\x02\n" +
+	"\x14ApplicationIDPConfig\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x15\n" +
+	"\x06app_id\x18\x02 \x01(\tR\x05appId\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1a\n" +
+	"\bpriority\x18\x04 \x01(\x05R\bpriority\x12\x1f\n" +
+	"\bstrategy\x18\x05 \x01(\tH\x00R\bstrategy\x88\x01\x01\x12\x1f\n" +
+	"\bdelegate\x18\x06 \x01(\tH\x01R\bdelegate\x88\x01\x01\x12\x1d\n" +
+	"\arequire\x18\a \x01(\tH\x02R\arequire\x88\x01\x01\x129\n" +
 	"\n" +
-	"pagination\x18\x03 \x01(\v2\x15.hermes.v1.PaginationR\n" +
-	"pagination\"2\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"\n" +
+	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\v\n" +
+	"\t_strategyB\v\n" +
+	"\t_delegateB\n" +
+	"\n" +
+	"\b_require\"U\n" +
+	"\x18ApplicationIDPConfigList\x129\n" +
+	"\aconfigs\x18\x01 \x03(\v2\x1f.hermes.v1.ApplicationIDPConfigR\aconfigs\"2\n" +
 	"\x11GetServiceRequest\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\"\x85\x04\n" +
@@ -2419,41 +1044,7 @@ const file_hermes_v1_provision_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12Q\n" +
 	"\x12challenge_settings\x18\v \x03(\v2\".hermes.v1.ServiceChallengeSettingR\x11challengeSettingsB\x0e\n" +
 	"\f_descriptionB\v\n" +
-	"\t_logo_url\"^\n" +
-	"\vServiceList\x12.\n" +
-	"\bservices\x18\x01 \x03(\v2\x12.hermes.v1.ServiceR\bservices\x12\x1f\n" +
-	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"\x8d\x02\n" +
-	"\x14CreateServiceRequest\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x01 \x01(\tR\tserviceId\x12\x1b\n" +
-	"\tdomain_id\x18\x02 \x01(\tR\bdomainId\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x1e\n" +
-	"\blogo_url\x18\x05 \x01(\tH\x00R\alogoUrl\x88\x01\x01\x12:\n" +
-	"\x17access_token_expires_in\x18\x06 \x01(\rH\x01R\x14accessTokenExpiresIn\x88\x01\x01B\v\n" +
-	"\t_logo_urlB\x1a\n" +
-	"\x18_access_token_expires_in\"\x93\x02\n" +
-	"\x14UpdateServiceRequest\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x01 \x01(\tR\tserviceId\x12\x17\n" +
-	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
-	"\vdescription\x18\x03 \x01(\tH\x01R\vdescription\x88\x01\x01\x12\x1e\n" +
-	"\blogo_url\x18\x04 \x01(\tH\x02R\alogoUrl\x88\x01\x01\x12:\n" +
-	"\x17access_token_expires_in\x18\x05 \x01(\rH\x03R\x14accessTokenExpiresIn\x88\x01\x01B\a\n" +
-	"\x05_nameB\x0e\n" +
-	"\f_descriptionB\v\n" +
-	"\t_logo_urlB\x1a\n" +
-	"\x18_access_token_expires_in\"5\n" +
-	"\x14DeleteServiceRequest\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x01 \x01(\tR\tserviceId\"\x81\x01\n" +
-	"\x13ListServicesRequest\x12\x1b\n" +
-	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\x125\n" +
-	"\n" +
-	"pagination\x18\x03 \x01(\v2\x15.hermes.v1.PaginationR\n" +
-	"pagination\"V\n" +
+	"\t_logo_url\"V\n" +
 	"!GetServiceChallengeSettingRequest\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12\x12\n" +
@@ -2472,29 +1063,14 @@ const file_hermes_v1_provision_proto_rawDesc = "" +
 	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x1a9\n" +
 	"\vLimitsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x012\xed\r\n" +
+	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x012\x82\x04\n" +
 	"\x10ProvisionService\x12;\n" +
-	"\tGetDomain\x12\x1b.hermes.v1.GetDomainRequest\x1a\x11.hermes.v1.Domain\x12<\n" +
-	"\vListDomains\x12\x16.google.protobuf.Empty\x1a\x15.hermes.v1.DomainList\x12A\n" +
-	"\fUpdateDomain\x12\x1e.hermes.v1.UpdateDomainRequest\x1a\x11.hermes.v1.Domain\x12R\n" +
-	"\x13GetDomainIDPConfigs\x12\x1b.hermes.v1.GetDomainRequest\x1a\x1e.hermes.v1.DomainIDPConfigList\x12\\\n" +
-	"\x15CreateDomainIDPConfig\x12'.hermes.v1.CreateDomainIDPConfigRequest\x1a\x1a.hermes.v1.DomainIDPConfig\x12\\\n" +
-	"\x15UpdateDomainIDPConfig\x12'.hermes.v1.UpdateDomainIDPConfigRequest\x1a\x1a.hermes.v1.DomainIDPConfig\x12X\n" +
-	"\x15DeleteDomainIDPConfig\x12'.hermes.v1.DeleteDomainIDPConfigRequest\x1a\x16.google.protobuf.Empty\x12P\n" +
-	"\x11CreateApplication\x12#.hermes.v1.CreateApplicationRequest\x1a\x16.hermes.v1.Application\x12J\n" +
-	"\x0eGetApplication\x12 .hermes.v1.GetApplicationRequest\x1a\x16.hermes.v1.Application\x12R\n" +
-	"\x10ListApplications\x12\".hermes.v1.ListApplicationsRequest\x1a\x1a.hermes.v1.ApplicationList\x12P\n" +
-	"\x11UpdateApplication\x12#.hermes.v1.UpdateApplicationRequest\x1a\x16.hermes.v1.Application\x12a\n" +
-	"\x18GetApplicationIDPConfigs\x12 .hermes.v1.GetApplicationRequest\x1a#.hermes.v1.ApplicationIDPConfigList\x12k\n" +
-	"\x1aCreateApplicationIDPConfig\x12,.hermes.v1.CreateApplicationIDPConfigRequest\x1a\x1f.hermes.v1.ApplicationIDPConfig\x12k\n" +
-	"\x1aUpdateApplicationIDPConfig\x12,.hermes.v1.UpdateApplicationIDPConfigRequest\x1a\x1f.hermes.v1.ApplicationIDPConfig\x12b\n" +
-	"\x1aDeleteApplicationIDPConfig\x12,.hermes.v1.DeleteApplicationIDPConfigRequest\x1a\x16.google.protobuf.Empty\x12D\n" +
-	"\rCreateService\x12\x1f.hermes.v1.CreateServiceRequest\x1a\x12.hermes.v1.Service\x12>\n" +
+	"\tGetDomain\x12\x1b.hermes.v1.GetDomainRequest\x1a\x11.hermes.v1.Domain\x12R\n" +
+	"\x13GetDomainIDPConfigs\x12\x1b.hermes.v1.GetDomainRequest\x1a\x1e.hermes.v1.DomainIDPConfigList\x12J\n" +
+	"\x0eGetApplication\x12 .hermes.v1.GetApplicationRequest\x1a\x16.hermes.v1.Application\x12a\n" +
+	"\x18GetApplicationIDPConfigs\x12 .hermes.v1.GetApplicationRequest\x1a#.hermes.v1.ApplicationIDPConfigList\x12>\n" +
 	"\n" +
-	"GetService\x12\x1c.hermes.v1.GetServiceRequest\x1a\x12.hermes.v1.Service\x12F\n" +
-	"\fListServices\x12\x1e.hermes.v1.ListServicesRequest\x1a\x16.hermes.v1.ServiceList\x12D\n" +
-	"\rUpdateService\x12\x1f.hermes.v1.UpdateServiceRequest\x1a\x12.hermes.v1.Service\x12H\n" +
-	"\rDeleteService\x12\x1f.hermes.v1.DeleteServiceRequest\x1a\x16.google.protobuf.Empty\x12n\n" +
+	"GetService\x12\x1c.hermes.v1.GetServiceRequest\x1a\x12.hermes.v1.Service\x12n\n" +
 	"\x1aGetServiceChallengeSetting\x12,.hermes.v1.GetServiceChallengeSettingRequest\x1a\".hermes.v1.ServiceChallengeSettingB\x9e\x01\n" +
 	"\rcom.hermes.v1B\x0eProvisionProtoP\x01Z8github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1\xa2\x02\x03HXX\xaa\x02\tHermes.V1\xca\x02\tHermes\\V1\xe2\x02\x15Hermes\\V1\\GPBMetadata\xea\x02\n" +
 	"Hermes::V1b\x06proto3"
@@ -2511,115 +1087,57 @@ func file_hermes_v1_provision_proto_rawDescGZIP() []byte {
 	return file_hermes_v1_provision_proto_rawDescData
 }
 
-var file_hermes_v1_provision_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_hermes_v1_provision_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_hermes_v1_provision_proto_goTypes = []any{
 	(*GetDomainRequest)(nil),                  // 0: hermes.v1.GetDomainRequest
 	(*Domain)(nil),                            // 1: hermes.v1.Domain
-	(*DomainList)(nil),                        // 2: hermes.v1.DomainList
-	(*UpdateDomainRequest)(nil),               // 3: hermes.v1.UpdateDomainRequest
-	(*DomainIDPConfig)(nil),                   // 4: hermes.v1.DomainIDPConfig
-	(*DomainIDPConfigList)(nil),               // 5: hermes.v1.DomainIDPConfigList
-	(*CreateDomainIDPConfigRequest)(nil),      // 6: hermes.v1.CreateDomainIDPConfigRequest
-	(*UpdateDomainIDPConfigRequest)(nil),      // 7: hermes.v1.UpdateDomainIDPConfigRequest
-	(*DeleteDomainIDPConfigRequest)(nil),      // 8: hermes.v1.DeleteDomainIDPConfigRequest
-	(*ApplicationIDPConfig)(nil),              // 9: hermes.v1.ApplicationIDPConfig
-	(*ApplicationIDPConfigList)(nil),          // 10: hermes.v1.ApplicationIDPConfigList
-	(*CreateApplicationIDPConfigRequest)(nil), // 11: hermes.v1.CreateApplicationIDPConfigRequest
-	(*UpdateApplicationIDPConfigRequest)(nil), // 12: hermes.v1.UpdateApplicationIDPConfigRequest
-	(*DeleteApplicationIDPConfigRequest)(nil), // 13: hermes.v1.DeleteApplicationIDPConfigRequest
-	(*GetApplicationRequest)(nil),             // 14: hermes.v1.GetApplicationRequest
-	(*Application)(nil),                       // 15: hermes.v1.Application
-	(*ApplicationList)(nil),                   // 16: hermes.v1.ApplicationList
-	(*CreateApplicationRequest)(nil),          // 17: hermes.v1.CreateApplicationRequest
-	(*UpdateApplicationRequest)(nil),          // 18: hermes.v1.UpdateApplicationRequest
-	(*OptionalStringList)(nil),                // 19: hermes.v1.OptionalStringList
-	(*ListApplicationsRequest)(nil),           // 20: hermes.v1.ListApplicationsRequest
-	(*GetServiceRequest)(nil),                 // 21: hermes.v1.GetServiceRequest
-	(*Service)(nil),                           // 22: hermes.v1.Service
-	(*ServiceList)(nil),                       // 23: hermes.v1.ServiceList
-	(*CreateServiceRequest)(nil),              // 24: hermes.v1.CreateServiceRequest
-	(*UpdateServiceRequest)(nil),              // 25: hermes.v1.UpdateServiceRequest
-	(*DeleteServiceRequest)(nil),              // 26: hermes.v1.DeleteServiceRequest
-	(*ListServicesRequest)(nil),               // 27: hermes.v1.ListServicesRequest
-	(*GetServiceChallengeSettingRequest)(nil), // 28: hermes.v1.GetServiceChallengeSettingRequest
-	(*ServiceChallengeSetting)(nil),           // 29: hermes.v1.ServiceChallengeSetting
-	nil,                                       // 30: hermes.v1.ServiceChallengeSetting.LimitsEntry
-	(*timestamppb.Timestamp)(nil),             // 31: google.protobuf.Timestamp
-	(*Pagination)(nil),                        // 32: hermes.v1.Pagination
-	(*emptypb.Empty)(nil),                     // 33: google.protobuf.Empty
+	(*DomainIDPConfig)(nil),                   // 2: hermes.v1.DomainIDPConfig
+	(*DomainIDPConfigList)(nil),               // 3: hermes.v1.DomainIDPConfigList
+	(*GetApplicationRequest)(nil),             // 4: hermes.v1.GetApplicationRequest
+	(*Application)(nil),                       // 5: hermes.v1.Application
+	(*ApplicationIDPConfig)(nil),              // 6: hermes.v1.ApplicationIDPConfig
+	(*ApplicationIDPConfigList)(nil),          // 7: hermes.v1.ApplicationIDPConfigList
+	(*GetServiceRequest)(nil),                 // 8: hermes.v1.GetServiceRequest
+	(*Service)(nil),                           // 9: hermes.v1.Service
+	(*GetServiceChallengeSettingRequest)(nil), // 10: hermes.v1.GetServiceChallengeSettingRequest
+	(*ServiceChallengeSetting)(nil),           // 11: hermes.v1.ServiceChallengeSetting
+	nil,                                       // 12: hermes.v1.ServiceChallengeSetting.LimitsEntry
+	(*timestamppb.Timestamp)(nil),             // 13: google.protobuf.Timestamp
 }
 var file_hermes_v1_provision_proto_depIdxs = []int32{
-	31, // 0: hermes.v1.Domain.created_at:type_name -> google.protobuf.Timestamp
-	31, // 1: hermes.v1.Domain.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 2: hermes.v1.DomainList.domains:type_name -> hermes.v1.Domain
-	31, // 3: hermes.v1.DomainIDPConfig.created_at:type_name -> google.protobuf.Timestamp
-	31, // 4: hermes.v1.DomainIDPConfig.updated_at:type_name -> google.protobuf.Timestamp
-	4,  // 5: hermes.v1.DomainIDPConfigList.configs:type_name -> hermes.v1.DomainIDPConfig
-	31, // 6: hermes.v1.ApplicationIDPConfig.created_at:type_name -> google.protobuf.Timestamp
-	31, // 7: hermes.v1.ApplicationIDPConfig.updated_at:type_name -> google.protobuf.Timestamp
-	9,  // 8: hermes.v1.ApplicationIDPConfigList.configs:type_name -> hermes.v1.ApplicationIDPConfig
-	31, // 9: hermes.v1.Application.created_at:type_name -> google.protobuf.Timestamp
-	31, // 10: hermes.v1.Application.updated_at:type_name -> google.protobuf.Timestamp
-	15, // 11: hermes.v1.ApplicationList.applications:type_name -> hermes.v1.Application
-	19, // 12: hermes.v1.UpdateApplicationRequest.allowed_redirect_uris:type_name -> hermes.v1.OptionalStringList
-	19, // 13: hermes.v1.UpdateApplicationRequest.allowed_origins:type_name -> hermes.v1.OptionalStringList
-	19, // 14: hermes.v1.UpdateApplicationRequest.allowed_logout_uris:type_name -> hermes.v1.OptionalStringList
-	32, // 15: hermes.v1.ListApplicationsRequest.pagination:type_name -> hermes.v1.Pagination
-	31, // 16: hermes.v1.Service.created_at:type_name -> google.protobuf.Timestamp
-	31, // 17: hermes.v1.Service.updated_at:type_name -> google.protobuf.Timestamp
-	29, // 18: hermes.v1.Service.challenge_settings:type_name -> hermes.v1.ServiceChallengeSetting
-	22, // 19: hermes.v1.ServiceList.services:type_name -> hermes.v1.Service
-	32, // 20: hermes.v1.ListServicesRequest.pagination:type_name -> hermes.v1.Pagination
-	30, // 21: hermes.v1.ServiceChallengeSetting.limits:type_name -> hermes.v1.ServiceChallengeSetting.LimitsEntry
-	31, // 22: hermes.v1.ServiceChallengeSetting.created_at:type_name -> google.protobuf.Timestamp
-	31, // 23: hermes.v1.ServiceChallengeSetting.updated_at:type_name -> google.protobuf.Timestamp
-	0,  // 24: hermes.v1.ProvisionService.GetDomain:input_type -> hermes.v1.GetDomainRequest
-	33, // 25: hermes.v1.ProvisionService.ListDomains:input_type -> google.protobuf.Empty
-	3,  // 26: hermes.v1.ProvisionService.UpdateDomain:input_type -> hermes.v1.UpdateDomainRequest
-	0,  // 27: hermes.v1.ProvisionService.GetDomainIDPConfigs:input_type -> hermes.v1.GetDomainRequest
-	6,  // 28: hermes.v1.ProvisionService.CreateDomainIDPConfig:input_type -> hermes.v1.CreateDomainIDPConfigRequest
-	7,  // 29: hermes.v1.ProvisionService.UpdateDomainIDPConfig:input_type -> hermes.v1.UpdateDomainIDPConfigRequest
-	8,  // 30: hermes.v1.ProvisionService.DeleteDomainIDPConfig:input_type -> hermes.v1.DeleteDomainIDPConfigRequest
-	17, // 31: hermes.v1.ProvisionService.CreateApplication:input_type -> hermes.v1.CreateApplicationRequest
-	14, // 32: hermes.v1.ProvisionService.GetApplication:input_type -> hermes.v1.GetApplicationRequest
-	20, // 33: hermes.v1.ProvisionService.ListApplications:input_type -> hermes.v1.ListApplicationsRequest
-	18, // 34: hermes.v1.ProvisionService.UpdateApplication:input_type -> hermes.v1.UpdateApplicationRequest
-	14, // 35: hermes.v1.ProvisionService.GetApplicationIDPConfigs:input_type -> hermes.v1.GetApplicationRequest
-	11, // 36: hermes.v1.ProvisionService.CreateApplicationIDPConfig:input_type -> hermes.v1.CreateApplicationIDPConfigRequest
-	12, // 37: hermes.v1.ProvisionService.UpdateApplicationIDPConfig:input_type -> hermes.v1.UpdateApplicationIDPConfigRequest
-	13, // 38: hermes.v1.ProvisionService.DeleteApplicationIDPConfig:input_type -> hermes.v1.DeleteApplicationIDPConfigRequest
-	24, // 39: hermes.v1.ProvisionService.CreateService:input_type -> hermes.v1.CreateServiceRequest
-	21, // 40: hermes.v1.ProvisionService.GetService:input_type -> hermes.v1.GetServiceRequest
-	27, // 41: hermes.v1.ProvisionService.ListServices:input_type -> hermes.v1.ListServicesRequest
-	25, // 42: hermes.v1.ProvisionService.UpdateService:input_type -> hermes.v1.UpdateServiceRequest
-	26, // 43: hermes.v1.ProvisionService.DeleteService:input_type -> hermes.v1.DeleteServiceRequest
-	28, // 44: hermes.v1.ProvisionService.GetServiceChallengeSetting:input_type -> hermes.v1.GetServiceChallengeSettingRequest
-	1,  // 45: hermes.v1.ProvisionService.GetDomain:output_type -> hermes.v1.Domain
-	2,  // 46: hermes.v1.ProvisionService.ListDomains:output_type -> hermes.v1.DomainList
-	1,  // 47: hermes.v1.ProvisionService.UpdateDomain:output_type -> hermes.v1.Domain
-	5,  // 48: hermes.v1.ProvisionService.GetDomainIDPConfigs:output_type -> hermes.v1.DomainIDPConfigList
-	4,  // 49: hermes.v1.ProvisionService.CreateDomainIDPConfig:output_type -> hermes.v1.DomainIDPConfig
-	4,  // 50: hermes.v1.ProvisionService.UpdateDomainIDPConfig:output_type -> hermes.v1.DomainIDPConfig
-	33, // 51: hermes.v1.ProvisionService.DeleteDomainIDPConfig:output_type -> google.protobuf.Empty
-	15, // 52: hermes.v1.ProvisionService.CreateApplication:output_type -> hermes.v1.Application
-	15, // 53: hermes.v1.ProvisionService.GetApplication:output_type -> hermes.v1.Application
-	16, // 54: hermes.v1.ProvisionService.ListApplications:output_type -> hermes.v1.ApplicationList
-	15, // 55: hermes.v1.ProvisionService.UpdateApplication:output_type -> hermes.v1.Application
-	10, // 56: hermes.v1.ProvisionService.GetApplicationIDPConfigs:output_type -> hermes.v1.ApplicationIDPConfigList
-	9,  // 57: hermes.v1.ProvisionService.CreateApplicationIDPConfig:output_type -> hermes.v1.ApplicationIDPConfig
-	9,  // 58: hermes.v1.ProvisionService.UpdateApplicationIDPConfig:output_type -> hermes.v1.ApplicationIDPConfig
-	33, // 59: hermes.v1.ProvisionService.DeleteApplicationIDPConfig:output_type -> google.protobuf.Empty
-	22, // 60: hermes.v1.ProvisionService.CreateService:output_type -> hermes.v1.Service
-	22, // 61: hermes.v1.ProvisionService.GetService:output_type -> hermes.v1.Service
-	23, // 62: hermes.v1.ProvisionService.ListServices:output_type -> hermes.v1.ServiceList
-	22, // 63: hermes.v1.ProvisionService.UpdateService:output_type -> hermes.v1.Service
-	33, // 64: hermes.v1.ProvisionService.DeleteService:output_type -> google.protobuf.Empty
-	29, // 65: hermes.v1.ProvisionService.GetServiceChallengeSetting:output_type -> hermes.v1.ServiceChallengeSetting
-	45, // [45:66] is the sub-list for method output_type
-	24, // [24:45] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	13, // 0: hermes.v1.Domain.created_at:type_name -> google.protobuf.Timestamp
+	13, // 1: hermes.v1.Domain.updated_at:type_name -> google.protobuf.Timestamp
+	13, // 2: hermes.v1.DomainIDPConfig.created_at:type_name -> google.protobuf.Timestamp
+	13, // 3: hermes.v1.DomainIDPConfig.updated_at:type_name -> google.protobuf.Timestamp
+	2,  // 4: hermes.v1.DomainIDPConfigList.configs:type_name -> hermes.v1.DomainIDPConfig
+	13, // 5: hermes.v1.Application.created_at:type_name -> google.protobuf.Timestamp
+	13, // 6: hermes.v1.Application.updated_at:type_name -> google.protobuf.Timestamp
+	13, // 7: hermes.v1.ApplicationIDPConfig.created_at:type_name -> google.protobuf.Timestamp
+	13, // 8: hermes.v1.ApplicationIDPConfig.updated_at:type_name -> google.protobuf.Timestamp
+	6,  // 9: hermes.v1.ApplicationIDPConfigList.configs:type_name -> hermes.v1.ApplicationIDPConfig
+	13, // 10: hermes.v1.Service.created_at:type_name -> google.protobuf.Timestamp
+	13, // 11: hermes.v1.Service.updated_at:type_name -> google.protobuf.Timestamp
+	11, // 12: hermes.v1.Service.challenge_settings:type_name -> hermes.v1.ServiceChallengeSetting
+	12, // 13: hermes.v1.ServiceChallengeSetting.limits:type_name -> hermes.v1.ServiceChallengeSetting.LimitsEntry
+	13, // 14: hermes.v1.ServiceChallengeSetting.created_at:type_name -> google.protobuf.Timestamp
+	13, // 15: hermes.v1.ServiceChallengeSetting.updated_at:type_name -> google.protobuf.Timestamp
+	0,  // 16: hermes.v1.ProvisionService.GetDomain:input_type -> hermes.v1.GetDomainRequest
+	0,  // 17: hermes.v1.ProvisionService.GetDomainIDPConfigs:input_type -> hermes.v1.GetDomainRequest
+	4,  // 18: hermes.v1.ProvisionService.GetApplication:input_type -> hermes.v1.GetApplicationRequest
+	4,  // 19: hermes.v1.ProvisionService.GetApplicationIDPConfigs:input_type -> hermes.v1.GetApplicationRequest
+	8,  // 20: hermes.v1.ProvisionService.GetService:input_type -> hermes.v1.GetServiceRequest
+	10, // 21: hermes.v1.ProvisionService.GetServiceChallengeSetting:input_type -> hermes.v1.GetServiceChallengeSettingRequest
+	1,  // 22: hermes.v1.ProvisionService.GetDomain:output_type -> hermes.v1.Domain
+	3,  // 23: hermes.v1.ProvisionService.GetDomainIDPConfigs:output_type -> hermes.v1.DomainIDPConfigList
+	5,  // 24: hermes.v1.ProvisionService.GetApplication:output_type -> hermes.v1.Application
+	7,  // 25: hermes.v1.ProvisionService.GetApplicationIDPConfigs:output_type -> hermes.v1.ApplicationIDPConfigList
+	9,  // 26: hermes.v1.ProvisionService.GetService:output_type -> hermes.v1.Service
+	11, // 27: hermes.v1.ProvisionService.GetServiceChallengeSetting:output_type -> hermes.v1.ServiceChallengeSetting
+	22, // [22:28] is the sub-list for method output_type
+	16, // [16:22] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_hermes_v1_provision_proto_init() }
@@ -2627,28 +1145,18 @@ func file_hermes_v1_provision_proto_init() {
 	if File_hermes_v1_provision_proto != nil {
 		return
 	}
-	file_hermes_v1_common_proto_init()
 	file_hermes_v1_provision_proto_msgTypes[1].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[3].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[4].OneofWrappers = []any{}
+	file_hermes_v1_provision_proto_msgTypes[2].OneofWrappers = []any{}
+	file_hermes_v1_provision_proto_msgTypes[5].OneofWrappers = []any{}
 	file_hermes_v1_provision_proto_msgTypes[6].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[7].OneofWrappers = []any{}
 	file_hermes_v1_provision_proto_msgTypes[9].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[11].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[12].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[15].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[17].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[18].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[22].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[24].OneofWrappers = []any{}
-	file_hermes_v1_provision_proto_msgTypes[25].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hermes_v1_provision_proto_rawDesc), len(file_hermes_v1_provision_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   31,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

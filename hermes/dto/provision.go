@@ -200,3 +200,39 @@ type ApplicationIDPConfigResponse struct {
 	CreatedAt string  `json:"created_at"`
 	UpdatedAt string  `json:"updated_at"`
 }
+
+// ==================== Service Challenge Setting ====================
+
+// ChallengeSettingCreateRequest 创建服务 Challenge 配置请求
+type ChallengeSettingCreateRequest struct {
+	Type      string            `json:"type" binding:"required"`
+	ExpiresIn uint              `json:"expires_in" binding:"required"`
+	Limits    models.RateLimits `json:"limits,omitempty"`
+}
+
+// ChallengeSettingUpdateRequest 更新服务 Challenge 配置请求（JSON Merge Patch 语义）
+type ChallengeSettingUpdateRequest struct {
+	ExpiresIn patch.Optional[uint]              `json:"expires_in"`
+	Limits    patch.Optional[models.RateLimits] `json:"limits"`
+}
+
+// ChallengeSettingResponse 服务 Challenge 配置响应
+type ChallengeSettingResponse struct {
+	ServiceID string            `json:"service_id"`
+	Type      string            `json:"type"`
+	ExpiresIn uint              `json:"expires_in"`
+	Limits    models.RateLimits `json:"limits,omitempty"`
+	CreatedAt string            `json:"created_at"`
+	UpdatedAt string            `json:"updated_at"`
+}
+
+func NewChallengeSettingResponse(c *models.ServiceChallengeSetting) ChallengeSettingResponse {
+	return ChallengeSettingResponse{
+		ServiceID: c.ServiceID,
+		Type:      c.Type,
+		ExpiresIn: c.ExpiresIn,
+		Limits:    c.Limits,
+		CreatedAt: FormatTime(c.CreatedAt),
+		UpdatedAt: FormatTime(c.UpdatedAt),
+	}
+}

@@ -41,6 +41,9 @@ type Manager struct {
 	// 应用 IDP 配置缓存：app_id -> []*ApplicationIDPConfig
 	appIDPConfigCache *ristretto.Cache[string, []*models.ApplicationIDPConfig]
 
+	// 域 IDP 配置缓存：domain_id -> []*DomainIDPConfig
+	domainIDPConfigCache *ristretto.Cache[string, []*models.DomainIDPConfig]
+
 	// Challenge 配置缓存：service_id:type -> *ServiceChallengeSetting
 	challengeConfigCache *ristretto.Cache[string, *models.ServiceChallengeSetting]
 
@@ -78,6 +81,7 @@ func NewManager(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 		relationCache:        newConfiguredCache[[]models.ApplicationServiceRelation]("application-service-relation"),
 		userCache:            newConfiguredCache[*models.UserWithDecrypted]("user"),
 		appIDPConfigCache:    newConfiguredCache[[]*models.ApplicationIDPConfig]("app-idp-config"),
+		domainIDPConfigCache: newConfiguredCache[[]*models.DomainIDPConfig]("domain-idp-config"),
 		challengeConfigCache: newConfiguredCache[*models.ServiceChallengeSetting]("challenge-config"),
 		ssoKeyCache:          newCache[*Keys]("sso", 10, 1, 64),
 	}
@@ -90,6 +94,7 @@ func (cm *Manager) Close() {
 	cm.relationCache.Close()
 	cm.userCache.Close()
 	cm.appIDPConfigCache.Close()
+	cm.domainIDPConfigCache.Close()
 	cm.challengeConfigCache.Close()
 	cm.ssoKeyCache.Close()
 }

@@ -7,12 +7,12 @@ import (
 	"github.com/heliannuuthus/helios/hermes"
 )
 
-// CredentialStoreAdapter 将 hermes.Service 适配为 iris.CredentialStore
+// CredentialStoreAdapter 将 hermes.UserService 适配为 iris.CredentialStore
 type CredentialStoreAdapter struct {
-	svc *hermes.Service
+	svc *hermes.UserService
 }
 
-func NewCredentialStoreAdapter(svc *hermes.Service) *CredentialStoreAdapter {
+func NewCredentialStoreAdapter(svc *hermes.UserService) *CredentialStoreAdapter {
 	return &CredentialStoreAdapter{svc: svc}
 }
 

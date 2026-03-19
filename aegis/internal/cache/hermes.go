@@ -172,6 +172,32 @@ func (cm *Manager) GetApplicationIDPConfigs(ctx context.Context, appID string) (
 	return configs, nil
 }
 
+// GetDomainIDPConfigs 获取域 IDP 配置（带缓存）
+func (cm *Manager) GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error) {
+	cacheKey := config.GetCacheKeyPrefix("domain-idp-config") + domainID
+
+	// 尝试从缓存获取
+	if cm.domainIDPConfigCache != nil {
+		if cached, ok := cm.domainIDPConfigCache.Get(cacheKey); ok {
+			return cached, nil
+		}
+	}
+
+	// 从 hermes 获取
+	configs, err := cm.hermesSvc.GetDomainIDPConfigs(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 存入缓存
+	if cm.domainIDPConfigCache != nil {
+		ttl := config.GetCacheTTL("domain-idp-config")
+		cm.domainIDPConfigCache.SetWithTTL(cacheKey, configs, 1, ttl)
+	}
+
+	return configs, nil
+}
+
 // GetServiceChallengeSetting 获取服务的 Challenge 配置（带本地缓存）
 func (cm *Manager) GetServiceChallengeSetting(ctx context.Context, serviceID, challengeType string) (*models.ServiceChallengeSetting, error) {
 	cacheKey := serviceChallengeCacheKey(serviceID, challengeType)

@@ -11,7 +11,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -21,12 +20,6 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	KeyService_GetKeys_FullMethodName       = "/hermes.v1.KeyService/GetKeys"
-	KeyService_RotateKey_FullMethodName     = "/hermes.v1.KeyService/RotateKey"
-	KeyService_ListIDPKeys_FullMethodName   = "/hermes.v1.KeyService/ListIDPKeys"
-	KeyService_GetIDPKey_FullMethodName     = "/hermes.v1.KeyService/GetIDPKey"
-	KeyService_CreateIDPKey_FullMethodName  = "/hermes.v1.KeyService/CreateIDPKey"
-	KeyService_UpdateIDPKey_FullMethodName  = "/hermes.v1.KeyService/UpdateIDPKey"
-	KeyService_DeleteIDPKey_FullMethodName  = "/hermes.v1.KeyService/DeleteIDPKey"
 	KeyService_ResolveIDPKey_FullMethodName = "/hermes.v1.KeyService/ResolveIDPKey"
 )
 
@@ -34,15 +27,9 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// KeyService 统一密钥管理（域/应用/服务签名密钥 + IDP 第三方凭证）
+// KeyService aegis 读取签名密钥 + 解析 IDP 凭证的只读接口
 type KeyServiceClient interface {
 	GetKeys(ctx context.Context, in *GetKeysRequest, opts ...grpc.CallOption) (*KeySet, error)
-	RotateKey(ctx context.Context, in *RotateKeyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	ListIDPKeys(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*IDPKeyList, error)
-	GetIDPKey(ctx context.Context, in *GetIDPKeyRequest, opts ...grpc.CallOption) (*IDPKey, error)
-	CreateIDPKey(ctx context.Context, in *CreateIDPKeyRequest, opts ...grpc.CallOption) (*IDPKey, error)
-	UpdateIDPKey(ctx context.Context, in *UpdateIDPKeyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	DeleteIDPKey(ctx context.Context, in *DeleteIDPKeyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ResolveIDPKey(ctx context.Context, in *ResolveIDPKeyRequest, opts ...grpc.CallOption) (*ResolveIDPKeyResponse, error)
 }
 
@@ -64,66 +51,6 @@ func (c *keyServiceClient) GetKeys(ctx context.Context, in *GetKeysRequest, opts
 	return out, nil
 }
 
-func (c *keyServiceClient) RotateKey(ctx context.Context, in *RotateKeyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, KeyService_RotateKey_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *keyServiceClient) ListIDPKeys(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*IDPKeyList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(IDPKeyList)
-	err := c.cc.Invoke(ctx, KeyService_ListIDPKeys_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *keyServiceClient) GetIDPKey(ctx context.Context, in *GetIDPKeyRequest, opts ...grpc.CallOption) (*IDPKey, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(IDPKey)
-	err := c.cc.Invoke(ctx, KeyService_GetIDPKey_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *keyServiceClient) CreateIDPKey(ctx context.Context, in *CreateIDPKeyRequest, opts ...grpc.CallOption) (*IDPKey, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(IDPKey)
-	err := c.cc.Invoke(ctx, KeyService_CreateIDPKey_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *keyServiceClient) UpdateIDPKey(ctx context.Context, in *UpdateIDPKeyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, KeyService_UpdateIDPKey_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *keyServiceClient) DeleteIDPKey(ctx context.Context, in *DeleteIDPKeyRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, KeyService_DeleteIDPKey_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *keyServiceClient) ResolveIDPKey(ctx context.Context, in *ResolveIDPKeyRequest, opts ...grpc.CallOption) (*ResolveIDPKeyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ResolveIDPKeyResponse)
@@ -138,15 +65,9 @@ func (c *keyServiceClient) ResolveIDPKey(ctx context.Context, in *ResolveIDPKeyR
 // All implementations must embed UnimplementedKeyServiceServer
 // for forward compatibility.
 //
-// KeyService 统一密钥管理（域/应用/服务签名密钥 + IDP 第三方凭证）
+// KeyService aegis 读取签名密钥 + 解析 IDP 凭证的只读接口
 type KeyServiceServer interface {
 	GetKeys(context.Context, *GetKeysRequest) (*KeySet, error)
-	RotateKey(context.Context, *RotateKeyRequest) (*emptypb.Empty, error)
-	ListIDPKeys(context.Context, *emptypb.Empty) (*IDPKeyList, error)
-	GetIDPKey(context.Context, *GetIDPKeyRequest) (*IDPKey, error)
-	CreateIDPKey(context.Context, *CreateIDPKeyRequest) (*IDPKey, error)
-	UpdateIDPKey(context.Context, *UpdateIDPKeyRequest) (*emptypb.Empty, error)
-	DeleteIDPKey(context.Context, *DeleteIDPKeyRequest) (*emptypb.Empty, error)
 	ResolveIDPKey(context.Context, *ResolveIDPKeyRequest) (*ResolveIDPKeyResponse, error)
 	mustEmbedUnimplementedKeyServiceServer()
 }
@@ -160,24 +81,6 @@ type UnimplementedKeyServiceServer struct{}
 
 func (UnimplementedKeyServiceServer) GetKeys(context.Context, *GetKeysRequest) (*KeySet, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetKeys not implemented")
-}
-func (UnimplementedKeyServiceServer) RotateKey(context.Context, *RotateKeyRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method RotateKey not implemented")
-}
-func (UnimplementedKeyServiceServer) ListIDPKeys(context.Context, *emptypb.Empty) (*IDPKeyList, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListIDPKeys not implemented")
-}
-func (UnimplementedKeyServiceServer) GetIDPKey(context.Context, *GetIDPKeyRequest) (*IDPKey, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetIDPKey not implemented")
-}
-func (UnimplementedKeyServiceServer) CreateIDPKey(context.Context, *CreateIDPKeyRequest) (*IDPKey, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateIDPKey not implemented")
-}
-func (UnimplementedKeyServiceServer) UpdateIDPKey(context.Context, *UpdateIDPKeyRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateIDPKey not implemented")
-}
-func (UnimplementedKeyServiceServer) DeleteIDPKey(context.Context, *DeleteIDPKeyRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteIDPKey not implemented")
 }
 func (UnimplementedKeyServiceServer) ResolveIDPKey(context.Context, *ResolveIDPKeyRequest) (*ResolveIDPKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ResolveIDPKey not implemented")
@@ -221,114 +124,6 @@ func _KeyService_GetKeys_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
-func _KeyService_RotateKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RotateKeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyServiceServer).RotateKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KeyService_RotateKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyServiceServer).RotateKey(ctx, req.(*RotateKeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _KeyService_ListIDPKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyServiceServer).ListIDPKeys(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KeyService_ListIDPKeys_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyServiceServer).ListIDPKeys(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _KeyService_GetIDPKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetIDPKeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyServiceServer).GetIDPKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KeyService_GetIDPKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyServiceServer).GetIDPKey(ctx, req.(*GetIDPKeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _KeyService_CreateIDPKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateIDPKeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyServiceServer).CreateIDPKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KeyService_CreateIDPKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyServiceServer).CreateIDPKey(ctx, req.(*CreateIDPKeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _KeyService_UpdateIDPKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateIDPKeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyServiceServer).UpdateIDPKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KeyService_UpdateIDPKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyServiceServer).UpdateIDPKey(ctx, req.(*UpdateIDPKeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _KeyService_DeleteIDPKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteIDPKeyRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(KeyServiceServer).DeleteIDPKey(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: KeyService_DeleteIDPKey_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KeyServiceServer).DeleteIDPKey(ctx, req.(*DeleteIDPKeyRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _KeyService_ResolveIDPKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ResolveIDPKeyRequest)
 	if err := dec(in); err != nil {
@@ -357,30 +152,6 @@ var KeyService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetKeys",
 			Handler:    _KeyService_GetKeys_Handler,
-		},
-		{
-			MethodName: "RotateKey",
-			Handler:    _KeyService_RotateKey_Handler,
-		},
-		{
-			MethodName: "ListIDPKeys",
-			Handler:    _KeyService_ListIDPKeys_Handler,
-		},
-		{
-			MethodName: "GetIDPKey",
-			Handler:    _KeyService_GetIDPKey_Handler,
-		},
-		{
-			MethodName: "CreateIDPKey",
-			Handler:    _KeyService_CreateIDPKey_Handler,
-		},
-		{
-			MethodName: "UpdateIDPKey",
-			Handler:    _KeyService_UpdateIDPKey_Handler,
-		},
-		{
-			MethodName: "DeleteIDPKey",
-			Handler:    _KeyService_DeleteIDPKey_Handler,
 		},
 		{
 			MethodName: "ResolveIDPKey",

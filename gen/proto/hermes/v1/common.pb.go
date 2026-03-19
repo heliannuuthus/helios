@@ -135,210 +135,11 @@ func (ErrorReason) EnumDescriptor() ([]byte, []int) {
 	return file_hermes_v1_common_proto_rawDescGZIP(), []int{0}
 }
 
-// Pagination 游标分页参数
-type Pagination struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Cursor        string                 `protobuf:"bytes,1,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Pagination) Reset() {
-	*x = Pagination{}
-	mi := &file_hermes_v1_common_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Pagination) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Pagination) ProtoMessage() {}
-
-func (x *Pagination) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_common_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Pagination.ProtoReflect.Descriptor instead.
-func (*Pagination) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_common_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *Pagination) GetCursor() string {
-	if x != nil {
-		return x.Cursor
-	}
-	return ""
-}
-
-func (x *Pagination) GetLimit() int32 {
-	if x != nil {
-		return x.Limit
-	}
-	return 0
-}
-
-// StringList 通用字符串列表
-type StringList struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Values        []string               `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *StringList) Reset() {
-	*x = StringList{}
-	mi := &file_hermes_v1_common_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *StringList) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StringList) ProtoMessage() {}
-
-func (x *StringList) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_common_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StringList.ProtoReflect.Descriptor instead.
-func (*StringList) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_common_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *StringList) GetValues() []string {
-	if x != nil {
-		return x.Values
-	}
-	return nil
-}
-
-// BoolValue 通用布尔响应
-type BoolValue struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Value         bool                   `protobuf:"varint,1,opt,name=value,proto3" json:"value,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BoolValue) Reset() {
-	*x = BoolValue{}
-	mi := &file_hermes_v1_common_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BoolValue) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BoolValue) ProtoMessage() {}
-
-func (x *BoolValue) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_common_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BoolValue.ProtoReflect.Descriptor instead.
-func (*BoolValue) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_common_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *BoolValue) GetValue() bool {
-	if x != nil {
-		return x.Value
-	}
-	return false
-}
-
-// OpenIDRequest 以 openid 为参数的通用请求
-type OpenIDRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Openid        string                 `protobuf:"bytes,1,opt,name=openid,proto3" json:"openid,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *OpenIDRequest) Reset() {
-	*x = OpenIDRequest{}
-	mi := &file_hermes_v1_common_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *OpenIDRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*OpenIDRequest) ProtoMessage() {}
-
-func (x *OpenIDRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_common_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use OpenIDRequest.ProtoReflect.Descriptor instead.
-func (*OpenIDRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_common_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *OpenIDRequest) GetOpenid() string {
-	if x != nil {
-		return x.Openid
-	}
-	return ""
-}
-
 var File_hermes_v1_common_proto protoreflect.FileDescriptor
 
 const file_hermes_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x16hermes/v1/common.proto\x12\thermes.v1\":\n" +
-	"\n" +
-	"Pagination\x12\x16\n" +
-	"\x06cursor\x18\x01 \x01(\tR\x06cursor\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\"$\n" +
-	"\n" +
-	"StringList\x12\x16\n" +
-	"\x06values\x18\x01 \x03(\tR\x06values\"!\n" +
-	"\tBoolValue\x12\x14\n" +
-	"\x05value\x18\x01 \x01(\bR\x05value\"'\n" +
-	"\rOpenIDRequest\x12\x16\n" +
-	"\x06openid\x18\x01 \x01(\tR\x06openid*\xd2\x04\n" +
+	"\x16hermes/v1/common.proto\x12\thermes.v1*\xd2\x04\n" +
 	"\vErrorReason\x12\x1c\n" +
 	"\x18ERROR_REASON_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10DOMAIN_NOT_FOUND\x10\x01\x12\x19\n" +
@@ -380,13 +181,8 @@ func file_hermes_v1_common_proto_rawDescGZIP() []byte {
 }
 
 var file_hermes_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_hermes_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_hermes_v1_common_proto_goTypes = []any{
-	(ErrorReason)(0),      // 0: hermes.v1.ErrorReason
-	(*Pagination)(nil),    // 1: hermes.v1.Pagination
-	(*StringList)(nil),    // 2: hermes.v1.StringList
-	(*BoolValue)(nil),     // 3: hermes.v1.BoolValue
-	(*OpenIDRequest)(nil), // 4: hermes.v1.OpenIDRequest
+	(ErrorReason)(0), // 0: hermes.v1.ErrorReason
 }
 var file_hermes_v1_common_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -407,14 +203,13 @@ func file_hermes_v1_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hermes_v1_common_proto_rawDesc), len(file_hermes_v1_common_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   0,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_hermes_v1_common_proto_goTypes,
 		DependencyIndexes: file_hermes_v1_common_proto_depIdxs,
 		EnumInfos:         file_hermes_v1_common_proto_enumTypes,
-		MessageInfos:      file_hermes_v1_common_proto_msgTypes,
 	}.Build()
 	File_hermes_v1_common_proto = out.File
 	file_hermes_v1_common_proto_goTypes = nil

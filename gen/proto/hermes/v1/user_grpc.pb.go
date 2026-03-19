@@ -20,19 +20,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	UserService_GetByOpenID_FullMethodName                     = "/hermes.v1.UserService/GetByOpenID"
-	UserService_GetByIdentity_FullMethodName                   = "/hermes.v1.UserService/GetByIdentity"
 	UserService_GetByEmail_FullMethodName                      = "/hermes.v1.UserService/GetByEmail"
 	UserService_GetByPhonePlain_FullMethodName                 = "/hermes.v1.UserService/GetByPhonePlain"
 	UserService_GetDecryptedUser_FullMethodName                = "/hermes.v1.UserService/GetDecryptedUser"
-	UserService_GetDecryptedUserByIdentity_FullMethodName      = "/hermes.v1.UserService/GetDecryptedUserByIdentity"
 	UserService_CreateUser_FullMethodName                      = "/hermes.v1.UserService/CreateUser"
 	UserService_UpdateUser_FullMethodName                      = "/hermes.v1.UserService/UpdateUser"
 	UserService_UpdateLastLogin_FullMethodName                 = "/hermes.v1.UserService/UpdateLastLogin"
 	UserService_UpdatePassword_FullMethodName                  = "/hermes.v1.UserService/UpdatePassword"
 	UserService_GetIdentities_FullMethodName                   = "/hermes.v1.UserService/GetIdentities"
 	UserService_GetIdentitiesByIdentity_FullMethodName         = "/hermes.v1.UserService/GetIdentitiesByIdentity"
-	UserService_GetIdentityByType_FullMethodName               = "/hermes.v1.UserService/GetIdentityByType"
 	UserService_AddIdentity_FullMethodName                     = "/hermes.v1.UserService/AddIdentity"
 	UserService_GetUserByIdentifier_FullMethodName             = "/hermes.v1.UserService/GetUserByIdentifier"
 	UserService_GetStaffByIdentifier_FullMethodName            = "/hermes.v1.UserService/GetStaffByIdentifier"
@@ -47,34 +43,23 @@ const (
 	UserService_DisableCredential_FullMethodName               = "/hermes.v1.UserService/DisableCredential"
 	UserService_DeleteCredential_FullMethodName                = "/hermes.v1.UserService/DeleteCredential"
 	UserService_GetOpenIDByCredentialID_FullMethodName         = "/hermes.v1.UserService/GetOpenIDByCredentialID"
-	UserService_CreateGroup_FullMethodName                     = "/hermes.v1.UserService/CreateGroup"
-	UserService_GetGroup_FullMethodName                        = "/hermes.v1.UserService/GetGroup"
-	UserService_ListGroups_FullMethodName                      = "/hermes.v1.UserService/ListGroups"
-	UserService_UpdateGroup_FullMethodName                     = "/hermes.v1.UserService/UpdateGroup"
-	UserService_DeleteGroup_FullMethodName                     = "/hermes.v1.UserService/DeleteGroup"
-	UserService_SetGroupMembers_FullMethodName                 = "/hermes.v1.UserService/SetGroupMembers"
-	UserService_GetGroupMembers_FullMethodName                 = "/hermes.v1.UserService/GetGroupMembers"
 )
 
 // UserServiceClient is the client API for UserService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证 + 用户组
+// UserService aegis 用户 + 身份 + 凭证管理接口
 type UserServiceClient interface {
-	GetByOpenID(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*User, error)
-	GetByIdentity(ctx context.Context, in *GetByIdentityRequest, opts ...grpc.CallOption) (*User, error)
 	GetByEmail(ctx context.Context, in *GetByEmailRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
 	GetByPhonePlain(ctx context.Context, in *GetByPhonePlainRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
 	GetDecryptedUser(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
-	GetDecryptedUserByIdentity(ctx context.Context, in *GetByIdentityRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
 	CreateUser(ctx context.Context, in *CreateUserRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
 	UpdateUser(ctx context.Context, in *UpdateUserRequest, opts ...grpc.CallOption) (*User, error)
 	UpdateLastLogin(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	UpdatePassword(ctx context.Context, in *UpdatePasswordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetIdentities(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*IdentityList, error)
 	GetIdentitiesByIdentity(ctx context.Context, in *GetByIdentityRequest, opts ...grpc.CallOption) (*IdentityList, error)
-	GetIdentityByType(ctx context.Context, in *GetIdentityByTypeRequest, opts ...grpc.CallOption) (*UserIdentity, error)
 	AddIdentity(ctx context.Context, in *AddIdentityRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetUserByIdentifier(ctx context.Context, in *GetByIdentifierRequest, opts ...grpc.CallOption) (*PasswordStoreCredential, error)
 	GetStaffByIdentifier(ctx context.Context, in *GetByIdentifierRequest, opts ...grpc.CallOption) (*PasswordStoreCredential, error)
@@ -89,13 +74,6 @@ type UserServiceClient interface {
 	DisableCredential(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteCredential(ctx context.Context, in *DeleteCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetOpenIDByCredentialID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*OpenIDResponse, error)
-	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Group, error)
-	GetGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*Group, error)
-	ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*GroupList, error)
-	UpdateGroup(ctx context.Context, in *UpdateGroupRequest, opts ...grpc.CallOption) (*Group, error)
-	DeleteGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	SetGroupMembers(ctx context.Context, in *SetGroupMembersRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	GetGroupMembers(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*StringList, error)
 }
 
 type userServiceClient struct {
@@ -104,26 +82,6 @@ type userServiceClient struct {
 
 func NewUserServiceClient(cc grpc.ClientConnInterface) UserServiceClient {
 	return &userServiceClient{cc}
-}
-
-func (c *userServiceClient) GetByOpenID(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*User, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(User)
-	err := c.cc.Invoke(ctx, UserService_GetByOpenID_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetByIdentity(ctx context.Context, in *GetByIdentityRequest, opts ...grpc.CallOption) (*User, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(User)
-	err := c.cc.Invoke(ctx, UserService_GetByIdentity_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *userServiceClient) GetByEmail(ctx context.Context, in *GetByEmailRequest, opts ...grpc.CallOption) (*DecryptedUser, error) {
@@ -150,16 +108,6 @@ func (c *userServiceClient) GetDecryptedUser(ctx context.Context, in *OpenIDRequ
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DecryptedUser)
 	err := c.cc.Invoke(ctx, UserService_GetDecryptedUser_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetDecryptedUserByIdentity(ctx context.Context, in *GetByIdentityRequest, opts ...grpc.CallOption) (*DecryptedUser, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DecryptedUser)
-	err := c.cc.Invoke(ctx, UserService_GetDecryptedUserByIdentity_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -220,16 +168,6 @@ func (c *userServiceClient) GetIdentitiesByIdentity(ctx context.Context, in *Get
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(IdentityList)
 	err := c.cc.Invoke(ctx, UserService_GetIdentitiesByIdentity_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetIdentityByType(ctx context.Context, in *GetIdentityByTypeRequest, opts ...grpc.CallOption) (*UserIdentity, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UserIdentity)
-	err := c.cc.Invoke(ctx, UserService_GetIdentityByType_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -376,95 +314,21 @@ func (c *userServiceClient) GetOpenIDByCredentialID(ctx context.Context, in *Cre
 	return out, nil
 }
 
-func (c *userServiceClient) CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Group, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Group)
-	err := c.cc.Invoke(ctx, UserService_CreateGroup_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*Group, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Group)
-	err := c.cc.Invoke(ctx, UserService_GetGroup_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) ListGroups(ctx context.Context, in *ListGroupsRequest, opts ...grpc.CallOption) (*GroupList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GroupList)
-	err := c.cc.Invoke(ctx, UserService_ListGroups_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) UpdateGroup(ctx context.Context, in *UpdateGroupRequest, opts ...grpc.CallOption) (*Group, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(Group)
-	err := c.cc.Invoke(ctx, UserService_UpdateGroup_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) DeleteGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_DeleteGroup_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) SetGroupMembers(ctx context.Context, in *SetGroupMembersRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_SetGroupMembers_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetGroupMembers(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*StringList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(StringList)
-	err := c.cc.Invoke(ctx, UserService_GetGroupMembers_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // UserServiceServer is the server API for UserService service.
 // All implementations must embed UnimplementedUserServiceServer
 // for forward compatibility.
 //
-// UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证 + 用户组
+// UserService aegis 用户 + 身份 + 凭证管理接口
 type UserServiceServer interface {
-	GetByOpenID(context.Context, *OpenIDRequest) (*User, error)
-	GetByIdentity(context.Context, *GetByIdentityRequest) (*User, error)
 	GetByEmail(context.Context, *GetByEmailRequest) (*DecryptedUser, error)
 	GetByPhonePlain(context.Context, *GetByPhonePlainRequest) (*DecryptedUser, error)
 	GetDecryptedUser(context.Context, *OpenIDRequest) (*DecryptedUser, error)
-	GetDecryptedUserByIdentity(context.Context, *GetByIdentityRequest) (*DecryptedUser, error)
 	CreateUser(context.Context, *CreateUserRequest) (*DecryptedUser, error)
 	UpdateUser(context.Context, *UpdateUserRequest) (*User, error)
 	UpdateLastLogin(context.Context, *OpenIDRequest) (*emptypb.Empty, error)
 	UpdatePassword(context.Context, *UpdatePasswordRequest) (*emptypb.Empty, error)
 	GetIdentities(context.Context, *OpenIDRequest) (*IdentityList, error)
 	GetIdentitiesByIdentity(context.Context, *GetByIdentityRequest) (*IdentityList, error)
-	GetIdentityByType(context.Context, *GetIdentityByTypeRequest) (*UserIdentity, error)
 	AddIdentity(context.Context, *AddIdentityRequest) (*emptypb.Empty, error)
 	GetUserByIdentifier(context.Context, *GetByIdentifierRequest) (*PasswordStoreCredential, error)
 	GetStaffByIdentifier(context.Context, *GetByIdentifierRequest) (*PasswordStoreCredential, error)
@@ -479,13 +343,6 @@ type UserServiceServer interface {
 	DisableCredential(context.Context, *CredentialIDRequest) (*emptypb.Empty, error)
 	DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error)
 	GetOpenIDByCredentialID(context.Context, *CredentialIDRequest) (*OpenIDResponse, error)
-	CreateGroup(context.Context, *CreateGroupRequest) (*Group, error)
-	GetGroup(context.Context, *GetGroupRequest) (*Group, error)
-	ListGroups(context.Context, *ListGroupsRequest) (*GroupList, error)
-	UpdateGroup(context.Context, *UpdateGroupRequest) (*Group, error)
-	DeleteGroup(context.Context, *GetGroupRequest) (*emptypb.Empty, error)
-	SetGroupMembers(context.Context, *SetGroupMembersRequest) (*emptypb.Empty, error)
-	GetGroupMembers(context.Context, *GetGroupRequest) (*StringList, error)
 	mustEmbedUnimplementedUserServiceServer()
 }
 
@@ -496,12 +353,6 @@ type UserServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedUserServiceServer struct{}
 
-func (UnimplementedUserServiceServer) GetByOpenID(context.Context, *OpenIDRequest) (*User, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetByOpenID not implemented")
-}
-func (UnimplementedUserServiceServer) GetByIdentity(context.Context, *GetByIdentityRequest) (*User, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetByIdentity not implemented")
-}
 func (UnimplementedUserServiceServer) GetByEmail(context.Context, *GetByEmailRequest) (*DecryptedUser, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetByEmail not implemented")
 }
@@ -510,9 +361,6 @@ func (UnimplementedUserServiceServer) GetByPhonePlain(context.Context, *GetByPho
 }
 func (UnimplementedUserServiceServer) GetDecryptedUser(context.Context, *OpenIDRequest) (*DecryptedUser, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDecryptedUser not implemented")
-}
-func (UnimplementedUserServiceServer) GetDecryptedUserByIdentity(context.Context, *GetByIdentityRequest) (*DecryptedUser, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetDecryptedUserByIdentity not implemented")
 }
 func (UnimplementedUserServiceServer) CreateUser(context.Context, *CreateUserRequest) (*DecryptedUser, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateUser not implemented")
@@ -531,9 +379,6 @@ func (UnimplementedUserServiceServer) GetIdentities(context.Context, *OpenIDRequ
 }
 func (UnimplementedUserServiceServer) GetIdentitiesByIdentity(context.Context, *GetByIdentityRequest) (*IdentityList, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetIdentitiesByIdentity not implemented")
-}
-func (UnimplementedUserServiceServer) GetIdentityByType(context.Context, *GetIdentityByTypeRequest) (*UserIdentity, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetIdentityByType not implemented")
 }
 func (UnimplementedUserServiceServer) AddIdentity(context.Context, *AddIdentityRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddIdentity not implemented")
@@ -577,27 +422,6 @@ func (UnimplementedUserServiceServer) DeleteCredential(context.Context, *DeleteC
 func (UnimplementedUserServiceServer) GetOpenIDByCredentialID(context.Context, *CredentialIDRequest) (*OpenIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOpenIDByCredentialID not implemented")
 }
-func (UnimplementedUserServiceServer) CreateGroup(context.Context, *CreateGroupRequest) (*Group, error) {
-	return nil, status.Error(codes.Unimplemented, "method CreateGroup not implemented")
-}
-func (UnimplementedUserServiceServer) GetGroup(context.Context, *GetGroupRequest) (*Group, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetGroup not implemented")
-}
-func (UnimplementedUserServiceServer) ListGroups(context.Context, *ListGroupsRequest) (*GroupList, error) {
-	return nil, status.Error(codes.Unimplemented, "method ListGroups not implemented")
-}
-func (UnimplementedUserServiceServer) UpdateGroup(context.Context, *UpdateGroupRequest) (*Group, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateGroup not implemented")
-}
-func (UnimplementedUserServiceServer) DeleteGroup(context.Context, *GetGroupRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DeleteGroup not implemented")
-}
-func (UnimplementedUserServiceServer) SetGroupMembers(context.Context, *SetGroupMembersRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method SetGroupMembers not implemented")
-}
-func (UnimplementedUserServiceServer) GetGroupMembers(context.Context, *GetGroupRequest) (*StringList, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetGroupMembers not implemented")
-}
 func (UnimplementedUserServiceServer) mustEmbedUnimplementedUserServiceServer() {}
 func (UnimplementedUserServiceServer) testEmbeddedByValue()                     {}
 
@@ -617,42 +441,6 @@ func RegisterUserServiceServer(s grpc.ServiceRegistrar, srv UserServiceServer) {
 		t.testEmbeddedByValue()
 	}
 	s.RegisterService(&UserService_ServiceDesc, srv)
-}
-
-func _UserService_GetByOpenID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OpenIDRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetByOpenID(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetByOpenID_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetByOpenID(ctx, req.(*OpenIDRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetByIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetByIdentityRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetByIdentity(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetByIdentity_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetByIdentity(ctx, req.(*GetByIdentityRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _UserService_GetByEmail_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -705,24 +493,6 @@ func _UserService_GetDecryptedUser_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).GetDecryptedUser(ctx, req.(*OpenIDRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetDecryptedUserByIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetByIdentityRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetDecryptedUserByIdentity(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetDecryptedUserByIdentity_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetDecryptedUserByIdentity(ctx, req.(*GetByIdentityRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -831,24 +601,6 @@ func _UserService_GetIdentitiesByIdentity_Handler(srv interface{}, ctx context.C
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).GetIdentitiesByIdentity(ctx, req.(*GetByIdentityRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetIdentityByType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetIdentityByTypeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetIdentityByType(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetIdentityByType_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetIdentityByType(ctx, req.(*GetIdentityByTypeRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1105,132 +857,6 @@ func _UserService_GetOpenIDByCredentialID_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_CreateGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateGroupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).CreateGroup(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_CreateGroup_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).CreateGroup(ctx, req.(*CreateGroupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetGroupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetGroup(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetGroup_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetGroup(ctx, req.(*GetGroupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_ListGroups_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListGroupsRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).ListGroups(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_ListGroups_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).ListGroups(ctx, req.(*ListGroupsRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_UpdateGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateGroupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).UpdateGroup(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_UpdateGroup_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).UpdateGroup(ctx, req.(*UpdateGroupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_DeleteGroup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetGroupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).DeleteGroup(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_DeleteGroup_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).DeleteGroup(ctx, req.(*GetGroupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_SetGroupMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SetGroupMembersRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).SetGroupMembers(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_SetGroupMembers_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).SetGroupMembers(ctx, req.(*SetGroupMembersRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetGroupMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetGroupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetGroupMembers(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetGroupMembers_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetGroupMembers(ctx, req.(*GetGroupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // UserService_ServiceDesc is the grpc.ServiceDesc for UserService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1238,14 +864,6 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "hermes.v1.UserService",
 	HandlerType: (*UserServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "GetByOpenID",
-			Handler:    _UserService_GetByOpenID_Handler,
-		},
-		{
-			MethodName: "GetByIdentity",
-			Handler:    _UserService_GetByIdentity_Handler,
-		},
 		{
 			MethodName: "GetByEmail",
 			Handler:    _UserService_GetByEmail_Handler,
@@ -1257,10 +875,6 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDecryptedUser",
 			Handler:    _UserService_GetDecryptedUser_Handler,
-		},
-		{
-			MethodName: "GetDecryptedUserByIdentity",
-			Handler:    _UserService_GetDecryptedUserByIdentity_Handler,
 		},
 		{
 			MethodName: "CreateUser",
@@ -1285,10 +899,6 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetIdentitiesByIdentity",
 			Handler:    _UserService_GetIdentitiesByIdentity_Handler,
-		},
-		{
-			MethodName: "GetIdentityByType",
-			Handler:    _UserService_GetIdentityByType_Handler,
 		},
 		{
 			MethodName: "AddIdentity",
@@ -1345,34 +955,6 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetOpenIDByCredentialID",
 			Handler:    _UserService_GetOpenIDByCredentialID_Handler,
-		},
-		{
-			MethodName: "CreateGroup",
-			Handler:    _UserService_CreateGroup_Handler,
-		},
-		{
-			MethodName: "GetGroup",
-			Handler:    _UserService_GetGroup_Handler,
-		},
-		{
-			MethodName: "ListGroups",
-			Handler:    _UserService_ListGroups_Handler,
-		},
-		{
-			MethodName: "UpdateGroup",
-			Handler:    _UserService_UpdateGroup_Handler,
-		},
-		{
-			MethodName: "DeleteGroup",
-			Handler:    _UserService_DeleteGroup_Handler,
-		},
-		{
-			MethodName: "SetGroupMembers",
-			Handler:    _UserService_SetGroupMembers_Handler,
-		},
-		{
-			MethodName: "GetGroupMembers",
-			Handler:    _UserService_GetGroupMembers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

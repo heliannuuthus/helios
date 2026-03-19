@@ -4,21 +4,9 @@ package hermes.v1;
 
 option go_package = "github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1";
 
-import "google/protobuf/empty.proto";
-import "google/protobuf/timestamp.proto";
-
-// KeyService 统一密钥管理（域/应用/服务签名密钥 + IDP 第三方凭证）
+// KeyService aegis 读取签名密钥 + 解析 IDP 凭证的只读接口
 service KeyService {
   rpc GetKeys(GetKeysRequest) returns (KeySet);
-  rpc RotateKey(RotateKeyRequest) returns (google.protobuf.Empty);
-
-  // ---- IDP Key ----
-
-  rpc ListIDPKeys(google.protobuf.Empty) returns (IDPKeyList);
-  rpc GetIDPKey(GetIDPKeyRequest) returns (IDPKey);
-  rpc CreateIDPKey(CreateIDPKeyRequest) returns (IDPKey);
-  rpc UpdateIDPKey(UpdateIDPKeyRequest) returns (google.protobuf.Empty);
-  rpc DeleteIDPKey(DeleteIDPKeyRequest) returns (google.protobuf.Empty);
   rpc ResolveIDPKey(ResolveIDPKeyRequest) returns (ResolveIDPKeyResponse);
 }
 
@@ -27,52 +15,10 @@ message GetKeysRequest {
   string owner_id = 2;
 }
 
-message RotateKeyRequest {
-  string owner_type = 1;
-  string owner_id = 2;
-  int64 window_seconds = 3; // 旧密钥过期窗口（秒）
-}
-
 // KeySet 密钥集合（已解密）
 message KeySet {
   bytes main = 1;           // 当前主密钥（48 字节 seed）
   repeated bytes keys = 2;  // 所有有效密钥（含轮换中旧密钥，按 created_at DESC）
-}
-
-// ==================== IDP Key ====================
-
-message GetIDPKeyRequest {
-  string idp_type = 1;
-  string t_app_id = 2;
-}
-
-message IDPKey {
-  uint32 id = 1;
-  string idp_type = 2;
-  string t_app_id = 3;
-  google.protobuf.Timestamp created_at = 4;
-  google.protobuf.Timestamp updated_at = 5;
-}
-
-message IDPKeyList {
-  repeated IDPKey keys = 1;
-}
-
-message CreateIDPKeyRequest {
-  string idp_type = 1;
-  string t_app_id = 2;
-  string t_secret = 3;
-}
-
-message UpdateIDPKeyRequest {
-  string idp_type = 1;
-  string t_app_id = 2;
-  optional string t_secret = 3;
-}
-
-message DeleteIDPKeyRequest {
-  string idp_type = 1;
-  string t_app_id = 2;
 }
 
 message ResolveIDPKeyRequest {

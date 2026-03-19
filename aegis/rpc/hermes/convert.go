@@ -112,6 +112,19 @@ func idpConfigFromProto(pb *hermesv1.ApplicationIDPConfig) *models.ApplicationID
 	}
 }
 
+func domainIDPConfigFromProto(pb *hermesv1.DomainIDPConfig) *models.DomainIDPConfig {
+	if pb == nil {
+		return nil
+	}
+	return &models.DomainIDPConfig{
+		ID:       uint(pb.Id),
+		DomainID: pb.DomainId,
+		IDPType:  pb.Type,
+		Priority: int(pb.Priority),
+		Strategy: pb.Strategy,
+	}
+}
+
 func relationshipFromProto(pb *hermesv1.Relationship) *models.Relationship {
 	if pb == nil {
 		return nil

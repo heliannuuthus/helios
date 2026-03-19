@@ -15,6 +15,7 @@ type HermesProvider interface {
 	GetServiceKeys(ctx context.Context, serviceID string) ([][]byte, error)
 	GetApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error)
 	GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error)
+	GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error)
 	GetServiceChallengeSetting(ctx context.Context, serviceID, challengeType string) (*models.ServiceChallengeSetting, error)
 	FindRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error)
 	ResolveIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error)

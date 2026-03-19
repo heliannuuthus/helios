@@ -17,11 +17,18 @@ import (
 
 var ProviderSet = wire.NewSet(
 	provideZwei,
-	provideHermesService,
+	provideHermesServices,
 	provideHermesHandler,
 	provideAegisHandler,
 	provideChaosHandler,
 )
+
+type HermesServices struct {
+	User      *hermes.UserService
+	Provision *hermes.ProvisionService
+	Resource  *hermes.ResourceService
+	Key       *hermes.KeyService
+}
 
 type App struct {
 	Zwei          *zwei.Zwei
@@ -42,20 +49,27 @@ func provideZwei() *zwei.Zwei {
 	return zwei.New(zweiconfig.InitDB())
 }
 
-func provideHermesService() *hermes.Service {
-	return hermes.NewService(hermesconfig.InitDB())
+func provideHermesServices() *HermesServices {
+	db := hermesconfig.InitDB()
+	keySvc := hermes.NewKeyService(db)
+	return &HermesServices{
+		User:      hermes.NewUserService(db),
+		Provision: hermes.NewProvisionService(db, keySvc),
+		Resource:  hermes.NewResourceService(db),
+		Key:       keySvc,
+	}
 }
 
-func provideAegisHandler(hermesService *hermes.Service) (*aegis.Handler, error) {
-	hermesAdapter := adapter.NewHermesAdapter(hermesService)
-	userAdapter := adapter.NewUserAdapter(hermesService)
-	credentialStore := adapter.NewCredentialStoreAdapter(hermesService)
+func provideAegisHandler(svc *HermesServices) (*aegis.Handler, error) {
+	hermesAdapter := adapter.NewHermesAdapter(svc.Provision, svc.Key, svc.Resource)
+	userAdapter := adapter.NewUserAdapter(svc.User)
+	credentialStore := adapter.NewCredentialStoreAdapter(svc.User)
 	credentialSvc := iris.NewCredentialService(credentialStore)
 	return aegis.Initialize(hermesAdapter, userAdapter, credentialSvc)
 }
 
-func provideHermesHandler(hermesService *hermes.Service) *hermes.Handler {
-	return hermes.NewHandler(hermesService)
+func provideHermesHandler(svc *HermesServices) *hermes.Handler {
+	return hermes.NewHandler(svc.Provision, svc.Resource, svc.Key, svc.User)
 }
 
 func provideChaosHandler() (*chaos.Handler, error) {

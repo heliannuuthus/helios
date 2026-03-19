@@ -9,7 +9,6 @@ package hermesv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -67,50 +66,6 @@ func (x *GetApplicationServiceRelationsRequest) GetAppId() string {
 	return ""
 }
 
-type GetServiceApplicationRelationsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId     string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetServiceApplicationRelationsRequest) Reset() {
-	*x = GetServiceApplicationRelationsRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetServiceApplicationRelationsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetServiceApplicationRelationsRequest) ProtoMessage() {}
-
-func (x *GetServiceApplicationRelationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetServiceApplicationRelationsRequest.ProtoReflect.Descriptor instead.
-func (*GetServiceApplicationRelationsRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *GetServiceApplicationRelationsRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
 type ApplicationServiceRelation struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -124,7 +79,7 @@ type ApplicationServiceRelation struct {
 
 func (x *ApplicationServiceRelation) Reset() {
 	*x = ApplicationServiceRelation{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[2]
+	mi := &file_hermes_v1_resource_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -136,7 +91,7 @@ func (x *ApplicationServiceRelation) String() string {
 func (*ApplicationServiceRelation) ProtoMessage() {}
 
 func (x *ApplicationServiceRelation) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[2]
+	mi := &file_hermes_v1_resource_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -149,7 +104,7 @@ func (x *ApplicationServiceRelation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplicationServiceRelation.ProtoReflect.Descriptor instead.
 func (*ApplicationServiceRelation) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{2}
+	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ApplicationServiceRelation) GetId() uint32 {
@@ -196,7 +151,7 @@ type ApplicationServiceRelationList struct {
 
 func (x *ApplicationServiceRelationList) Reset() {
 	*x = ApplicationServiceRelationList{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[3]
+	mi := &file_hermes_v1_resource_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -208,7 +163,7 @@ func (x *ApplicationServiceRelationList) String() string {
 func (*ApplicationServiceRelationList) ProtoMessage() {}
 
 func (x *ApplicationServiceRelationList) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[3]
+	mi := &file_hermes_v1_resource_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -221,7 +176,7 @@ func (x *ApplicationServiceRelationList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplicationServiceRelationList.ProtoReflect.Descriptor instead.
 func (*ApplicationServiceRelationList) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{3}
+	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ApplicationServiceRelationList) GetRelations() []*ApplicationServiceRelation {
@@ -229,118 +184,6 @@ func (x *ApplicationServiceRelationList) GetRelations() []*ApplicationServiceRel
 		return x.Relations
 	}
 	return nil
-}
-
-type SetApplicationServiceRelationsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AppId         string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	ServiceId     string                 `protobuf:"bytes,2,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	Relations     []string               `protobuf:"bytes,3,rep,name=relations,proto3" json:"relations,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetApplicationServiceRelationsRequest) Reset() {
-	*x = SetApplicationServiceRelationsRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetApplicationServiceRelationsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetApplicationServiceRelationsRequest) ProtoMessage() {}
-
-func (x *SetApplicationServiceRelationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetApplicationServiceRelationsRequest.ProtoReflect.Descriptor instead.
-func (*SetApplicationServiceRelationsRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *SetApplicationServiceRelationsRequest) GetAppId() string {
-	if x != nil {
-		return x.AppId
-	}
-	return ""
-}
-
-func (x *SetApplicationServiceRelationsRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *SetApplicationServiceRelationsRequest) GetRelations() []string {
-	if x != nil {
-		return x.Relations
-	}
-	return nil
-}
-
-type GetServiceAppRelationsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId     string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	AppId         string                 `protobuf:"bytes,2,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetServiceAppRelationsRequest) Reset() {
-	*x = GetServiceAppRelationsRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetServiceAppRelationsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetServiceAppRelationsRequest) ProtoMessage() {}
-
-func (x *GetServiceAppRelationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetServiceAppRelationsRequest.ProtoReflect.Descriptor instead.
-func (*GetServiceAppRelationsRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *GetServiceAppRelationsRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *GetServiceAppRelationsRequest) GetAppId() string {
-	if x != nil {
-		return x.AppId
-	}
-	return ""
 }
 
 type Relationship struct {
@@ -360,7 +203,7 @@ type Relationship struct {
 
 func (x *Relationship) Reset() {
 	*x = Relationship{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[6]
+	mi := &file_hermes_v1_resource_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -372,7 +215,7 @@ func (x *Relationship) String() string {
 func (*Relationship) ProtoMessage() {}
 
 func (x *Relationship) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[6]
+	mi := &file_hermes_v1_resource_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -385,7 +228,7 @@ func (x *Relationship) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Relationship.ProtoReflect.Descriptor instead.
 func (*Relationship) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{6}
+	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Relationship) GetId() uint32 {
@@ -451,386 +294,6 @@ func (x *Relationship) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
-type RelationshipList struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Relationships []*Relationship        `protobuf:"bytes,1,rep,name=relationships,proto3" json:"relationships,omitempty"`
-	NextCursor    string                 `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RelationshipList) Reset() {
-	*x = RelationshipList{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RelationshipList) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RelationshipList) ProtoMessage() {}
-
-func (x *RelationshipList) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RelationshipList.ProtoReflect.Descriptor instead.
-func (*RelationshipList) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *RelationshipList) GetRelationships() []*Relationship {
-	if x != nil {
-		return x.Relationships
-	}
-	return nil
-}
-
-func (x *RelationshipList) GetNextCursor() string {
-	if x != nil {
-		return x.NextCursor
-	}
-	return ""
-}
-
-type CreateRelationshipRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId     string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	SubjectType   string                 `protobuf:"bytes,2,opt,name=subject_type,json=subjectType,proto3" json:"subject_type,omitempty"`
-	SubjectId     string                 `protobuf:"bytes,3,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
-	Relation      string                 `protobuf:"bytes,4,opt,name=relation,proto3" json:"relation,omitempty"`
-	ObjectType    string                 `protobuf:"bytes,5,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"`
-	ObjectId      string                 `protobuf:"bytes,6,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateRelationshipRequest) Reset() {
-	*x = CreateRelationshipRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateRelationshipRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateRelationshipRequest) ProtoMessage() {}
-
-func (x *CreateRelationshipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateRelationshipRequest.ProtoReflect.Descriptor instead.
-func (*CreateRelationshipRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *CreateRelationshipRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *CreateRelationshipRequest) GetSubjectType() string {
-	if x != nil {
-		return x.SubjectType
-	}
-	return ""
-}
-
-func (x *CreateRelationshipRequest) GetSubjectId() string {
-	if x != nil {
-		return x.SubjectId
-	}
-	return ""
-}
-
-func (x *CreateRelationshipRequest) GetRelation() string {
-	if x != nil {
-		return x.Relation
-	}
-	return ""
-}
-
-func (x *CreateRelationshipRequest) GetObjectType() string {
-	if x != nil {
-		return x.ObjectType
-	}
-	return ""
-}
-
-func (x *CreateRelationshipRequest) GetObjectId() string {
-	if x != nil {
-		return x.ObjectId
-	}
-	return ""
-}
-
-func (x *CreateRelationshipRequest) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
-type DeleteRelationshipRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId     string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	SubjectType   string                 `protobuf:"bytes,2,opt,name=subject_type,json=subjectType,proto3" json:"subject_type,omitempty"`
-	SubjectId     string                 `protobuf:"bytes,3,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
-	Relation      string                 `protobuf:"bytes,4,opt,name=relation,proto3" json:"relation,omitempty"`
-	ObjectType    string                 `protobuf:"bytes,5,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"`
-	ObjectId      string                 `protobuf:"bytes,6,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeleteRelationshipRequest) Reset() {
-	*x = DeleteRelationshipRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeleteRelationshipRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeleteRelationshipRequest) ProtoMessage() {}
-
-func (x *DeleteRelationshipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeleteRelationshipRequest.ProtoReflect.Descriptor instead.
-func (*DeleteRelationshipRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *DeleteRelationshipRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *DeleteRelationshipRequest) GetSubjectType() string {
-	if x != nil {
-		return x.SubjectType
-	}
-	return ""
-}
-
-func (x *DeleteRelationshipRequest) GetSubjectId() string {
-	if x != nil {
-		return x.SubjectId
-	}
-	return ""
-}
-
-func (x *DeleteRelationshipRequest) GetRelation() string {
-	if x != nil {
-		return x.Relation
-	}
-	return ""
-}
-
-func (x *DeleteRelationshipRequest) GetObjectType() string {
-	if x != nil {
-		return x.ObjectType
-	}
-	return ""
-}
-
-func (x *DeleteRelationshipRequest) GetObjectId() string {
-	if x != nil {
-		return x.ObjectId
-	}
-	return ""
-}
-
-type UpdateRelationshipRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ServiceId     string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	SubjectType   string                 `protobuf:"bytes,2,opt,name=subject_type,json=subjectType,proto3" json:"subject_type,omitempty"`
-	SubjectId     string                 `protobuf:"bytes,3,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
-	Relation      string                 `protobuf:"bytes,4,opt,name=relation,proto3" json:"relation,omitempty"`
-	ObjectType    string                 `protobuf:"bytes,5,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"`
-	ObjectId      string                 `protobuf:"bytes,6,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	NewRelation   *string                `protobuf:"bytes,7,opt,name=new_relation,json=newRelation,proto3,oneof" json:"new_relation,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateRelationshipRequest) Reset() {
-	*x = UpdateRelationshipRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateRelationshipRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateRelationshipRequest) ProtoMessage() {}
-
-func (x *UpdateRelationshipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateRelationshipRequest.ProtoReflect.Descriptor instead.
-func (*UpdateRelationshipRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *UpdateRelationshipRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *UpdateRelationshipRequest) GetSubjectType() string {
-	if x != nil {
-		return x.SubjectType
-	}
-	return ""
-}
-
-func (x *UpdateRelationshipRequest) GetSubjectId() string {
-	if x != nil {
-		return x.SubjectId
-	}
-	return ""
-}
-
-func (x *UpdateRelationshipRequest) GetRelation() string {
-	if x != nil {
-		return x.Relation
-	}
-	return ""
-}
-
-func (x *UpdateRelationshipRequest) GetObjectType() string {
-	if x != nil {
-		return x.ObjectType
-	}
-	return ""
-}
-
-func (x *UpdateRelationshipRequest) GetObjectId() string {
-	if x != nil {
-		return x.ObjectId
-	}
-	return ""
-}
-
-func (x *UpdateRelationshipRequest) GetNewRelation() string {
-	if x != nil && x.NewRelation != nil {
-		return *x.NewRelation
-	}
-	return ""
-}
-
-func (x *UpdateRelationshipRequest) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
-type ListRelationshipsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Filter        string                 `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
-	Pagination    *Pagination            `protobuf:"bytes,2,opt,name=pagination,proto3" json:"pagination,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListRelationshipsRequest) Reset() {
-	*x = ListRelationshipsRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListRelationshipsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListRelationshipsRequest) ProtoMessage() {}
-
-func (x *ListRelationshipsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListRelationshipsRequest.ProtoReflect.Descriptor instead.
-func (*ListRelationshipsRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *ListRelationshipsRequest) GetFilter() string {
-	if x != nil {
-		return x.Filter
-	}
-	return ""
-}
-
-func (x *ListRelationshipsRequest) GetPagination() *Pagination {
-	if x != nil {
-		return x.Pagination
-	}
-	return nil
-}
-
 type FindRelationshipsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ServiceId     string                 `protobuf:"bytes,1,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
@@ -842,7 +305,7 @@ type FindRelationshipsRequest struct {
 
 func (x *FindRelationshipsRequest) Reset() {
 	*x = FindRelationshipsRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[12]
+	mi := &file_hermes_v1_resource_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -854,7 +317,7 @@ func (x *FindRelationshipsRequest) String() string {
 func (*FindRelationshipsRequest) ProtoMessage() {}
 
 func (x *FindRelationshipsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[12]
+	mi := &file_hermes_v1_resource_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -867,7 +330,7 @@ func (x *FindRelationshipsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FindRelationshipsRequest.ProtoReflect.Descriptor instead.
 func (*FindRelationshipsRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{12}
+	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *FindRelationshipsRequest) GetServiceId() string {
@@ -900,7 +363,7 @@ type Relationships struct {
 
 func (x *Relationships) Reset() {
 	*x = Relationships{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[13]
+	mi := &file_hermes_v1_resource_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -912,7 +375,7 @@ func (x *Relationships) String() string {
 func (*Relationships) ProtoMessage() {}
 
 func (x *Relationships) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[13]
+	mi := &file_hermes_v1_resource_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -925,7 +388,7 @@ func (x *Relationships) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Relationships.ProtoReflect.Descriptor instead.
 func (*Relationships) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{13}
+	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Relationships) GetItems() []*Relationship {
@@ -935,320 +398,13 @@ func (x *Relationships) GetItems() []*Relationship {
 	return nil
 }
 
-type ListAppServiceRelationshipsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AppId         string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	ServiceId     string                 `protobuf:"bytes,2,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	Filter        string                 `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
-	Pagination    *Pagination            `protobuf:"bytes,4,opt,name=pagination,proto3" json:"pagination,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListAppServiceRelationshipsRequest) Reset() {
-	*x = ListAppServiceRelationshipsRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListAppServiceRelationshipsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListAppServiceRelationshipsRequest) ProtoMessage() {}
-
-func (x *ListAppServiceRelationshipsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListAppServiceRelationshipsRequest.ProtoReflect.Descriptor instead.
-func (*ListAppServiceRelationshipsRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *ListAppServiceRelationshipsRequest) GetAppId() string {
-	if x != nil {
-		return x.AppId
-	}
-	return ""
-}
-
-func (x *ListAppServiceRelationshipsRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *ListAppServiceRelationshipsRequest) GetFilter() string {
-	if x != nil {
-		return x.Filter
-	}
-	return ""
-}
-
-func (x *ListAppServiceRelationshipsRequest) GetPagination() *Pagination {
-	if x != nil {
-		return x.Pagination
-	}
-	return nil
-}
-
-type CreateAppServiceRelationshipRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AppId         string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	ServiceId     string                 `protobuf:"bytes,2,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	SubjectType   string                 `protobuf:"bytes,3,opt,name=subject_type,json=subjectType,proto3" json:"subject_type,omitempty"`
-	SubjectId     string                 `protobuf:"bytes,4,opt,name=subject_id,json=subjectId,proto3" json:"subject_id,omitempty"`
-	Relation      string                 `protobuf:"bytes,5,opt,name=relation,proto3" json:"relation,omitempty"`
-	ObjectType    string                 `protobuf:"bytes,6,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"`
-	ObjectId      string                 `protobuf:"bytes,7,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateAppServiceRelationshipRequest) Reset() {
-	*x = CreateAppServiceRelationshipRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateAppServiceRelationshipRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateAppServiceRelationshipRequest) ProtoMessage() {}
-
-func (x *CreateAppServiceRelationshipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateAppServiceRelationshipRequest.ProtoReflect.Descriptor instead.
-func (*CreateAppServiceRelationshipRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *CreateAppServiceRelationshipRequest) GetAppId() string {
-	if x != nil {
-		return x.AppId
-	}
-	return ""
-}
-
-func (x *CreateAppServiceRelationshipRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *CreateAppServiceRelationshipRequest) GetSubjectType() string {
-	if x != nil {
-		return x.SubjectType
-	}
-	return ""
-}
-
-func (x *CreateAppServiceRelationshipRequest) GetSubjectId() string {
-	if x != nil {
-		return x.SubjectId
-	}
-	return ""
-}
-
-func (x *CreateAppServiceRelationshipRequest) GetRelation() string {
-	if x != nil {
-		return x.Relation
-	}
-	return ""
-}
-
-func (x *CreateAppServiceRelationshipRequest) GetObjectType() string {
-	if x != nil {
-		return x.ObjectType
-	}
-	return ""
-}
-
-func (x *CreateAppServiceRelationshipRequest) GetObjectId() string {
-	if x != nil {
-		return x.ObjectId
-	}
-	return ""
-}
-
-func (x *CreateAppServiceRelationshipRequest) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
-type UpdateAppServiceRelationshipRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	AppId          string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	ServiceId      string                 `protobuf:"bytes,2,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	RelationshipId uint32                 `protobuf:"varint,3,opt,name=relationship_id,json=relationshipId,proto3" json:"relationship_id,omitempty"`
-	NewRelation    *string                `protobuf:"bytes,4,opt,name=new_relation,json=newRelation,proto3,oneof" json:"new_relation,omitempty"`
-	ExpiresAt      *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expires_at,json=expiresAt,proto3,oneof" json:"expires_at,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *UpdateAppServiceRelationshipRequest) Reset() {
-	*x = UpdateAppServiceRelationshipRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateAppServiceRelationshipRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateAppServiceRelationshipRequest) ProtoMessage() {}
-
-func (x *UpdateAppServiceRelationshipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateAppServiceRelationshipRequest.ProtoReflect.Descriptor instead.
-func (*UpdateAppServiceRelationshipRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *UpdateAppServiceRelationshipRequest) GetAppId() string {
-	if x != nil {
-		return x.AppId
-	}
-	return ""
-}
-
-func (x *UpdateAppServiceRelationshipRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *UpdateAppServiceRelationshipRequest) GetRelationshipId() uint32 {
-	if x != nil {
-		return x.RelationshipId
-	}
-	return 0
-}
-
-func (x *UpdateAppServiceRelationshipRequest) GetNewRelation() string {
-	if x != nil && x.NewRelation != nil {
-		return *x.NewRelation
-	}
-	return ""
-}
-
-func (x *UpdateAppServiceRelationshipRequest) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
-type DeleteAppServiceRelationshipRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	AppId          string                 `protobuf:"bytes,1,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"`
-	ServiceId      string                 `protobuf:"bytes,2,opt,name=service_id,json=serviceId,proto3" json:"service_id,omitempty"`
-	RelationshipId uint32                 `protobuf:"varint,3,opt,name=relationship_id,json=relationshipId,proto3" json:"relationship_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *DeleteAppServiceRelationshipRequest) Reset() {
-	*x = DeleteAppServiceRelationshipRequest{}
-	mi := &file_hermes_v1_resource_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeleteAppServiceRelationshipRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeleteAppServiceRelationshipRequest) ProtoMessage() {}
-
-func (x *DeleteAppServiceRelationshipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_hermes_v1_resource_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeleteAppServiceRelationshipRequest.ProtoReflect.Descriptor instead.
-func (*DeleteAppServiceRelationshipRequest) Descriptor() ([]byte, []int) {
-	return file_hermes_v1_resource_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *DeleteAppServiceRelationshipRequest) GetAppId() string {
-	if x != nil {
-		return x.AppId
-	}
-	return ""
-}
-
-func (x *DeleteAppServiceRelationshipRequest) GetServiceId() string {
-	if x != nil {
-		return x.ServiceId
-	}
-	return ""
-}
-
-func (x *DeleteAppServiceRelationshipRequest) GetRelationshipId() uint32 {
-	if x != nil {
-		return x.RelationshipId
-	}
-	return 0
-}
-
 var File_hermes_v1_resource_proto protoreflect.FileDescriptor
 
 const file_hermes_v1_resource_proto_rawDesc = "" +
 	"\n" +
-	"\x18hermes/v1/resource.proto\x12\thermes.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16hermes/v1/common.proto\">\n" +
+	"\x18hermes/v1/resource.proto\x12\thermes.v1\x1a\x1fgoogle/protobuf/timestamp.proto\">\n" +
 	"%GetApplicationServiceRelationsRequest\x12\x15\n" +
-	"\x06app_id\x18\x01 \x01(\tR\x05appId\"F\n" +
-	"%GetServiceApplicationRelationsRequest\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x01 \x01(\tR\tserviceId\"\xb9\x01\n" +
+	"\x06app_id\x18\x01 \x01(\tR\x05appId\"\xb9\x01\n" +
 	"\x1aApplicationServiceRelation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\tR\x05appId\x12\x1d\n" +
@@ -1258,16 +414,7 @@ const file_hermes_v1_resource_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"e\n" +
 	"\x1eApplicationServiceRelationList\x12C\n" +
-	"\trelations\x18\x01 \x03(\v2%.hermes.v1.ApplicationServiceRelationR\trelations\"{\n" +
-	"%SetApplicationServiceRelationsRequest\x12\x15\n" +
-	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x02 \x01(\tR\tserviceId\x12\x1c\n" +
-	"\trelations\x18\x03 \x03(\tR\trelations\"U\n" +
-	"\x1dGetServiceAppRelationsRequest\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x01 \x01(\tR\tserviceId\x12\x15\n" +
-	"\x06app_id\x18\x02 \x01(\tR\x05appId\"\xe3\x02\n" +
+	"\trelations\x18\x01 \x03(\v2%.hermes.v1.ApplicationServiceRelationR\trelations\"\xe3\x02\n" +
 	"\fRelationship\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1283,54 +430,7 @@ const file_hermes_v1_resource_proto_rawDesc = "" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12>\n" +
 	"\n" +
 	"expires_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampH\x00R\texpiresAt\x88\x01\x01B\r\n" +
-	"\v_expires_at\"r\n" +
-	"\x10RelationshipList\x12=\n" +
-	"\rrelationships\x18\x01 \x03(\v2\x17.hermes.v1.RelationshipR\rrelationships\x12\x1f\n" +
-	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"\xa5\x02\n" +
-	"\x19CreateRelationshipRequest\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x01 \x01(\tR\tserviceId\x12!\n" +
-	"\fsubject_type\x18\x02 \x01(\tR\vsubjectType\x12\x1d\n" +
-	"\n" +
-	"subject_id\x18\x03 \x01(\tR\tsubjectId\x12\x1a\n" +
-	"\brelation\x18\x04 \x01(\tR\brelation\x12\x1f\n" +
-	"\vobject_type\x18\x05 \x01(\tR\n" +
-	"objectType\x12\x1b\n" +
-	"\tobject_id\x18\x06 \x01(\tR\bobjectId\x12>\n" +
-	"\n" +
-	"expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampH\x00R\texpiresAt\x88\x01\x01B\r\n" +
-	"\v_expires_at\"\xd6\x01\n" +
-	"\x19DeleteRelationshipRequest\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x01 \x01(\tR\tserviceId\x12!\n" +
-	"\fsubject_type\x18\x02 \x01(\tR\vsubjectType\x12\x1d\n" +
-	"\n" +
-	"subject_id\x18\x03 \x01(\tR\tsubjectId\x12\x1a\n" +
-	"\brelation\x18\x04 \x01(\tR\brelation\x12\x1f\n" +
-	"\vobject_type\x18\x05 \x01(\tR\n" +
-	"objectType\x12\x1b\n" +
-	"\tobject_id\x18\x06 \x01(\tR\bobjectId\"\xde\x02\n" +
-	"\x19UpdateRelationshipRequest\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x01 \x01(\tR\tserviceId\x12!\n" +
-	"\fsubject_type\x18\x02 \x01(\tR\vsubjectType\x12\x1d\n" +
-	"\n" +
-	"subject_id\x18\x03 \x01(\tR\tsubjectId\x12\x1a\n" +
-	"\brelation\x18\x04 \x01(\tR\brelation\x12\x1f\n" +
-	"\vobject_type\x18\x05 \x01(\tR\n" +
-	"objectType\x12\x1b\n" +
-	"\tobject_id\x18\x06 \x01(\tR\bobjectId\x12&\n" +
-	"\fnew_relation\x18\a \x01(\tH\x00R\vnewRelation\x88\x01\x01\x12>\n" +
-	"\n" +
-	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampH\x01R\texpiresAt\x88\x01\x01B\x0f\n" +
-	"\r_new_relationB\r\n" +
-	"\v_expires_at\"i\n" +
-	"\x18ListRelationshipsRequest\x12\x16\n" +
-	"\x06filter\x18\x01 \x01(\tR\x06filter\x125\n" +
-	"\n" +
-	"pagination\x18\x02 \x01(\v2\x15.hermes.v1.PaginationR\n" +
-	"pagination\"{\n" +
+	"\v_expires_at\"{\n" +
 	"\x18FindRelationshipsRequest\x12\x1d\n" +
 	"\n" +
 	"service_id\x18\x01 \x01(\tR\tserviceId\x12!\n" +
@@ -1338,59 +438,10 @@ const file_hermes_v1_resource_proto_rawDesc = "" +
 	"\n" +
 	"subject_id\x18\x03 \x01(\tR\tsubjectId\">\n" +
 	"\rRelationships\x12-\n" +
-	"\x05items\x18\x01 \x03(\v2\x17.hermes.v1.RelationshipR\x05items\"\xa9\x01\n" +
-	"\"ListAppServiceRelationshipsRequest\x12\x15\n" +
-	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x02 \x01(\tR\tserviceId\x12\x16\n" +
-	"\x06filter\x18\x03 \x01(\tR\x06filter\x125\n" +
-	"\n" +
-	"pagination\x18\x04 \x01(\v2\x15.hermes.v1.PaginationR\n" +
-	"pagination\"\xc6\x02\n" +
-	"#CreateAppServiceRelationshipRequest\x12\x15\n" +
-	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x02 \x01(\tR\tserviceId\x12!\n" +
-	"\fsubject_type\x18\x03 \x01(\tR\vsubjectType\x12\x1d\n" +
-	"\n" +
-	"subject_id\x18\x04 \x01(\tR\tsubjectId\x12\x1a\n" +
-	"\brelation\x18\x05 \x01(\tR\brelation\x12\x1f\n" +
-	"\vobject_type\x18\x06 \x01(\tR\n" +
-	"objectType\x12\x1b\n" +
-	"\tobject_id\x18\a \x01(\tR\bobjectId\x12>\n" +
-	"\n" +
-	"expires_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampH\x00R\texpiresAt\x88\x01\x01B\r\n" +
-	"\v_expires_at\"\x8c\x02\n" +
-	"#UpdateAppServiceRelationshipRequest\x12\x15\n" +
-	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x02 \x01(\tR\tserviceId\x12'\n" +
-	"\x0frelationship_id\x18\x03 \x01(\rR\x0erelationshipId\x12&\n" +
-	"\fnew_relation\x18\x04 \x01(\tH\x00R\vnewRelation\x88\x01\x01\x12>\n" +
-	"\n" +
-	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\texpiresAt\x88\x01\x01B\x0f\n" +
-	"\r_new_relationB\r\n" +
-	"\v_expires_at\"\x84\x01\n" +
-	"#DeleteAppServiceRelationshipRequest\x12\x15\n" +
-	"\x06app_id\x18\x01 \x01(\tR\x05appId\x12\x1d\n" +
-	"\n" +
-	"service_id\x18\x02 \x01(\tR\tserviceId\x12'\n" +
-	"\x0frelationship_id\x18\x03 \x01(\rR\x0erelationshipId2\xa4\n" +
-	"\n" +
-	"\x0fResourceService\x12j\n" +
-	"\x1eSetApplicationServiceRelations\x120.hermes.v1.SetApplicationServiceRelationsRequest\x1a\x16.google.protobuf.Empty\x12}\n" +
-	"\x1eGetApplicationServiceRelations\x120.hermes.v1.GetApplicationServiceRelationsRequest\x1a).hermes.v1.ApplicationServiceRelationList\x12Y\n" +
-	"\x16GetServiceAppRelations\x12(.hermes.v1.GetServiceAppRelationsRequest\x1a\x15.hermes.v1.StringList\x12}\n" +
-	"\x1eGetServiceApplicationRelations\x120.hermes.v1.GetServiceApplicationRelationsRequest\x1a).hermes.v1.ApplicationServiceRelationList\x12S\n" +
-	"\x12CreateRelationship\x12$.hermes.v1.CreateRelationshipRequest\x1a\x17.hermes.v1.Relationship\x12R\n" +
-	"\x12DeleteRelationship\x12$.hermes.v1.DeleteRelationshipRequest\x1a\x16.google.protobuf.Empty\x12S\n" +
-	"\x12UpdateRelationship\x12$.hermes.v1.UpdateRelationshipRequest\x1a\x17.hermes.v1.Relationship\x12U\n" +
-	"\x11ListRelationships\x12#.hermes.v1.ListRelationshipsRequest\x1a\x1b.hermes.v1.RelationshipList\x12R\n" +
-	"\x11FindRelationships\x12#.hermes.v1.FindRelationshipsRequest\x1a\x18.hermes.v1.Relationships\x12i\n" +
-	"\x1bListAppServiceRelationships\x12-.hermes.v1.ListAppServiceRelationshipsRequest\x1a\x1b.hermes.v1.RelationshipList\x12g\n" +
-	"\x1cCreateAppServiceRelationship\x12..hermes.v1.CreateAppServiceRelationshipRequest\x1a\x17.hermes.v1.Relationship\x12g\n" +
-	"\x1cUpdateAppServiceRelationship\x12..hermes.v1.UpdateAppServiceRelationshipRequest\x1a\x17.hermes.v1.Relationship\x12f\n" +
-	"\x1cDeleteAppServiceRelationship\x12..hermes.v1.DeleteAppServiceRelationshipRequest\x1a\x16.google.protobuf.EmptyB\x9d\x01\n" +
+	"\x05items\x18\x01 \x03(\v2\x17.hermes.v1.RelationshipR\x05items2\xe4\x01\n" +
+	"\x0fResourceService\x12}\n" +
+	"\x1eGetApplicationServiceRelations\x120.hermes.v1.GetApplicationServiceRelationsRequest\x1a).hermes.v1.ApplicationServiceRelationList\x12R\n" +
+	"\x11FindRelationships\x12#.hermes.v1.FindRelationshipsRequest\x1a\x18.hermes.v1.RelationshipsB\x9d\x01\n" +
 	"\rcom.hermes.v1B\rResourceProtoP\x01Z8github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1\xa2\x02\x03HXX\xaa\x02\tHermes.V1\xca\x02\tHermes\\V1\xe2\x02\x15Hermes\\V1\\GPBMetadata\xea\x02\n" +
 	"Hermes::V1b\x06proto3"
 
@@ -1406,75 +457,31 @@ func file_hermes_v1_resource_proto_rawDescGZIP() []byte {
 	return file_hermes_v1_resource_proto_rawDescData
 }
 
-var file_hermes_v1_resource_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_hermes_v1_resource_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_hermes_v1_resource_proto_goTypes = []any{
 	(*GetApplicationServiceRelationsRequest)(nil), // 0: hermes.v1.GetApplicationServiceRelationsRequest
-	(*GetServiceApplicationRelationsRequest)(nil), // 1: hermes.v1.GetServiceApplicationRelationsRequest
-	(*ApplicationServiceRelation)(nil),            // 2: hermes.v1.ApplicationServiceRelation
-	(*ApplicationServiceRelationList)(nil),        // 3: hermes.v1.ApplicationServiceRelationList
-	(*SetApplicationServiceRelationsRequest)(nil), // 4: hermes.v1.SetApplicationServiceRelationsRequest
-	(*GetServiceAppRelationsRequest)(nil),         // 5: hermes.v1.GetServiceAppRelationsRequest
-	(*Relationship)(nil),                          // 6: hermes.v1.Relationship
-	(*RelationshipList)(nil),                      // 7: hermes.v1.RelationshipList
-	(*CreateRelationshipRequest)(nil),             // 8: hermes.v1.CreateRelationshipRequest
-	(*DeleteRelationshipRequest)(nil),             // 9: hermes.v1.DeleteRelationshipRequest
-	(*UpdateRelationshipRequest)(nil),             // 10: hermes.v1.UpdateRelationshipRequest
-	(*ListRelationshipsRequest)(nil),              // 11: hermes.v1.ListRelationshipsRequest
-	(*FindRelationshipsRequest)(nil),              // 12: hermes.v1.FindRelationshipsRequest
-	(*Relationships)(nil),                         // 13: hermes.v1.Relationships
-	(*ListAppServiceRelationshipsRequest)(nil),    // 14: hermes.v1.ListAppServiceRelationshipsRequest
-	(*CreateAppServiceRelationshipRequest)(nil),   // 15: hermes.v1.CreateAppServiceRelationshipRequest
-	(*UpdateAppServiceRelationshipRequest)(nil),   // 16: hermes.v1.UpdateAppServiceRelationshipRequest
-	(*DeleteAppServiceRelationshipRequest)(nil),   // 17: hermes.v1.DeleteAppServiceRelationshipRequest
-	(*timestamppb.Timestamp)(nil),                 // 18: google.protobuf.Timestamp
-	(*Pagination)(nil),                            // 19: hermes.v1.Pagination
-	(*emptypb.Empty)(nil),                         // 20: google.protobuf.Empty
-	(*StringList)(nil),                            // 21: hermes.v1.StringList
+	(*ApplicationServiceRelation)(nil),            // 1: hermes.v1.ApplicationServiceRelation
+	(*ApplicationServiceRelationList)(nil),        // 2: hermes.v1.ApplicationServiceRelationList
+	(*Relationship)(nil),                          // 3: hermes.v1.Relationship
+	(*FindRelationshipsRequest)(nil),              // 4: hermes.v1.FindRelationshipsRequest
+	(*Relationships)(nil),                         // 5: hermes.v1.Relationships
+	(*timestamppb.Timestamp)(nil),                 // 6: google.protobuf.Timestamp
 }
 var file_hermes_v1_resource_proto_depIdxs = []int32{
-	18, // 0: hermes.v1.ApplicationServiceRelation.created_at:type_name -> google.protobuf.Timestamp
-	2,  // 1: hermes.v1.ApplicationServiceRelationList.relations:type_name -> hermes.v1.ApplicationServiceRelation
-	18, // 2: hermes.v1.Relationship.created_at:type_name -> google.protobuf.Timestamp
-	18, // 3: hermes.v1.Relationship.expires_at:type_name -> google.protobuf.Timestamp
-	6,  // 4: hermes.v1.RelationshipList.relationships:type_name -> hermes.v1.Relationship
-	18, // 5: hermes.v1.CreateRelationshipRequest.expires_at:type_name -> google.protobuf.Timestamp
-	18, // 6: hermes.v1.UpdateRelationshipRequest.expires_at:type_name -> google.protobuf.Timestamp
-	19, // 7: hermes.v1.ListRelationshipsRequest.pagination:type_name -> hermes.v1.Pagination
-	6,  // 8: hermes.v1.Relationships.items:type_name -> hermes.v1.Relationship
-	19, // 9: hermes.v1.ListAppServiceRelationshipsRequest.pagination:type_name -> hermes.v1.Pagination
-	18, // 10: hermes.v1.CreateAppServiceRelationshipRequest.expires_at:type_name -> google.protobuf.Timestamp
-	18, // 11: hermes.v1.UpdateAppServiceRelationshipRequest.expires_at:type_name -> google.protobuf.Timestamp
-	4,  // 12: hermes.v1.ResourceService.SetApplicationServiceRelations:input_type -> hermes.v1.SetApplicationServiceRelationsRequest
-	0,  // 13: hermes.v1.ResourceService.GetApplicationServiceRelations:input_type -> hermes.v1.GetApplicationServiceRelationsRequest
-	5,  // 14: hermes.v1.ResourceService.GetServiceAppRelations:input_type -> hermes.v1.GetServiceAppRelationsRequest
-	1,  // 15: hermes.v1.ResourceService.GetServiceApplicationRelations:input_type -> hermes.v1.GetServiceApplicationRelationsRequest
-	8,  // 16: hermes.v1.ResourceService.CreateRelationship:input_type -> hermes.v1.CreateRelationshipRequest
-	9,  // 17: hermes.v1.ResourceService.DeleteRelationship:input_type -> hermes.v1.DeleteRelationshipRequest
-	10, // 18: hermes.v1.ResourceService.UpdateRelationship:input_type -> hermes.v1.UpdateRelationshipRequest
-	11, // 19: hermes.v1.ResourceService.ListRelationships:input_type -> hermes.v1.ListRelationshipsRequest
-	12, // 20: hermes.v1.ResourceService.FindRelationships:input_type -> hermes.v1.FindRelationshipsRequest
-	14, // 21: hermes.v1.ResourceService.ListAppServiceRelationships:input_type -> hermes.v1.ListAppServiceRelationshipsRequest
-	15, // 22: hermes.v1.ResourceService.CreateAppServiceRelationship:input_type -> hermes.v1.CreateAppServiceRelationshipRequest
-	16, // 23: hermes.v1.ResourceService.UpdateAppServiceRelationship:input_type -> hermes.v1.UpdateAppServiceRelationshipRequest
-	17, // 24: hermes.v1.ResourceService.DeleteAppServiceRelationship:input_type -> hermes.v1.DeleteAppServiceRelationshipRequest
-	20, // 25: hermes.v1.ResourceService.SetApplicationServiceRelations:output_type -> google.protobuf.Empty
-	3,  // 26: hermes.v1.ResourceService.GetApplicationServiceRelations:output_type -> hermes.v1.ApplicationServiceRelationList
-	21, // 27: hermes.v1.ResourceService.GetServiceAppRelations:output_type -> hermes.v1.StringList
-	3,  // 28: hermes.v1.ResourceService.GetServiceApplicationRelations:output_type -> hermes.v1.ApplicationServiceRelationList
-	6,  // 29: hermes.v1.ResourceService.CreateRelationship:output_type -> hermes.v1.Relationship
-	20, // 30: hermes.v1.ResourceService.DeleteRelationship:output_type -> google.protobuf.Empty
-	6,  // 31: hermes.v1.ResourceService.UpdateRelationship:output_type -> hermes.v1.Relationship
-	7,  // 32: hermes.v1.ResourceService.ListRelationships:output_type -> hermes.v1.RelationshipList
-	13, // 33: hermes.v1.ResourceService.FindRelationships:output_type -> hermes.v1.Relationships
-	7,  // 34: hermes.v1.ResourceService.ListAppServiceRelationships:output_type -> hermes.v1.RelationshipList
-	6,  // 35: hermes.v1.ResourceService.CreateAppServiceRelationship:output_type -> hermes.v1.Relationship
-	6,  // 36: hermes.v1.ResourceService.UpdateAppServiceRelationship:output_type -> hermes.v1.Relationship
-	20, // 37: hermes.v1.ResourceService.DeleteAppServiceRelationship:output_type -> google.protobuf.Empty
-	25, // [25:38] is the sub-list for method output_type
-	12, // [12:25] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	6, // 0: hermes.v1.ApplicationServiceRelation.created_at:type_name -> google.protobuf.Timestamp
+	1, // 1: hermes.v1.ApplicationServiceRelationList.relations:type_name -> hermes.v1.ApplicationServiceRelation
+	6, // 2: hermes.v1.Relationship.created_at:type_name -> google.protobuf.Timestamp
+	6, // 3: hermes.v1.Relationship.expires_at:type_name -> google.protobuf.Timestamp
+	3, // 4: hermes.v1.Relationships.items:type_name -> hermes.v1.Relationship
+	0, // 5: hermes.v1.ResourceService.GetApplicationServiceRelations:input_type -> hermes.v1.GetApplicationServiceRelationsRequest
+	4, // 6: hermes.v1.ResourceService.FindRelationships:input_type -> hermes.v1.FindRelationshipsRequest
+	2, // 7: hermes.v1.ResourceService.GetApplicationServiceRelations:output_type -> hermes.v1.ApplicationServiceRelationList
+	5, // 8: hermes.v1.ResourceService.FindRelationships:output_type -> hermes.v1.Relationships
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_hermes_v1_resource_proto_init() }
@@ -1482,19 +489,14 @@ func file_hermes_v1_resource_proto_init() {
 	if File_hermes_v1_resource_proto != nil {
 		return
 	}
-	file_hermes_v1_common_proto_init()
-	file_hermes_v1_resource_proto_msgTypes[6].OneofWrappers = []any{}
-	file_hermes_v1_resource_proto_msgTypes[8].OneofWrappers = []any{}
-	file_hermes_v1_resource_proto_msgTypes[10].OneofWrappers = []any{}
-	file_hermes_v1_resource_proto_msgTypes[15].OneofWrappers = []any{}
-	file_hermes_v1_resource_proto_msgTypes[16].OneofWrappers = []any{}
+	file_hermes_v1_resource_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_hermes_v1_resource_proto_rawDesc), len(file_hermes_v1_resource_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

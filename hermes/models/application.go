@@ -36,13 +36,6 @@ func (Application) TableName() string { return "t_application" }
 
 func (a Application) PrimaryKey() uint { return a.ID }
 
-// ApplicationWithKey 带密钥的 Application（Main/Keys 不序列化到 API）
-type ApplicationWithKey struct {
-	Application
-	Main []byte   `json:"-"` // 当前主密钥（48 字节 seed）
-	Keys [][]byte `json:"-"` // 所有有效密钥（包括主密钥和轮换中的旧密钥）
-}
-
 // ApplicationIDPConfig 应用 IDP 配置 + 可选凭证覆盖
 type ApplicationIDPConfig struct {
 	ID        uint      `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
@@ -74,6 +67,8 @@ type ApplicationServiceRelation struct {
 }
 
 func (ApplicationServiceRelation) TableName() string { return "t_application_service_relation" }
+
+func (r ApplicationServiceRelation) PrimaryKey() uint { return r.ID }
 
 // ==================== Application URI 方法 ====================
 

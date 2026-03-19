@@ -5,37 +5,11 @@ import (
 	"github.com/heliannuuthus/helios/pkg/patch"
 )
 
-// ==================== Application-Service Relation ====================
-
-// ApplicationServiceRelationRequest 应用服务关系请求（内部用，path 提供 app_id/service_id）
-type ApplicationServiceRelationRequest struct {
-	AppID     string   `json:"app_id" binding:"required"`
-	ServiceID string   `json:"service_id" binding:"required"`
-	Relations []string `json:"relations" binding:"required"`
-}
-
-// ServiceAppRelationsRequest 服务-应用关系请求 PUT /services/:service_id/applications/:app_id/relations
-type ServiceAppRelationsRequest struct {
-	Relations []string `json:"relations" binding:"required"`
-}
-
-// ApplicationServiceRelationResponse 应用可访问服务关系（无 _id）
-type ApplicationServiceRelationResponse struct {
-	ServiceID string   `json:"service_id"`
-	Relations []string `json:"relations"`
-}
-
-// ServiceApplicationRelationResponse 服务侧：已授权应用及授予的权限（无 _id）
-type ServiceApplicationRelationResponse struct {
-	AppID     string   `json:"app_id"`
-	Relations []string `json:"relations"`
-}
-
 // ==================== Relationship ====================
 
-// RelationshipCreateRequest 创建关系请求
+// RelationshipCreateRequest 创建关系请求（service_id 从 URL 路径获取）
 type RelationshipCreateRequest struct {
-	ServiceID   string  `json:"service_id" binding:"required"`
+	ServiceID   string  `json:"-"`
 	SubjectType string  `json:"subject_type" binding:"required"`
 	SubjectID   string  `json:"subject_id" binding:"required"`
 	Relation    string  `json:"relation" binding:"required"`
@@ -44,9 +18,9 @@ type RelationshipCreateRequest struct {
 	ExpiresAt   *string `json:"expires_at"`
 }
 
-// RelationshipDeleteRequest 删除关系请求
+// RelationshipDeleteRequest 删除关系请求（service_id 从 URL 路径获取）
 type RelationshipDeleteRequest struct {
-	ServiceID   string `json:"service_id" binding:"required"`
+	ServiceID   string `json:"-"`
 	SubjectType string `json:"subject_type" binding:"required"`
 	SubjectID   string `json:"subject_id" binding:"required"`
 	Relation    string `json:"relation" binding:"required"`
@@ -54,9 +28,9 @@ type RelationshipDeleteRequest struct {
 	ObjectID    string `json:"object_id" binding:"required"`
 }
 
-// RelationshipUpdateRequest 更新关系请求（JSON Merge Patch 语义）
+// RelationshipUpdateRequest 更新关系请求（JSON Merge Patch 语义，service_id 从 URL 路径获取）
 type RelationshipUpdateRequest struct {
-	ServiceID   string                 `json:"service_id" binding:"required"`
+	ServiceID   string                 `json:"-"`
 	SubjectType string                 `json:"subject_type" binding:"required"`
 	SubjectID   string                 `json:"subject_id" binding:"required"`
 	Relation    string                 `json:"relation" binding:"required"`
@@ -66,7 +40,7 @@ type RelationshipUpdateRequest struct {
 	ExpiresAt   patch.Optional[string] `json:"expires_at,omitempty"`
 }
 
-// RelationshipResponse 关系（无 _id，expires_at 为 ISO 字符串）
+// RelationshipResponse 关系响应
 type RelationshipResponse struct {
 	ServiceID   string  `json:"service_id"`
 	SubjectType string  `json:"subject_type"`
@@ -95,42 +69,21 @@ func NewRelationshipResponse(r *models.Relationship) RelationshipResponse {
 	return resp
 }
 
-// ==================== App-Service Relationship (RESTful) ====================
+// ==================== ApplicationServiceRelation ====================
 
-// AppServiceRelationshipCreateRequest 在应用服务下创建关系请求（RESTful 风格）
-type AppServiceRelationshipCreateRequest struct {
-	SubjectType string  `json:"subject_type" binding:"required"`
-	SubjectID   string  `json:"subject_id" binding:"required"`
-	Relation    string  `json:"relation" binding:"required"`
-	ObjectType  string  `json:"object_type" binding:"required"`
-	ObjectID    string  `json:"object_id" binding:"required"`
-	ExpiresAt   *string `json:"expires_at,omitempty"`
+// ApplicationRelationResponse 应用服务关系响应
+type ApplicationRelationResponse struct {
+	AppID     string `json:"app_id"`
+	ServiceID string `json:"service_id"`
+	Relation  string `json:"relation"`
+	CreatedAt string `json:"created_at"`
 }
 
-// AppServiceRelationshipUpdateRequest 在应用服务下更新关系请求（JSON Merge Patch 语义）
-type AppServiceRelationshipUpdateRequest struct {
-	NewRelation patch.Optional[string] `json:"new_relation,omitempty"`
-	ExpiresAt   patch.Optional[string] `json:"expires_at,omitempty"`
-}
-
-// AppServiceRelationshipListRequest 应用服务关系列表查询请求（游标分页）
-type AppServiceRelationshipListRequest struct {
-	SubjectType string `form:"subject_type"`
-	SubjectID   string `form:"subject_id"`
-	Cursor      string `form:"cursor"`
-	Limit       int    `form:"limit" binding:"omitempty,min=1,max=100"`
-}
-
-// RelationshipListRequest 通用关系查询请求（游标分页）
-type RelationshipListRequest struct {
-	ServiceID   string `form:"service_id"`
-	SubjectType string `form:"subject_type"`
-	SubjectID   string `form:"subject_id"`
-	Relation    string `form:"relation"`
-	ObjectType  string `form:"object_type"`
-	ObjectID    string `form:"object_id"`
-	EntityType  string `form:"entity_type"`
-	EntityID    string `form:"entity_id"`
-	Cursor      string `form:"cursor"`
-	Limit       int    `form:"limit" binding:"omitempty,min=1,max=100"`
+func NewApplicationRelationResponse(r *models.ApplicationServiceRelation) ApplicationRelationResponse {
+	return ApplicationRelationResponse{
+		AppID:     r.AppID,
+		ServiceID: r.ServiceID,
+		Relation:  r.Relation,
+		CreatedAt: FormatTime(r.CreatedAt),
+	}
 }
