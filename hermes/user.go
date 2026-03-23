@@ -300,16 +300,6 @@ func (s *Service) GetUserCredentialsByType(ctx context.Context, openid, credType
 	return credentials, nil
 }
 
-// GetEnabledUserCredentialsByType 获取用户已启用的指定类型的凭证（TOTP 类型自动解密 Secret）
-func (s *Service) GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
-	var credentials []models.UserCredential
-	if err := s.db.WithContext(ctx).Where("openid = ? AND type = ? AND enabled = ?", openid, credType, true).Find(&credentials).Error; err != nil {
-		return nil, err
-	}
-	s.decryptCredentialSecrets(credentials)
-	return credentials, nil
-}
-
 // UpdateCredential 更新凭证
 func (s *Service) UpdateCredential(ctx context.Context, credentialID string, updates map[string]any) error {
 	return s.db.WithContext(ctx).Model(&models.UserCredential{}).Where("credential_id = ?", credentialID).Updates(updates).Error
@@ -321,16 +311,6 @@ func (s *Service) UpdateCredentialSignCount(ctx context.Context, credentialID st
 		"secret":       gorm.Expr("JSON_SET(secret, '$.sign_count', ?)", signCount),
 		"last_used_at": time.Now(),
 	})
-}
-
-// EnableCredential 启用凭证
-func (s *Service) EnableCredential(ctx context.Context, credentialID string) error {
-	return s.UpdateCredential(ctx, credentialID, map[string]any{"enabled": true})
-}
-
-// DisableCredential 禁用凭证
-func (s *Service) DisableCredential(ctx context.Context, credentialID string) error {
-	return s.UpdateCredential(ctx, credentialID, map[string]any{"enabled": false})
 }
 
 // DeleteCredential 删除凭证

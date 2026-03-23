@@ -40,11 +40,8 @@ const (
 	UserService_GetCredentialByID_FullMethodName               = "/hermes.v1.UserService/GetCredentialByID"
 	UserService_GetUserCredentials_FullMethodName              = "/hermes.v1.UserService/GetUserCredentials"
 	UserService_GetUserCredentialsByType_FullMethodName        = "/hermes.v1.UserService/GetUserCredentialsByType"
-	UserService_GetEnabledUserCredentialsByType_FullMethodName = "/hermes.v1.UserService/GetEnabledUserCredentialsByType"
 	UserService_UpdateCredential_FullMethodName                = "/hermes.v1.UserService/UpdateCredential"
 	UserService_UpdateCredentialSignCount_FullMethodName       = "/hermes.v1.UserService/UpdateCredentialSignCount"
-	UserService_EnableCredential_FullMethodName                = "/hermes.v1.UserService/EnableCredential"
-	UserService_DisableCredential_FullMethodName               = "/hermes.v1.UserService/DisableCredential"
 	UserService_DeleteCredential_FullMethodName                = "/hermes.v1.UserService/DeleteCredential"
 	UserService_DeleteCredentialByOpenIDAndType_FullMethodName = "/hermes.v1.UserService/DeleteCredentialByOpenIDAndType"
 	UserService_UpdateCredentialByInternalID_FullMethodName    = "/hermes.v1.UserService/UpdateCredentialByInternalID"
@@ -84,11 +81,8 @@ type UserServiceClient interface {
 	GetCredentialByID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*UserCredential, error)
 	GetUserCredentials(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*UserCredentialList, error)
 	GetUserCredentialsByType(ctx context.Context, in *GetCredentialsByTypeRequest, opts ...grpc.CallOption) (*UserCredentialList, error)
-	GetEnabledUserCredentialsByType(ctx context.Context, in *GetCredentialsByTypeRequest, opts ...grpc.CallOption) (*UserCredentialList, error)
 	UpdateCredential(ctx context.Context, in *UpdateCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	UpdateCredentialSignCount(ctx context.Context, in *UpdateCredentialSignCountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	EnableCredential(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	DisableCredential(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteCredential(ctx context.Context, in *DeleteCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteCredentialByOpenIDAndType(ctx context.Context, in *DeleteCredentialByTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	UpdateCredentialByInternalID(ctx context.Context, in *UpdateCredentialByInternalIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -310,16 +304,6 @@ func (c *userServiceClient) GetUserCredentialsByType(ctx context.Context, in *Ge
 	return out, nil
 }
 
-func (c *userServiceClient) GetEnabledUserCredentialsByType(ctx context.Context, in *GetCredentialsByTypeRequest, opts ...grpc.CallOption) (*UserCredentialList, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(UserCredentialList)
-	err := c.cc.Invoke(ctx, UserService_GetEnabledUserCredentialsByType_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *userServiceClient) UpdateCredential(ctx context.Context, in *UpdateCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
@@ -334,26 +318,6 @@ func (c *userServiceClient) UpdateCredentialSignCount(ctx context.Context, in *U
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, UserService_UpdateCredentialSignCount_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) EnableCredential(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_EnableCredential_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) DisableCredential(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_DisableCredential_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -496,11 +460,8 @@ type UserServiceServer interface {
 	GetCredentialByID(context.Context, *CredentialIDRequest) (*UserCredential, error)
 	GetUserCredentials(context.Context, *OpenIDRequest) (*UserCredentialList, error)
 	GetUserCredentialsByType(context.Context, *GetCredentialsByTypeRequest) (*UserCredentialList, error)
-	GetEnabledUserCredentialsByType(context.Context, *GetCredentialsByTypeRequest) (*UserCredentialList, error)
 	UpdateCredential(context.Context, *UpdateCredentialRequest) (*emptypb.Empty, error)
 	UpdateCredentialSignCount(context.Context, *UpdateCredentialSignCountRequest) (*emptypb.Empty, error)
-	EnableCredential(context.Context, *CredentialIDRequest) (*emptypb.Empty, error)
-	DisableCredential(context.Context, *CredentialIDRequest) (*emptypb.Empty, error)
 	DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error)
 	DeleteCredentialByOpenIDAndType(context.Context, *DeleteCredentialByTypeRequest) (*emptypb.Empty, error)
 	UpdateCredentialByInternalID(context.Context, *UpdateCredentialByInternalIDRequest) (*emptypb.Empty, error)
@@ -582,20 +543,11 @@ func (UnimplementedUserServiceServer) GetUserCredentials(context.Context, *OpenI
 func (UnimplementedUserServiceServer) GetUserCredentialsByType(context.Context, *GetCredentialsByTypeRequest) (*UserCredentialList, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserCredentialsByType not implemented")
 }
-func (UnimplementedUserServiceServer) GetEnabledUserCredentialsByType(context.Context, *GetCredentialsByTypeRequest) (*UserCredentialList, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetEnabledUserCredentialsByType not implemented")
-}
 func (UnimplementedUserServiceServer) UpdateCredential(context.Context, *UpdateCredentialRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateCredential not implemented")
 }
 func (UnimplementedUserServiceServer) UpdateCredentialSignCount(context.Context, *UpdateCredentialSignCountRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method UpdateCredentialSignCount not implemented")
-}
-func (UnimplementedUserServiceServer) EnableCredential(context.Context, *CredentialIDRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method EnableCredential not implemented")
-}
-func (UnimplementedUserServiceServer) DisableCredential(context.Context, *CredentialIDRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method DisableCredential not implemented")
 }
 func (UnimplementedUserServiceServer) DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteCredential not implemented")
@@ -1011,24 +963,6 @@ func _UserService_GetUserCredentialsByType_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_GetEnabledUserCredentialsByType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetCredentialsByTypeRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetEnabledUserCredentialsByType(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetEnabledUserCredentialsByType_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetEnabledUserCredentialsByType(ctx, req.(*GetCredentialsByTypeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _UserService_UpdateCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateCredentialRequest)
 	if err := dec(in); err != nil {
@@ -1061,42 +995,6 @@ func _UserService_UpdateCredentialSignCount_Handler(srv interface{}, ctx context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).UpdateCredentialSignCount(ctx, req.(*UpdateCredentialSignCountRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_EnableCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CredentialIDRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).EnableCredential(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_EnableCredential_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).EnableCredential(ctx, req.(*CredentialIDRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_DisableCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CredentialIDRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).DisableCredential(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_DisableCredential_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).DisableCredential(ctx, req.(*CredentialIDRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1387,24 +1285,12 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _UserService_GetUserCredentialsByType_Handler,
 		},
 		{
-			MethodName: "GetEnabledUserCredentialsByType",
-			Handler:    _UserService_GetEnabledUserCredentialsByType_Handler,
-		},
-		{
 			MethodName: "UpdateCredential",
 			Handler:    _UserService_UpdateCredential_Handler,
 		},
 		{
 			MethodName: "UpdateCredentialSignCount",
 			Handler:    _UserService_UpdateCredentialSignCount_Handler,
-		},
-		{
-			MethodName: "EnableCredential",
-			Handler:    _UserService_EnableCredential_Handler,
-		},
-		{
-			MethodName: "DisableCredential",
-			Handler:    _UserService_DisableCredential_Handler,
 		},
 		{
 			MethodName: "DeleteCredential",

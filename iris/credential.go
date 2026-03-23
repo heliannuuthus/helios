@@ -21,12 +21,9 @@ type CredentialStore interface {
 	CreateCredential(ctx context.Context, cred *models.UserCredential) error
 	GetUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error)
 	GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
-	GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
 	GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error)
 	UpdateCredential(ctx context.Context, credentialID string, updates map[string]any) error
 	UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error
-	EnableCredential(ctx context.Context, credentialID string) error
-	DisableCredential(ctx context.Context, credentialID string) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
 	DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error
 }
@@ -44,14 +41,46 @@ func NewCredentialService(store CredentialStore) *CredentialService {
 
 // ==================== TOTP ====================
 
-// SetupTOTP 初始化 TOTP（生成密钥，但尚未启用）
+// isActiveTOTPCredential TOTP 已绑定可用：已写 last_used_at，或兼容仅 enabled 的旧数据
+func isActiveTOTPCredential(c *models.UserCredential) bool {
+	if c.Type != string(models.CredentialTypeTOTP) {
+		return false
+	}
+	if c.LastUsedAt != nil {
+		return true
+	}
+	return c.Enabled
+}
+
+func isPendingTOTPCredential(c *models.UserCredential) bool {
+	return c.Type == string(models.CredentialTypeTOTP) && !isActiveTOTPCredential(c)
+}
+
+// credentialActiveInMFA MFA 展示与摘要：TOTP 按激活判定；WebAuthn 等以行存在且 enabled（遗留软禁用）
+func credentialActiveInMFA(c *models.UserCredential) bool {
+	switch models.CredentialType(c.Type) {
+	case models.CredentialTypeTOTP:
+		return isActiveTOTPCredential(c)
+	default:
+		return c.Enabled
+	}
+}
+
+// SetupTOTP 初始化 TOTP（明文 Secret 交给 store，Hermes 层负责加密）
 func (s *CredentialService) SetupTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
-	creds, err := s.store.GetEnabledUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
+	creds, err := s.store.GetUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
 	if err != nil {
 		return nil, fmt.Errorf("查询 TOTP 失败: %w", err)
 	}
+	for i := range creds {
+		if isActiveTOTPCredential(&creds[i]) {
+			return nil, errors.New("用户已绑定 TOTP")
+		}
+	}
 	if len(creds) > 0 {
-		return nil, errors.New("用户已绑定 TOTP")
+		if err := s.store.DeleteCredentialByOpenIDAndType(ctx, req.OpenID, string(models.CredentialTypeTOTP)); err != nil {
+			return nil, fmt.Errorf("清理未完成的 TOTP 失败: %w", err)
+		}
 	}
 
 	secretBytes := make([]byte, 20)
@@ -68,7 +97,6 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *models.TOTPSetup
 	otpauthURI := fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30",
 		url.PathEscape(issuer), url.PathEscape(req.OpenID), secret, url.QueryEscape(issuer))
 
-	// 明文传给 store，hermes 层负责加密
 	credential := &models.UserCredential{
 		OpenID:  req.OpenID,
 		Type:    string(models.CredentialTypeTOTP),
@@ -87,9 +115,8 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *models.TOTPSetup
 	}, nil
 }
 
-// ConfirmTOTP 确认 TOTP 绑定（验证一次后启用）
+// ConfirmTOTP 确认 TOTP 绑定（验证一次后写入 last_used_at）
 func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error {
-	// 查找用户未启用的 TOTP 凭证
 	creds, err := s.store.GetUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
 	if err != nil {
 		return fmt.Errorf("查询凭证失败: %w", err)
@@ -97,33 +124,32 @@ func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *models.Confirm
 
 	var credential *models.UserCredential
 	for i := range creds {
-		if creds[i].ID == req.CredentialID && !creds[i].Enabled {
+		if creds[i].ID == req.CredentialID && isPendingTOTPCredential(&creds[i]) {
 			credential = &creds[i]
 			break
 		}
 	}
 	if credential == nil {
-		return errors.New("凭证不存在或已启用")
+		return errors.New("凭证不存在或已激活")
 	}
 
-	// hermes 层已解密，直接使用
+	// Hermes 层已解密 TOTP Secret
 	if !totp.Validate(req.Code, credential.Secret) {
 		return errors.New("验证码错误")
 	}
 
 	now := time.Now()
 	updates := map[string]any{
-		"enabled":      true,
 		"last_used_at": now,
+		"enabled":      true,
 	}
-	// TOTP 凭证没有 credential_id，通过内部主键 ID 更新
 	if credential.CredentialID != nil {
 		if err := s.store.UpdateCredential(ctx, *credential.CredentialID, updates); err != nil {
-			return fmt.Errorf("启用凭证失败: %w", err)
+			return fmt.Errorf("确认 TOTP 失败: %w", err)
 		}
 	} else {
 		if err := s.store.UpdateCredentialByInternalID(ctx, credential.ID, updates); err != nil {
-			return fmt.Errorf("启用凭证失败: %w", err)
+			return fmt.Errorf("确认 TOTP 失败: %w", err)
 		}
 	}
 
@@ -133,23 +159,28 @@ func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *models.Confirm
 
 // VerifyTOTP 验证 TOTP
 func (s *CredentialService) VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error {
-	creds, err := s.store.GetEnabledUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
+	creds, err := s.store.GetUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
 	if err != nil {
 		return fmt.Errorf("查询凭证失败: %w", err)
 	}
-	if len(creds) == 0 {
+	var active []models.UserCredential
+	for i := range creds {
+		if isActiveTOTPCredential(&creds[i]) {
+			active = append(active, creds[i])
+		}
+	}
+	if len(active) == 0 {
 		return errors.New("用户未绑定 TOTP")
 	}
 
-	// hermes 层已解密，直接使用
-	if !totp.Validate(req.Code, creds[0].Secret) {
+	if !totp.Validate(req.Code, active[0].Secret) {
 		return errors.New("验证码错误")
 	}
 
 	return nil
 }
 
-// DisableTOTP 禁用 TOTP（删除所有 TOTP 凭证）
+// DisableTOTP 禁用 TOTP（按类型删除全部凭证行）
 func (s *CredentialService) DisableTOTP(ctx context.Context, openid string) error {
 	if err := s.store.DeleteCredentialByOpenIDAndType(ctx, openid, string(models.CredentialTypeTOTP)); err != nil {
 		return fmt.Errorf("删除 TOTP 凭证失败: %w", err)
@@ -158,37 +189,32 @@ func (s *CredentialService) DisableTOTP(ctx context.Context, openid string) erro
 	return nil
 }
 
-// SetTOTPEnabled 设置 TOTP 启用状态
+// SetTOTPEnabled 关闭 TOTP 即删除凭证；开启请走 Setup/Confirm 流程
 func (s *CredentialService) SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error {
-	creds, err := s.store.GetUserCredentialsByType(ctx, openid, string(models.CredentialTypeTOTP))
-	if err != nil {
-		return fmt.Errorf("查询凭证失败: %w", err)
+	if enabled {
+		return errors.New("启用 TOTP 请使用扫码绑定流程")
 	}
-	if len(creds) == 0 {
-		return errors.New("用户未绑定 TOTP")
-	}
-	updates := map[string]any{"enabled": enabled}
-	if creds[0].CredentialID != nil {
-		return s.store.UpdateCredential(ctx, *creds[0].CredentialID, updates)
-	}
-	return s.store.UpdateCredentialByInternalID(ctx, creds[0].ID, updates)
+	return s.DisableTOTP(ctx, openid)
 }
 
 // ==================== WebAuthn ====================
 
-// SetWebAuthnEnabled 设置 WebAuthn 启用状态
+// SetWebAuthnEnabled 关闭即删除凭证；已存在则视为已启用
 func (s *CredentialService) SetWebAuthnEnabled(ctx context.Context, openid, credentialID string, enabled bool) error {
-	cred, err := s.store.GetCredentialByID(ctx, credentialID)
-	if err != nil {
-		return errors.New("凭证不存在")
-	}
-	if cred.OpenID != openid {
-		return errors.New("凭证不存在")
-	}
 	if enabled {
-		return s.store.EnableCredential(ctx, credentialID)
+		cred, err := s.store.GetCredentialByID(ctx, credentialID)
+		if err != nil {
+			return errors.New("凭证不存在")
+		}
+		if cred.OpenID != openid {
+			return errors.New("凭证不存在")
+		}
+		return nil
 	}
-	return s.store.DisableCredential(ctx, credentialID)
+	if err := s.store.DeleteCredential(ctx, openid, credentialID); err != nil {
+		return fmt.Errorf("删除凭证失败: %w", err)
+	}
+	return nil
 }
 
 // DeleteWebAuthn 删除 WebAuthn 凭证
@@ -211,7 +237,7 @@ func (s *CredentialService) GetUserMFAStatus(ctx context.Context, openid string)
 
 	status := &models.MFAStatus{}
 	for _, cred := range credentials {
-		if !cred.Enabled {
+		if !credentialActiveInMFA(&cred) {
 			continue
 		}
 		switch models.CredentialType(cred.Type) {
@@ -235,13 +261,13 @@ func (s *CredentialService) GetUserCredentialSummaries(ctx context.Context, open
 
 	summaries := make([]models.CredentialSummary, 0, len(credentials))
 	for _, cred := range credentials {
-		if !cred.Enabled {
+		if !credentialActiveInMFA(&cred) {
 			continue
 		}
 		summary := models.CredentialSummary{
 			ID:         cred.ID,
 			Type:       cred.Type,
-			Enabled:    cred.Enabled,
+			Enabled:    credentialActiveInMFA(&cred),
 			LastUsedAt: cred.LastUsedAt,
 			CreatedAt:  cred.CreatedAt,
 		}
@@ -257,7 +283,3 @@ func (s *CredentialService) GetUserCredentialSummaries(ctx context.Context, open
 	}
 	return summaries, nil
 }
-
-// ==================== 内部辅助 ====================
-
-// (empty — encryption moved to hermes layer)

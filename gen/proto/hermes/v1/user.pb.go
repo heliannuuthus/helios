@@ -1221,8 +1221,7 @@ type CreateCredentialRequest struct {
 	Openid        string                 `protobuf:"bytes,1,opt,name=openid,proto3" json:"openid,omitempty"`
 	CredentialId  *string                `protobuf:"bytes,2,opt,name=credential_id,json=credentialId,proto3,oneof" json:"credential_id,omitempty"`
 	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	Secret        string                 `protobuf:"bytes,5,opt,name=secret,proto3" json:"secret,omitempty"`
+	Secret        string                 `protobuf:"bytes,4,opt,name=secret,proto3" json:"secret,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1276,13 +1275,6 @@ func (x *CreateCredentialRequest) GetType() string {
 		return x.Type
 	}
 	return ""
-}
-
-func (x *CreateCredentialRequest) GetEnabled() bool {
-	if x != nil {
-		return x.Enabled
-	}
-	return false
 }
 
 func (x *CreateCredentialRequest) GetSecret() string {
@@ -1347,9 +1339,8 @@ func (x *GetCredentialsByTypeRequest) GetType() string {
 type UpdateCredentialRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CredentialId  string                 `protobuf:"bytes,1,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
-	Enabled       *bool                  `protobuf:"varint,2,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
-	Secret        *string                `protobuf:"bytes,3,opt,name=secret,proto3,oneof" json:"secret,omitempty"`
-	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_used_at,json=lastUsedAt,proto3,oneof" json:"last_used_at,omitempty"`
+	Secret        *string                `protobuf:"bytes,2,opt,name=secret,proto3,oneof" json:"secret,omitempty"`
+	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_used_at,json=lastUsedAt,proto3,oneof" json:"last_used_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1389,13 +1380,6 @@ func (x *UpdateCredentialRequest) GetCredentialId() string {
 		return x.CredentialId
 	}
 	return ""
-}
-
-func (x *UpdateCredentialRequest) GetEnabled() bool {
-	if x != nil && x.Enabled != nil {
-		return *x.Enabled
-	}
-	return false
 }
 
 func (x *UpdateCredentialRequest) GetSecret() string {
@@ -2228,25 +2212,21 @@ const file_hermes_v1_user_proto_rawDesc = "" +
 	"\x0e_credential_idB\x0f\n" +
 	"\r_last_used_at\"Q\n" +
 	"\x12UserCredentialList\x12;\n" +
-	"\vcredentials\x18\x01 \x03(\v2\x19.hermes.v1.UserCredentialR\vcredentials\"\xb3\x01\n" +
+	"\vcredentials\x18\x01 \x03(\v2\x19.hermes.v1.UserCredentialR\vcredentials\"\x99\x01\n" +
 	"\x17CreateCredentialRequest\x12\x16\n" +
 	"\x06openid\x18\x01 \x01(\tR\x06openid\x12(\n" +
 	"\rcredential_id\x18\x02 \x01(\tH\x00R\fcredentialId\x88\x01\x01\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\x12\x18\n" +
-	"\aenabled\x18\x04 \x01(\bR\aenabled\x12\x16\n" +
-	"\x06secret\x18\x05 \x01(\tR\x06secretB\x10\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x16\n" +
+	"\x06secret\x18\x04 \x01(\tR\x06secretB\x10\n" +
 	"\x0e_credential_id\"I\n" +
 	"\x1bGetCredentialsByTypeRequest\x12\x16\n" +
 	"\x06openid\x18\x01 \x01(\tR\x06openid\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\"\xe5\x01\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\"\xba\x01\n" +
 	"\x17UpdateCredentialRequest\x12#\n" +
-	"\rcredential_id\x18\x01 \x01(\tR\fcredentialId\x12\x1d\n" +
-	"\aenabled\x18\x02 \x01(\bH\x00R\aenabled\x88\x01\x01\x12\x1b\n" +
-	"\x06secret\x18\x03 \x01(\tH\x01R\x06secret\x88\x01\x01\x12A\n" +
-	"\flast_used_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x02R\n" +
-	"lastUsedAt\x88\x01\x01B\n" +
-	"\n" +
-	"\b_enabledB\t\n" +
+	"\rcredential_id\x18\x01 \x01(\tR\fcredentialId\x12\x1b\n" +
+	"\x06secret\x18\x02 \x01(\tH\x00R\x06secret\x88\x01\x01\x12A\n" +
+	"\flast_used_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\n" +
+	"lastUsedAt\x88\x01\x01B\t\n" +
 	"\a_secretB\x0f\n" +
 	"\r_last_used_at\"f\n" +
 	" UpdateCredentialSignCountRequest\x12#\n" +
@@ -2309,7 +2289,7 @@ const file_hermes_v1_user_proto_rawDesc = "" +
 	"pagination\"N\n" +
 	"\x16SetGroupMembersRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12\x19\n" +
-	"\buser_ids\x18\x02 \x03(\tR\auserIds2\x91\x16\n" +
+	"\buser_ids\x18\x02 \x03(\tR\auserIds2\x8e\x14\n" +
 	"\vUserService\x128\n" +
 	"\vGetByOpenID\x12\x18.hermes.v1.OpenIDRequest\x1a\x0f.hermes.v1.User\x12A\n" +
 	"\rGetByIdentity\x12\x1f.hermes.v1.GetByIdentityRequest\x1a\x0f.hermes.v1.User\x12D\n" +
@@ -2333,12 +2313,9 @@ const file_hermes_v1_user_proto_rawDesc = "" +
 	"\x10CreateCredential\x12\".hermes.v1.CreateCredentialRequest\x1a\x16.google.protobuf.Empty\x12N\n" +
 	"\x11GetCredentialByID\x12\x1e.hermes.v1.CredentialIDRequest\x1a\x19.hermes.v1.UserCredential\x12M\n" +
 	"\x12GetUserCredentials\x12\x18.hermes.v1.OpenIDRequest\x1a\x1d.hermes.v1.UserCredentialList\x12a\n" +
-	"\x18GetUserCredentialsByType\x12&.hermes.v1.GetCredentialsByTypeRequest\x1a\x1d.hermes.v1.UserCredentialList\x12h\n" +
-	"\x1fGetEnabledUserCredentialsByType\x12&.hermes.v1.GetCredentialsByTypeRequest\x1a\x1d.hermes.v1.UserCredentialList\x12N\n" +
+	"\x18GetUserCredentialsByType\x12&.hermes.v1.GetCredentialsByTypeRequest\x1a\x1d.hermes.v1.UserCredentialList\x12N\n" +
 	"\x10UpdateCredential\x12\".hermes.v1.UpdateCredentialRequest\x1a\x16.google.protobuf.Empty\x12`\n" +
-	"\x19UpdateCredentialSignCount\x12+.hermes.v1.UpdateCredentialSignCountRequest\x1a\x16.google.protobuf.Empty\x12J\n" +
-	"\x10EnableCredential\x12\x1e.hermes.v1.CredentialIDRequest\x1a\x16.google.protobuf.Empty\x12K\n" +
-	"\x11DisableCredential\x12\x1e.hermes.v1.CredentialIDRequest\x1a\x16.google.protobuf.Empty\x12N\n" +
+	"\x19UpdateCredentialSignCount\x12+.hermes.v1.UpdateCredentialSignCountRequest\x1a\x16.google.protobuf.Empty\x12N\n" +
 	"\x10DeleteCredential\x12\".hermes.v1.DeleteCredentialRequest\x1a\x16.google.protobuf.Empty\x12c\n" +
 	"\x1fDeleteCredentialByOpenIDAndType\x12(.hermes.v1.DeleteCredentialByTypeRequest\x1a\x16.google.protobuf.Empty\x12f\n" +
 	"\x1cUpdateCredentialByInternalID\x12..hermes.v1.UpdateCredentialByInternalIDRequest\x1a\x16.google.protobuf.Empty\x12T\n" +
@@ -2447,60 +2424,54 @@ var file_hermes_v1_user_proto_depIdxs = []int32{
 	15, // 36: hermes.v1.UserService.GetCredentialByID:input_type -> hermes.v1.CredentialIDRequest
 	35, // 37: hermes.v1.UserService.GetUserCredentials:input_type -> hermes.v1.OpenIDRequest
 	19, // 38: hermes.v1.UserService.GetUserCredentialsByType:input_type -> hermes.v1.GetCredentialsByTypeRequest
-	19, // 39: hermes.v1.UserService.GetEnabledUserCredentialsByType:input_type -> hermes.v1.GetCredentialsByTypeRequest
-	20, // 40: hermes.v1.UserService.UpdateCredential:input_type -> hermes.v1.UpdateCredentialRequest
-	21, // 41: hermes.v1.UserService.UpdateCredentialSignCount:input_type -> hermes.v1.UpdateCredentialSignCountRequest
-	15, // 42: hermes.v1.UserService.EnableCredential:input_type -> hermes.v1.CredentialIDRequest
-	15, // 43: hermes.v1.UserService.DisableCredential:input_type -> hermes.v1.CredentialIDRequest
-	22, // 44: hermes.v1.UserService.DeleteCredential:input_type -> hermes.v1.DeleteCredentialRequest
-	23, // 45: hermes.v1.UserService.DeleteCredentialByOpenIDAndType:input_type -> hermes.v1.DeleteCredentialByTypeRequest
-	24, // 46: hermes.v1.UserService.UpdateCredentialByInternalID:input_type -> hermes.v1.UpdateCredentialByInternalIDRequest
-	15, // 47: hermes.v1.UserService.GetOpenIDByCredentialID:input_type -> hermes.v1.CredentialIDRequest
-	29, // 48: hermes.v1.UserService.CreateGroup:input_type -> hermes.v1.CreateGroupRequest
-	28, // 49: hermes.v1.UserService.GetGroup:input_type -> hermes.v1.GetGroupRequest
-	31, // 50: hermes.v1.UserService.ListGroups:input_type -> hermes.v1.ListGroupsRequest
-	30, // 51: hermes.v1.UserService.UpdateGroup:input_type -> hermes.v1.UpdateGroupRequest
-	28, // 52: hermes.v1.UserService.DeleteGroup:input_type -> hermes.v1.GetGroupRequest
-	32, // 53: hermes.v1.UserService.SetGroupMembers:input_type -> hermes.v1.SetGroupMembersRequest
-	28, // 54: hermes.v1.UserService.GetGroupMembers:input_type -> hermes.v1.GetGroupRequest
-	0,  // 55: hermes.v1.UserService.GetByOpenID:output_type -> hermes.v1.User
-	0,  // 56: hermes.v1.UserService.GetByIdentity:output_type -> hermes.v1.User
-	1,  // 57: hermes.v1.UserService.GetByEmail:output_type -> hermes.v1.DecryptedUser
-	1,  // 58: hermes.v1.UserService.GetByPhonePlain:output_type -> hermes.v1.DecryptedUser
-	1,  // 59: hermes.v1.UserService.GetDecryptedUser:output_type -> hermes.v1.DecryptedUser
-	1,  // 60: hermes.v1.UserService.GetDecryptedUserByIdentity:output_type -> hermes.v1.DecryptedUser
-	1,  // 61: hermes.v1.UserService.CreateUser:output_type -> hermes.v1.DecryptedUser
-	0,  // 62: hermes.v1.UserService.UpdateUser:output_type -> hermes.v1.User
-	36, // 63: hermes.v1.UserService.UpdateLastLogin:output_type -> google.protobuf.Empty
-	36, // 64: hermes.v1.UserService.UpdatePassword:output_type -> google.protobuf.Empty
-	10, // 65: hermes.v1.UserService.GetIdentities:output_type -> hermes.v1.IdentityList
-	10, // 66: hermes.v1.UserService.GetIdentitiesByIdentity:output_type -> hermes.v1.IdentityList
-	9,  // 67: hermes.v1.UserService.GetIdentityByType:output_type -> hermes.v1.UserIdentity
-	36, // 68: hermes.v1.UserService.AddIdentity:output_type -> google.protobuf.Empty
-	14, // 69: hermes.v1.UserService.GetUserByIdentifier:output_type -> hermes.v1.PasswordStoreCredential
-	14, // 70: hermes.v1.UserService.GetStaffByIdentifier:output_type -> hermes.v1.PasswordStoreCredential
-	36, // 71: hermes.v1.UserService.CreateCredential:output_type -> google.protobuf.Empty
-	16, // 72: hermes.v1.UserService.GetCredentialByID:output_type -> hermes.v1.UserCredential
-	17, // 73: hermes.v1.UserService.GetUserCredentials:output_type -> hermes.v1.UserCredentialList
-	17, // 74: hermes.v1.UserService.GetUserCredentialsByType:output_type -> hermes.v1.UserCredentialList
-	17, // 75: hermes.v1.UserService.GetEnabledUserCredentialsByType:output_type -> hermes.v1.UserCredentialList
-	36, // 76: hermes.v1.UserService.UpdateCredential:output_type -> google.protobuf.Empty
-	36, // 77: hermes.v1.UserService.UpdateCredentialSignCount:output_type -> google.protobuf.Empty
-	36, // 78: hermes.v1.UserService.EnableCredential:output_type -> google.protobuf.Empty
-	36, // 79: hermes.v1.UserService.DisableCredential:output_type -> google.protobuf.Empty
-	36, // 80: hermes.v1.UserService.DeleteCredential:output_type -> google.protobuf.Empty
-	36, // 81: hermes.v1.UserService.DeleteCredentialByOpenIDAndType:output_type -> google.protobuf.Empty
-	36, // 82: hermes.v1.UserService.UpdateCredentialByInternalID:output_type -> google.protobuf.Empty
-	25, // 83: hermes.v1.UserService.GetOpenIDByCredentialID:output_type -> hermes.v1.OpenIDResponse
-	26, // 84: hermes.v1.UserService.CreateGroup:output_type -> hermes.v1.Group
-	26, // 85: hermes.v1.UserService.GetGroup:output_type -> hermes.v1.Group
-	27, // 86: hermes.v1.UserService.ListGroups:output_type -> hermes.v1.GroupList
-	26, // 87: hermes.v1.UserService.UpdateGroup:output_type -> hermes.v1.Group
-	36, // 88: hermes.v1.UserService.DeleteGroup:output_type -> google.protobuf.Empty
-	36, // 89: hermes.v1.UserService.SetGroupMembers:output_type -> google.protobuf.Empty
-	37, // 90: hermes.v1.UserService.GetGroupMembers:output_type -> hermes.v1.StringList
-	55, // [55:91] is the sub-list for method output_type
-	19, // [19:55] is the sub-list for method input_type
+	20, // 39: hermes.v1.UserService.UpdateCredential:input_type -> hermes.v1.UpdateCredentialRequest
+	21, // 40: hermes.v1.UserService.UpdateCredentialSignCount:input_type -> hermes.v1.UpdateCredentialSignCountRequest
+	22, // 41: hermes.v1.UserService.DeleteCredential:input_type -> hermes.v1.DeleteCredentialRequest
+	23, // 42: hermes.v1.UserService.DeleteCredentialByOpenIDAndType:input_type -> hermes.v1.DeleteCredentialByTypeRequest
+	24, // 43: hermes.v1.UserService.UpdateCredentialByInternalID:input_type -> hermes.v1.UpdateCredentialByInternalIDRequest
+	15, // 44: hermes.v1.UserService.GetOpenIDByCredentialID:input_type -> hermes.v1.CredentialIDRequest
+	29, // 45: hermes.v1.UserService.CreateGroup:input_type -> hermes.v1.CreateGroupRequest
+	28, // 46: hermes.v1.UserService.GetGroup:input_type -> hermes.v1.GetGroupRequest
+	31, // 47: hermes.v1.UserService.ListGroups:input_type -> hermes.v1.ListGroupsRequest
+	30, // 48: hermes.v1.UserService.UpdateGroup:input_type -> hermes.v1.UpdateGroupRequest
+	28, // 49: hermes.v1.UserService.DeleteGroup:input_type -> hermes.v1.GetGroupRequest
+	32, // 50: hermes.v1.UserService.SetGroupMembers:input_type -> hermes.v1.SetGroupMembersRequest
+	28, // 51: hermes.v1.UserService.GetGroupMembers:input_type -> hermes.v1.GetGroupRequest
+	0,  // 52: hermes.v1.UserService.GetByOpenID:output_type -> hermes.v1.User
+	0,  // 53: hermes.v1.UserService.GetByIdentity:output_type -> hermes.v1.User
+	1,  // 54: hermes.v1.UserService.GetByEmail:output_type -> hermes.v1.DecryptedUser
+	1,  // 55: hermes.v1.UserService.GetByPhonePlain:output_type -> hermes.v1.DecryptedUser
+	1,  // 56: hermes.v1.UserService.GetDecryptedUser:output_type -> hermes.v1.DecryptedUser
+	1,  // 57: hermes.v1.UserService.GetDecryptedUserByIdentity:output_type -> hermes.v1.DecryptedUser
+	1,  // 58: hermes.v1.UserService.CreateUser:output_type -> hermes.v1.DecryptedUser
+	0,  // 59: hermes.v1.UserService.UpdateUser:output_type -> hermes.v1.User
+	36, // 60: hermes.v1.UserService.UpdateLastLogin:output_type -> google.protobuf.Empty
+	36, // 61: hermes.v1.UserService.UpdatePassword:output_type -> google.protobuf.Empty
+	10, // 62: hermes.v1.UserService.GetIdentities:output_type -> hermes.v1.IdentityList
+	10, // 63: hermes.v1.UserService.GetIdentitiesByIdentity:output_type -> hermes.v1.IdentityList
+	9,  // 64: hermes.v1.UserService.GetIdentityByType:output_type -> hermes.v1.UserIdentity
+	36, // 65: hermes.v1.UserService.AddIdentity:output_type -> google.protobuf.Empty
+	14, // 66: hermes.v1.UserService.GetUserByIdentifier:output_type -> hermes.v1.PasswordStoreCredential
+	14, // 67: hermes.v1.UserService.GetStaffByIdentifier:output_type -> hermes.v1.PasswordStoreCredential
+	36, // 68: hermes.v1.UserService.CreateCredential:output_type -> google.protobuf.Empty
+	16, // 69: hermes.v1.UserService.GetCredentialByID:output_type -> hermes.v1.UserCredential
+	17, // 70: hermes.v1.UserService.GetUserCredentials:output_type -> hermes.v1.UserCredentialList
+	17, // 71: hermes.v1.UserService.GetUserCredentialsByType:output_type -> hermes.v1.UserCredentialList
+	36, // 72: hermes.v1.UserService.UpdateCredential:output_type -> google.protobuf.Empty
+	36, // 73: hermes.v1.UserService.UpdateCredentialSignCount:output_type -> google.protobuf.Empty
+	36, // 74: hermes.v1.UserService.DeleteCredential:output_type -> google.protobuf.Empty
+	36, // 75: hermes.v1.UserService.DeleteCredentialByOpenIDAndType:output_type -> google.protobuf.Empty
+	36, // 76: hermes.v1.UserService.UpdateCredentialByInternalID:output_type -> google.protobuf.Empty
+	25, // 77: hermes.v1.UserService.GetOpenIDByCredentialID:output_type -> hermes.v1.OpenIDResponse
+	26, // 78: hermes.v1.UserService.CreateGroup:output_type -> hermes.v1.Group
+	26, // 79: hermes.v1.UserService.GetGroup:output_type -> hermes.v1.Group
+	27, // 80: hermes.v1.UserService.ListGroups:output_type -> hermes.v1.GroupList
+	26, // 81: hermes.v1.UserService.UpdateGroup:output_type -> hermes.v1.Group
+	36, // 82: hermes.v1.UserService.DeleteGroup:output_type -> google.protobuf.Empty
+	36, // 83: hermes.v1.UserService.SetGroupMembers:output_type -> google.protobuf.Empty
+	37, // 84: hermes.v1.UserService.GetGroupMembers:output_type -> hermes.v1.StringList
+	52, // [52:85] is the sub-list for method output_type
+	19, // [19:52] is the sub-list for method input_type
 	19, // [19:19] is the sub-list for extension type_name
 	19, // [19:19] is the sub-list for extension extendee
 	0,  // [0:19] is the sub-list for field type_name

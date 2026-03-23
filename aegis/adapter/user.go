@@ -104,8 +104,8 @@ func (a *UserAdapter) GetOpenIDByCredentialID(ctx context.Context, credentialID 
 	return a.svc.GetOpenIDByCredentialID(ctx, credentialID)
 }
 
-func (a *UserAdapter) GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]amodels.UserCredential, error) {
-	cs, err := a.svc.GetEnabledUserCredentialsByType(ctx, openid, credType)
+func (a *UserAdapter) GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]amodels.UserCredential, error) {
+	cs, err := a.svc.GetUserCredentialsByType(ctx, openid, credType)
 	if err != nil {
 		return nil, err
 	}

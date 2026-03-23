@@ -35,7 +35,7 @@ type UserProvider interface {
 	UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
 	GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error)
-	GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
+	GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
 	UpdateUser(ctx context.Context, openid string, updates map[string]any) error
 	UpdatePassword(ctx context.Context, openid, oldPassword, newPassword string) error
 }

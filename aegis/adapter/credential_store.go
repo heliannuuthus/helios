@@ -36,14 +36,6 @@ func (a *CredentialStoreAdapter) GetUserCredentialsByType(ctx context.Context, o
 	return ConvertCredentials(cs), nil
 }
 
-func (a *CredentialStoreAdapter) GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]amodels.UserCredential, error) {
-	cs, err := a.svc.GetEnabledUserCredentialsByType(ctx, openid, credType)
-	if err != nil {
-		return nil, err
-	}
-	return ConvertCredentials(cs), nil
-}
-
 func (a *CredentialStoreAdapter) GetCredentialByID(ctx context.Context, credentialID string) (*amodels.UserCredential, error) {
 	c, err := a.svc.GetCredentialByID(ctx, credentialID)
 	if err != nil {
@@ -56,20 +48,12 @@ func (a *CredentialStoreAdapter) UpdateCredential(ctx context.Context, credentia
 	return a.svc.UpdateCredential(ctx, credentialID, updates)
 }
 
-func (a *CredentialStoreAdapter) EnableCredential(ctx context.Context, credentialID string) error {
-	return a.svc.EnableCredential(ctx, credentialID)
-}
-
-func (a *CredentialStoreAdapter) DisableCredential(ctx context.Context, credentialID string) error {
-	return a.svc.DisableCredential(ctx, credentialID)
+func (a *CredentialStoreAdapter) UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error {
+	return a.svc.UpdateCredentialByInternalID(ctx, id, updates)
 }
 
 func (a *CredentialStoreAdapter) DeleteCredential(ctx context.Context, openid, credentialID string) error {
 	return a.svc.DeleteCredential(ctx, openid, credentialID)
-}
-
-func (a *CredentialStoreAdapter) UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error {
-	return a.svc.UpdateCredentialByInternalID(ctx, id, updates)
 }
 
 func (a *CredentialStoreAdapter) DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error {
