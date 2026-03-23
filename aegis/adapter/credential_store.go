@@ -67,3 +67,11 @@ func (a *CredentialStoreAdapter) DisableCredential(ctx context.Context, credenti
 func (a *CredentialStoreAdapter) DeleteCredential(ctx context.Context, openid, credentialID string) error {
 	return a.svc.DeleteCredential(ctx, openid, credentialID)
 }
+
+func (a *CredentialStoreAdapter) UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error {
+	return a.svc.UpdateCredentialByInternalID(ctx, id, updates)
+}
+
+func (a *CredentialStoreAdapter) DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error {
+	return a.svc.DeleteCredentialByOpenIDAndType(ctx, openid, credType)
+}

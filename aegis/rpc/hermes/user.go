@@ -3,6 +3,9 @@ package hermes
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/heliannuuthus/helios/aegis/models"
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
@@ -291,5 +294,34 @@ func (c *Client) EnableCredential(ctx context.Context, credentialID string) erro
 
 func (c *Client) DisableCredential(ctx context.Context, credentialID string) error {
 	_, err := c.user.DisableCredential(ctx, &hermesv1.CredentialIDRequest{CredentialId: credentialID})
+	return err
+}
+
+func (c *Client) UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error {
+	pbReq := &hermesv1.UpdateCredentialByInternalIDRequest{Id: uint32(id)}
+	if v, ok := updates["enabled"]; ok {
+		if b, ok := v.(bool); ok {
+			pbReq.Enabled = &b
+		}
+	}
+	if v, ok := updates["secret"]; ok {
+		if s, ok := v.(string); ok {
+			pbReq.Secret = &s
+		}
+	}
+	if v, ok := updates["last_used_at"]; ok {
+		if t, ok := v.(time.Time); ok {
+			pbReq.LastUsedAt = timestamppb.New(t)
+		}
+	}
+	_, err := c.user.UpdateCredentialByInternalID(ctx, pbReq)
+	return err
+}
+
+func (c *Client) DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error {
+	_, err := c.user.DeleteCredentialByOpenIDAndType(ctx, &hermesv1.DeleteCredentialByTypeRequest{
+		Openid: openid,
+		Type:   credType,
+	})
 	return err
 }

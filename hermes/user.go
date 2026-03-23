@@ -258,44 +258,55 @@ func (s *Service) UpdatePassword(ctx context.Context, openid, oldPassword, newPa
 
 // ==================== WebAuthn 凭证管理 ====================
 
-// CreateCredential 创建凭证
+// CreateCredential 创建凭证（TOTP 类型自动加密 Secret）
 func (s *Service) CreateCredential(ctx context.Context, cred *models.UserCredential) error {
+	if models.CredentialType(cred.Type) == models.CredentialTypeTOTP && cred.Secret != "" {
+		encrypted, err := s.encryptSecret(cred.Secret, cred.OpenID)
+		if err != nil {
+			return fmt.Errorf("加密凭证失败: %w", err)
+		}
+		cred.Secret = encrypted
+	}
 	return s.db.WithContext(ctx).Create(cred).Error
 }
 
-// GetCredentialByID 根据凭证 ID 获取凭证
+// GetCredentialByID 根据凭证 ID 获取凭证（TOTP 类型自动解密 Secret）
 func (s *Service) GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error) {
 	var cred models.UserCredential
 	if err := s.db.WithContext(ctx).Where("credential_id = ?", credentialID).First(&cred).Error; err != nil {
 		return nil, err
 	}
+	s.decryptCredentialSecret(&cred)
 	return &cred, nil
 }
 
-// GetUserCredentials 获取用户所有凭证
+// GetUserCredentials 获取用户所有凭证（TOTP 类型自动解密 Secret）
 func (s *Service) GetUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
 	if err := s.db.WithContext(ctx).Where("openid = ?", openid).Find(&credentials).Error; err != nil {
 		return nil, err
 	}
+	s.decryptCredentialSecrets(credentials)
 	return credentials, nil
 }
 
-// GetUserCredentialsByType 获取用户指定类型的凭证
+// GetUserCredentialsByType 获取用户指定类型的凭证（TOTP 类型自动解密 Secret）
 func (s *Service) GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
 	if err := s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Find(&credentials).Error; err != nil {
 		return nil, err
 	}
+	s.decryptCredentialSecrets(credentials)
 	return credentials, nil
 }
 
-// GetEnabledUserCredentialsByType 获取用户已启用的指定类型的凭证
+// GetEnabledUserCredentialsByType 获取用户已启用的指定类型的凭证（TOTP 类型自动解密 Secret）
 func (s *Service) GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
 	if err := s.db.WithContext(ctx).Where("openid = ? AND type = ? AND enabled = ?", openid, credType, true).Find(&credentials).Error; err != nil {
 		return nil, err
 	}
+	s.decryptCredentialSecrets(credentials)
 	return credentials, nil
 }
 
@@ -336,12 +347,13 @@ func (s *Service) GetOpenIDByCredentialID(ctx context.Context, credentialID stri
 	return cred.OpenID, nil
 }
 
-// GetCredentialByInternalID 根据内部主键 ID 获取凭证
+// GetCredentialByInternalID 根据内部主键 ID 获取凭证（TOTP 类型自动解密 Secret）
 func (s *Service) GetCredentialByInternalID(ctx context.Context, id uint) (*models.UserCredential, error) {
 	var cred models.UserCredential
 	if err := s.db.WithContext(ctx).Where("_id = ?", id).First(&cred).Error; err != nil {
 		return nil, err
 	}
+	s.decryptCredentialSecret(&cred)
 	return &cred, nil
 }
 
@@ -599,4 +611,43 @@ func isPhone(s string) bool {
 
 func hashPhone(phone string) string {
 	return cryptoutil.Hash(phone)
+}
+
+// ==================== 凭证加解密辅助 ====================
+
+// encryptSecret 加密凭证密钥（AES-256-GCM，openid 作为 AAD）
+func (s *Service) encryptSecret(plaintext, openid string) (string, error) {
+	key, err := config.GetDBEncKeyRaw()
+	if err != nil {
+		return "", fmt.Errorf("获取加密密钥失败: %w", err)
+	}
+	return cryptoutil.Encrypt(key, plaintext, openid)
+}
+
+// decryptSecret 解密凭证密钥
+func (s *Service) decryptSecret(ciphertext, openid string) (string, error) {
+	key, err := config.GetDBEncKeyRaw()
+	if err != nil {
+		return "", fmt.Errorf("获取加密密钥失败: %w", err)
+	}
+	return cryptoutil.Decrypt(key, ciphertext, openid)
+}
+
+// decryptCredentialSecret 解密单个凭证的 Secret（仅 TOTP 类型）
+func (s *Service) decryptCredentialSecret(cred *models.UserCredential) {
+	if models.CredentialType(cred.Type) == models.CredentialTypeTOTP && cred.Secret != "" {
+		plain, err := s.decryptSecret(cred.Secret, cred.OpenID)
+		if err != nil {
+			logger.Warnf("[UserService] 解密 TOTP 密钥失败 (ID=%d): %v", cred.ID, err)
+			return
+		}
+		cred.Secret = plain
+	}
+}
+
+// decryptCredentialSecrets 批量解密凭证的 Secret（仅 TOTP 类型）
+func (s *Service) decryptCredentialSecrets(creds []models.UserCredential) {
+	for i := range creds {
+		s.decryptCredentialSecret(&creds[i])
+	}
 }
