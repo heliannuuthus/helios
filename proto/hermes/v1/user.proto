@@ -50,6 +50,8 @@ service UserService {
   rpc EnableCredential(CredentialIDRequest) returns (google.protobuf.Empty);
   rpc DisableCredential(CredentialIDRequest) returns (google.protobuf.Empty);
   rpc DeleteCredential(DeleteCredentialRequest) returns (google.protobuf.Empty);
+  rpc DeleteCredentialByOpenIDAndType(DeleteCredentialByTypeRequest) returns (google.protobuf.Empty);
+  rpc UpdateCredentialByInternalID(UpdateCredentialByInternalIDRequest) returns (google.protobuf.Empty);
   rpc GetOpenIDByCredentialID(CredentialIDRequest) returns (OpenIDResponse);
 
 
@@ -224,6 +226,18 @@ message UpdateCredentialSignCountRequest {
 message DeleteCredentialRequest {
   string openid = 1;
   string credential_id = 2;
+}
+
+message DeleteCredentialByTypeRequest {
+  string openid = 1;
+  string type = 2;
+}
+
+message UpdateCredentialByInternalIDRequest {
+  uint32 id = 1;
+  optional bool enabled = 2;
+  optional string secret = 3;
+  optional google.protobuf.Timestamp last_used_at = 4;
 }
 
 message OpenIDResponse {

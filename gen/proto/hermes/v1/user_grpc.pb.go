@@ -46,6 +46,8 @@ const (
 	UserService_EnableCredential_FullMethodName                = "/hermes.v1.UserService/EnableCredential"
 	UserService_DisableCredential_FullMethodName               = "/hermes.v1.UserService/DisableCredential"
 	UserService_DeleteCredential_FullMethodName                = "/hermes.v1.UserService/DeleteCredential"
+	UserService_DeleteCredentialByOpenIDAndType_FullMethodName = "/hermes.v1.UserService/DeleteCredentialByOpenIDAndType"
+	UserService_UpdateCredentialByInternalID_FullMethodName    = "/hermes.v1.UserService/UpdateCredentialByInternalID"
 	UserService_GetOpenIDByCredentialID_FullMethodName         = "/hermes.v1.UserService/GetOpenIDByCredentialID"
 	UserService_CreateGroup_FullMethodName                     = "/hermes.v1.UserService/CreateGroup"
 	UserService_GetGroup_FullMethodName                        = "/hermes.v1.UserService/GetGroup"
@@ -88,6 +90,8 @@ type UserServiceClient interface {
 	EnableCredential(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DisableCredential(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteCredential(ctx context.Context, in *DeleteCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteCredentialByOpenIDAndType(ctx context.Context, in *DeleteCredentialByTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	UpdateCredentialByInternalID(ctx context.Context, in *UpdateCredentialByInternalIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetOpenIDByCredentialID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*OpenIDResponse, error)
 	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Group, error)
 	GetGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*Group, error)
@@ -366,6 +370,26 @@ func (c *userServiceClient) DeleteCredential(ctx context.Context, in *DeleteCred
 	return out, nil
 }
 
+func (c *userServiceClient) DeleteCredentialByOpenIDAndType(ctx context.Context, in *DeleteCredentialByTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, UserService_DeleteCredentialByOpenIDAndType_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *userServiceClient) UpdateCredentialByInternalID(ctx context.Context, in *UpdateCredentialByInternalIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, UserService_UpdateCredentialByInternalID_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *userServiceClient) GetOpenIDByCredentialID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*OpenIDResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(OpenIDResponse)
@@ -478,6 +502,8 @@ type UserServiceServer interface {
 	EnableCredential(context.Context, *CredentialIDRequest) (*emptypb.Empty, error)
 	DisableCredential(context.Context, *CredentialIDRequest) (*emptypb.Empty, error)
 	DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error)
+	DeleteCredentialByOpenIDAndType(context.Context, *DeleteCredentialByTypeRequest) (*emptypb.Empty, error)
+	UpdateCredentialByInternalID(context.Context, *UpdateCredentialByInternalIDRequest) (*emptypb.Empty, error)
 	GetOpenIDByCredentialID(context.Context, *CredentialIDRequest) (*OpenIDResponse, error)
 	CreateGroup(context.Context, *CreateGroupRequest) (*Group, error)
 	GetGroup(context.Context, *GetGroupRequest) (*Group, error)
@@ -573,6 +599,12 @@ func (UnimplementedUserServiceServer) DisableCredential(context.Context, *Creden
 }
 func (UnimplementedUserServiceServer) DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteCredential not implemented")
+}
+func (UnimplementedUserServiceServer) DeleteCredentialByOpenIDAndType(context.Context, *DeleteCredentialByTypeRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteCredentialByOpenIDAndType not implemented")
+}
+func (UnimplementedUserServiceServer) UpdateCredentialByInternalID(context.Context, *UpdateCredentialByInternalIDRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateCredentialByInternalID not implemented")
 }
 func (UnimplementedUserServiceServer) GetOpenIDByCredentialID(context.Context, *CredentialIDRequest) (*OpenIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOpenIDByCredentialID not implemented")
@@ -1087,6 +1119,42 @@ func _UserService_DeleteCredential_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_DeleteCredentialByOpenIDAndType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteCredentialByTypeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).DeleteCredentialByOpenIDAndType(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_DeleteCredentialByOpenIDAndType_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).DeleteCredentialByOpenIDAndType(ctx, req.(*DeleteCredentialByTypeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _UserService_UpdateCredentialByInternalID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateCredentialByInternalIDRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).UpdateCredentialByInternalID(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_UpdateCredentialByInternalID_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).UpdateCredentialByInternalID(ctx, req.(*UpdateCredentialByInternalIDRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _UserService_GetOpenIDByCredentialID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CredentialIDRequest)
 	if err := dec(in); err != nil {
@@ -1341,6 +1409,14 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteCredential",
 			Handler:    _UserService_DeleteCredential_Handler,
+		},
+		{
+			MethodName: "DeleteCredentialByOpenIDAndType",
+			Handler:    _UserService_DeleteCredentialByOpenIDAndType_Handler,
+		},
+		{
+			MethodName: "UpdateCredentialByInternalID",
+			Handler:    _UserService_UpdateCredentialByInternalID_Handler,
 		},
 		{
 			MethodName: "GetOpenIDByCredentialID",

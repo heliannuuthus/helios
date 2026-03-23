@@ -16,9 +16,7 @@ import (
 	"github.com/heliannuuthus/helios/iris"
 	"github.com/heliannuuthus/helios/zwei"
 	"github.com/heliannuuthus/helios/zwei/config"
-)
 
-import (
 	_ "github.com/heliannuuthus/helios/docs"
 )
 

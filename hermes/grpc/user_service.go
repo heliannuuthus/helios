@@ -300,6 +300,30 @@ func (s *userServiceServer) DeleteCredential(ctx context.Context, req *hermesv1.
 	return &emptypb.Empty{}, nil
 }
 
+func (s *userServiceServer) DeleteCredentialByOpenIDAndType(ctx context.Context, req *hermesv1.DeleteCredentialByTypeRequest) (*emptypb.Empty, error) {
+	if err := s.svc.DeleteCredentialByOpenIDAndType(ctx, req.GetOpenid(), req.GetType()); err != nil {
+		return nil, toStatus(err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *userServiceServer) UpdateCredentialByInternalID(ctx context.Context, req *hermesv1.UpdateCredentialByInternalIDRequest) (*emptypb.Empty, error) {
+	updates := make(map[string]any)
+	if req.Enabled != nil {
+		updates["enabled"] = req.GetEnabled()
+	}
+	if req.Secret != nil {
+		updates["secret"] = req.GetSecret()
+	}
+	if req.LastUsedAt != nil {
+		updates["last_used_at"] = req.GetLastUsedAt().AsTime()
+	}
+	if err := s.svc.UpdateCredentialByInternalID(ctx, uint(req.GetId()), updates); err != nil {
+		return nil, toStatus(err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
 func (s *userServiceServer) GetOpenIDByCredentialID(ctx context.Context, req *hermesv1.CredentialIDRequest) (*hermesv1.OpenIDResponse, error) {
 	openid, err := s.svc.GetOpenIDByCredentialID(ctx, req.GetCredentialId())
 	if err != nil {
@@ -467,6 +491,7 @@ func userCredentialToProto(c *models.UserCredential) *hermesv1.UserCredential {
 		CredentialId: c.CredentialID,
 		Type:         c.Type,
 		Enabled:      c.Enabled,
+		Secret:       c.Secret,
 		CreatedAt:    timestamppb.New(c.CreatedAt),
 		UpdatedAt:    timestamppb.New(c.UpdatedAt),
 	}

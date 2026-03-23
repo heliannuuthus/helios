@@ -9,12 +9,9 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/go-json-experiment/json"
 	"github.com/pquerna/otp/totp"
 
 	"github.com/heliannuuthus/helios/aegis/models"
-	"github.com/heliannuuthus/helios/hermes/config"
-	cryptoutil "github.com/heliannuuthus/helios/pkg/crypto"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
@@ -27,9 +24,11 @@ type CredentialStore interface {
 	GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
 	GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error)
 	UpdateCredential(ctx context.Context, credentialID string, updates map[string]any) error
+	UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error
 	EnableCredential(ctx context.Context, credentialID string) error
 	DisableCredential(ctx context.Context, credentialID string) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
+	DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error
 }
 
 // CredentialService 凭证业务服务（TOTP/WebAuthn 业务逻辑）
@@ -69,16 +68,12 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *models.TOTPSetup
 	otpauthURI := fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30",
 		url.PathEscape(issuer), url.PathEscape(req.OpenID), secret, url.QueryEscape(issuer))
 
-	encryptedSecret, err := encryptTOTPSecret(secret, req.OpenID)
-	if err != nil {
-		return nil, err
-	}
-
+	// 明文传给 store，hermes 层负责加密
 	credential := &models.UserCredential{
 		OpenID:  req.OpenID,
 		Type:    string(models.CredentialTypeTOTP),
 		Enabled: false,
-		Secret:  encryptedSecret,
+		Secret:  secret,
 	}
 
 	if err := s.store.CreateCredential(ctx, credential); err != nil {
@@ -111,28 +106,23 @@ func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *models.Confirm
 		return errors.New("凭证不存在或已启用")
 	}
 
-	secret, err := decryptTOTPSecret(credential.Secret, req.OpenID)
-	if err != nil {
-		return err
-	}
-
-	if !totp.Validate(req.Code, secret) {
+	// hermes 层已解密，直接使用
+	if !totp.Validate(req.Code, credential.Secret) {
 		return errors.New("验证码错误")
 	}
 
 	now := time.Now()
-	// 通过 credential_id 或 openid+type 更新
+	updates := map[string]any{
+		"enabled":      true,
+		"last_used_at": now,
+	}
+	// TOTP 凭证没有 credential_id，通过内部主键 ID 更新
 	if credential.CredentialID != nil {
-		if err := s.store.UpdateCredential(ctx, *credential.CredentialID, map[string]any{
-			"enabled":      true,
-			"last_used_at": now,
-		}); err != nil {
+		if err := s.store.UpdateCredential(ctx, *credential.CredentialID, updates); err != nil {
 			return fmt.Errorf("启用凭证失败: %w", err)
 		}
 	} else {
-		// TOTP 没有 credential_id，直接启用
-		if err := s.store.EnableCredential(ctx, fmt.Sprintf("_internal_%d", credential.ID)); err != nil {
-			// fallback: 尝试通过类型查找并启用
+		if err := s.store.UpdateCredentialByInternalID(ctx, credential.ID, updates); err != nil {
 			return fmt.Errorf("启用凭证失败: %w", err)
 		}
 	}
@@ -151,12 +141,8 @@ func (s *CredentialService) VerifyTOTP(ctx context.Context, req *models.VerifyTO
 		return errors.New("用户未绑定 TOTP")
 	}
 
-	secret, err := decryptTOTPSecret(creds[0].Secret, req.OpenID)
-	if err != nil {
-		return err
-	}
-
-	if !totp.Validate(req.Code, secret) {
+	// hermes 层已解密，直接使用
+	if !totp.Validate(req.Code, creds[0].Secret) {
 		return errors.New("验证码错误")
 	}
 
@@ -165,16 +151,8 @@ func (s *CredentialService) VerifyTOTP(ctx context.Context, req *models.VerifyTO
 
 // DisableTOTP 禁用 TOTP（删除所有 TOTP 凭证）
 func (s *CredentialService) DisableTOTP(ctx context.Context, openid string) error {
-	creds, err := s.store.GetUserCredentialsByType(ctx, openid, string(models.CredentialTypeTOTP))
-	if err != nil {
-		return fmt.Errorf("查询凭证失败: %w", err)
-	}
-	for _, cred := range creds {
-		if cred.CredentialID != nil {
-			if err := s.store.DeleteCredential(ctx, openid, *cred.CredentialID); err != nil {
-				logger.Warnf("[Credential] 删除 TOTP 凭证失败 - OpenID: %s, Error: %v", openid, err)
-			}
-		}
+	if err := s.store.DeleteCredentialByOpenIDAndType(ctx, openid, string(models.CredentialTypeTOTP)); err != nil {
+		return fmt.Errorf("删除 TOTP 凭证失败: %w", err)
 	}
 	logger.Infof("[Credential] TOTP 已禁用 - OpenID: %s", openid)
 	return nil
@@ -189,13 +167,11 @@ func (s *CredentialService) SetTOTPEnabled(ctx context.Context, openid string, e
 	if len(creds) == 0 {
 		return errors.New("用户未绑定 TOTP")
 	}
+	updates := map[string]any{"enabled": enabled}
 	if creds[0].CredentialID != nil {
-		if enabled {
-			return s.store.EnableCredential(ctx, *creds[0].CredentialID)
-		}
-		return s.store.DisableCredential(ctx, *creds[0].CredentialID)
+		return s.store.UpdateCredential(ctx, *creds[0].CredentialID, updates)
 	}
-	return nil
+	return s.store.UpdateCredentialByInternalID(ctx, creds[0].ID, updates)
 }
 
 // ==================== WebAuthn ====================
@@ -284,39 +260,4 @@ func (s *CredentialService) GetUserCredentialSummaries(ctx context.Context, open
 
 // ==================== 内部辅助 ====================
 
-func encryptTOTPSecret(secret, openid string) (string, error) {
-	secretData := &models.TOTPSecret{Secret: secret}
-	secretJSON, err := json.Marshal(secretData)
-	if err != nil {
-		return "", fmt.Errorf("序列化密钥失败: %w", err)
-	}
-
-	encKey, err := config.GetDBEncKeyRaw()
-	if err != nil {
-		return "", fmt.Errorf("获取加密密钥失败: %w", err)
-	}
-
-	encrypted, err := cryptoutil.Encrypt(encKey, string(secretJSON), openid)
-	if err != nil {
-		return "", fmt.Errorf("加密密钥失败: %w", err)
-	}
-	return encrypted, nil
-}
-
-func decryptTOTPSecret(encryptedSecret, openid string) (string, error) {
-	encKey, err := config.GetDBEncKeyRaw()
-	if err != nil {
-		return "", fmt.Errorf("获取加密密钥失败: %w", err)
-	}
-
-	secretJSON, err := cryptoutil.Decrypt(encKey, encryptedSecret, openid)
-	if err != nil {
-		return "", fmt.Errorf("解密密钥失败: %w", err)
-	}
-
-	var secretData models.TOTPSecret
-	if err := json.Unmarshal([]byte(secretJSON), &secretData); err != nil {
-		return "", fmt.Errorf("解析密钥失败: %w", err)
-	}
-	return secretData.Secret, nil
-}
+// (empty — encryption moved to hermes layer)
