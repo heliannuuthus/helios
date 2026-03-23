@@ -41,3 +41,5 @@ func GetAegisSecretKeyBytes() ([]byte, error) {
 	}
 	return secretBytes, nil
 }
+
+// (GetDBEncKeyRaw removed — encryption moved to hermes layer)

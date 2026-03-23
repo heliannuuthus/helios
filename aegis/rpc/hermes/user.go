@@ -3,6 +3,9 @@ package hermes
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/heliannuuthus/helios/aegis/models"
 	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
@@ -182,31 +185,15 @@ func (c *Client) GetStaffByIdentifier(ctx context.Context, identifier string) (*
 
 func (c *Client) CreateCredential(ctx context.Context, cred *models.UserCredential) error {
 	pbReq := &hermesv1.CreateCredentialRequest{
-		Openid:  cred.OpenID,
-		Type:    cred.Type,
-		Enabled: cred.Enabled,
-		Secret:  cred.Secret,
+		Openid: cred.OpenID,
+		Type:   cred.Type,
+		Secret: cred.Secret,
 	}
 	if cred.CredentialID != nil {
 		pbReq.CredentialId = cred.CredentialID
 	}
 	_, err := c.user.CreateCredential(ctx, pbReq)
 	return err
-}
-
-func (c *Client) GetEnabledUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
-	resp, err := c.user.GetEnabledUserCredentialsByType(ctx, &hermesv1.GetCredentialsByTypeRequest{
-		Openid: openid,
-		Type:   credType,
-	})
-	if err != nil {
-		return nil, err
-	}
-	creds := make([]models.UserCredential, 0, len(resp.Credentials))
-	for _, cr := range resp.Credentials {
-		creds = append(creds, *credentialFromProto(cr))
-	}
-	return creds, nil
 }
 
 func (c *Client) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
@@ -221,6 +208,14 @@ func (c *Client) DeleteCredential(ctx context.Context, openid, credentialID stri
 	_, err := c.user.DeleteCredential(ctx, &hermesv1.DeleteCredentialRequest{
 		Openid:       openid,
 		CredentialId: credentialID,
+	})
+	return err
+}
+
+func (c *Client) DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error {
+	_, err := c.user.DeleteCredentialByOpenIDAndType(ctx, &hermesv1.DeleteCredentialByTypeRequest{
+		Openid: openid,
+		Type:   credType,
 	})
 	return err
 }
@@ -270,6 +265,22 @@ func (c *Client) GetCredentialByID(ctx context.Context, credentialID string) (*m
 
 func (c *Client) UpdateCredential(ctx context.Context, credentialID string, updates map[string]any) error {
 	pbReq := &hermesv1.UpdateCredentialRequest{CredentialId: credentialID}
+	if v, ok := updates["secret"]; ok {
+		if s, ok := v.(string); ok {
+			pbReq.Secret = &s
+		}
+	}
+	if v, ok := updates["last_used_at"]; ok {
+		if t, ok := v.(time.Time); ok {
+			pbReq.LastUsedAt = timestamppb.New(t)
+		}
+	}
+	_, err := c.user.UpdateCredential(ctx, pbReq)
+	return err
+}
+
+func (c *Client) UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error {
+	pbReq := &hermesv1.UpdateCredentialByInternalIDRequest{Id: uint32(id)}
 	if v, ok := updates["enabled"]; ok {
 		if b, ok := v.(bool); ok {
 			pbReq.Enabled = &b
@@ -280,16 +291,11 @@ func (c *Client) UpdateCredential(ctx context.Context, credentialID string, upda
 			pbReq.Secret = &s
 		}
 	}
-	_, err := c.user.UpdateCredential(ctx, pbReq)
-	return err
-}
-
-func (c *Client) EnableCredential(ctx context.Context, credentialID string) error {
-	_, err := c.user.EnableCredential(ctx, &hermesv1.CredentialIDRequest{CredentialId: credentialID})
-	return err
-}
-
-func (c *Client) DisableCredential(ctx context.Context, credentialID string) error {
-	_, err := c.user.DisableCredential(ctx, &hermesv1.CredentialIDRequest{CredentialId: credentialID})
+	if v, ok := updates["last_used_at"]; ok {
+		if t, ok := v.(time.Time); ok {
+			pbReq.LastUsedAt = timestamppb.New(t)
+		}
+	}
+	_, err := c.user.UpdateCredentialByInternalID(ctx, pbReq)
 	return err
 }

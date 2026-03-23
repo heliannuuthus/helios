@@ -208,11 +208,11 @@ func (s *userServiceServer) CreateCredential(ctx context.Context, req *hermesv1.
 	cred := &models.UserCredential{
 		OpenID:  req.GetOpenid(),
 		Type:    req.GetType(),
-		Enabled: req.GetEnabled(),
+		Enabled: true,
 		Secret:  req.GetSecret(),
 	}
-	if req.CredentialId != nil {
-		cred.CredentialID = req.CredentialId
+	if id := req.GetCredentialId(); id != "" {
+		cred.CredentialID = &id
 	}
 	if err := s.svc.CreateCredential(ctx, cred); err != nil {
 		return nil, toStatus(err)
@@ -244,19 +244,8 @@ func (s *userServiceServer) GetUserCredentialsByType(ctx context.Context, req *h
 	return userCredentialListToProto(creds), nil
 }
 
-func (s *userServiceServer) GetEnabledUserCredentialsByType(ctx context.Context, req *hermesv1.GetCredentialsByTypeRequest) (*hermesv1.UserCredentialList, error) {
-	creds, err := s.svc.GetEnabledUserCredentialsByType(ctx, req.GetOpenid(), req.GetType())
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	return userCredentialListToProto(creds), nil
-}
-
 func (s *userServiceServer) UpdateCredential(ctx context.Context, req *hermesv1.UpdateCredentialRequest) (*emptypb.Empty, error) {
 	updates := make(map[string]any)
-	if req.Enabled != nil {
-		updates["enabled"] = *req.Enabled
-	}
 	if req.Secret != nil {
 		updates["secret"] = *req.Secret
 	}
@@ -279,22 +268,32 @@ func (s *userServiceServer) UpdateCredentialSignCount(ctx context.Context, req *
 	return &emptypb.Empty{}, nil
 }
 
-func (s *userServiceServer) EnableCredential(ctx context.Context, req *hermesv1.CredentialIDRequest) (*emptypb.Empty, error) {
-	if err := s.svc.EnableCredential(ctx, req.GetCredentialId()); err != nil {
-		return nil, toStatus(err)
-	}
-	return &emptypb.Empty{}, nil
-}
-
-func (s *userServiceServer) DisableCredential(ctx context.Context, req *hermesv1.CredentialIDRequest) (*emptypb.Empty, error) {
-	if err := s.svc.DisableCredential(ctx, req.GetCredentialId()); err != nil {
-		return nil, toStatus(err)
-	}
-	return &emptypb.Empty{}, nil
-}
-
 func (s *userServiceServer) DeleteCredential(ctx context.Context, req *hermesv1.DeleteCredentialRequest) (*emptypb.Empty, error) {
 	if err := s.svc.DeleteCredential(ctx, req.GetOpenid(), req.GetCredentialId()); err != nil {
+		return nil, toStatus(err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *userServiceServer) DeleteCredentialByOpenIDAndType(ctx context.Context, req *hermesv1.DeleteCredentialByTypeRequest) (*emptypb.Empty, error) {
+	if err := s.svc.DeleteCredentialByOpenIDAndType(ctx, req.GetOpenid(), req.GetType()); err != nil {
+		return nil, toStatus(err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *userServiceServer) UpdateCredentialByInternalID(ctx context.Context, req *hermesv1.UpdateCredentialByInternalIDRequest) (*emptypb.Empty, error) {
+	updates := make(map[string]any)
+	if req.Enabled != nil {
+		updates["enabled"] = req.GetEnabled()
+	}
+	if req.Secret != nil {
+		updates["secret"] = req.GetSecret()
+	}
+	if req.LastUsedAt != nil {
+		updates["last_used_at"] = req.GetLastUsedAt().AsTime()
+	}
+	if err := s.svc.UpdateCredentialByInternalID(ctx, uint(req.GetId()), updates); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -460,13 +459,25 @@ func passwordStoreCredentialToProto(c *dto.PasswordStoreCredential) *hermesv1.Pa
 	return pb
 }
 
+// credentialProtoEnabled 与 Iris MFA 语义对齐：TOTP 待确认阶段无 last_used_at，已绑定则有
+func credentialProtoEnabled(c *models.UserCredential) bool {
+	if c.Type == string(models.CredentialTypeTOTP) {
+		if c.LastUsedAt != nil {
+			return true
+		}
+		return c.Enabled
+	}
+	return c.Enabled
+}
+
 func userCredentialToProto(c *models.UserCredential) *hermesv1.UserCredential {
 	pb := &hermesv1.UserCredential{
 		Id:           safeUint32(c.ID),
 		Openid:       c.OpenID,
 		CredentialId: c.CredentialID,
 		Type:         c.Type,
-		Enabled:      c.Enabled,
+		Enabled:      credentialProtoEnabled(c),
+		Secret:       c.Secret,
 		CreatedAt:    timestamppb.New(c.CreatedAt),
 		UpdatedAt:    timestamppb.New(c.UpdatedAt),
 	}
