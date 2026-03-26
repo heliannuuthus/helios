@@ -988,12 +988,14 @@ func (h *Handler) resolveUser(ctx context.Context, flow *types.AuthFlow) error {
 			return errIdentifiedUser
 		}
 
-		// 未找到已有用户，检查该 IDP 是否在应用所属域的允许列表中（来自 DB）
-		domainWithKey, err := h.cache.GetDomain(ctx, domain)
+		// 未找到已有用户，检查该 IDP 是否在域的 IDP 配置中（有配置即允许）
+		domainIDPConfigs, err := h.cache.GetDomainIDPConfigs(ctx, domain)
 		if err != nil {
-			return fmt.Errorf("get domain: %w", err)
+			return fmt.Errorf("get domain idp configs: %w", err)
 		}
-		if !slices.Contains(domainWithKey.AllowedIDPs, connection) {
+		if !slices.ContainsFunc(domainIDPConfigs, func(cfg *models.DomainIDPConfig) bool {
+			return cfg.IDPType == connection
+		}) {
 			return autherrors.NewAccessDenied("registration not allowed for this IDP")
 		}
 

@@ -38,6 +38,9 @@ type Manager struct {
 	relationCache    *ristretto.Cache[string, []models.ApplicationServiceRelation]
 	userCache        *ristretto.Cache[string, *models.UserWithDecrypted]
 
+	// 域 IDP 配置缓存：domain_id -> []*DomainIDPConfig
+	domainIDPConfigCache *ristretto.Cache[string, []*models.DomainIDPConfig]
+
 	// 应用 IDP 配置缓存：app_id -> []*ApplicationIDPConfig
 	appIDPConfigCache *ristretto.Cache[string, []*models.ApplicationIDPConfig]
 
@@ -77,6 +80,7 @@ func NewManager(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 		serviceCache:         newConfiguredCache[*ServiceWithKey]("service"),
 		relationCache:        newConfiguredCache[[]models.ApplicationServiceRelation]("application-service-relation"),
 		userCache:            newConfiguredCache[*models.UserWithDecrypted]("user"),
+		domainIDPConfigCache: newConfiguredCache[[]*models.DomainIDPConfig]("domain-idp-config"),
 		appIDPConfigCache:    newConfiguredCache[[]*models.ApplicationIDPConfig]("app-idp-config"),
 		challengeConfigCache: newConfiguredCache[*models.ServiceChallengeSetting]("challenge-config"),
 		ssoKeyCache:          newCache[*Keys]("sso", 10, 1, 64),
@@ -89,6 +93,7 @@ func (cm *Manager) Close() {
 	cm.serviceCache.Close()
 	cm.relationCache.Close()
 	cm.userCache.Close()
+	cm.domainIDPConfigCache.Close()
 	cm.appIDPConfigCache.Close()
 	cm.challengeConfigCache.Close()
 	cm.ssoKeyCache.Close()

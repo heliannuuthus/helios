@@ -34,12 +34,13 @@ helios/
 ├── hermes/                          # 数据模块（身份与访问管理数据层）
 │   ├── config/                      # Hermes 配置 + DB 初始化
 │   ├── models/                      # 数据模型（公开，aegis/iris 依赖）
-│   ├── upload/                      # 文件上传 Handler
-│   ├── handler.go                   # HTTP Handler
+│   ├── handler.go                   # HTTP Handler（管理端 CRUD）
 │   ├── service.go                   # 核心服务（Domain/Application/Service/Relationship/Group）
 │   ├── user.go                      # 用户数据服务
-│   ├── credential.go                # 凭证数据服务
-│   └── types.go                     # 请求/响应类型
+│   ├── key.go                       # 密钥管理服务
+│   ├── provision.go                 # 域/应用/服务配置管理
+│   ├── resource.go                  # 关系（ReBAC）管理
+│   └── dto/                         # 请求/响应类型
 ├── iris/                            # 用户信息模块（用户 Profile/MFA/Identity 管理）
 │   ├── config/                      # Iris 配置
 │   └── handler.go                   # HTTP Handler

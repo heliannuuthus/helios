@@ -13,7 +13,7 @@ type DomainUpdateRequest struct {
 	Description patch.Optional[string] `json:"description"`
 }
 
-// DomainResponse 域基础信息（名称、描述等）；allowed_idps 不在此暴露，需时调 GET /domains/:id/idps）
+// DomainResponse 域基础信息（名称、描述等）；IDP 配置通过 GET /domains/:id/idp-configs 获取
 type DomainResponse struct {
 	DomainID    string  `json:"domain_id"`
 	Name        string  `json:"name"`
@@ -175,7 +175,43 @@ func NewDomainIDPConfigResponse(c *models.DomainIDPConfig) DomainIDPConfigRespon
 	}
 }
 
-// ApplicationIDPConfigCreateRequest 创建应用 IDP 配置请求（idp 类型必须在应用所属域的 allowed_idps 内）
+// ==================== Service Challenge Setting ====================
+
+// ServiceChallengeSettingCreateRequest 创建服务 Challenge 配置请求
+type ServiceChallengeSettingCreateRequest struct {
+	Type      string            `json:"type" binding:"required"`
+	ExpiresIn uint              `json:"expires_in"`
+	Limits    models.RateLimits `json:"limits"`
+}
+
+// ServiceChallengeSettingUpdateRequest 更新服务 Challenge 配置请求（JSON Merge Patch 语义）
+type ServiceChallengeSettingUpdateRequest struct {
+	ExpiresIn patch.Optional[uint]              `json:"expires_in"`
+	Limits    patch.Optional[models.RateLimits] `json:"limits"`
+}
+
+// ServiceChallengeSettingResponse 服务 Challenge 配置
+type ServiceChallengeSettingResponse struct {
+	ServiceID string            `json:"service_id"`
+	Type      string            `json:"type"`
+	ExpiresIn uint              `json:"expires_in"`
+	Limits    models.RateLimits `json:"limits,omitempty"`
+	CreatedAt string            `json:"created_at"`
+	UpdatedAt string            `json:"updated_at"`
+}
+
+func NewServiceChallengeSettingResponse(s *models.ServiceChallengeSetting) ServiceChallengeSettingResponse {
+	return ServiceChallengeSettingResponse{
+		ServiceID: s.ServiceID,
+		Type:      s.Type,
+		ExpiresIn: s.ExpiresIn,
+		Limits:    s.Limits,
+		CreatedAt: FormatTime(s.CreatedAt),
+		UpdatedAt: FormatTime(s.UpdatedAt),
+	}
+}
+
+// ApplicationIDPConfigCreateRequest 创建应用 IDP 配置请求（idp 类型必须在应用所属域的 idp-configs 内）
 type ApplicationIDPConfigCreateRequest struct {
 	Type     string  `json:"type" binding:"required"`
 	Priority int     `json:"priority"`

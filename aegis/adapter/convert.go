@@ -18,8 +18,31 @@ func ConvertDomain(d *hmodels.Domain) *amodels.Domain {
 		DomainID:    d.DomainID,
 		Name:        d.Name,
 		Description: d.Description,
-		AllowedIDPs: d.AllowedIDPs,
 	}
+}
+
+func ConvertDomainIDPConfig(c *hmodels.DomainIDPConfig) *amodels.DomainIDPConfig {
+	if c == nil {
+		return nil
+	}
+	return &amodels.DomainIDPConfig{
+		ID:        c.ID,
+		DomainID:  c.DomainID,
+		IDPType:   c.IDPType,
+		Priority:  c.Priority,
+		Strategy:  c.Strategy,
+		TAppID:    c.TAppID,
+		CreatedAt: c.CreatedAt,
+		UpdatedAt: c.UpdatedAt,
+	}
+}
+
+func ConvertDomainIDPConfigs(cs []*hmodels.DomainIDPConfig) []*amodels.DomainIDPConfig {
+	result := make([]*amodels.DomainIDPConfig, len(cs))
+	for i, c := range cs {
+		result[i] = ConvertDomainIDPConfig(c)
+	}
+	return result
 }
 
 // ==================== Application ====================

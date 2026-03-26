@@ -146,6 +146,29 @@ func (cm *Manager) GetAppServiceRelations(ctx context.Context, appID string) ([]
 	return relations, nil
 }
 
+// GetDomainIDPConfigs 获取域 IDP 配置（带缓存）
+func (cm *Manager) GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error) {
+	cacheKey := config.GetCacheKeyPrefix("domain-idp-config") + domainID
+
+	if cm.domainIDPConfigCache != nil {
+		if cached, ok := cm.domainIDPConfigCache.Get(cacheKey); ok {
+			return cached, nil
+		}
+	}
+
+	configs, err := cm.hermesSvc.GetDomainIDPConfigs(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+
+	if cm.domainIDPConfigCache != nil {
+		ttl := config.GetCacheTTL("domain-idp-config")
+		cm.domainIDPConfigCache.SetWithTTL(cacheKey, configs, 1, ttl)
+	}
+
+	return configs, nil
+}
+
 // GetApplicationIDPConfigs 获取应用 IDP 配置（带缓存）
 func (cm *Manager) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
 	cacheKey := config.GetCacheKeyPrefix("app-idp-config") + appID

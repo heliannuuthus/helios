@@ -18,6 +18,26 @@ func domainFromProto(pb *hermesv1.Domain) *models.Domain {
 	}
 }
 
+func domainIDPConfigFromProto(pb *hermesv1.DomainIDPConfig) *models.DomainIDPConfig {
+	if pb == nil {
+		return nil
+	}
+	cfg := &models.DomainIDPConfig{
+		ID:       uint(pb.Id),
+		DomainID: pb.DomainId,
+		IDPType:  pb.Type,
+		Priority: int(pb.Priority),
+		Strategy: pb.Strategy,
+	}
+	if pb.CreatedAt != nil {
+		cfg.CreatedAt = pb.CreatedAt.AsTime()
+	}
+	if pb.UpdatedAt != nil {
+		cfg.UpdatedAt = pb.UpdatedAt.AsTime()
+	}
+	return cfg
+}
+
 func applicationFromProto(pb *hermesv1.Application) *models.Application {
 	if pb == nil {
 		return nil

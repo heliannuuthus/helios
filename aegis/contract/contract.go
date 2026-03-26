@@ -8,6 +8,7 @@ import (
 
 type HermesProvider interface {
 	GetDomain(ctx context.Context, domainID string) (*models.Domain, error)
+	GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error)
 	GetApplication(ctx context.Context, appID string) (*models.Application, error)
 	GetService(ctx context.Context, serviceID string) (*models.Service, error)
 	GetDomainKeys(ctx context.Context, domainID string) ([][]byte, error)
