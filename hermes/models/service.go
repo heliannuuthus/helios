@@ -34,13 +34,6 @@ func (Service) TableName() string { return "t_service" }
 
 func (s Service) PrimaryKey() uint { return s.ID }
 
-// ServiceWithKey 带密钥的 Service（Main/Keys 不序列化到 API）
-type ServiceWithKey struct {
-	Service
-	Main []byte   `json:"-"` // 当前主密钥（48 字节 seed）
-	Keys [][]byte `json:"-"` // 所有有效密钥（包括主密钥和轮换中的旧密钥）
-}
-
 // GetRequiredIdentities 解析访问该服务需要绑定的身份类型
 func (s *Service) GetRequiredIdentities() []string {
 	if s.RequiredIdentities == nil || *s.RequiredIdentities == "" {

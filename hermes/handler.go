@@ -39,17 +39,6 @@ func (h *Handler) GetDomain(c *gin.Context) {
 	})
 }
 
-// GetDomainAllowedIDPs GET /hermes/domains/:domain_id/idps（供配置应用 IDP 时按需拉取）
-func (h *Handler) GetDomainAllowedIDPs(c *gin.Context) {
-	domainID := c.Param("domain_id")
-	idps, err := h.service.GetDomainAllowedIDPs(c.Request.Context(), domainID)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"allowed_idps": idps})
-}
-
 // ==================== IDP Secret 相关 ====================
 
 // ListIDPKeys GET /hermes/idp-keys
@@ -117,7 +106,7 @@ func (h *Handler) DeleteIDPKey(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	c.Status(http.StatusNoContent)
 }
 
 // ==================== Domain IDP Config 相关 ====================
@@ -189,7 +178,7 @@ func (h *Handler) DeleteDomainIDPConfig(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	c.Status(http.StatusNoContent)
 }
 
 // UpdateDomain PATCH /hermes/domains/:domain_id（仅 name、description 可编辑）
@@ -327,7 +316,7 @@ func (h *Handler) DeleteService(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	c.Status(http.StatusNoContent)
 }
 
 // GetServiceApplicationRelations GET /hermes/domains/:domain_id/services/:service_id/applications
@@ -601,7 +590,7 @@ func (h *Handler) DeleteApplicationIDPConfig(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	c.Status(http.StatusNoContent)
 }
 
 // GetApplicationServiceRelations GET /hermes/domains/:domain_id/applications/:app_id/relations
@@ -632,6 +621,106 @@ func (h *Handler) GetApplicationServiceRelations(c *gin.Context) {
 		resp = append(resp, dto.ApplicationServiceRelationResponse{ServiceID: sid, Relations: rels})
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// DeleteDomain DELETE /hermes/domains/:domain_id
+func (h *Handler) DeleteDomain(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	if err := h.service.DeleteDomain(c.Request.Context(), domainID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// DeleteApplication DELETE /hermes/domains/:domain_id/applications/:app_id
+func (h *Handler) DeleteApplication(c *gin.Context) {
+	domainID := c.Param("domain_id")
+	appID := c.Param("app_id")
+	app, err := h.service.GetApplication(c.Request.Context(), appID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	if app.DomainID != domainID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "application not found in this domain"})
+		return
+	}
+	if err := h.service.DeleteApplication(c.Request.Context(), appID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// DeleteGroup DELETE /hermes/groups/:group_id
+func (h *Handler) DeleteGroup(c *gin.Context) {
+	groupID := c.Param("group_id")
+	if err := h.service.DeleteGroup(c.Request.Context(), groupID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+// ==================== Service Challenge Setting 相关 ====================
+
+// ListServiceChallengeSettings GET /hermes/domains/:domain_id/services/:service_id/challenge-settings
+func (h *Handler) ListServiceChallengeSettings(c *gin.Context) {
+	serviceID := c.Param("service_id")
+	settings, err := h.service.ListServiceChallengeSettings(c.Request.Context(), serviceID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	resp := make([]dto.ServiceChallengeSettingResponse, 0, len(settings))
+	for i := range settings {
+		resp = append(resp, dto.NewServiceChallengeSettingResponse(&settings[i]))
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// CreateServiceChallengeSetting POST /hermes/domains/:domain_id/services/:service_id/challenge-settings
+func (h *Handler) CreateServiceChallengeSetting(c *gin.Context) {
+	serviceID := c.Param("service_id")
+	var req dto.ServiceChallengeSettingCreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	setting, err := h.service.CreateServiceChallengeSetting(c.Request.Context(), serviceID, &req)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, dto.NewServiceChallengeSettingResponse(setting))
+}
+
+// UpdateServiceChallengeSetting PATCH /hermes/domains/:domain_id/services/:service_id/challenge-settings/:type
+func (h *Handler) UpdateServiceChallengeSetting(c *gin.Context) {
+	serviceID := c.Param("service_id")
+	challengeType := c.Param("type")
+	var req dto.ServiceChallengeSettingUpdateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.service.UpdateServiceChallengeSetting(c.Request.Context(), serviceID, challengeType, &req); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "更新成功"})
+}
+
+// DeleteServiceChallengeSetting DELETE /hermes/domains/:domain_id/services/:service_id/challenge-settings/:type
+func (h *Handler) DeleteServiceChallengeSetting(c *gin.Context) {
+	serviceID := c.Param("service_id")
+	challengeType := c.Param("type")
+	if err := h.service.DeleteServiceChallengeSetting(c.Request.Context(), serviceID, challengeType); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // ==================== Relationship 相关 ====================

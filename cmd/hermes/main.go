@@ -81,7 +81,16 @@ func startHTTP(svc *hermes.Service) {
 			domains.GET("", handler.ListDomains)
 			domains.GET("/:domain_id", handler.GetDomain)
 			domains.PATCH("/:domain_id", adminRelation, handler.UpdateDomain)
-			domains.GET("/:domain_id/idps", handler.GetDomainAllowedIDPs)
+			domains.DELETE("/:domain_id", adminRelation, handler.DeleteDomain)
+
+			domainIDPConfigs := domains.Group("/:domain_id/idp-configs")
+			{
+				domainIDPConfigs.GET("", handler.ListDomainIDPConfigs)
+				domainIDPConfigs.GET("/:idp_type", handler.GetDomainIDPConfig)
+				domainIDPConfigs.POST("", adminRelation, handler.CreateDomainIDPConfig)
+				domainIDPConfigs.PATCH("/:idp_type", adminRelation, handler.UpdateDomainIDPConfig)
+				domainIDPConfigs.DELETE("/:idp_type", adminRelation, handler.DeleteDomainIDPConfig)
+			}
 
 			domainServices := domains.Group("/:domain_id/services")
 			{
@@ -93,6 +102,14 @@ func startHTTP(svc *hermes.Service) {
 				domainServices.POST("", adminRelation, handler.CreateService)
 				domainServices.PATCH("/:service_id", adminRelation, handler.UpdateService)
 				domainServices.DELETE("/:service_id", adminRelation, handler.DeleteService)
+
+				challengeSettings := domainServices.Group("/:service_id/challenge-settings")
+				{
+					challengeSettings.GET("", handler.ListServiceChallengeSettings)
+					challengeSettings.POST("", adminRelation, handler.CreateServiceChallengeSetting)
+					challengeSettings.PATCH("/:type", adminRelation, handler.UpdateServiceChallengeSetting)
+					challengeSettings.DELETE("/:type", adminRelation, handler.DeleteServiceChallengeSetting)
+				}
 			}
 
 			domainApps := domains.Group("/:domain_id/applications")
@@ -103,6 +120,7 @@ func startHTTP(svc *hermes.Service) {
 				domainApps.GET("/:app_id/idp-configs", handler.ListApplicationIDPConfigs)
 				domainApps.POST("", adminRelation, handler.CreateApplication)
 				domainApps.PATCH("/:app_id", adminRelation, handler.UpdateApplication)
+				domainApps.DELETE("/:app_id", adminRelation, handler.DeleteApplication)
 				domainApps.POST("/:app_id/idp-configs", adminRelation, handler.CreateApplicationIDPConfig)
 				domainApps.PATCH("/:app_id/idp-configs/:idp_type", adminRelation, handler.UpdateApplicationIDPConfig)
 				domainApps.DELETE("/:app_id/idp-configs/:idp_type", adminRelation, handler.DeleteApplicationIDPConfig)
@@ -132,7 +150,17 @@ func startHTTP(svc *hermes.Service) {
 			groups.GET("/:group_id/members", handler.GetGroupMembers)
 			groups.POST("", adminRelation, handler.CreateGroup)
 			groups.PATCH("/:group_id", adminRelation, handler.UpdateGroup)
+			groups.DELETE("/:group_id", adminRelation, handler.DeleteGroup)
 			groups.POST("/:group_id/members", adminRelation, handler.SetGroupMembers)
+		}
+
+		idpKeys := api.Group("/idp-keys")
+		{
+			idpKeys.GET("", handler.ListIDPKeys)
+			idpKeys.GET("/:idp_type/:t_app_id", handler.GetIDPKey)
+			idpKeys.POST("", adminRelation, handler.CreateIDPKey)
+			idpKeys.PATCH("/:idp_type/:t_app_id", adminRelation, handler.UpdateIDPKey)
+			idpKeys.DELETE("/:idp_type/:t_app_id", adminRelation, handler.DeleteIDPKey)
 		}
 	}
 

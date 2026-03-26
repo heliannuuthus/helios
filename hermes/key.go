@@ -35,25 +35,6 @@ func generateEncryptedKey(aad string) (string, error) {
 	return base64.StdEncoding.EncodeToString(encryptedKey), nil
 }
 
-// GetDomainWithKey 获取域（含签名密钥，供 aegis 签发/验签）
-func (s *Service) GetDomainWithKey(ctx context.Context, domainID string) (*models.DomainWithKey, error) {
-	domain, err := s.getDomainFromDB(ctx, domainID)
-	if err != nil {
-		return nil, err
-	}
-
-	signKeys, err := s.GetDomainKeys(ctx, domainID)
-	if err != nil {
-		return nil, fmt.Errorf("获取域密钥失败: %w", err)
-	}
-
-	return &models.DomainWithKey{
-		Domain: *domain,
-		Main:   signKeys[0],
-		Keys:   signKeys,
-	}, nil
-}
-
 // GetDomainKeys 获取域的所有有效密钥（已解密），回退到配置文件兼容旧部署
 func (s *Service) GetDomainKeys(ctx context.Context, domainID string) ([][]byte, error) {
 	keys, err := s.getKeys(ctx, models.KeyOwnerDomain, domainID)
@@ -77,40 +58,6 @@ func (s *Service) GetApplicationKeys(ctx context.Context, appID string) ([][]byt
 // GetServiceKeys 获取服务的所有有效密钥（已解密）
 func (s *Service) GetServiceKeys(ctx context.Context, serviceID string) ([][]byte, error) {
 	return s.getKeys(ctx, models.KeyOwnerService, serviceID)
-}
-
-// GetServiceWithKey 获取服务（含解密密钥）
-func (s *Service) GetServiceWithKey(ctx context.Context, serviceID string) (*models.ServiceWithKey, error) {
-	var svc models.Service
-	if err := s.db.WithContext(ctx).Where("service_id = ?", serviceID).First(&svc).Error; err != nil {
-		return nil, fmt.Errorf("获取服务失败: %w", err)
-	}
-	keys, err := s.GetServiceKeys(ctx, serviceID)
-	if err != nil {
-		return nil, err
-	}
-	result := &models.ServiceWithKey{Service: svc, Keys: keys}
-	if len(keys) > 0 {
-		result.Main = keys[0]
-	}
-	return result, nil
-}
-
-// GetApplicationWithKey 获取应用（含解密密钥）
-func (s *Service) GetApplicationWithKey(ctx context.Context, appID string) (*models.ApplicationWithKey, error) {
-	var app models.Application
-	if err := s.db.WithContext(ctx).Where("app_id = ?", appID).First(&app).Error; err != nil {
-		return nil, fmt.Errorf("获取应用失败: %w", err)
-	}
-	keys, err := s.GetApplicationKeys(ctx, appID)
-	if err != nil {
-		return nil, err
-	}
-	result := &models.ApplicationWithKey{Application: app, Keys: keys}
-	if len(keys) > 0 {
-		result.Main = keys[0]
-	}
-	return result, nil
 }
 
 // RotateKey 轮换密钥：给旧主密钥设 expired_at，插入新密钥

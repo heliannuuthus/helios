@@ -18,6 +18,18 @@ func (c *Client) GetDomain(ctx context.Context, domainID string) (*models.Domain
 	return domainFromProto(resp), nil
 }
 
+func (c *Client) GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error) {
+	resp, err := c.provision.GetDomainIDPConfigs(ctx, &hermesv1.GetDomainRequest{DomainId: domainID})
+	if err != nil {
+		return nil, fmt.Errorf("获取域 IDP 配置失败: %w", err)
+	}
+	configs := make([]*models.DomainIDPConfig, 0, len(resp.GetConfigs()))
+	for _, cfg := range resp.GetConfigs() {
+		configs = append(configs, domainIDPConfigFromProto(cfg))
+	}
+	return configs, nil
+}
+
 // ==================== Application ====================
 
 func (c *Client) GetApplication(ctx context.Context, appID string) (*models.Application, error) {

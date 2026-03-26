@@ -3,7 +3,6 @@ package hermes
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/go-json-experiment/json"
@@ -20,9 +19,9 @@ import (
 
 // ==================== Domain 相关 ====================
 
-// GetDomain 获取域基础信息（仅 t_domain，不查 t_domain_idp；需时调 GetDomainAllowedIDPs）
+// GetDomain 获取域基础信息（仅 t_domain 元数据）
 func (s *Service) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
-	rec, err := s.getDomainRecordOnly(ctx, domainID)
+	rec, err := s.getDomain(ctx, domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -30,19 +29,10 @@ func (s *Service) GetDomain(ctx context.Context, domainID string) (*models.Domai
 		DomainID:    rec.DomainID,
 		Name:        rec.Name,
 		Description: rec.Description,
-		AllowedIDPs: nil,
 	}, nil
 }
 
-// GetDomainAllowedIDPs 获取域允许的 IDP 类型列表（供应用配置 IDP 时按需拉取）
-func (s *Service) GetDomainAllowedIDPs(ctx context.Context, domainID string) ([]string, error) {
-	if _, err := s.getDomainRecordOnly(ctx, domainID); err != nil {
-		return nil, err
-	}
-	return s.getDomainAllowedIDPs(ctx, domainID)
-}
-
-// ListDomains 列出所有域（仅基础信息，不含 allowed_idps）
+// ListDomains 列出所有域（仅基础信息）
 func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 	var recs []models.DomainRecord
 	if err := s.db.WithContext(ctx).Find(&recs).Error; err != nil {
@@ -54,7 +44,6 @@ func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 			DomainID:    recs[i].DomainID,
 			Name:        recs[i].Name,
 			Description: recs[i].Description,
-			AllowedIDPs: nil,
 		})
 	}
 	return domains, nil
@@ -62,7 +51,7 @@ func (s *Service) ListDomains(ctx context.Context) ([]models.Domain, error) {
 
 // UpdateDomain 更新域（仅 name、description）
 func (s *Service) UpdateDomain(ctx context.Context, domainID string, req *dto.DomainUpdateRequest) (*models.Domain, error) {
-	if _, err := s.getDomainRecordOnly(ctx, domainID); err != nil {
+	if _, err := s.getDomain(ctx, domainID); err != nil {
 		return nil, err
 	}
 	updates := patch.Collect(
@@ -88,9 +77,6 @@ func (s *Service) DeleteDomain(ctx context.Context, domainID string) error {
 		if err := tx.Where("domain_id = ?", domainID).Delete(&models.DomainIDPConfig{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("domain_id = ?", domainID).Delete(&models.DomainIDPRecord{}).Error; err != nil {
-			return err
-		}
 		if err := tx.Where("domain_id = ?", domainID).Delete(&models.Service{}).Error; err != nil {
 			return err
 		}
@@ -108,6 +94,12 @@ func (s *Service) DeleteDomain(ctx context.Context, domainID string) error {
 
 // CreateService 创建服务
 func (s *Service) CreateService(ctx context.Context, req *dto.ServiceCreateRequest) (*models.Service, error) {
+	if err := validation.ValidateID("service_id", req.ServiceID); err != nil {
+		return nil, err
+	}
+	if err := validation.ValidateID("domain_id", req.DomainID); err != nil {
+		return nil, err
+	}
 	desc := req.Description
 	svc := &models.Service{
 		ServiceID:            req.ServiceID,
@@ -203,9 +195,6 @@ func (s *Service) DeleteService(ctx context.Context, serviceID string) error {
 
 // ==================== Application 相关 ====================
 
-// appIDPattern 应用标识：字母数字、下划线、连字符，1~64 字符
-var appIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
-
 func marshalOptionalStringSlice(s []string) *string {
 	if len(s) == 0 {
 		return nil
@@ -220,11 +209,14 @@ func marshalOptionalStringSlice(s []string) *string {
 
 // CreateApplication 创建应用
 func (s *Service) CreateApplication(ctx context.Context, req *dto.ApplicationCreateRequest) (*models.Application, error) {
+	if err := validation.ValidateID("domain_id", req.DomainID); err != nil {
+		return nil, err
+	}
 	appID := strings.TrimSpace(req.AppID)
 	if appID == "" {
 		appID = helpers.GenerateID(12)
-	} else if !appIDPattern.MatchString(appID) {
-		return nil, fmt.Errorf("应用标识仅允许字母、数字、下划线、连字符，1~64 字符")
+	} else if err := validation.ValidateID("app_id", appID); err != nil {
+		return nil, err
 	}
 
 	if err := validation.ValidateRedirectURIs(req.AllowedRedirectURIs); err != nil {
@@ -406,23 +398,11 @@ func (s *Service) GetDomainIDPConfig(ctx context.Context, domainID, idpType stri
 	return &cfg, nil
 }
 
-// CreateDomainIDPConfig 创建域 IDP 配置（idp_type 必须在域允许列表中）
+// CreateDomainIDPConfig 创建域 IDP 配置（同时表示该 IDP 在此域下可用）
 func (s *Service) CreateDomainIDPConfig(ctx context.Context, domainID string, req *dto.DomainIDPConfigCreateRequest) (*models.DomainIDPConfig, error) {
-	allowed, err := s.getDomainAllowedIDPs(ctx, domainID)
-	if err != nil {
+	if _, err := s.getDomain(ctx, domainID); err != nil {
 		return nil, err
 	}
-	found := false
-	for _, t := range allowed {
-		if t == req.IDPType {
-			found = true
-			break
-		}
-	}
-	if !found {
-		return nil, fmt.Errorf("IDP %s 不在域 %s 的允许列表中", req.IDPType, domainID)
-	}
-
 	cfg := &models.DomainIDPConfig{
 		DomainID: domainID,
 		IDPType:  req.IDPType,
@@ -549,9 +529,78 @@ func (s *Service) GetServiceChallengeSetting(ctx context.Context, serviceID, cha
 	return &cfg, nil
 }
 
+// ListServiceChallengeSettings 获取服务下所有 Challenge 配置
+func (s *Service) ListServiceChallengeSettings(ctx context.Context, serviceID string) ([]models.ServiceChallengeSetting, error) {
+	var settings []models.ServiceChallengeSetting
+	if err := s.db.WithContext(ctx).Where("service_id = ?", serviceID).Find(&settings).Error; err != nil {
+		return nil, fmt.Errorf("获取 Challenge 配置列表失败: %w", err)
+	}
+	return settings, nil
+}
+
+// CreateServiceChallengeSetting 创建服务 Challenge 配置
+func (s *Service) CreateServiceChallengeSetting(ctx context.Context, serviceID string, req *dto.ServiceChallengeSettingCreateRequest) (*models.ServiceChallengeSetting, error) {
+	if _, err := s.GetService(ctx, serviceID); err != nil {
+		return nil, err
+	}
+	setting := &models.ServiceChallengeSetting{
+		ServiceID: serviceID,
+		Type:      req.Type,
+		ExpiresIn: req.ExpiresIn,
+		Limits:    req.Limits,
+	}
+	if setting.ExpiresIn == 0 {
+		setting.ExpiresIn = 300
+	}
+	if err := s.db.WithContext(ctx).Create(setting).Error; err != nil {
+		return nil, fmt.Errorf("创建 Challenge 配置失败: %w", err)
+	}
+	return setting, nil
+}
+
+// UpdateServiceChallengeSetting 更新服务 Challenge 配置（JSON Merge Patch 语义）
+func (s *Service) UpdateServiceChallengeSetting(ctx context.Context, serviceID, challengeType string, req *dto.ServiceChallengeSettingUpdateRequest) error {
+	updates := patch.Collect(
+		patch.Field("expires_in", req.ExpiresIn),
+	)
+	if req.Limits.IsPresent() {
+		if req.Limits.IsNull() {
+			updates["limits"] = nil
+		} else {
+			updates["limits"] = req.Limits.Value()
+		}
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	result := s.db.WithContext(ctx).Model(&models.ServiceChallengeSetting{}).
+		Where("service_id = ? AND `type` = ?", serviceID, challengeType).Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("更新 Challenge 配置失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("challenge 配置不存在: service_id=%s, type=%s", serviceID, challengeType)
+	}
+	return nil
+}
+
+// DeleteServiceChallengeSetting 删除服务 Challenge 配置
+func (s *Service) DeleteServiceChallengeSetting(ctx context.Context, serviceID, challengeType string) error {
+	result := s.db.WithContext(ctx).
+		Where("service_id = ? AND `type` = ?", serviceID, challengeType).
+		Delete(&models.ServiceChallengeSetting{})
+	if result.Error != nil {
+		return fmt.Errorf("删除 Challenge 配置失败: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("challenge 配置不存在: service_id=%s, type=%s", serviceID, challengeType)
+	}
+	return nil
+}
+
 // ==================== 内部辅助方法 ====================
 
-func (s *Service) getDomainRecordOnly(ctx context.Context, domainID string) (*models.DomainRecord, error) {
+func (s *Service) getDomain(ctx context.Context, domainID string) (*models.DomainRecord, error) {
 	var rec models.DomainRecord
 	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).First(&rec).Error; err != nil {
 		return nil, fmt.Errorf("域 %s 不存在: %w", domainID, err)
@@ -559,48 +608,19 @@ func (s *Service) getDomainRecordOnly(ctx context.Context, domainID string) (*mo
 	return &rec, nil
 }
 
-func (s *Service) getDomainFromDB(ctx context.Context, domainID string) (*models.Domain, error) {
-	rec, err := s.getDomainRecordOnly(ctx, domainID)
-	if err != nil {
-		return nil, err
-	}
-	allowedIDPs, err := s.getDomainAllowedIDPs(ctx, domainID)
-	if err != nil {
-		return nil, err
-	}
-	return &models.Domain{
-		DomainID:    rec.DomainID,
-		Name:        rec.Name,
-		Description: rec.Description,
-		AllowedIDPs: allowedIDPs,
-	}, nil
-}
-
-func (s *Service) getDomainAllowedIDPs(ctx context.Context, domainID string) ([]string, error) {
-	var rows []models.DomainIDPRecord
-	if err := s.db.WithContext(ctx).Where("domain_id = ?", domainID).Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("查询域 IDP 列表失败: %w", err)
-	}
-	out := make([]string, 0, len(rows))
-	for i := range rows {
-		out = append(out, rows[i].IDPType)
-	}
-	return out, nil
-}
-
 func (s *Service) ensureIDPAllowedForApplication(ctx context.Context, appID, idpType string) error {
 	app, err := s.GetApplication(ctx, appID)
 	if err != nil {
 		return err
 	}
-	allowed, err := s.getDomainAllowedIDPs(ctx, app.DomainID)
+	configs, err := s.GetDomainIDPConfigs(ctx, app.DomainID)
 	if err != nil {
 		return err
 	}
-	for _, t := range allowed {
-		if t == idpType {
+	for _, cfg := range configs {
+		if cfg.IDPType == idpType {
 			return nil
 		}
 	}
-	return fmt.Errorf("IDP %s 不在域 %s 的允许列表中", idpType, app.DomainID)
+	return fmt.Errorf("IDP %s 未在域 %s 中配置", idpType, app.DomainID)
 }

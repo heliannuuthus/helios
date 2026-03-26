@@ -24,6 +24,14 @@ func (a *HermesAdapter) GetDomain(ctx context.Context, domainID string) (*amodel
 	return ConvertDomain(d), nil
 }
 
+func (a *HermesAdapter) GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*amodels.DomainIDPConfig, error) {
+	cs, err := a.svc.GetDomainIDPConfigs(ctx, domainID)
+	if err != nil {
+		return nil, err
+	}
+	return ConvertDomainIDPConfigs(cs), nil
+}
+
 func (a *HermesAdapter) GetApplication(ctx context.Context, appID string) (*amodels.Application, error) {
 	app, err := a.svc.GetApplication(ctx, appID)
 	if err != nil {
