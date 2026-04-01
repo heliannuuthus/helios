@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/heliannuuthus/helios/aegis/config"
+	"github.com/heliannuuthus/helios/aegis/internal/config"
 )
 
 // ==================== AuthFlow（Redis）====================

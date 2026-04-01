@@ -4,8 +4,8 @@ package totp
 import (
 	"context"
 
-	"github.com/heliannuuthus/helios/aegis/contract"
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/helios/aegis/internal/contract"
+	"github.com/heliannuuthus/helios/aegis/internal/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 

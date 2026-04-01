@@ -13,10 +13,10 @@ import (
 
 	"github.com/tidwall/gjson"
 
-	"github.com/heliannuuthus/helios/aegis/config"
+	"github.com/heliannuuthus/helios/aegis/internal/config"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/helios/aegis/internal/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 

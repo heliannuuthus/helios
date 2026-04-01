@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-json-experiment/json"
 
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/helios/aegis/internal/models"
 	"github.com/heliannuuthus/helios/pkg/binding"
 	"github.com/heliannuuthus/helios/pkg/helpers"
 )

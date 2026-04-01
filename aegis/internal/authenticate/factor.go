@@ -6,8 +6,8 @@ import (
 
 	tokendef "github.com/heliannuuthus/aegis-go/utilities/token"
 
-	"github.com/heliannuuthus/helios/aegis/config"
-	autherrors "github.com/heliannuuthus/helios/aegis/errors"
+	"github.com/heliannuuthus/helios/aegis/internal/config"
+	autherrors "github.com/heliannuuthus/helios/aegis/internal/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/factor"
 	"github.com/heliannuuthus/helios/aegis/internal/types"

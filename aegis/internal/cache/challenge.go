@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/heliannuuthus/helios/aegis/config"
+	"github.com/heliannuuthus/helios/aegis/internal/config"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
 )
 

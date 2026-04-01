@@ -7,7 +7,7 @@ import (
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/helios/aegis/internal/models"
 )
 
 // StoredWebAuthnCredential 存储的 WebAuthn 凭证（用于缓存层传递）

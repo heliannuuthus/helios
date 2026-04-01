@@ -5,9 +5,9 @@ import (
 
 	"github.com/dgraph-io/ristretto/v2"
 
-	"github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/aegis/contract"
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/helios/aegis/internal/config"
+	"github.com/heliannuuthus/helios/aegis/internal/contract"
+	"github.com/heliannuuthus/helios/aegis/internal/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 	pkgredis "github.com/heliannuuthus/helios/pkg/redis"
 )
