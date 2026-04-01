@@ -3,11 +3,11 @@ package authenticate
 import (
 	"context"
 
-	autherrors "github.com/heliannuuthus/helios/aegis/errors"
+	autherrors "github.com/heliannuuthus/helios/aegis/internal/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/helios/aegis/internal/models"
 )
 
 // 编译期接口检查

@@ -3,7 +3,7 @@ package authenticate
 import (
 	"context"
 
-	autherrors "github.com/heliannuuthus/helios/aegis/errors"
+	autherrors "github.com/heliannuuthus/helios/aegis/internal/errors"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/vchan"
 	"github.com/heliannuuthus/helios/aegis/internal/types"

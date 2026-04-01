@@ -3,7 +3,7 @@ package webauthn
 import (
 	"github.com/go-webauthn/webauthn/webauthn"
 
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/helios/aegis/internal/models"
 )
 
 // User 实现 webauthn.User 接口

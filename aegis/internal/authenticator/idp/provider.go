@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/helios/aegis/internal/models"
 )
 
 // Provider IDP 提供者接口

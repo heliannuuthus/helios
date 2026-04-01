@@ -44,14 +44,14 @@ services:
   hermes:
     build:
       context: .
-      args:
-        SERVICE: hermes
+      dockerfile: hermes/Dockerfile
     container_name: helios-hermes
     ports:
       - "50051:50051"
       - "8081:18000"
     volumes:
-      - ./config:/app/config:ro
+      - ./config/base.toml:/app/config/base.toml:ro
+      - ./config/hermes.toml:/app/config/hermes.toml:ro
     depends_on:
       - db
     restart: unless-stopped
@@ -64,13 +64,14 @@ services:
   aegis:
     build:
       context: .
-      args:
-        SERVICE: aegis
+      dockerfile: aegis/Dockerfile
     container_name: helios-aegis
     ports:
       - "18000:18000"
     volumes:
-      - ./config:/app/config:ro
+      - ./config/base.toml:/app/config/base.toml:ro
+      - ./config/aegis.toml:/app/config/aegis.toml:ro
+      - ./config/iris.toml:/app/config/iris.toml:ro
     environment:
       HERMES_GRPC_ADDR: hermes:50051
     depends_on:
@@ -86,13 +87,13 @@ services:
   zwei:
     build:
       context: .
-      args:
-        SERVICE: zwei
+      dockerfile: zwei/Dockerfile
     container_name: helios-zwei
     ports:
       - "18001:18000"
     volumes:
-      - ./config:/app/config:ro
+      - ./config/base.toml:/app/config/base.toml:ro
+      - ./config/zwei.toml:/app/config/zwei.toml:ro
     depends_on:
       - db
     restart: unless-stopped
@@ -105,13 +106,14 @@ services:
   chaos:
     build:
       context: .
-      args:
-        SERVICE: chaos
+      dockerfile: chaos/Dockerfile
     container_name: helios-chaos
     ports:
       - "18002:18000"
     volumes:
-      - ./config:/app/config:ro
+      - ./config/base.toml:/app/config/base.toml:ro
+      - ./config/hermes.toml:/app/config/hermes.toml:ro
+      - ./config/chaos.toml:/app/config/chaos.toml:ro
     depends_on:
       - db
     restart: unless-stopped
@@ -129,11 +131,6 @@ services:
       - ./environments/gateway/nginx.conf:/etc/nginx/nginx.conf:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      - aegis
-      - hermes
-      - zwei
-      - chaos
     restart: unless-stopped
     deploy:
       resources:

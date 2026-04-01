@@ -6,8 +6,8 @@ import (
 
 	pasetokit "github.com/heliannuuthus/aegis-go/utilities/paseto"
 
-	"github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/helios/aegis/internal/config"
+	"github.com/heliannuuthus/helios/aegis/internal/models"
 )
 
 // ==================== Hermes 数据（本地缓存 + DB）====================

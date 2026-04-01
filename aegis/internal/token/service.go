@@ -11,7 +11,7 @@ import (
 	"github.com/heliannuuthus/aegis-go/utilities/key"
 	tokendef "github.com/heliannuuthus/aegis-go/utilities/token"
 
-	"github.com/heliannuuthus/helios/aegis/config"
+	"github.com/heliannuuthus/helios/aegis/internal/config"
 	"github.com/heliannuuthus/helios/aegis/internal/cache"
 )
 

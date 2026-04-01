@@ -19,7 +19,7 @@ import (
 
 	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/helios/aegis/internal/models"
 	"github.com/heliannuuthus/helios/pkg/logger"
 )
 
