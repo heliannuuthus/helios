@@ -8,8 +8,8 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/zwei/internal/tag"
+	"github.com/heliannuuthus/pkg/logger"
+	"github.com/heliannuuthus/zwei/internal/tag"
 )
 
 // Handler 用户偏好处理器

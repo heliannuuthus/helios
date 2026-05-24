@@ -6,7 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/zwei/internal/models"
+	"github.com/heliannuuthus/zwei/internal/models"
 )
 
 // Service 浏览历史服务

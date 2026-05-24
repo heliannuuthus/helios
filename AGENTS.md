@@ -8,22 +8,34 @@
 2. 所有 PATCH 更新字段必须用 `patch.Optional[T]`，禁止用 `*T` 表示可选更新。
 3. Aegis 不直接访问数据库，数据统一通过 Hermes 服务层获取。
 4. API 调用走 services 层，不要在组件或 handler 中绕过服务层直接拼底层调用。
-5. 改完代码必须执行：`golangci-lint run --fix ./...`。
+5. 改完代码必须执行：`make lint`（各 module 分别 lint）。
 
 ## 模块边界与依赖
 
-- `aegis/`：认证授权（OAuth2/OIDC 流程、Token、认证链路）。
-- `hermes/`：身份与访问管理数据层（用户、应用、服务、关系等）。
-- `iris/`：用户 Profile/MFA/Identity 相关能力。
-- `zwei/`：业务侧能力模块（独立于 Hermes 数据域）。
-- `pkg/`：公共基础能力（配置、日志、patch、数据库工具等）。
+本仓库为 **Go Workspace 多 module**，各 module 可独立拆仓库，module path **无 `helios` 前缀**：
+
+| Module | 路径 | 说明 |
+|--------|------|------|
+| `github.com/heliannuuthus/proto` | `proto/` | proto 定义 + 生成 gRPC 代码 |
+| `github.com/heliannuuthus/pkg` | `pkg/` | 公共基础设施（config/logger/patch/database 等） |
+| `github.com/heliannuuthus/hermes` | `hermes/` | IAM 数据层；入口 `hermes/main.go` |
+| `github.com/heliannuuthus/aegis` | `aegis/` | 认证 + 用户中心；入口 `aegis/server/main.go` |
+| `github.com/heliannuuthus/zwei` | `zwei/` | 业务 API；入口 `zwei/main.go` |
+| `github.com/heliannuuthus/chaos` | `chaos/` | 运维 API；入口 `chaos/main.go`，独立 DB |
+
+- `aegis/iris/`：**Aegis 子模块**（同进程），负责 `/user/*`，不是独立服务。
+- 服务间 **禁止** import 其他服务的 Go 包；共享只通过 `proto`、`pkg`。
+- `aegis -> hermes`：仅通过 gRPC（`aegis/rpc/hermes` + `proto` 生成代码）。
+
+启动命令：`make run <service>`（如 `make run aegis`、`make run hermes`）。
 
 关键约束：
 
-- `aegis -> hermes`：Aegis 依赖 Hermes 获取数据，不直连 DB。
-- `hermes/models` 为公共模型包，可被 `aegis`、`iris` 依赖。
-- `zwei/internal/models` 仅 zwei 内部使用，不对外暴露。
-- 各模块配置在各自 `config/` 包；全局配置基础在 `pkg/config/`。
+- `aegis -> hermes`：gRPC 调用，不直连 DB、不 import `hermes/*`。
+- `aegis/models`：Aegis 侧独立数据模型，与 `hermes/internal/models` 完全隔离。
+- `hermes/internal/models`：仅 Hermes 内部使用（`internal` 保护）。
+- `chaos/config.InitDB()`：连 chaos 独立库，禁止 import `hermes/config`。
+- 各服务配置在 `config/*.toml`；加载封装在 `pkg/config` 与各服务 `config/`。
 
 ## PATCH 语义（强约束）
 
@@ -58,7 +70,7 @@ updates := patch.Collect(
 
 ## 路由与网关约定（不要破坏）
 
-- 前端/SDK 认证调用统一走 `/api/*`，由网关转换到后端真实路径（如 `/auth/*`）。
+- 前端/SDK 认证调用统一走../proto/*`，由网关转换到后端真实路径（如 `/auth/*`）。
 - 不要在前端/SDK 里改成直接请求 `/auth/*`。
 - `/auth/authorize` 必须是 `POST` + `application/x-www-form-urlencoded`。
 - 禁止把 `ShouldBind` 改为 `ShouldBindQuery`。

@@ -4,9 +4,9 @@ package totp
 import (
 	"context"
 
-	"github.com/heliannuuthus/helios/aegis/contract"
-	"github.com/heliannuuthus/helios/aegis/models"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/aegis/contract"
+	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 type Verifier struct {

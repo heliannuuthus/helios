@@ -6,8 +6,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/zwei/internal/models"
-	"github.com/heliannuuthus/helios/zwei/internal/tag"
+	"github.com/heliannuuthus/zwei/internal/models"
+	"github.com/heliannuuthus/zwei/internal/tag"
 )
 
 // Service 用户偏好服务

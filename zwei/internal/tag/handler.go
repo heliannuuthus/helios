@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/zwei/internal/models"
+	"github.com/heliannuuthus/zwei/internal/models"
 )
 
 // Handler 标签处理器

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/aegis/internal/types"
+	"github.com/heliannuuthus/aegis/config"
+	"github.com/heliannuuthus/aegis/internal/types"
 )
 
 // ==================== Challenge（Redis 临时会话）====================

@@ -10,9 +10,9 @@ import (
 	"github.com/dgraph-io/ristretto/v2"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/zwei/internal/models"
-	"github.com/heliannuuthus/helios/zwei/internal/tag"
+	"github.com/heliannuuthus/pkg/logger"
+	"github.com/heliannuuthus/zwei/internal/models"
+	"github.com/heliannuuthus/zwei/internal/tag"
 )
 
 const (

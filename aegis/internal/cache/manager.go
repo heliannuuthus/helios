@@ -5,11 +5,11 @@ import (
 
 	"github.com/dgraph-io/ristretto/v2"
 
-	"github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/aegis/contract"
-	"github.com/heliannuuthus/helios/aegis/models"
-	"github.com/heliannuuthus/helios/pkg/logger"
-	pkgredis "github.com/heliannuuthus/helios/pkg/redis"
+	"github.com/heliannuuthus/aegis/config"
+	"github.com/heliannuuthus/aegis/contract"
+	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/pkg/logger"
+	pkgredis "github.com/heliannuuthus/pkg/redis"
 )
 
 // 错误定义

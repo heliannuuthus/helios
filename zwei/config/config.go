@@ -7,9 +7,9 @@ import (
 
 	"gorm.io/gorm"
 
-	baseconfig "github.com/heliannuuthus/helios/pkg/config"
-	pkgdb "github.com/heliannuuthus/helios/pkg/database"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	baseconfig "github.com/heliannuuthus/pkg/config"
+	pkgdb "github.com/heliannuuthus/pkg/database"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 // Cfg 返回 Zwei 配置单例

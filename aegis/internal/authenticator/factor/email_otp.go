@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/mail"
 
-	"github.com/heliannuuthus/helios/aegis/internal/cache"
-	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/pkg/helpers"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/aegis/internal/cache"
+	"github.com/heliannuuthus/aegis/internal/types"
+	"github.com/heliannuuthus/pkg/helpers"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 var _ Provider = (*EmailOTPProvider)(nil)

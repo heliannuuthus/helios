@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/heliannuuthus/helios/aegis/internal/types"
+	"github.com/heliannuuthus/aegis/internal/types"
 )
 
 var (

@@ -5,11 +5,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
-	"github.com/heliannuuthus/helios/aegis/internal/authenticator/webauthn"
-	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/aegis/models"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/aegis/internal/authenticator/idp"
+	"github.com/heliannuuthus/aegis/internal/authenticator/webauthn"
+	"github.com/heliannuuthus/aegis/internal/types"
+	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 const (

@@ -9,8 +9,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/chaos/models"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/chaos/internal/models"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 // Service 模板服务

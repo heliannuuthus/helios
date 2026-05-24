@@ -10,7 +10,7 @@ import (
 
 	"github.com/knadh/smtppool/v2"
 
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 const (

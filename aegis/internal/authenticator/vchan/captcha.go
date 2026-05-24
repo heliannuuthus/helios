@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/heliannuuthus/helios/aegis/internal/authenticator/captcha"
-	"github.com/heliannuuthus/helios/aegis/internal/types"
+	"github.com/heliannuuthus/aegis/internal/authenticator/captcha"
+	"github.com/heliannuuthus/aegis/internal/types"
 )
 
 // TypeCaptcha captcha 渠道类型标识

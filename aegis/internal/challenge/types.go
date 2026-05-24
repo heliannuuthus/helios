@@ -5,8 +5,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/aegis/internal/types"
+	"github.com/heliannuuthus/aegis/models"
 )
 
 // ChallengeRequired 是 types.ChallengeRequired 的别名

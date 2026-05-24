@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	pkgtoken "github.com/heliannuuthus/aegis-go/utilities/token"
 
-	"github.com/heliannuuthus/helios/aegis/internal/token"
+	"github.com/heliannuuthus/aegis/internal/token"
 )
 
 // Middleware 认证中间件（用于验证 CT）

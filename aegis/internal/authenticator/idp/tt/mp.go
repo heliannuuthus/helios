@@ -17,10 +17,10 @@ import (
 	"github.com/go-json-experiment/json"
 	"github.com/tidwall/gjson"
 
-	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
-	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/aegis/models"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/aegis/internal/authenticator/idp"
+	"github.com/heliannuuthus/aegis/internal/types"
+	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 // MPProvider 抖音小程序 Provider

@@ -4,7 +4,7 @@ package vchan
 import (
 	"context"
 
-	"github.com/heliannuuthus/helios/aegis/internal/types"
+	"github.com/heliannuuthus/aegis/internal/types"
 )
 
 // Provider 验证渠道提供者接口

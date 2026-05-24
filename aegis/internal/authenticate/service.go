@@ -6,14 +6,14 @@ import (
 
 	"github.com/go-json-experiment/json"
 
-	"github.com/heliannuuthus/helios/aegis/config"
-	autherrors "github.com/heliannuuthus/helios/aegis/errors"
-	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
-	"github.com/heliannuuthus/helios/aegis/internal/cache"
-	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/aegis/models"
-	"github.com/heliannuuthus/helios/pkg/accessctl"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/aegis/config"
+	autherrors "github.com/heliannuuthus/aegis/errors"
+	"github.com/heliannuuthus/aegis/internal/authenticator"
+	"github.com/heliannuuthus/aegis/internal/cache"
+	"github.com/heliannuuthus/aegis/internal/types"
+	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/pkg/accessctl"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 // Service 认证服务
@@ -170,6 +170,12 @@ func (s *Service) buildConnectionConfig(idpCfg *models.ApplicationIDPConfig) *ty
 	}
 	if list := idpCfg.GetStrategyList(); len(list) > 0 {
 		cfg.Strategy = list
+	}
+	if list := idpCfg.GetDelegateList(); len(list) > 0 {
+		cfg.Delegate = list
+	}
+	if list := idpCfg.GetRequireList(); len(list) > 0 {
+		cfg.Require = list
 	}
 	return cfg
 }

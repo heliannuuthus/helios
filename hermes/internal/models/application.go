@@ -1,0 +1,221 @@
+package models
+
+import (
+	"errors"
+	"net/url"
+	"strings"
+	"time"
+
+	"github.com/go-json-experiment/json"
+
+	"github.com/heliannuuthus/pkg/logger"
+)
+
+// Application 应用（控制 id_token、refresh_token 有效期；access_token 由服务控制）
+type Application struct {
+	// 主键
+	ID uint `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
+	// 业务字段
+	DomainID                      string  `gorm:"column:domain_id;size:32;not null" json:"domain_id"`
+	AppID                         string  `gorm:"column:app_id;size:64;not null;uniqueIndex" json:"app_id"`
+	Name                          string  `gorm:"column:name;size:128;not null" json:"name"`
+	Description                   *string `gorm:"column:description;size:512" json:"description,omitempty"`
+	LogoURL                       *string `gorm:"column:logo_url;size:512" json:"logo_url,omitempty"`
+	AllowedRedirectURIs           *string `gorm:"column:redirect_uris;size:2048" json:"allowed_redirect_uris,omitempty"`
+	AllowedOrigins                *string `gorm:"column:allowed_origins;size:1024" json:"allowed_origins,omitempty"`
+	AllowedLogoutURIs             *string `gorm:"column:allowed_logout_uris;size:1024" json:"allowed_logout_uris,omitempty"`
+	IDTokenExpiresIn              uint    `gorm:"column:id_token_expires_in;not null;default:3600" json:"id_token_expires_in"`
+	RefreshTokenExpiresIn         uint    `gorm:"column:refresh_token_expires_in;not null;default:604800" json:"refresh_token_expires_in"`
+	RefreshTokenAbsoluteExpiresIn uint    `gorm:"column:refresh_token_absolute_expires_in;not null;default:0" json:"refresh_token_absolute_expires_in"`
+	// 时间戳
+	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null" json:"updated_at"`
+}
+
+func (Application) TableName() string { return "t_application" }
+
+func (a Application) PrimaryKey() uint { return a.ID }
+
+// ApplicationIDPConfig 应用 IDP 配置 + 可选凭证覆盖
+type ApplicationIDPConfig struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
+	AppID     string    `gorm:"column:app_id;size:64;not null" json:"app_id"`
+	Type      string    `gorm:"column:type;size:32;not null" json:"type"`
+	Priority  int       `gorm:"column:priority;not null;default:0" json:"priority"`
+	Strategy  *string   `gorm:"column:strategy;size:256" json:"strategy,omitempty"`
+	Delegate  *string   `gorm:"column:delegate;size:256" json:"delegate,omitempty"`
+	Require   *string   `gorm:"column:require;size:256" json:"require,omitempty"`
+	TAppID    *string   `gorm:"column:t_app_id;size:256" json:"t_app_id,omitempty"`
+	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at;not null" json:"updated_at"`
+}
+
+func (ApplicationIDPConfig) TableName() string { return "t_application_idp_config" }
+
+func (a *ApplicationIDPConfig) GetStrategyList() []string {
+	if a.Strategy == nil || *a.Strategy == "" {
+		return nil
+	}
+	return strings.Split(*a.Strategy, ",")
+}
+
+// ApplicationServiceRelation 应用服务关系
+type ApplicationServiceRelation struct {
+	ID        uint      `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
+	AppID     string    `gorm:"column:app_id;size:64;not null" json:"app_id"`
+	ServiceID string    `gorm:"column:service_id;size:32;not null;index" json:"service_id"`
+	Relation  string    `gorm:"column:relation;size:32;not null;default:*" json:"relation"`
+	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
+}
+
+func (ApplicationServiceRelation) TableName() string { return "t_application_service_relation" }
+
+// ==================== Application URI 方法 ====================
+
+// GetAllowedRedirectURIs 解析允许的重定向 URI 列表
+func (a *Application) GetAllowedRedirectURIs() []string {
+	if a.AllowedRedirectURIs == nil || *a.AllowedRedirectURIs == "" {
+		return nil
+	}
+	var uris []string
+	if err := json.Unmarshal([]byte(*a.AllowedRedirectURIs), &uris); err != nil {
+		logger.Warnf("[Application] unmarshal allowed redirect uris failed: %v", err)
+		return nil
+	}
+	return uris
+}
+
+// ValidateAllowedRedirectURI 验证重定向 URI 是否在允许列表中（规范化后比较）
+func (a *Application) ValidateAllowedRedirectURI(uri string) bool {
+	normalizedURI := normalizeURI(uri)
+	for _, allowed := range a.GetAllowedRedirectURIs() {
+		if normalizeURI(allowed) == normalizedURI {
+			return true
+		}
+	}
+	return false
+}
+
+// GetAllowedLogoutURIs 解析登出后允许跳转的 URI 列表
+func (a *Application) GetAllowedLogoutURIs() []string {
+	if a.AllowedLogoutURIs == nil || *a.AllowedLogoutURIs == "" {
+		return nil
+	}
+	var uris []string
+	if err := json.Unmarshal([]byte(*a.AllowedLogoutURIs), &uris); err != nil {
+		logger.Warnf("[Application] unmarshal allowed logout uris failed: %v", err)
+		return nil
+	}
+	return uris
+}
+
+// ValidateAllowedLogoutURI 验证登出后跳转 URI 是否在允许列表中
+func (a *Application) ValidateAllowedLogoutURI(uri string) bool {
+	normalizedURI := normalizeURI(uri)
+	for _, allowed := range a.GetAllowedLogoutURIs() {
+		if normalizeURI(allowed) == normalizedURI {
+			return true
+		}
+	}
+	return false
+}
+
+// ErrLogoutURINotConfigured allowed_logout_uris 未配置
+var ErrLogoutURINotConfigured = errors.New("allowed_logout_uris not configured")
+
+// ResolveLogoutRedirect 解析登出后跳转 URL。仅匹配 allowed_logout_uris，未配置或未匹配则返回错误。
+func (a *Application) ResolveLogoutRedirect(returnTo, referer string) (string, error) {
+	allowed := a.GetAllowedLogoutURIs()
+	if len(allowed) == 0 {
+		return "", ErrLogoutURINotConfigured
+	}
+	try := func(uri string) string {
+		u, err := url.Parse(uri)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return ""
+		}
+		if a.ValidateAllowedLogoutURI(uri) {
+			return uri
+		}
+		return ""
+	}
+	if returnTo != "" {
+		if r := try(returnTo); r != "" {
+			return r, nil
+		}
+	}
+	if referer != "" {
+		if r := try(referer); r != "" {
+			return r, nil
+		}
+	}
+	return "", errors.New("return_to or referer does not match allowed_logout_uris")
+}
+
+// GetAllowedOrigins 解析允许的跨域源列表
+func (a *Application) GetAllowedOrigins() []string {
+	if a.AllowedOrigins == nil || *a.AllowedOrigins == "" {
+		return nil
+	}
+	var origins []string
+	if err := json.Unmarshal([]byte(*a.AllowedOrigins), &origins); err != nil {
+		logger.Warnf("[Application] unmarshal allowed origins failed: %v", err)
+		return nil
+	}
+	return origins
+}
+
+// ValidateOrigin 验证请求来源是否允许
+func (a *Application) ValidateOrigin(origin string) bool {
+	allowedOrigins := a.GetAllowedOrigins()
+	if len(allowedOrigins) == 0 {
+		return true
+	}
+	normalizedOrigin := normalizeOrigin(origin)
+	for _, allowed := range allowedOrigins {
+		if normalizeOrigin(allowed) == normalizedOrigin {
+			return true
+		}
+		if allowed == "*" {
+			return true
+		}
+	}
+	return false
+}
+
+// ==================== URI 规范化辅助函数 ====================
+
+func normalizeURI(uri string) string {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return uri
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
+	if (u.Scheme == "https" && u.Port() == "443") ||
+		(u.Scheme == "http" && u.Port() == "80") {
+		u.Host = u.Hostname()
+	}
+	u.Path = strings.TrimSuffix(u.Path, "/")
+	if u.Path == "" {
+		u.Path = "/"
+	}
+	if u.RawQuery == "" {
+		u.ForceQuery = false
+	}
+	return u.String()
+}
+
+func normalizeOrigin(origin string) string {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return strings.ToLower(origin)
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
+	if (u.Scheme == "https" && u.Port() == "443") ||
+		(u.Scheme == "http" && u.Port() == "80") {
+		u.Host = u.Hostname()
+	}
+	return u.Scheme + "://" + u.Host
+}

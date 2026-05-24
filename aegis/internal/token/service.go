@@ -11,8 +11,8 @@ import (
 	"github.com/heliannuuthus/aegis-go/utilities/key"
 	tokendef "github.com/heliannuuthus/aegis-go/utilities/token"
 
-	"github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/aegis/internal/cache"
+	"github.com/heliannuuthus/aegis/config"
+	"github.com/heliannuuthus/aegis/internal/cache"
 )
 
 // Service is the token service that handles issuing and verifying all token types.

@@ -9,9 +9,9 @@ import (
 
 	"gorm.io/gorm"
 
-	baseconfig "github.com/heliannuuthus/helios/pkg/config"
-	pkgdb "github.com/heliannuuthus/helios/pkg/database"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	baseconfig "github.com/heliannuuthus/pkg/config"
+	pkgdb "github.com/heliannuuthus/pkg/database"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 var (
@@ -56,6 +56,26 @@ func InitDB() *gorm.DB {
 		hermesDB = db
 	})
 	return hermesDB
+}
+
+// ==================== IDP 默认配置 ====================
+
+// GetIDPDefaultDelegate 获取 IDP 类型的默认 delegate（逗号分隔字符串，无配置返回 nil）
+func GetIDPDefaultDelegate(idpType string) *string {
+	v := Cfg().GetString("idp-defaults." + idpType + ".delegate")
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+// GetIDPDefaultRequire 获取 IDP 类型的默认 require（逗号分隔字符串，无配置返回 nil）
+func GetIDPDefaultRequire(idpType string) *string {
+	v := Cfg().GetString("idp-defaults." + idpType + ".require")
+	if v == "" {
+		return nil
+	}
+	return &v
 }
 
 // ==================== 域签名密钥 ====================
