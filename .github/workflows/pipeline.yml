@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   ci:
-    uses: heliannuuthus/hephaestus/.github/workflows/ci-golang-service.yml@codex/ci-go-workspace-service
+    uses: heliannuuthus/hephaestus/.github/workflows/ci-golang-service.yml@ci/go-workspace-autodetect
 
   containerize:
     if: github.event_name == 'push'
