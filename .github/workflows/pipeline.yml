@@ -10,6 +10,9 @@ on:
 permissions:
   contents: read
 
+env:
+  AEGIS_GO_REF: 1c3920cbce94591b0f6d23af7eaa35b452e2b591
+
 jobs:
   setup:
     name: ci / setup
@@ -37,6 +40,10 @@ jobs:
           go-version-file: go.work
           cache: true
           cache-dependency-path: "**/go.sum"
+      - name: Prepare local aegis-go modules
+        run: |
+          git clone https://github.com/heliannuuthus/aegis-go.git ../aegis-go
+          git -C ../aegis-go checkout "$AEGIS_GO_REF"
       - uses: golangci/golangci-lint-action@v7
         with:
           version: latest
@@ -75,9 +82,13 @@ jobs:
           go-version-file: go.work
           cache: true
           cache-dependency-path: "**/go.sum"
+      - name: Prepare local aegis-go modules
+        run: |
+          git clone https://github.com/heliannuuthus/aegis-go.git ../aegis-go
+          git -C ../aegis-go checkout "$AEGIS_GO_REF"
       - uses: bufbuild/buf-setup-action@v1
       - name: Run generate
-        run: make check-generate
+        run: make SHELL=/bin/bash check-generate
       - name: Check for uncommitted changes
         run: |
           if [ -n "$(git status --porcelain)" ]; then
@@ -102,8 +113,14 @@ jobs:
           go-version-file: go.work
           cache: true
           cache-dependency-path: "**/go.sum"
+      - name: Prepare local aegis-go modules
+        run: |
+          git clone https://github.com/heliannuuthus/aegis-go.git ../aegis-go
+          git -C ../aegis-go checkout "$AEGIS_GO_REF"
       - name: Build binaries
-        run: make build
+        run: make SHELL=/bin/bash build
+      - name: Test
+        run: make SHELL=/bin/bash test
       - id: version
         name: Extract version
         run: |
