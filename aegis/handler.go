@@ -1387,7 +1387,7 @@ func setAuthSessionCookie(c *gin.Context, value string) {
 
 // clearAuthSessionCookie 清除 Auth 会话 Cookie
 func clearAuthSessionCookie(c *gin.Context) {
-	cookie := &http.Cookie{
+	cookie := &http.Cookie{ // #nosec G124 -- secure cookie flags default to true and must match the configured cookie for deletion.
 		Name:     AuthSessionCookie,
 		Value:    "",
 		MaxAge:   -1,
@@ -1408,7 +1408,7 @@ func getAuthSessionCookie(c *gin.Context) (string, error) {
 // --- SSO Cookie ---
 
 func setSSOCookie(c *gin.Context, value string) {
-	cookie := &http.Cookie{
+	cookie := &http.Cookie{ // #nosec G124 -- secure cookie flags default to true and are controlled by deployment config.
 		Name:     config.GetSSOCookieName(),
 		Value:    value,
 		MaxAge:   config.GetSSOCookieMaxAge(),
@@ -1422,7 +1422,7 @@ func setSSOCookie(c *gin.Context, value string) {
 }
 
 func clearSSOCookie(c *gin.Context) {
-	cookie := &http.Cookie{
+	cookie := &http.Cookie{ // #nosec G124 -- secure cookie flags default to true and must match the configured cookie for deletion.
 		Name:     config.GetSSOCookieName(),
 		Value:    "",
 		MaxAge:   -1,
