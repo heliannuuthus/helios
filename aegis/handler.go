@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
 	aegisguard "github.com/heliannuuthus/aegis-go/guard"
 	pkgtoken "github.com/heliannuuthus/aegis-go/utilities/token"
-
 	"github.com/heliannuuthus/aegis/config"
 	autherrors "github.com/heliannuuthus/aegis/errors"
 	"github.com/heliannuuthus/aegis/internal/authenticate"

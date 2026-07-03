@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	chaos "github.com/heliannuuthus/chaos/internal"
 	chaosconfig "github.com/heliannuuthus/chaos/config"
+	chaos "github.com/heliannuuthus/chaos/internal"
 	"github.com/heliannuuthus/pkg/config"
 	"github.com/heliannuuthus/pkg/logger"
 )

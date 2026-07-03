@@ -6,11 +6,11 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	hermesv1 "github.com/heliannuuthus/proto/gen/proto/hermes/v1"
 	hermes "github.com/heliannuuthus/hermes/internal"
 	"github.com/heliannuuthus/hermes/internal/dto"
 	"github.com/heliannuuthus/hermes/internal/models"
 	"github.com/heliannuuthus/pkg/pagination"
+	hermesv1 "github.com/heliannuuthus/proto/gen/proto/hermes/v1"
 )
 
 type userServiceServer struct {

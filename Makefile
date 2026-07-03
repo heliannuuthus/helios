@@ -80,7 +80,7 @@ proto:
 
 swag:
 	go install github.com/swaggo/swag/cmd/swag@latest
-	cd aegis && swag init --parseDependency --parseInternal
+	cd zwei && swag init --parseDependency --parseInternal --generalInfo main.go --output ../docs
 
 check-generate: generate
 	@if [ -n "$$(git status --porcelain proto/gen/)" ]; then \

@@ -3,14 +3,14 @@ package chaos
 import (
 	"fmt"
 
-	"github.com/heliannuuthus/aegis-go/guard"
 	"gorm.io/gorm"
 
+	"github.com/heliannuuthus/aegis-go/guard"
 	"github.com/heliannuuthus/chaos/config"
 	"github.com/heliannuuthus/chaos/internal/mail"
+	"github.com/heliannuuthus/chaos/internal/models"
 	"github.com/heliannuuthus/chaos/internal/storage"
 	"github.com/heliannuuthus/chaos/internal/template"
-	"github.com/heliannuuthus/chaos/internal/models"
 	"github.com/heliannuuthus/pkg/logger"
 )
 

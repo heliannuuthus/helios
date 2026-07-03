@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	pasetokit "github.com/heliannuuthus/aegis-go/utilities/paseto"
-
 	"github.com/heliannuuthus/aegis/config"
 	"github.com/heliannuuthus/aegis/models"
 )

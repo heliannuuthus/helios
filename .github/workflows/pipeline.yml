@@ -11,23 +11,122 @@ permissions:
   contents: read
 
 jobs:
-  ci:
-    uses: heliannuuthus/hephaestus/.github/workflows/ci-golang-service.yml@main
-    with:
-      ENTRANCE: "."
-      generate-commands: |
-        go install github.com/google/wire/cmd/wire@latest
-        go install github.com/swaggo/swag/cmd/swag@latest
-        wire ./...
-        swag init --parseDependency --parseInternal
+  setup:
+    name: ci / setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache: true
+          cache-dependency-path: "**/go.sum"
+
+  lint:
+    name: ci / lint
+    needs: [setup]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache: true
+          cache-dependency-path: "**/go.sum"
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          working-directory: proto
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          working-directory: pkg
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          working-directory: hermes
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          working-directory: aegis
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          working-directory: zwei
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          working-directory: chaos
+
+  check-generate:
+    name: ci / check-generate
+    needs: [setup]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache: true
+          cache-dependency-path: "**/go.sum"
+      - uses: bufbuild/buf-setup-action@v1
+      - name: Run generate
+        run: make check-generate
+      - name: Check for uncommitted changes
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::Generated code is out of date. Run make generate locally and commit the changes."
+            git diff
+            git status
+            exit 1
+          fi
+
+  build:
+    name: ci / build
+    needs: [lint, check-generate]
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache: true
+          cache-dependency-path: "**/go.sum"
+      - name: Build binaries
+        run: make build
+      - id: version
+        name: Extract version
+        run: |
+          exact_tag=$(git tag --points-at HEAD --sort=-v:refname | grep '^v' | head -n 1 || true)
+          if [ -n "$exact_tag" ]; then
+            version="${exact_tag#v}"
+          else
+            latest_tag=$(git tag --sort=-v:refname | grep '^v' | head -n 1 || echo "v0.1.0")
+            version="${latest_tag#v}-$(git rev-parse --short HEAD)"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: targets
+          path: bin/
 
   containerize:
     if: github.event_name == 'push'
-    needs: [ci]
+    needs: [build]
     uses: heliannuuthus/hephaestus/.github/workflows/ci-containerize.yml@main
     with:
-      version: ${{ needs.ci.outputs.version }}
-      targets: build/
+      version: ${{ needs.build.outputs.version }}
+      targets: bin/
     permissions:
       contents: read
       packages: write

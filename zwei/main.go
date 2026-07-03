@@ -7,10 +7,19 @@ import (
 
 	"github.com/heliannuuthus/pkg/config"
 	"github.com/heliannuuthus/pkg/logger"
-	zwei "github.com/heliannuuthus/zwei/internal"
 	zweiconfig "github.com/heliannuuthus/zwei/config"
+	zwei "github.com/heliannuuthus/zwei/internal"
 )
 
+// @title Helios API
+// @version 1.0
+// @description Helios 统一后端 API - 提供认证、业务和身份与访问管理服务
+// @host localhost:18000
+// @BasePath /api
+// @securityDefinitions.apikey Bearer
+// @in header
+// @name Authorization
+// @description 输入 "Bearer {token}"
 func main() {
 	config.LoadConfig()
 	config.LoadZwei()

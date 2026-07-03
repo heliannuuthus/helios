@@ -6,17 +6,17 @@ import (
 	"net"
 
 	"github.com/gin-gonic/gin"
+	"google.golang.org/grpc"
+
 	"github.com/heliannuuthus/aegis-go/guard"
 	reqr "github.com/heliannuuthus/aegis-go/guard/requirement"
 	"github.com/heliannuuthus/aegis-go/utilities/relation"
-	"google.golang.org/grpc"
-
-	hermesv1 "github.com/heliannuuthus/proto/gen/proto/hermes/v1"
-	hermes "github.com/heliannuuthus/hermes/internal"
 	hermesconfig "github.com/heliannuuthus/hermes/config"
+	hermes "github.com/heliannuuthus/hermes/internal"
 	hermesgrpc "github.com/heliannuuthus/hermes/internal/grpc"
 	"github.com/heliannuuthus/pkg/config"
 	"github.com/heliannuuthus/pkg/logger"
+	hermesv1 "github.com/heliannuuthus/proto/gen/proto/hermes/v1"
 )
 
 func main() {
