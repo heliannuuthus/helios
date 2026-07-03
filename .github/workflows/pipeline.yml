@@ -19,17 +19,8 @@ jobs:
       prepare-commands: |
         git clone https://github.com/heliannuuthus/aegis-go.git ../aegis-go
         git -C ../aegis-go checkout 1c3920cbce94591b0f6d23af7eaa35b452e2b591
-      lint-commands: |
-        for dir in proto pkg hermes aegis zwei chaos; do
-          echo "::group::Linting module: $dir"
-          (cd "$dir" && golangci-lint run ./...)
-          echo "::endgroup::"
-        done
-      generate-commands: |
-        go install github.com/bufbuild/buf/cmd/buf@latest
-        make SHELL=/bin/bash check-generate
-      build-commands: make SHELL=/bin/bash build
-      test-commands: make SHELL=/bin/bash test
+      install-buf: true
+      generate-target: check-generate
       artifact-path: bin/
 
   containerize:
