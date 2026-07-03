@@ -13,15 +13,6 @@ permissions:
 jobs:
   ci:
     uses: heliannuuthus/hephaestus/.github/workflows/ci-golang-service.yml@codex/ci-go-workspace-service
-    with:
-      go-version-file: go.work
-      cache-dependency-path: "**/go.sum"
-      prepare-commands: |
-        git clone https://github.com/heliannuuthus/aegis-go.git ../aegis-go
-        git -C ../aegis-go checkout 1c3920cbce94591b0f6d23af7eaa35b452e2b591
-      install-buf: true
-      generate-target: check-generate
-      artifact-path: bin/
 
   containerize:
     if: github.event_name == 'push'
