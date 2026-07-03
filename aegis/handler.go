@@ -1372,7 +1372,7 @@ func (h *Handler) flowErrorResponse(c *gin.Context, flow *types.AuthFlow) {
 // 使用 http.SetCookie 以支持 SameSite 属性
 // SameSite=None 允许跨站请求携带 Cookie（OAuth 场景需要），必须配合 Secure=true
 func setAuthSessionCookie(c *gin.Context, value string) {
-	cookie := &http.Cookie{
+	cookie := &http.Cookie{ // #nosec G124 -- secure cookie flags default to true and are controlled by deployment config.
 		Name:     AuthSessionCookie,
 		Value:    value,
 		MaxAge:   config.GetCookieMaxAge(),
