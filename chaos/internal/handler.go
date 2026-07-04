@@ -5,10 +5,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/pkg/aegis/guard"
+	reqr "github.com/heliannuuthus/pkg/aegis/guard/requirement"
+	"github.com/heliannuuthus/pkg/aegis/utilities/relation"
 
-	"github.com/heliannuuthus/aegis-go/guard"
-	reqr "github.com/heliannuuthus/aegis-go/guard/requirement"
-	"github.com/heliannuuthus/aegis-go/utilities/relation"
 	"github.com/heliannuuthus/chaos/internal/mail"
 	"github.com/heliannuuthus/chaos/internal/models"
 	"github.com/heliannuuthus/chaos/internal/storage"

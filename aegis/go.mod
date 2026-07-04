@@ -8,9 +8,6 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
 	github.com/go-webauthn/webauthn v0.15.0
-	github.com/heliannuuthus/aegis-go/guard v0.0.1
-	github.com/heliannuuthus/aegis-go/service v0.0.0
-	github.com/heliannuuthus/aegis-go/utilities v0.0.1
 	github.com/heliannuuthus/pkg v0.0.0
 	github.com/heliannuuthus/proto v0.0.0
 	github.com/pquerna/otp v1.5.0
@@ -92,9 +89,6 @@ require (
 )
 
 replace (
-	github.com/heliannuuthus/aegis-go/guard => ../../aegis-go/guard
-	github.com/heliannuuthus/aegis-go/service => ../../aegis-go/service
-	github.com/heliannuuthus/aegis-go/utilities => ../../aegis-go/utilities
 	github.com/heliannuuthus/pkg => ../pkg
 	github.com/heliannuuthus/proto => ../proto
 )

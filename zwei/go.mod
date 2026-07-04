@@ -6,8 +6,6 @@ require (
 	github.com/dgraph-io/ristretto/v2 v2.4.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-json-experiment/json v0.0.0-20260214004413-d219187c3433
-	github.com/heliannuuthus/aegis-go/guard v0.0.1
-	github.com/heliannuuthus/aegis-go/utilities v0.0.1
 	github.com/heliannuuthus/pkg v0.0.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/sashabaranov/go-openai v1.41.2
@@ -36,7 +34,6 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
-	github.com/heliannuuthus/aegis-go/service v0.0.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
@@ -70,9 +67,4 @@ require (
 	gorm.io/driver/mysql v1.6.0 // indirect
 )
 
-replace (
-	github.com/heliannuuthus/aegis-go/guard => ../../aegis-go/guard
-	github.com/heliannuuthus/aegis-go/service => ../../aegis-go/service
-	github.com/heliannuuthus/aegis-go/utilities => ../../aegis-go/utilities
-	github.com/heliannuuthus/pkg => ../pkg
-)
+replace github.com/heliannuuthus/pkg => ../pkg

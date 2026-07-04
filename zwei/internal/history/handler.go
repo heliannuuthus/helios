@@ -5,9 +5,9 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/pkg/aegis/guard"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/aegis-go/guard"
 	"github.com/heliannuuthus/zwei/internal/dto"
 )
 

@@ -3,9 +3,9 @@ package chaos
 import (
 	"fmt"
 
+	"github.com/heliannuuthus/pkg/aegis/guard"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/aegis-go/guard"
 	"github.com/heliannuuthus/chaos/config"
 	"github.com/heliannuuthus/chaos/internal/mail"
 	"github.com/heliannuuthus/chaos/internal/models"

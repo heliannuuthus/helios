@@ -96,9 +96,9 @@ clean:
 
 docker-build:
 ifdef SERVICE
-	$(CTR) build -f Dockerfile --build-arg SERVICE=$(SERVICE) -t $(SERVICE):$(IMAGE_TAG) -t $(SERVICE):latest ..
+	$(CTR) build -f Dockerfile --build-arg SERVICE=$(SERVICE) -t $(SERVICE):$(IMAGE_TAG) -t $(SERVICE):latest .
 else
-	@$(foreach svc,$(SERVICES),$(CTR) build -f Dockerfile --build-arg SERVICE=$(svc) -t $(svc):$(IMAGE_TAG) -t $(svc):latest .. &&) true
+	@$(foreach svc,$(SERVICES),$(CTR) build -f Dockerfile --build-arg SERVICE=$(svc) -t $(svc):$(IMAGE_TAG) -t $(svc):latest . &&) true
 endif
 
 # ── dev-check ────────────────────────────────────────

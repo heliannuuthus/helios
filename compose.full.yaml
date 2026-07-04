@@ -1,8 +1,8 @@
 services:
   hermes:
     build:
-      context: ..
-      dockerfile: helios/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       args:
         SERVICE: hermes
     container_name: helios-hermes
@@ -24,8 +24,8 @@ services:
 
   aegis:
     build:
-      context: ..
-      dockerfile: helios/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       args:
         SERVICE: aegis
     container_name: helios-aegis
@@ -48,8 +48,8 @@ services:
 
   zwei:
     build:
-      context: ..
-      dockerfile: helios/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       args:
         SERVICE: zwei
     container_name: helios-zwei
@@ -70,8 +70,8 @@ services:
 
   chaos:
     build:
-      context: ..
-      dockerfile: helios/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       args:
         SERVICE: chaos
     container_name: helios-chaos
@@ -93,6 +93,8 @@ services:
   gateway:
     image: nginx:alpine
     container_name: helios-gateway
+    ports:
+      - "80:80"
     volumes:
       - ./environments/gateway/nginx.conf:/etc/nginx/nginx.conf:ro
     extra_hosts:

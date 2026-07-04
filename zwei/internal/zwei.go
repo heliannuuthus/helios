@@ -2,11 +2,11 @@ package zwei
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/pkg/aegis/guard"
+	reqr "github.com/heliannuuthus/pkg/aegis/guard/requirement"
+	"github.com/heliannuuthus/pkg/aegis/utilities/relation"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/aegis-go/guard"
-	reqr "github.com/heliannuuthus/aegis-go/guard/requirement"
-	"github.com/heliannuuthus/aegis-go/utilities/relation"
 	zweiconfig "github.com/heliannuuthus/zwei/config"
 	"github.com/heliannuuthus/zwei/internal/favorite"
 	"github.com/heliannuuthus/zwei/internal/history"

@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	pasetokit "github.com/heliannuuthus/aegis-go/utilities/paseto"
+	pasetokit "github.com/heliannuuthus/pkg/aegis/utilities/paseto"
+
 	"github.com/heliannuuthus/aegis/config"
 	"github.com/heliannuuthus/aegis/models"
 )

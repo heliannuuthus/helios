@@ -4,7 +4,8 @@ import (
 	"context"
 	"strings"
 
-	tokendef "github.com/heliannuuthus/aegis-go/utilities/token"
+	tokendef "github.com/heliannuuthus/pkg/aegis/utilities/token"
+
 	"github.com/heliannuuthus/aegis/config"
 	autherrors "github.com/heliannuuthus/aegis/errors"
 	"github.com/heliannuuthus/aegis/internal/authenticator"

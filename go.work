@@ -2,9 +2,9 @@ go 1.26
 
 use (
 	./aegis
-	./proto
 	./chaos
 	./hermes
 	./pkg
+	./proto
 	./zwei
 )

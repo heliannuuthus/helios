@@ -6,14 +6,14 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/pkg/aegis/guard"
+	"github.com/heliannuuthus/pkg/aegis/utilities/key"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/heliannuuthus/aegis"
-	"github.com/heliannuuthus/aegis-go/guard"
-	"github.com/heliannuuthus/aegis-go/utilities/key"
 	aegisconfig "github.com/heliannuuthus/aegis/config"
 	"github.com/heliannuuthus/aegis/iris"
 	irisconfig "github.com/heliannuuthus/aegis/iris/config"

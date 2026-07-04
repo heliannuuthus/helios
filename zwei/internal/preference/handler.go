@@ -4,10 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/pkg/aegis/guard"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/aegis-go/guard"
 	"github.com/heliannuuthus/pkg/logger"
 	"github.com/heliannuuthus/zwei/internal/tag"
 )

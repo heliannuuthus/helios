@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/heliannuuthus/aegis-go/utilities/key"
+	"github.com/heliannuuthus/pkg/aegis/utilities/key"
+
 	"github.com/heliannuuthus/aegis/config"
 	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/authenticate"

@@ -5,8 +5,7 @@ import (
 
 	"aidanwoods.dev/go-paseto"
 	"github.com/go-json-experiment/json"
-
-	pkgtoken "github.com/heliannuuthus/aegis-go/utilities/token"
+	pkgtoken "github.com/heliannuuthus/pkg/aegis/utilities/token"
 )
 
 const (

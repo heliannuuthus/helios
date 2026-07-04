@@ -1,7 +1,7 @@
 package token
 
 import (
-	pkgtoken "github.com/heliannuuthus/aegis-go/utilities/token"
+	pkgtoken "github.com/heliannuuthus/pkg/aegis/utilities/token"
 )
 
 // 类型别名（便于 internal 包使用）

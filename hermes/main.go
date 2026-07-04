@@ -6,11 +6,11 @@ import (
 	"net"
 
 	"github.com/gin-gonic/gin"
+	"github.com/heliannuuthus/pkg/aegis/guard"
+	reqr "github.com/heliannuuthus/pkg/aegis/guard/requirement"
+	"github.com/heliannuuthus/pkg/aegis/utilities/relation"
 	"google.golang.org/grpc"
 
-	"github.com/heliannuuthus/aegis-go/guard"
-	reqr "github.com/heliannuuthus/aegis-go/guard/requirement"
-	"github.com/heliannuuthus/aegis-go/utilities/relation"
 	hermesconfig "github.com/heliannuuthus/hermes/config"
 	hermes "github.com/heliannuuthus/hermes/internal"
 	hermesgrpc "github.com/heliannuuthus/hermes/internal/grpc"
