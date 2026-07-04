@@ -4,10 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	pasetokit "github.com/heliannuuthus/pkg/aegis/utilities/paseto"
-
 	"github.com/heliannuuthus/aegis/config"
 	"github.com/heliannuuthus/aegis/models"
+	pasetokit "github.com/heliannuuthus/pkg/aegis/utilities/paseto"
 )
 
 // ==================== Hermes 数据（本地缓存 + DB）====================
