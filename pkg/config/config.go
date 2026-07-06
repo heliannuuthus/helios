@@ -12,13 +12,8 @@ import (
 )
 
 const (
-	// 配置文件名（位于 config/ 目录）
-	ConfigFile       = "base"
-	ZweiConfigFile   = "zwei"
-	HermesConfigFile = "hermes"
-	AegisConfigFile  = "aegis"
-	IrisConfigFile   = "iris"
-	ChaosConfigFile  = "chaos"
+	// 配置文件名。每个模块根目录使用 config.toml。
+	ConfigFile = "config"
 
 	// 配置名称
 	ConfigName       = "base"
@@ -69,7 +64,7 @@ func LoadZwei() {
 	if zweiCfg != nil {
 		return
 	}
-	zweiCfg = newCfg(ZweiConfigName, ZweiConfigFile)
+	zweiCfg = newCfg(ZweiConfigName, ConfigFile, "./zwei")
 }
 
 // LoadHermes 加载 Hermes 配置
@@ -77,7 +72,7 @@ func LoadHermes() {
 	if hermesCfg != nil {
 		return
 	}
-	hermesCfg = newCfg(HermesConfigName, HermesConfigFile)
+	hermesCfg = newCfg(HermesConfigName, ConfigFile, "./hermes")
 }
 
 // LoadAegis 加载 Aegis 配置
@@ -85,7 +80,7 @@ func LoadAegis() {
 	if aegisCfg != nil {
 		return
 	}
-	aegisCfg = newCfg(AegisConfigName, AegisConfigFile)
+	aegisCfg = newCfg(AegisConfigName, ConfigFile, "./aegis")
 }
 
 // LoadIris 加载 Iris 配置
@@ -93,7 +88,7 @@ func LoadIris() {
 	if irisCfg != nil {
 		return
 	}
-	irisCfg = newCfg(IrisConfigName, IrisConfigFile, "./aegis")
+	irisCfg = newCfg(IrisConfigName, ConfigFile, "./aegis")
 }
 
 // LoadChaos 加载 Chaos 配置
@@ -101,7 +96,7 @@ func LoadChaos() {
 	if chaosCfg != nil {
 		return
 	}
-	chaosCfg = newCfg(ChaosConfigName, ChaosConfigFile)
+	chaosCfg = newCfg(ChaosConfigName, ConfigFile, "./chaos")
 }
 
 // Zwei 返回 Zwei 配置单例
@@ -211,12 +206,12 @@ func newCfg(name, configFile string, extraPaths ...string) *Cfg {
 
 	v.SetConfigName(configFile)
 	v.SetConfigType("toml")
-	v.AddConfigPath(".")
-	v.AddConfigPath("./config")
-	v.AddConfigPath("./" + configFile)
 	for _, p := range extraPaths {
 		v.AddConfigPath(p)
 	}
+	v.AddConfigPath(".")
+	v.AddConfigPath("./config")
+	v.AddConfigPath("./" + configFile)
 
 	// 设置环境变量前缀和自动绑定
 	prefix := strings.ToUpper(name)

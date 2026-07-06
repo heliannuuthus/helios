@@ -3,11 +3,11 @@
 Hermes 初始化脚本
 
 功能：
-1. 生成数据库加密密钥，直接写入 hermes.toml
-2. 生成域签名密钥（48 字节 seed: 16-byte salt + 32-byte key），直接写入 hermes.toml
-3. 生成 SSO master key（48 字节 seed），直接写入 aegis.toml
-4. 生成服务密钥（48 字节 seed: 16-byte salt + 32-byte key），直接写入 hermes.toml / iris.toml
-5. 生成加密后的服务密钥，直接写入 sql/hermes/init.sql
+1. 生成数据库加密密钥，直接写入 hermes/config.toml
+2. 生成域签名密钥（48 字节 seed: 16-byte salt + 32-byte key），写入 hermes/sql/init.sql
+3. 生成 SSO master key（48 字节 seed），直接写入 aegis/config.toml
+4. 生成服务密钥（48 字节 seed: 16-byte salt + 32-byte key），写入 hermes/config.toml / aegis/config.toml
+5. 生成加密后的域 / 服务 / 应用密钥，直接写入 hermes/sql/init.sql
 6. 生成初始用户密码（随机），写入 init.sql
 
 密钥说明：
@@ -17,20 +17,18 @@ Hermes 初始化脚本
 - 32 字节原始 AES-256 密钥（仅 db.enc-key）
 - 48 字节 seed（16-byte salt + 32-byte key），通过 KDF 派生签名/加密密钥
 
-aegis.toml:
+aegis/config.toml:
   - [sso] master-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)
     通过 KDF 派生 Ed25519 签名密钥和 AES-256 加密密钥
+  - [iris] secret-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)，Iris 服务密钥
 
-hermes.toml:
+hermes/config.toml:
   - [db] enc-key: Base64 编码的 32 字节 AES-256 密钥，用于加密敏感数据
   - [aegis] secret-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)，Hermes 服务密钥
   域元数据、域允许的 IDP、域签名密钥已落库（t_domain / t_domain_idp / t_key），不再写入本配置。
 
-iris.toml:
-  - [aegis] secret-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)，服务密钥
-
-sql/hermes/init.sql:
-  - t_key: 服务密钥的密文（用 db.enc-key 加密），owner_type='service'
+hermes/sql/init.sql:
+  - t_key: 域 / 服务 / 应用密钥的密文（用 db.enc-key 加密）
 
 使用方法:
   cd scripts
@@ -69,12 +67,10 @@ except ImportError:
 
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-CONFIG_DIR = PROJECT_ROOT / "config"
-INIT_SQL_PATH = PROJECT_ROOT / "sql" / "hermes" / "init.sql"
+INIT_SQL_PATH = PROJECT_ROOT / "hermes" / "sql" / "init.sql"
 
-HERMES_TOML = CONFIG_DIR / "hermes.toml"
-AEGIS_TOML = CONFIG_DIR / "aegis.toml"
-IRIS_TOML = CONFIG_DIR / "iris.toml"
+HERMES_TOML = PROJECT_ROOT / "hermes" / "config.toml"
+AEGIS_TOML = PROJECT_ROOT / "aegis" / "config.toml"
 
 
 # ==================== 预制数据定义 ====================
@@ -339,7 +335,7 @@ SERVICE_CHALLENGE_SETTINGS = [
     ServiceChallengeSetting("iris", "passkey:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
 ]
 
-_admin_openid = secrets.token_hex(16)
+_admin_openid = "11ffa2fb5bfa3b8f8e805d88c479f306"
 
 USERS = [
     User(
@@ -408,6 +404,16 @@ class Initializer:
                 encrypted_key=b64_encode(encrypted),
             ))
 
+        for app in APPLICATIONS:
+            secret_key = generate_seed()
+            encrypted = encrypt_aes_gcm(self.db_enc_key, secret_key, app.app_id)
+            self.keys_data.append(KeyData(
+                owner_type="application",
+                owner_id=app.app_id,
+                secret_key=secret_key,
+                encrypted_key=b64_encode(encrypted),
+            ))
+
     def update_hermes_toml(self):
         """只写入 db.enc-key 与 aegis.secret-key。域元数据、域允许的 IDP、域签名密钥已落库，不写配置。"""
         doc = load_toml(HERMES_TOML)
@@ -430,16 +436,15 @@ class Initializer:
 
         save_toml(AEGIS_TOML, doc)
 
-    def update_iris_toml(self):
-        doc = load_toml(IRIS_TOML)
-
+    def update_iris_config(self):
+        doc = load_toml(AEGIS_TOML)
         iris_data = next((kd for kd in self.keys_data if kd.owner_type == "service" and kd.owner_id == "iris"), None)
         if iris_data:
-            aegis = ensure_table(doc, "aegis")
-            aegis["audience"] = "iris"
-            aegis["secret-key"] = b64url_encode(iris_data.secret_key)
+            iris = ensure_table(doc, "iris")
+            iris["audience"] = "iris"
+            iris["secret-key"] = b64url_encode(iris_data.secret_key)
 
-        save_toml(IRIS_TOML, doc)
+        save_toml(AEGIS_TOML, doc)
 
     def generate_init_sql(self) -> str:
         lines = []
@@ -481,8 +486,8 @@ class Initializer:
         lines.append("ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), logo_url = VALUES(logo_url), domain_id = VALUES(domain_id);")
         lines.append("")
 
-        lines.append("-- ==================== 域密钥 & 服务密钥 ====================")
-        lines.append("DELETE FROM t_key WHERE owner_type IN ('domain', 'service');")
+        lines.append("-- ==================== 域密钥 & 服务密钥 & 应用密钥 ====================")
+        lines.append("DELETE FROM t_key WHERE owner_type IN ('domain', 'service', 'application');")
         lines.append("INSERT INTO t_key (owner_type, owner_id, encrypted_key) VALUES")
         key_values = []
         for kd in self.keys_data:
@@ -586,7 +591,7 @@ class Initializer:
         print("  ✅ 数据库加密密钥已生成")
         print("  ✅ 域签名密钥已生成")
         print("  ✅ SSO master key 已生成")
-        print("  ✅ 服务密钥已生成并加密")
+        print("  ✅ 域 / 服务 / 应用密钥已生成并加密")
         print()
 
         print("正在写入配置文件...")
@@ -597,8 +602,8 @@ class Initializer:
         self.update_aegis_toml()
         print(f"  ✅ 已写入: {AEGIS_TOML}")
 
-        self.update_iris_toml()
-        print(f"  ✅ 已写入: {IRIS_TOML}")
+        self.update_iris_config()
+        print(f"  ✅ 已写入 Iris 配置: {AEGIS_TOML}")
 
         init_sql = self.generate_init_sql()
         INIT_SQL_PATH.write_text(init_sql, encoding="utf-8")
