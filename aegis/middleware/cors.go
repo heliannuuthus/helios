@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-json-experiment/json"
 
-	"github.com/heliannuuthus/helios/aegis/config"
-	"github.com/heliannuuthus/helios/aegis/internal/cache"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/aegis/config"
+	"github.com/heliannuuthus/aegis/internal/cache"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 const (

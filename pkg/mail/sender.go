@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/heliannuuthus/helios/pkg/logger"
-	"github.com/heliannuuthus/helios/pkg/mail/templates"
+	"github.com/heliannuuthus/pkg/logger"
+	"github.com/heliannuuthus/pkg/mail/templates"
 )
 
 // Sender 邮件发送器

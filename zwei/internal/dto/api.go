@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/heliannuuthus/helios/zwei/internal/models"
+import "github.com/heliannuuthus/zwei/internal/models"
 
 type RecipeListItem struct {
 	ID               string      `json:"id"`

@@ -9,9 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/zwei/config"
-	"github.com/heliannuuthus/helios/zwei/internal/dto"
-	"github.com/heliannuuthus/helios/zwei/internal/recipe"
+	"github.com/heliannuuthus/zwei/config"
+	"github.com/heliannuuthus/zwei/internal/dto"
+	"github.com/heliannuuthus/zwei/internal/recipe"
 )
 
 // Handler 首页处理器

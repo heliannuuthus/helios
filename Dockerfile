@@ -2,21 +2,42 @@
 
 FROM golang:1.26-alpine AS builder
 
-WORKDIR /app
+WORKDIR /src
 
 RUN apk add --no-cache gcc musl-dev
 
-COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
-
-COPY . .
-
 ARG SERVICE=hermes
+
+COPY go.work ./
+COPY proto/go.mod proto/go.sum ./proto/
+COPY pkg/go.mod pkg/go.sum ./pkg/
+COPY hermes/go.mod hermes/go.sum ./hermes/
+COPY aegis/go.mod aegis/go.sum ./aegis/
+COPY zwei/go.mod zwei/go.sum ./zwei/
+COPY chaos/go.mod chaos/go.sum ./chaos/
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    (cd proto && go mod download) && \
+    (cd pkg && go mod download) && \
+    (cd hermes && go mod download) && \
+    (cd aegis && go mod download) && \
+    (cd zwei && go mod download) && \
+    (cd chaos && go mod download)
+
+COPY proto/ ./proto/
+COPY pkg/ ./pkg/
+COPY hermes/ ./hermes/
+COPY aegis/ ./aegis/
+COPY zwei/ ./zwei/
+COPY chaos/ ./chaos/
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=1 go build -ldflags="-s -w" -o server ./cmd/${SERVICE}
+    if [ "${SERVICE}" = "aegis" ]; then \
+      cd aegis && CGO_ENABLED=1 go build -ldflags="-s -w" -o /server ./server; \
+    else \
+      cd ${SERVICE} && CGO_ENABLED=1 go build -ldflags="-s -w" -o /server .; \
+    fi
 
 FROM alpine:3.21
 
@@ -25,7 +46,7 @@ RUN apk add --no-cache ca-certificates tzdata && \
 
 WORKDIR /app
 
-COPY --from=builder /app/server .
+COPY --from=builder /server .
 
 ARG ENV=""
 ENV APP_ENV=${ENV}

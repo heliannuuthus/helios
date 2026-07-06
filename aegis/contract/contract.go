@@ -3,7 +3,7 @@ package contract
 import (
 	"context"
 
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/aegis/models"
 )
 
 type HermesProvider interface {

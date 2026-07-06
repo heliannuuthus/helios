@@ -1,0 +1,10 @@
+go 1.26
+
+use (
+	./aegis
+	./chaos
+	./hermes
+	./pkg
+	./proto
+	./zwei
+)

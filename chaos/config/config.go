@@ -1,7 +1,21 @@
 package config
 
 import (
-	baseconfig "github.com/heliannuuthus/helios/pkg/config"
+	"fmt"
+	"net/url"
+	"strings"
+	"sync"
+
+	"gorm.io/gorm"
+
+	baseconfig "github.com/heliannuuthus/pkg/config"
+	pkgdb "github.com/heliannuuthus/pkg/database"
+	"github.com/heliannuuthus/pkg/logger"
+)
+
+var (
+	chaosDB     *gorm.DB
+	chaosDBOnce sync.Once
 )
 
 // Cfg 返回 Chaos 配置单例
@@ -83,4 +97,40 @@ func GetCloudflareR2Endpoint() string {
 // GetCloudflareR2PublicURL 获取 R2 公开访问 URL
 func GetCloudflareR2PublicURL() string {
 	return Cfg().GetString("r2.domain")
+}
+
+// InitDB 初始化 Chaos 数据库连接（单例）
+func InitDB() *gorm.DB {
+	chaosDBOnce.Do(func() {
+		cfg := Cfg()
+		dsn := parseDSNFromURL(cfg.GetString("db.url"))
+
+		db, err := pkgdb.Connect(dsn, pkgdb.WithLogWriter(logger.GormWriter()))
+		if err != nil {
+			logger.Fatalf("连接 Chaos 数据库失败: %v", err)
+		}
+		logger.Infof("数据库连接成功 (chaos): %s", cfg.GetString("db.url"))
+		chaosDB = db
+	})
+	return chaosDB
+}
+
+func parseDSNFromURL(dbURL string) string {
+	if !strings.HasPrefix(dbURL, "mysql://") {
+		return dbURL
+	}
+	u, err := url.Parse(dbURL)
+	if err != nil {
+		logger.Fatalf("解析数据库 URL 失败: %v", err)
+	}
+	user := u.User.Username()
+	password, _ := u.User.Password()
+	host := u.Host
+	database := strings.TrimPrefix(u.Path, "/")
+	query := u.RawQuery
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", user, password, host, database)
+	if query != "" {
+		dsn += "?" + query
+	}
+	return dsn
 }

@@ -3,10 +3,10 @@ package user
 import (
 	"context"
 
-	"github.com/heliannuuthus/helios/aegis/contract"
-	autherrors "github.com/heliannuuthus/helios/aegis/errors"
-	"github.com/heliannuuthus/helios/aegis/internal/cache"
-	"github.com/heliannuuthus/helios/aegis/models"
+	"github.com/heliannuuthus/aegis/contract"
+	autherrors "github.com/heliannuuthus/aegis/errors"
+	"github.com/heliannuuthus/aegis/internal/cache"
+	"github.com/heliannuuthus/aegis/models"
 )
 
 // Service 用户业务服务

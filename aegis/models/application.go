@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-json-experiment/json"
 
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 // Application 应用（从 proto 转换，不含 GORM 标签）

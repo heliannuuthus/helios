@@ -5,7 +5,7 @@ import (
 
 	"github.com/panjf2000/ants/v2"
 
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 // Pool 异步任务池，封装 ants goroutine pool

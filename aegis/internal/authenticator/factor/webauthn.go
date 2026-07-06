@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/heliannuuthus/helios/aegis/internal/authenticator/webauthn"
-	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/aegis/internal/authenticator/webauthn"
+	"github.com/heliannuuthus/aegis/internal/types"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 // WebAuthnProvider WebAuthn 认证因子 Provider

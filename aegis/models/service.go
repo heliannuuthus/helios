@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-json-experiment/json"
 
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 // RateLimits 限流配置 map[window]limit

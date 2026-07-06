@@ -8,12 +8,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-json-experiment/json/jsontext"
-	"github.com/heliannuuthus/aegis-go/guard"
 
-	"github.com/heliannuuthus/helios/aegis/contract"
-	"github.com/heliannuuthus/helios/aegis/errors"
-	"github.com/heliannuuthus/helios/aegis/models"
-	"github.com/heliannuuthus/helios/pkg/patch"
+	"github.com/heliannuuthus/aegis/contract"
+	"github.com/heliannuuthus/aegis/errors"
+	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/pkg/aegis/guard"
+	"github.com/heliannuuthus/pkg/patch"
 )
 
 type ProfileHandler struct {

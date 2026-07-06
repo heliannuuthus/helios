@@ -11,24 +11,24 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	aegisguard "github.com/heliannuuthus/aegis-go/guard"
-	pkgtoken "github.com/heliannuuthus/aegis-go/utilities/token"
 
-	"github.com/heliannuuthus/helios/aegis/config"
-	autherrors "github.com/heliannuuthus/helios/aegis/errors"
-	"github.com/heliannuuthus/helios/aegis/internal/authenticate"
-	"github.com/heliannuuthus/helios/aegis/internal/authenticator"
-	"github.com/heliannuuthus/helios/aegis/internal/authenticator/idp"
-	"github.com/heliannuuthus/helios/aegis/internal/authorize"
-	"github.com/heliannuuthus/helios/aegis/internal/cache"
-	"github.com/heliannuuthus/helios/aegis/internal/challenge"
-	"github.com/heliannuuthus/helios/aegis/internal/token"
-	"github.com/heliannuuthus/helios/aegis/internal/types"
-	"github.com/heliannuuthus/helios/aegis/internal/user"
-	"github.com/heliannuuthus/helios/aegis/models"
-	"github.com/heliannuuthus/helios/pkg/async"
-	"github.com/heliannuuthus/helios/pkg/helpers"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/aegis/config"
+	autherrors "github.com/heliannuuthus/aegis/errors"
+	"github.com/heliannuuthus/aegis/internal/authenticate"
+	"github.com/heliannuuthus/aegis/internal/authenticator"
+	"github.com/heliannuuthus/aegis/internal/authenticator/idp"
+	"github.com/heliannuuthus/aegis/internal/authorize"
+	"github.com/heliannuuthus/aegis/internal/cache"
+	"github.com/heliannuuthus/aegis/internal/challenge"
+	"github.com/heliannuuthus/aegis/internal/token"
+	"github.com/heliannuuthus/aegis/internal/types"
+	"github.com/heliannuuthus/aegis/internal/user"
+	"github.com/heliannuuthus/aegis/models"
+	aegisguard "github.com/heliannuuthus/pkg/aegis/guard"
+	pkgtoken "github.com/heliannuuthus/pkg/aegis/utilities/token"
+	"github.com/heliannuuthus/pkg/async"
+	"github.com/heliannuuthus/pkg/helpers"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 // ==================== Handler 定义 ====================
@@ -1372,7 +1372,7 @@ func (h *Handler) flowErrorResponse(c *gin.Context, flow *types.AuthFlow) {
 // 使用 http.SetCookie 以支持 SameSite 属性
 // SameSite=None 允许跨站请求携带 Cookie（OAuth 场景需要），必须配合 Secure=true
 func setAuthSessionCookie(c *gin.Context, value string) {
-	cookie := &http.Cookie{
+	cookie := &http.Cookie{ // #nosec G124 -- secure cookie flags default to true and are controlled by deployment config.
 		Name:     AuthSessionCookie,
 		Value:    value,
 		MaxAge:   config.GetCookieMaxAge(),
@@ -1387,7 +1387,7 @@ func setAuthSessionCookie(c *gin.Context, value string) {
 
 // clearAuthSessionCookie 清除 Auth 会话 Cookie
 func clearAuthSessionCookie(c *gin.Context) {
-	cookie := &http.Cookie{
+	cookie := &http.Cookie{ // #nosec G124 -- secure cookie flags default to true and must match the configured cookie for deletion.
 		Name:     AuthSessionCookie,
 		Value:    "",
 		MaxAge:   -1,
@@ -1408,7 +1408,7 @@ func getAuthSessionCookie(c *gin.Context) (string, error) {
 // --- SSO Cookie ---
 
 func setSSOCookie(c *gin.Context, value string) {
-	cookie := &http.Cookie{
+	cookie := &http.Cookie{ // #nosec G124 -- secure cookie flags default to true and are controlled by deployment config.
 		Name:     config.GetSSOCookieName(),
 		Value:    value,
 		MaxAge:   config.GetSSOCookieMaxAge(),
@@ -1422,7 +1422,7 @@ func setSSOCookie(c *gin.Context, value string) {
 }
 
 func clearSSOCookie(c *gin.Context) {
-	cookie := &http.Cookie{
+	cookie := &http.Cookie{ // #nosec G124 -- secure cookie flags default to true and must match the configured cookie for deletion.
 		Name:     config.GetSSOCookieName(),
 		Value:    "",
 		MaxAge:   -1,

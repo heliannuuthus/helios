@@ -4,7 +4,8 @@ import (
 	"fmt"
 
 	"aidanwoods.dev/go-paseto"
-	pkgtoken "github.com/heliannuuthus/aegis-go/utilities/token"
+
+	pkgtoken "github.com/heliannuuthus/pkg/aegis/utilities/token"
 )
 
 const ClaimNickname = "nic"

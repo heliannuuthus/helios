@@ -179,7 +179,7 @@ func (b *Builder) HasBinding() bool
 Requirement 相关的所有类型和函数定义在 `web/requirement` 子包中（`pkg/aegis/web/requirement`），`web` 包通过别名引用：
 
 ```go
-import reqr "github.com/heliannuuthus/helios/pkg/aegis/web/requirement"
+import reqr "github.com/heliannuuthus/pkg/aegis/web/requirement"
 ```
 
 ### Requirement 接口
@@ -322,17 +322,17 @@ pkg/aegis/
 `web` 包通过别名引用 requirement 子包：
 
 ```go
-import reqr "github.com/heliannuuthus/helios/pkg/aegis/web/requirement"
+import reqr "github.com/heliannuuthus/pkg/aegis/web/requirement"
 ```
 
 ## 使用示例
 
 ```go
 import (
-    "github.com/heliannuuthus/helios/pkg/aegis/utils/relation"
-    "github.com/heliannuuthus/helios/pkg/aegis/web"
-    reqr "github.com/heliannuuthus/helios/pkg/aegis/web/requirement"
-    "github.com/heliannuuthus/helios/pkg/aegis/web/guard"
+    "github.com/heliannuuthus/pkg/aegis/utils/relation"
+    "github.com/heliannuuthus/pkg/aegis/web"
+    reqr "github.com/heliannuuthus/pkg/aegis/web/requirement"
+    "github.com/heliannuuthus/pkg/aegis/web/guard"
 )
 
 // 初始化

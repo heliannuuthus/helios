@@ -3,7 +3,7 @@ package hermes
 import (
 	"google.golang.org/grpc"
 
-	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
+	hermesv1 "github.com/heliannuuthus/proto/gen/proto/hermes/v1"
 )
 
 type Client struct {

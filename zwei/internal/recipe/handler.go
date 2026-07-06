@@ -7,10 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/pkg/helpers"
-	"github.com/heliannuuthus/helios/pkg/patch"
-	"github.com/heliannuuthus/helios/zwei/internal/dto"
-	"github.com/heliannuuthus/helios/zwei/internal/models"
+	"github.com/heliannuuthus/pkg/helpers"
+	"github.com/heliannuuthus/pkg/patch"
+	"github.com/heliannuuthus/zwei/internal/dto"
+	"github.com/heliannuuthus/zwei/internal/models"
 )
 
 // Handler 菜谱处理器

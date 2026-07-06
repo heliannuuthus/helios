@@ -5,10 +5,10 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"github.com/heliannuuthus/aegis-go/guard"
 	"gorm.io/gorm"
 
-	"github.com/heliannuuthus/helios/zwei/internal/dto"
+	"github.com/heliannuuthus/pkg/aegis/guard"
+	"github.com/heliannuuthus/zwei/internal/dto"
 )
 
 // Handler 收藏处理器

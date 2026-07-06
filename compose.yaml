@@ -13,10 +13,10 @@ services:
     volumes:
       - helios_mysql_data:/var/lib/mysql
       - helios_mysql_logs:/var/log/mysql
-      - ./sql/hermes/schema.sql:/docker-entrypoint-initdb.d/01-hermes-schema.sql:ro
-      - ./sql/hermes/init.sql:/docker-entrypoint-initdb.d/02-hermes-init.sql:ro
-      - ./sql/zwei/schema.sql:/docker-entrypoint-initdb.d/03-zwei-schema.sql:ro
-      - ./sql/zwei/init.sql:/docker-entrypoint-initdb.d/04-zwei-init.sql:ro
+      - ./hermes/sql/schema.sql:/docker-entrypoint-initdb.d/01-hermes-schema.sql:ro
+      - ./hermes/sql/init.sql:/docker-entrypoint-initdb.d/02-hermes-init.sql:ro
+      - ./zwei/sql/schema.sql:/docker-entrypoint-initdb.d/03-zwei-schema.sql:ro
+      - ./chaos/sql/schema.sql:/docker-entrypoint-initdb.d/04-chaos-schema.sql:ro
       - ./environments/db/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
     restart: unless-stopped
     deploy:
@@ -40,124 +40,6 @@ services:
         limits:
           memory: 512m
           cpus: "0.5"
-
-  hermes:
-    build:
-      context: .
-      args:
-        SERVICE: hermes
-    container_name: helios-hermes
-    ports:
-      - "50051:50051"
-      - "8081:18000"
-    volumes:
-      - ./config:/app/config:ro
-    depends_on:
-      - db
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-          cpus: "0.5"
-
-  aegis:
-    build:
-      context: .
-      args:
-        SERVICE: aegis
-    container_name: helios-aegis
-    ports:
-      - "18000:18000"
-    volumes:
-      - ./config:/app/config:ro
-    environment:
-      HERMES_GRPC_ADDR: hermes:50051
-    depends_on:
-      - hermes
-      - cache
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-          cpus: "0.5"
-
-  zwei:
-    build:
-      context: .
-      args:
-        SERVICE: zwei
-    container_name: helios-zwei
-    ports:
-      - "18001:18000"
-    volumes:
-      - ./config:/app/config:ro
-    depends_on:
-      - db
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-          cpus: "0.5"
-
-  chaos:
-    build:
-      context: .
-      args:
-        SERVICE: chaos
-    container_name: helios-chaos
-    ports:
-      - "18002:18000"
-    volumes:
-      - ./config:/app/config:ro
-    depends_on:
-      - db
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 128m
-          cpus: "0.25"
-
-  gateway:
-    image: nginx:alpine
-    container_name: helios-gateway
-    ports: []
-    volumes:
-      - ./environments/gateway/nginx.conf:/etc/nginx/nginx.conf:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      - aegis
-      - hermes
-      - zwei
-      - chaos
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 128m
-          cpus: "0.25"
-    stop_grace_period: 10s
-
-  https-proxy:
-    image: nginx:alpine
-    container_name: helios-https-proxy
-    ports:
-      - "443:443"
-      - "80:80"
-    volumes:
-      - ./environments/https-proxy/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./environments/certs:/etc/nginx/ssl:ro
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 64m
-          cpus: "0.1"
-    stop_grace_period: 10s
 
 volumes:
   helios_redis_data:

@@ -13,13 +13,6 @@ permissions:
 jobs:
   ci:
     uses: heliannuuthus/hephaestus/.github/workflows/ci-golang-service.yml@main
-    with:
-      ENTRANCE: "."
-      generate-commands: |
-        go install github.com/google/wire/cmd/wire@latest
-        go install github.com/swaggo/swag/cmd/swag@latest
-        wire ./...
-        swag init --parseDependency --parseInternal
 
   containerize:
     if: github.event_name == 'push'
@@ -27,7 +20,7 @@ jobs:
     uses: heliannuuthus/hephaestus/.github/workflows/ci-containerize.yml@main
     with:
       version: ${{ needs.ci.outputs.version }}
-      targets: build/
+      targets: bin/
     permissions:
       contents: read
       packages: write

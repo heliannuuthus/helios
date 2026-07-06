@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	baseconfig "github.com/heliannuuthus/helios/pkg/config"
+	baseconfig "github.com/heliannuuthus/pkg/config"
 )
 
 // Aegis 配置 Key 常量

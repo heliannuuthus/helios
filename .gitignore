@@ -9,9 +9,11 @@ bin/
 # Environment
 .env
 
-# Config files (contain secrets, use config/example.toml as template)
+# Config files (contain secrets)
 config/*.toml
 !config/example.toml
+*.toml
+!**/example.toml
 
 # Database
 *.db
@@ -32,6 +34,7 @@ vendor/
 # Logs
 logs/
 *.log
+.dev/
 scripts/.env
 
 # Python
@@ -56,5 +59,11 @@ environments/certs/*.pem
 environments/certs/*.key
 environments/certs/*.crt
 !environments/certs/.gitkeep
-config.tomlhelios
-helios
+
+# Generated docs (swag output)
+docs/docs.go
+docs/swagger.json
+docs/swagger.yaml
+
+# Package manager locks
+prpm.lock

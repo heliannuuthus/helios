@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/heliannuuthus/helios/chaos/config"
-	"github.com/heliannuuthus/helios/chaos/internal/template"
-	"github.com/heliannuuthus/helios/pkg/logger"
-	pkgmail "github.com/heliannuuthus/helios/pkg/mail"
+	"github.com/heliannuuthus/chaos/config"
+	"github.com/heliannuuthus/chaos/internal/template"
+	"github.com/heliannuuthus/pkg/logger"
+	pkgmail "github.com/heliannuuthus/pkg/mail"
 )
 
 // Service 邮件服务

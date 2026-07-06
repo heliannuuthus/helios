@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/heliannuuthus/helios/aegis/internal/authenticator/webauthn"
-	"github.com/heliannuuthus/helios/aegis/models"
-	"github.com/heliannuuthus/helios/pkg/logger"
+	"github.com/heliannuuthus/aegis/internal/authenticator/webauthn"
+	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/pkg/logger"
 )
 
 // MFAService 对外暴露的 MFA 服务门面

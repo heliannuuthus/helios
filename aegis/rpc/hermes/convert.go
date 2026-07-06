@@ -3,8 +3,8 @@ package hermes
 import (
 	"encoding/json"
 
-	"github.com/heliannuuthus/helios/aegis/models"
-	hermesv1 "github.com/heliannuuthus/helios/gen/proto/hermes/v1"
+	"github.com/heliannuuthus/aegis/models"
+	hermesv1 "github.com/heliannuuthus/proto/gen/proto/hermes/v1"
 )
 
 func domainFromProto(pb *hermesv1.Domain) *models.Domain {
@@ -129,6 +129,8 @@ func idpConfigFromProto(pb *hermesv1.ApplicationIDPConfig) *models.ApplicationID
 		Type:     pb.Type,
 		Priority: int(pb.Priority),
 		Strategy: pb.Strategy,
+		Delegate: pb.Delegate,
+		Require:  pb.Require,
 	}
 }
 

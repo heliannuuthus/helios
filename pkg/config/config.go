@@ -93,7 +93,7 @@ func LoadIris() {
 	if irisCfg != nil {
 		return
 	}
-	irisCfg = newCfg(IrisConfigName, IrisConfigFile)
+	irisCfg = newCfg(IrisConfigName, IrisConfigFile, "./aegis")
 }
 
 // LoadChaos 加载 Chaos 配置
@@ -205,14 +205,18 @@ func GetLogFormat() string {
 	return format
 }
 
-// newCfg 创建新的配置实例
-func newCfg(name, configFile string) *Cfg {
+// newCfg 创建新的配置实例，extraPaths 为额外搜索目录
+func newCfg(name, configFile string, extraPaths ...string) *Cfg {
 	v := viper.New()
 
 	v.SetConfigName(configFile)
 	v.SetConfigType("toml")
 	v.AddConfigPath(".")
 	v.AddConfigPath("./config")
+	v.AddConfigPath("./" + configFile)
+	for _, p := range extraPaths {
+		v.AddConfigPath(p)
+	}
 
 	// 设置环境变量前缀和自动绑定
 	prefix := strings.ToUpper(name)

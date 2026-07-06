@@ -12,6 +12,8 @@ type ApplicationIDPConfig struct {
 	Type      string    `json:"type"`
 	Priority  int       `json:"priority"`
 	Strategy  *string   `json:"strategy,omitempty"`
+	Delegate  *string   `json:"delegate,omitempty"`
+	Require   *string   `json:"require,omitempty"`
 	TAppID    *string   `json:"t_app_id,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -23,6 +25,22 @@ func (a *ApplicationIDPConfig) GetStrategyList() []string {
 		return nil
 	}
 	return strings.Split(*a.Strategy, ",")
+}
+
+// GetDelegateList 解析 delegate 列表
+func (a *ApplicationIDPConfig) GetDelegateList() []string {
+	if a.Delegate == nil || *a.Delegate == "" {
+		return nil
+	}
+	return strings.Split(*a.Delegate, ",")
+}
+
+// GetRequireList 解析 require 列表
+func (a *ApplicationIDPConfig) GetRequireList() []string {
+	if a.Require == nil || *a.Require == "" {
+		return nil
+	}
+	return strings.Split(*a.Require, ",")
 }
 
 // ApplicationServiceRelation 应用服务关系（从 proto 转换）
