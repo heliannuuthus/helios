@@ -6,8 +6,6 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
-	"github.com/heliannuuthus/pkg/aegis/guard"
-	"github.com/heliannuuthus/pkg/aegis/utilities/key"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"google.golang.org/grpc"
@@ -19,6 +17,8 @@ import (
 	irisconfig "github.com/heliannuuthus/aegis/iris/config"
 	"github.com/heliannuuthus/aegis/middleware"
 	hermesrpc "github.com/heliannuuthus/aegis/rpc/hermes"
+	"github.com/heliannuuthus/pkg/aegis/guard"
+	"github.com/heliannuuthus/pkg/aegis/utilities/key"
 	"github.com/heliannuuthus/pkg/config"
 	"github.com/heliannuuthus/pkg/logger"
 )

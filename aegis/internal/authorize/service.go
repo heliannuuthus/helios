@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-json-experiment/json"
-	tokendef "github.com/heliannuuthus/pkg/aegis/utilities/token"
 
 	"github.com/heliannuuthus/aegis/config"
 	"github.com/heliannuuthus/aegis/contract"
@@ -22,6 +21,7 @@ import (
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/internal/user"
 	"github.com/heliannuuthus/aegis/models"
+	tokendef "github.com/heliannuuthus/pkg/aegis/utilities/token"
 	"github.com/heliannuuthus/pkg/async"
 	"github.com/heliannuuthus/pkg/helpers"
 	"github.com/heliannuuthus/pkg/logger"

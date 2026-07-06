@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	pkgtoken "github.com/heliannuuthus/pkg/aegis/utilities/token"
 
 	"github.com/heliannuuthus/aegis/internal/token"
+	pkgtoken "github.com/heliannuuthus/pkg/aegis/utilities/token"
 )
 
 // Middleware 认证中间件（用于验证 CT）

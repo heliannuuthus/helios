@@ -3,7 +3,6 @@ package chaos
 import (
 	"fmt"
 
-	"github.com/heliannuuthus/pkg/aegis/guard"
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/chaos/config"
@@ -11,6 +10,7 @@ import (
 	"github.com/heliannuuthus/chaos/internal/models"
 	"github.com/heliannuuthus/chaos/internal/storage"
 	"github.com/heliannuuthus/chaos/internal/template"
+	"github.com/heliannuuthus/pkg/aegis/guard"
 	"github.com/heliannuuthus/pkg/logger"
 )
 

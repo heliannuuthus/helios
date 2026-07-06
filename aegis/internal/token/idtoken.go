@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"aidanwoods.dev/go-paseto"
+
 	pkgtoken "github.com/heliannuuthus/pkg/aegis/utilities/token"
 )
 

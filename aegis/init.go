@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/heliannuuthus/pkg/aegis/utilities/key"
-
 	"github.com/heliannuuthus/aegis/config"
 	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/authenticate"
@@ -31,6 +29,7 @@ import (
 	"github.com/heliannuuthus/aegis/internal/token"
 	"github.com/heliannuuthus/aegis/internal/user"
 	"github.com/heliannuuthus/pkg/accessctl"
+	"github.com/heliannuuthus/pkg/aegis/utilities/key"
 	"github.com/heliannuuthus/pkg/async"
 	"github.com/heliannuuthus/pkg/logger"
 	"github.com/heliannuuthus/pkg/mail"

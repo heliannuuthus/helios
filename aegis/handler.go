@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	aegisguard "github.com/heliannuuthus/pkg/aegis/guard"
-	pkgtoken "github.com/heliannuuthus/pkg/aegis/utilities/token"
 
 	"github.com/heliannuuthus/aegis/config"
 	autherrors "github.com/heliannuuthus/aegis/errors"
@@ -26,6 +24,8 @@ import (
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/internal/user"
 	"github.com/heliannuuthus/aegis/models"
+	aegisguard "github.com/heliannuuthus/pkg/aegis/guard"
+	pkgtoken "github.com/heliannuuthus/pkg/aegis/utilities/token"
 	"github.com/heliannuuthus/pkg/async"
 	"github.com/heliannuuthus/pkg/helpers"
 	"github.com/heliannuuthus/pkg/logger"
