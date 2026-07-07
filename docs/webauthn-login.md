@@ -622,7 +622,7 @@ Challenge 验证（`challenge/service.go`）有独立的访问控制链：
 | `client_id` | string | 是 | 应用 ID |
 | `audience` | string | 是 | 目标服务 ID |
 | `type` | string | 验证类可选 | 业务场景（`login` / `bind` / `verify` 等） |
-| `channel_type` | string | 是 | 验证方式（`webauthn` / `email_otp` / `totp`） |
+| `channel_type` | string | 是 | 验证方式（`webauthn` / `email-code` / `totp`） |
 | `channel` | string | 是 | 验证目标（Passkey 登录时为空串，WebAuthn Factor 时为邮箱） |
 
 响应：
@@ -665,7 +665,7 @@ WebAuthn 类型的响应会额外包含 `options`（`PublicKeyCredentialRequestO
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `type` | string | 是 | 当前提交的验证类型（`webauthn` / `captcha` / `email_otp`） |
+| `type` | string | 是 | 当前提交的验证类型（`webauthn` / `captcha` / `email-code`） |
 | `proof` | any | 是 | 验证证明（WebAuthn 为 assertion JSON 字符串，OTP 为验证码） |
 
 响应（验证成功）：
@@ -767,12 +767,11 @@ Staff Delegate（WebAuthn/Email OTP）登录请求：
 
 #### `POST /user/mfa` — 设置 MFA（WebAuthn 注册）
 
-**Begin 阶段**请求：
+请求：
 
 ```json
 {
-  "type": "webauthn",
-  "action": "begin"
+  "type": "webauthn"
 }
 ```
 
@@ -781,19 +780,18 @@ Staff Delegate（WebAuthn/Email OTP）登录请求：
 ```json
 {
   "type": "webauthn",
-  "action": "begin",
-  "options": { "publicKey": { "...PublicKeyCredentialCreationOptions..." } },
-  "challenge_id": "ch_xxx"
+  "uid": "ch_xxx",
+  "options": { "publicKey": { "...PublicKeyCredentialCreationOptions..." } }
 }
 ```
 
-**Finish 阶段**请求：
+#### `POST /user/mfa/:uid` — 完成 MFA 创建
+
+WebAuthn/Passkey 的 `:uid` 使用 `POST /user/mfa` 返回的 `uid`：
 
 ```json
 {
   "type": "webauthn",
-  "action": "finish",
-  "challenge_id": "ch_xxx",
   "credential": { "id": "...", "rawId": "...", "type": "public-key", "response": { "...attestation..." } }
 }
 ```
@@ -803,33 +801,30 @@ Staff Delegate（WebAuthn/Email OTP）登录请求：
 ```json
 {
   "type": "webauthn",
-  "action": "finish",
   "success": true,
   "credential_id": "base64url_credential_id"
 }
 ```
 
-#### `PUT /user/mfa` — 验证 MFA（WebAuthn 验证）
+TOTP 的 `:uid` 使用 `POST /user/mfa` 返回的 `uid`：
 
-**Begin 阶段**请求：
+初始化响应：
 
 ```json
 {
-  "type": "webauthn",
-  "action": "begin"
+  "type": "totp",
+  "uid": "ch_xxx",
+  "secret": "BASE32SECRET",
+  "otpauth_uri": "otpauth://totp/..."
 }
 ```
 
-响应（同 Setup Begin，但 `options` 中 `allowCredentials` 包含用户已注册的凭证）。
-
-**Finish 阶段**请求：
+完成请求：
 
 ```json
 {
-  "type": "webauthn",
-  "action": "finish",
-  "challenge_id": "ch_xxx",
-  "credential": { "id": "...", "rawId": "...", "type": "public-key", "response": { "...assertion..." } }
+  "type": "totp",
+  "code": "123456"
 }
 ```
 
@@ -837,10 +832,8 @@ Staff Delegate（WebAuthn/Email OTP）登录请求：
 
 ```json
 {
-  "type": "webauthn",
-  "action": "finish",
-  "success": true,
-  "openid": "u_xxx"
+  "type": "totp",
+  "success": true
 }
 ```
 

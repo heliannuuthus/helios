@@ -17,6 +17,7 @@ type UserCredential struct {
 	OpenID       string     `json:"openid"`
 	CredentialID *string    `json:"credential_id,omitempty"`
 	Type         string     `json:"type"`
+	Label        string     `json:"label"`
 	Enabled      bool       `json:"enabled"`
 	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
@@ -49,6 +50,7 @@ type WebAuthnSecret struct {
 type CredentialSummary struct {
 	ID           uint       `json:"id"`
 	Type         string     `json:"type"`
+	Label        string     `json:"label"`
 	CredentialID string     `json:"credential_id,omitempty"`
 	Enabled      bool       `json:"enabled"`
 	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`

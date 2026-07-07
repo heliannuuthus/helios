@@ -2,6 +2,7 @@ package factor
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/heliannuuthus/aegis/internal/authenticator/webauthn"
@@ -36,10 +37,6 @@ func (p *WebAuthnProvider) Initiate(_ context.Context, _ *types.Challenge) error
 // params[0]: channel (string) - user_id（未使用，但统一传入）
 // params[1]: challengeID (string)
 func (p *WebAuthnProvider) Verify(ctx context.Context, proof string, params ...any) (bool, error) {
-	if p.webauthnSvc == nil {
-		return false, fmt.Errorf("webauthn service not configured")
-	}
-
 	if proof == "" {
 		return false, fmt.Errorf("webauthn assertion is required")
 	}
@@ -64,7 +61,8 @@ func (p *WebAuthnProvider) Verify(ctx context.Context, proof string, params ...a
 
 	// 更新凭证签名计数
 	if credential != nil {
-		if err := p.webauthnSvc.UpdateCredentialSignCount(ctx, string(credential.ID), credential.Authenticator.SignCount); err != nil {
+		credentialID := base64.RawURLEncoding.EncodeToString(credential.ID)
+		if err := p.webauthnSvc.UpdateCredentialSignCount(ctx, credentialID, credential.Authenticator.SignCount); err != nil {
 			logger.Warnf("[WebAuthn Factor] UpdateCredentialSignCount failed: %v", err)
 		}
 	}
@@ -74,11 +72,8 @@ func (p *WebAuthnProvider) Verify(ctx context.Context, proof string, params ...a
 
 // Prepare 准备前端公开配置
 func (p *WebAuthnProvider) Prepare() *types.ConnectionConfig {
-	cfg := &types.ConnectionConfig{
+	return &types.ConnectionConfig{
 		Connection: TypeWebAuthn,
+		Identifier: p.webauthnSvc.GetRPID(),
 	}
-	if p.webauthnSvc != nil {
-		cfg.Identifier = p.webauthnSvc.GetRPID()
-	}
-	return cfg
 }

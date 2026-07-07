@@ -61,22 +61,22 @@ ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), 
 
 -- ==================== 应用 IDP 配置 ====================
 INSERT INTO t_application_idp_config (app_id, `type`, priority, strategy, delegate, `require`) VALUES
-('atlas', 'staff', 10, 'password', 'email_otp,webauthn', 'captcha'),
+('atlas', 'staff', 10, 'password', 'email-code,webauthn', 'captcha'),
 ('atlas', 'google', 5, NULL, NULL, NULL),
 ('atlas', 'github', 5, NULL, NULL, NULL),
-('zwei', 'staff', 10, 'password', 'email_otp,webauthn', 'captcha'),
+('zwei', 'staff', 10, 'password', 'email-code,webauthn', 'captcha'),
 ('zwei', 'google', 5, NULL, NULL, NULL),
 ('zwei', 'github', 5, NULL, NULL, NULL),
-('hermes', 'staff', 10, 'password', 'email_otp,webauthn', 'captcha'),
+('hermes', 'staff', 10, 'password', 'email-code,webauthn', 'captcha'),
 ('hermes', 'google', 5, NULL, NULL, NULL),
 ('hermes', 'github', 5, NULL, NULL, NULL),
-('chaos', 'staff', 10, 'password', 'email_otp,webauthn', 'captcha'),
+('chaos', 'staff', 10, 'password', 'email-code,webauthn', 'captcha'),
 ('chaos', 'google', 5, NULL, NULL, NULL),
 ('chaos', 'github', 5, NULL, NULL, NULL),
-('piris', 'staff', 10, 'password', 'email_otp,webauthn', 'captcha'),
+('piris', 'staff', 10, 'password', 'email-code,webauthn', 'captcha'),
 ('piris', 'google', 5, NULL, NULL, NULL),
 ('piris', 'github', 5, NULL, NULL, NULL),
-('ciris', 'user', 10, 'password', 'sms_otp', NULL),
+('ciris', 'user', 10, 'password', 'sms-code', NULL),
 ('ciris', 'wxmp', 5, NULL, NULL, NULL),
 ('ciris', 'wechat', 5, NULL, NULL, NULL)
 ON DUPLICATE KEY UPDATE priority = VALUES(priority), strategy = VALUES(strategy), delegate = VALUES(delegate), `require` = VALUES(`require`);

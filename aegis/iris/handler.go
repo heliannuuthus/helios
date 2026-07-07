@@ -313,23 +313,16 @@ func (h *Handler) GetMFAStatus(c *gin.Context) {
 
 // SetupMFARequest 设置 MFA 请求
 type SetupMFARequest struct {
-	Type   string `json:"type" binding:"required,oneof=totp webauthn passkey"`
-	Action string `json:"action,omitempty"` // "begin" 或 "finish"（WebAuthn 专用）
+	Type string `json:"type" binding:"required,oneof=totp webauthn passkey"`
 
 	// TOTP 专用
 	AppName string `json:"app_name,omitempty"`
-
-	// WebAuthn finish 阶段专用
-	ChallengeID string `json:"challenge_id,omitempty"` // begin 返回的 challenge_id
-
-	// WebAuthn attestation response（finish 阶段，前端序列化的 PublicKeyCredential）
-	Credential jsontext.Value `json:"credential,omitempty"`
 }
 
 // SetupMFA POST /user/mfa
-// 设置 MFA
+// 初始化 MFA 凭证
 // - TOTP: 直接返回 secret 和 otpauth_uri
-// - WebAuthn: action=begin 返回 options，action=finish 完成注册
+// - WebAuthn/Passkey: 返回创建凭证所需的 options 和 uid
 func (h *Handler) SetupMFA(c *gin.Context) {
 	openid := getOpenID(c)
 	if openid == "" {
@@ -356,53 +349,54 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"type":          "totp",
-			"credential_id": resp.CredentialID,
-			"secret":        resp.Secret,
-			"otpauth_uri":   resp.OTPAuthURI,
+			"type":        "totp",
+			"uid":         resp.UID,
+			"secret":      resp.Secret,
+			"otpauth_uri": resp.OTPAuthURI,
 		})
 
 	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		h.setupWebAuthn(c, openid, req.Type, req.Action, req.ChallengeID, req.Credential)
+		h.beginWebAuthnRegistration(c, openid, req.Type)
 
 	default:
 		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
 	}
 }
 
-// VerifyMFARequest 验证 MFA 请求
-type VerifyMFARequest struct {
-	Type   string `json:"type" binding:"required,oneof=totp webauthn passkey"`
-	Action string `json:"action,omitempty"` // "begin" 或 "finish"（WebAuthn 专用）
+// CompleteMFARequest 完成 MFA 凭证创建请求
+type CompleteMFARequest struct {
+	Type string `json:"type" binding:"required,oneof=totp webauthn passkey"`
 
 	// TOTP 专用
-	CredentialID uint   `json:"credential_id,omitempty"`
-	Code         string `json:"code,omitempty"`
-	Confirm      bool   `json:"confirm,omitempty"` // 首次绑定确认
+	Code string `json:"code,omitempty"`
 
-	// WebAuthn finish 阶段专用
-	ChallengeID string         `json:"challenge_id,omitempty"`
-	Credential  jsontext.Value `json:"credential,omitempty"` // assertion response JSON
+	// WebAuthn/Passkey 专用
+	Credential jsontext.Value `json:"credential,omitempty"`
 }
 
-// VerifyMFA PUT /user/mfa
-// 验证 MFA
-// - TOTP: 直接验证 code
-// - WebAuthn: action=begin 返回 options，action=finish 完成验证
-func (h *Handler) VerifyMFA(c *gin.Context) {
+// CompleteMFA POST /user/mfa/:uid
+// 完成 MFA 凭证创建
+// - TOTP: 用验证码确认绑定
+// - WebAuthn/Passkey: 用 attestation credential 完成注册
+func (h *Handler) CompleteMFA(c *gin.Context) {
 	openid := getOpenID(c)
 	if openid == "" {
 		errorResponse(c, autherrors.NewInvalidToken("not authenticated"))
 		return
 	}
 
-	var req VerifyMFARequest
+	var req CompleteMFARequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return
 	}
 
 	ctx := c.Request.Context()
+	uid := c.Param("uid")
+	if uid == "" {
+		errorResponse(c, autherrors.NewInvalidRequest("uid is required"))
+		return
+	}
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
@@ -410,35 +404,19 @@ func (h *Handler) VerifyMFA(c *gin.Context) {
 			errorResponse(c, autherrors.NewInvalidRequest("code is required"))
 			return
 		}
-
-		if req.Confirm {
-			if req.CredentialID == 0 {
-				errorResponse(c, autherrors.NewInvalidRequest("credential_id is required for confirm"))
-				return
-			}
-			err := h.credentialSvc.ConfirmTOTP(ctx, &models.ConfirmTOTPRequest{
-				OpenID:       openid,
-				CredentialID: req.CredentialID,
-				Code:         req.Code,
-			})
-			if err != nil {
-				errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-				return
-			}
-		} else {
-			err := h.credentialSvc.VerifyTOTP(ctx, &models.VerifyTOTPRequest{
-				OpenID: openid,
-				Code:   req.Code,
-			})
-			if err != nil {
-				errorResponse(c, autherrors.NewAccessDenied(err.Error()))
-				return
-			}
+		err := h.credentialSvc.ConfirmTOTP(ctx, &models.ConfirmTOTPRequest{
+			OpenID: openid,
+			UID:    uid,
+			Code:   req.Code,
+		})
+		if err != nil {
+			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+			return
 		}
 		c.JSON(http.StatusOK, gin.H{"type": "totp", "success": true})
 
 	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		h.verifyWebAuthn(c, openid, req.Type, req.Action, req.ChallengeID, req.Credential)
+		h.finishWebAuthnRegistration(c, openid, req.Type, uid, req.Credential)
 
 	default:
 		errorResponse(c, autherrors.NewInvalidRequest("unsupported credential type"))
@@ -450,6 +428,7 @@ type UpdateMFARequest struct {
 	Type         string `json:"type" binding:"required,oneof=totp webauthn passkey"`
 	CredentialID string `json:"credential_id,omitempty"`
 	Enabled      *bool  `json:"enabled"`
+	Label        string `json:"label,omitempty"`
 }
 
 // UpdateMFA PATCH /user/mfa
@@ -467,8 +446,8 @@ func (h *Handler) UpdateMFA(c *gin.Context) {
 		return
 	}
 
-	if req.Enabled == nil {
-		errorResponse(c, autherrors.NewInvalidRequest("enabled is required"))
+	if req.Enabled == nil && req.Label == "" {
+		errorResponse(c, autherrors.NewInvalidRequest("enabled or label is required"))
 		return
 	}
 
@@ -476,6 +455,10 @@ func (h *Handler) UpdateMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
+		if req.Enabled == nil {
+			errorResponse(c, autherrors.NewInvalidRequest("enabled is required for totp"))
+			return
+		}
 		err := h.credentialSvc.SetTOTPEnabled(ctx, openid, *req.Enabled)
 		if err != nil {
 			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
@@ -487,10 +470,19 @@ func (h *Handler) UpdateMFA(c *gin.Context) {
 			errorResponse(c, autherrors.NewInvalidRequest("credential_id is required"))
 			return
 		}
-		err := h.credentialSvc.SetWebAuthnEnabled(ctx, openid, req.CredentialID, *req.Enabled)
-		if err != nil {
-			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-			return
+		if req.Label != "" {
+			err := h.credentialSvc.RenameWebAuthn(ctx, openid, req.CredentialID, req.Label)
+			if err != nil {
+				errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+				return
+			}
+		}
+		if req.Enabled != nil {
+			err := h.credentialSvc.SetWebAuthnEnabled(ctx, openid, req.CredentialID, *req.Enabled)
+			if err != nil {
+				errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+				return
+			}
 		}
 
 	default:
@@ -551,120 +543,49 @@ func (h *Handler) DeleteMFA(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-// setupWebAuthn 处理 WebAuthn 设置流程
-func (h *Handler) setupWebAuthn(c *gin.Context, openID, credType, action, challengeID string, credentialJSON jsontext.Value) {
-	if !h.mfaSvc.WebAuthnEnabled() {
-		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
+// beginWebAuthnRegistration 发起 WebAuthn/Passkey MFA 凭证注册
+func (h *Handler) beginWebAuthnRegistration(c *gin.Context, openID, credType string) {
+	ctx := c.Request.Context()
+
+	user, err := h.userSvc.GetDecryptedUserByOpenID(ctx, openID)
+	if err != nil {
+		errorResponse(c, autherrors.NewNotFound("user not found"))
+		return
+	}
+	resp, err := h.mfaSvc.BeginWebAuthnRegistration(ctx, user)
+	if err != nil {
+		errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	switch action {
-	case "", "begin":
-		user, err := h.userSvc.GetDecryptedUserByOpenID(ctx, openID)
-		if err != nil {
-			errorResponse(c, autherrors.NewNotFound("user not found"))
-			return
-		}
-
-		resp, err := h.mfaSvc.BeginWebAuthnRegistration(ctx, user)
-		if err != nil {
-			errorResponse(c, autherrors.NewServerError(err.Error()))
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"type":         credType,
-			"action":       "begin",
-			"options":      resp.Options,
-			"challenge_id": resp.ChallengeID,
-		})
-
-	case "finish":
-		if challengeID == "" {
-			errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required for finish"))
-			return
-		}
-
-		if len(credentialJSON) == 0 {
-			errorResponse(c, autherrors.NewInvalidRequest("credential data is required for finish"))
-			return
-		}
-		c.Request.Body = io.NopCloser(bytes.NewReader(credentialJSON))
-
-		credInfo, err := h.mfaSvc.FinishWebAuthnRegistration(ctx, openID, challengeID, c.Request)
-		if err != nil {
-			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"type":          credType,
-			"action":        "finish",
-			"success":       true,
-			"credential_id": encodeCredentialID(credInfo.ID),
-		})
-
-	default:
-		errorResponse(c, autherrors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
-	}
+	c.JSON(http.StatusOK, gin.H{
+		"type":    credType,
+		"uid":     resp.ChallengeID,
+		"options": resp.Options,
+	})
 }
 
-// verifyWebAuthn 处理 WebAuthn 验证流程
-func (h *Handler) verifyWebAuthn(c *gin.Context, openID, credType, action, challengeID string, credentialJSON jsontext.Value) {
-	if !h.mfaSvc.WebAuthnEnabled() {
-		errorResponse(c, autherrors.NewServerError("webauthn not enabled"))
+// finishWebAuthnRegistration 完成 WebAuthn/Passkey MFA 凭证注册
+func (h *Handler) finishWebAuthnRegistration(c *gin.Context, openID, credType, uid string, credentialJSON jsontext.Value) {
+	if uid == "" {
+		errorResponse(c, autherrors.NewInvalidRequest("uid is required"))
+		return
+	}
+	if len(credentialJSON) == 0 {
+		errorResponse(c, autherrors.NewInvalidRequest("credential data is required"))
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	switch action {
-	case "", "begin":
-		user, err := h.userSvc.GetDecryptedUserByOpenID(ctx, openID)
-		if err != nil {
-			errorResponse(c, autherrors.NewNotFound("user not found"))
-			return
-		}
-
-		resp, err := h.mfaSvc.BeginWebAuthnVerification(ctx, user)
-		if err != nil {
-			errorResponse(c, autherrors.NewServerError(err.Error()))
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"type":         credType,
-			"action":       "begin",
-			"options":      resp.Options,
-			"challenge_id": resp.ChallengeID,
-		})
-
-	case "finish":
-		if challengeID == "" {
-			errorResponse(c, autherrors.NewInvalidRequest("challenge_id is required for finish"))
-			return
-		}
-
-		if len(credentialJSON) == 0 {
-			errorResponse(c, autherrors.NewInvalidRequest("credential data is required for finish"))
-			return
-		}
-		openid, _, err := h.mfaSvc.FinishWebAuthnVerification(ctx, challengeID, credentialJSON)
-		if err != nil {
-			errorResponse(c, autherrors.NewAccessDenied(err.Error()))
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"type":    credType,
-			"action":  "finish",
-			"success": true,
-			"openid":  openid,
-		})
-
-	default:
-		errorResponse(c, autherrors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
+	c.Request.Body = io.NopCloser(bytes.NewReader(credentialJSON))
+	credInfo, err := h.mfaSvc.FinishWebAuthnRegistration(c.Request.Context(), openID, uid, c.Request)
+	if err != nil {
+		errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		return
 	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"type":          credType,
+		"success":       true,
+		"credential_id": encodeCredentialID(credInfo.ID),
+	})
 }

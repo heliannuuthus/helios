@@ -208,6 +208,7 @@ func (s *userServiceServer) CreateCredential(ctx context.Context, req *hermesv1.
 	cred := &models.UserCredential{
 		OpenID:  req.GetOpenid(),
 		Type:    req.GetType(),
+		Label:   req.GetLabel(),
 		Enabled: true,
 		Secret:  req.GetSecret(),
 	}
@@ -249,6 +250,9 @@ func (s *userServiceServer) UpdateCredential(ctx context.Context, req *hermesv1.
 	if req.Secret != nil {
 		updates["secret"] = *req.Secret
 	}
+	if req.Label != nil {
+		updates["label"] = req.GetLabel()
+	}
 	if req.LastUsedAt != nil {
 		updates["last_used_at"] = req.LastUsedAt.AsTime()
 	}
@@ -289,6 +293,9 @@ func (s *userServiceServer) UpdateCredentialByInternalID(ctx context.Context, re
 	}
 	if req.Secret != nil {
 		updates["secret"] = req.GetSecret()
+	}
+	if req.Label != nil {
+		updates["label"] = req.GetLabel()
 	}
 	if req.LastUsedAt != nil {
 		updates["last_used_at"] = req.GetLastUsedAt().AsTime()
@@ -476,6 +483,7 @@ func userCredentialToProto(c *models.UserCredential) *hermesv1.UserCredential {
 		Openid:       c.OpenID,
 		CredentialId: c.CredentialID,
 		Type:         c.Type,
+		Label:        c.Label,
 		Enabled:      credentialProtoEnabled(c),
 		Secret:       c.Secret,
 		CreatedAt:    timestamppb.New(c.CreatedAt),

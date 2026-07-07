@@ -18,16 +18,16 @@ type TOTPSetupRequest struct {
 
 // TOTPSetupResponse TOTP 设置响应
 type TOTPSetupResponse struct {
-	Secret       string `json:"secret"`
-	OTPAuthURI   string `json:"otpauth_uri"`
-	CredentialID uint   `json:"credential_id"`
+	UID        string `json:"uid"`
+	Secret     string `json:"secret"`
+	OTPAuthURI string `json:"otpauth_uri"`
 }
 
 // ConfirmTOTPRequest TOTP 确认请求
 type ConfirmTOTPRequest struct {
-	OpenID       string
-	CredentialID uint
-	Code         string
+	OpenID string
+	UID    string
+	Code   string
 }
 
 // VerifyTOTPRequest TOTP 验证请求

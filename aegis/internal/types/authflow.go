@@ -227,7 +227,7 @@ type ConnectionConfig struct {
 	Secret     string         `json:"-"`                   // 私有密钥（不序列化到 Redis / API）
 	Identifier string         `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
 	Strategy   []string       `json:"strategy,omitzero"`   // 认证方式
-	Delegate   []string       `json:"delegate,omitzero"`   // 可替代主认证的独立验证方式（如 email_otp, totp），与 Strategy 同级
+	Delegate   []string       `json:"delegate,omitzero"`   // 可替代主认证的独立验证方式（如 email-code, totp），与 Strategy 同级
 	Require    []string       `json:"require,omitzero"`    // 前置条件
 	Verified   bool           `json:"verified,omitempty"`  // 运行时：是否已通过验证
 }
@@ -430,10 +430,10 @@ func (f *AuthFlow) GetExtra(key string) string {
 // type 通过 ConnectionsMap 的 key 隐含，不再序列化到每个 item
 type Connection struct {
 	Type       ConnectionType `json:"-"`                   // 连接类型（idp / vchan / factor），仅内部分组用
-	Connection string         `json:"connection"`          // 标识（github, google, wxmp, user, staff, email_otp, totp, captcha...）
+	Connection string         `json:"connection"`          // 标识（github, google, wxmp, user, staff, email-code, totp, captcha...）
 	Identifier string         `json:"identifier,omitzero"` // 公开标识（client_id / site_key / rp_id）
 	Strategy   []string       `json:"strategy,omitzero"`   // 认证方式（user/staff: password, webauthn; captcha: turnstile; 其余忽略）
-	Delegate   []string       `json:"delegate,omitzero"`   // 可替代主认证的独立验证方式（totp, email_otp）
+	Delegate   []string       `json:"delegate,omitzero"`   // 可替代主认证的独立验证方式（totp, email-code）
 	Require    []string       `json:"require,omitzero"`    // 前置条件（captcha）
 }
 

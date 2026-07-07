@@ -365,6 +365,7 @@ func (s *Service) SaveCredential(ctx context.Context, openid string, credential 
 		OpenID:       openid,
 		CredentialID: &credentialID,
 		Type:         string(models.CredentialTypeWebAuthn),
+		Label:        InferCredentialLabel(credential),
 		Secret:       secretJSON,
 		Enabled:      true,
 	}

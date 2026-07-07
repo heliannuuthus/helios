@@ -298,22 +298,22 @@ APPLICATIONS = [
 ]
 
 APP_IDP_CONFIGS = [
-    AppIdpConfig("atlas", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("atlas", "staff", priority=10, strategy="password", delegate="email-code,webauthn", require="captcha"),
     AppIdpConfig("atlas", "google", priority=5),
     AppIdpConfig("atlas", "github", priority=5),
-    AppIdpConfig("zwei", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("zwei", "staff", priority=10, strategy="password", delegate="email-code,webauthn", require="captcha"),
     AppIdpConfig("zwei", "google", priority=5),
     AppIdpConfig("zwei", "github", priority=5),
-    AppIdpConfig("hermes", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("hermes", "staff", priority=10, strategy="password", delegate="email-code,webauthn", require="captcha"),
     AppIdpConfig("hermes", "google", priority=5),
     AppIdpConfig("hermes", "github", priority=5),
-    AppIdpConfig("chaos", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("chaos", "staff", priority=10, strategy="password", delegate="email-code,webauthn", require="captcha"),
     AppIdpConfig("chaos", "google", priority=5),
     AppIdpConfig("chaos", "github", priority=5),
-    AppIdpConfig("piris", "staff", priority=10, strategy="password", delegate="email_otp,webauthn", require="captcha"),
+    AppIdpConfig("piris", "staff", priority=10, strategy="password", delegate="email-code,webauthn", require="captcha"),
     AppIdpConfig("piris", "google", priority=5),
     AppIdpConfig("piris", "github", priority=5),
-    AppIdpConfig("ciris", "user", priority=10, strategy="password", delegate="sms_otp"),
+    AppIdpConfig("ciris", "user", priority=10, strategy="password", delegate="sms-code"),
     AppIdpConfig("ciris", "wxmp", priority=5),
     AppIdpConfig("ciris", "wechat", priority=5),
 ]

@@ -7,7 +7,7 @@ import (
 )
 
 // ChannelType 验证方式（系统定义）
-// 命名规范：{delivery}_{method}（如 email_otp, sms_otp），与数据库及前端保持一致
+// 对外使用 kebab-case 名称（如 email-code）。
 type ChannelType string
 
 const (
@@ -15,11 +15,11 @@ const (
 	ChannelTypeCaptcha ChannelType = "captcha" // 人机验证（Turnstile）
 
 	// 验证类（支持 Type 业务场景配置）
-	ChannelTypeEmailOTP ChannelType = "email_otp" // 邮箱 OTP
-	ChannelTypeTOTP     ChannelType = "totp"      // TOTP 动态口令（Authenticator App）
-	ChannelTypeSmsOTP   ChannelType = "sms_otp"   // 短信 OTP
-	ChannelTypeTgOTP    ChannelType = "tg_otp"    // Telegram OTP
-	ChannelTypeWebAuthn ChannelType = "webauthn"  // WebAuthn/Passkey
+	ChannelTypeEmailOTP ChannelType = "email-code"    // 邮箱验证码
+	ChannelTypeTOTP     ChannelType = "totp"          // TOTP 动态口令（Authenticator App）
+	ChannelTypeSmsOTP   ChannelType = "sms-code"      // 短信验证码
+	ChannelTypeTgOTP    ChannelType = "telegram-code" // Telegram 验证码
+	ChannelTypeWebAuthn ChannelType = "webauthn"      // WebAuthn/Passkey
 
 	// 交换类（平台固定能力，不需要 Type）
 	ChannelTypeWechatMP ChannelType = "wechat-mp" // 微信小程序换手机号
@@ -51,8 +51,8 @@ func (t ChannelType) IsExchange() bool {
 //
 // 设计说明：
 // - sub: 完成验证的 principal
-//   - email_otp → 邮箱地址
-//   - sms_otp → 手机号
+//   - email-code → 邮箱地址
+//   - sms-code → 手机号
 //   - totp → 用户 OpenID
 //   - webauthn → credential ID
 //   - wechat-mp → 手机号（交换得到）

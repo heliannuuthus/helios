@@ -1075,6 +1075,7 @@ type UserCredential struct {
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	Secret        string                 `protobuf:"bytes,9,opt,name=secret,proto3" json:"secret,omitempty"` // 加密后的密文（gRPC 内部传输，不暴露给前端）
+	Label         string                 `protobuf:"bytes,10,opt,name=label,proto3" json:"label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1172,6 +1173,13 @@ func (x *UserCredential) GetSecret() string {
 	return ""
 }
 
+func (x *UserCredential) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
 type UserCredentialList struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Credentials   []*UserCredential      `protobuf:"bytes,1,rep,name=credentials,proto3" json:"credentials,omitempty"`
@@ -1222,6 +1230,7 @@ type CreateCredentialRequest struct {
 	CredentialId  *string                `protobuf:"bytes,2,opt,name=credential_id,json=credentialId,proto3,oneof" json:"credential_id,omitempty"`
 	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	Secret        string                 `protobuf:"bytes,4,opt,name=secret,proto3" json:"secret,omitempty"`
+	Label         string                 `protobuf:"bytes,5,opt,name=label,proto3" json:"label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1284,6 +1293,13 @@ func (x *CreateCredentialRequest) GetSecret() string {
 	return ""
 }
 
+func (x *CreateCredentialRequest) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
 type GetCredentialsByTypeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Openid        string                 `protobuf:"bytes,1,opt,name=openid,proto3" json:"openid,omitempty"`
@@ -1341,6 +1357,7 @@ type UpdateCredentialRequest struct {
 	CredentialId  string                 `protobuf:"bytes,1,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
 	Secret        *string                `protobuf:"bytes,2,opt,name=secret,proto3,oneof" json:"secret,omitempty"`
 	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=last_used_at,json=lastUsedAt,proto3,oneof" json:"last_used_at,omitempty"`
+	Label         *string                `protobuf:"bytes,4,opt,name=label,proto3,oneof" json:"label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1394,6 +1411,13 @@ func (x *UpdateCredentialRequest) GetLastUsedAt() *timestamppb.Timestamp {
 		return x.LastUsedAt
 	}
 	return nil
+}
+
+func (x *UpdateCredentialRequest) GetLabel() string {
+	if x != nil && x.Label != nil {
+		return *x.Label
+	}
+	return ""
 }
 
 type UpdateCredentialSignCountRequest struct {
@@ -1558,6 +1582,7 @@ type UpdateCredentialByInternalIDRequest struct {
 	Enabled       *bool                  `protobuf:"varint,2,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
 	Secret        *string                `protobuf:"bytes,3,opt,name=secret,proto3,oneof" json:"secret,omitempty"`
 	LastUsedAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_used_at,json=lastUsedAt,proto3,oneof" json:"last_used_at,omitempty"`
+	Label         *string                `protobuf:"bytes,5,opt,name=label,proto3,oneof" json:"label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1618,6 +1643,13 @@ func (x *UpdateCredentialByInternalIDRequest) GetLastUsedAt() *timestamppb.Times
 		return x.LastUsedAt
 	}
 	return nil
+}
+
+func (x *UpdateCredentialByInternalIDRequest) GetLabel() string {
+	if x != nil && x.Label != nil {
+		return *x.Label
+	}
+	return ""
 }
 
 type OpenIDResponse struct {
@@ -2195,7 +2227,7 @@ const file_hermes_v1_user_proto_rawDesc = "" +
 	"\n" +
 	"\b_picture\":\n" +
 	"\x13CredentialIDRequest\x12#\n" +
-	"\rcredential_id\x18\x01 \x01(\tR\fcredentialId\"\x84\x03\n" +
+	"\rcredential_id\x18\x01 \x01(\tR\fcredentialId\"\x9a\x03\n" +
 	"\x0eUserCredential\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x16\n" +
 	"\x06openid\x18\x02 \x01(\tR\x06openid\x12(\n" +
@@ -2208,27 +2240,32 @@ const file_hermes_v1_user_proto_rawDesc = "" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x16\n" +
-	"\x06secret\x18\t \x01(\tR\x06secretB\x10\n" +
+	"\x06secret\x18\t \x01(\tR\x06secret\x12\x14\n" +
+	"\x05label\x18\n" +
+	" \x01(\tR\x05labelB\x10\n" +
 	"\x0e_credential_idB\x0f\n" +
 	"\r_last_used_at\"Q\n" +
 	"\x12UserCredentialList\x12;\n" +
-	"\vcredentials\x18\x01 \x03(\v2\x19.hermes.v1.UserCredentialR\vcredentials\"\x99\x01\n" +
+	"\vcredentials\x18\x01 \x03(\v2\x19.hermes.v1.UserCredentialR\vcredentials\"\xaf\x01\n" +
 	"\x17CreateCredentialRequest\x12\x16\n" +
 	"\x06openid\x18\x01 \x01(\tR\x06openid\x12(\n" +
 	"\rcredential_id\x18\x02 \x01(\tH\x00R\fcredentialId\x88\x01\x01\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x16\n" +
-	"\x06secret\x18\x04 \x01(\tR\x06secretB\x10\n" +
+	"\x06secret\x18\x04 \x01(\tR\x06secret\x12\x14\n" +
+	"\x05label\x18\x05 \x01(\tR\x05labelB\x10\n" +
 	"\x0e_credential_id\"I\n" +
 	"\x1bGetCredentialsByTypeRequest\x12\x16\n" +
 	"\x06openid\x18\x01 \x01(\tR\x06openid\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\"\xba\x01\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\"\xdf\x01\n" +
 	"\x17UpdateCredentialRequest\x12#\n" +
 	"\rcredential_id\x18\x01 \x01(\tR\fcredentialId\x12\x1b\n" +
 	"\x06secret\x18\x02 \x01(\tH\x00R\x06secret\x88\x01\x01\x12A\n" +
 	"\flast_used_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\n" +
-	"lastUsedAt\x88\x01\x01B\t\n" +
+	"lastUsedAt\x88\x01\x01\x12\x19\n" +
+	"\x05label\x18\x04 \x01(\tH\x02R\x05label\x88\x01\x01B\t\n" +
 	"\a_secretB\x0f\n" +
-	"\r_last_used_at\"f\n" +
+	"\r_last_used_atB\b\n" +
+	"\x06_label\"f\n" +
 	" UpdateCredentialSignCountRequest\x12#\n" +
 	"\rcredential_id\x18\x01 \x01(\tR\fcredentialId\x12\x1d\n" +
 	"\n" +
@@ -2238,17 +2275,19 @@ const file_hermes_v1_user_proto_rawDesc = "" +
 	"\rcredential_id\x18\x02 \x01(\tR\fcredentialId\"K\n" +
 	"\x1dDeleteCredentialByTypeRequest\x12\x16\n" +
 	"\x06openid\x18\x01 \x01(\tR\x06openid\x12\x12\n" +
-	"\x04type\x18\x02 \x01(\tR\x04type\"\xdc\x01\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\"\x81\x02\n" +
 	"#UpdateCredentialByInternalIDRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1d\n" +
 	"\aenabled\x18\x02 \x01(\bH\x00R\aenabled\x88\x01\x01\x12\x1b\n" +
 	"\x06secret\x18\x03 \x01(\tH\x01R\x06secret\x88\x01\x01\x12A\n" +
 	"\flast_used_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x02R\n" +
-	"lastUsedAt\x88\x01\x01B\n" +
+	"lastUsedAt\x88\x01\x01\x12\x19\n" +
+	"\x05label\x18\x05 \x01(\tH\x03R\x05label\x88\x01\x01B\n" +
 	"\n" +
 	"\b_enabledB\t\n" +
 	"\a_secretB\x0f\n" +
-	"\r_last_used_at\"(\n" +
+	"\r_last_used_atB\b\n" +
+	"\x06_label\"(\n" +
 	"\x0eOpenIDResponse\x12\x16\n" +
 	"\x06openid\x18\x01 \x01(\tR\x06openid\"\x92\x02\n" +
 	"\x05Group\x12\x0e\n" +

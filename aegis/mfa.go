@@ -24,16 +24,8 @@ func NewMFAService(webauthnSvc *webauthn.Service) *MFAService {
 	}
 }
 
-// WebAuthnEnabled 检查 WebAuthn 是否可用
-func (s *MFAService) WebAuthnEnabled() bool {
-	return s.webauthnSvc != nil
-}
-
 // GetRPID 获取 WebAuthn RP ID
 func (s *MFAService) GetRPID() string {
-	if s.webauthnSvc == nil {
-		return ""
-	}
 	return s.webauthnSvc.GetRPID()
 }
 

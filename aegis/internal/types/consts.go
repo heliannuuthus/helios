@@ -9,7 +9,7 @@ type ConnectionType string
 const (
 	ConnTypeIDP    ConnectionType = "idp"    // 身份提供商（github, google, user, staff, passkey...）
 	ConnTypeVChan  ConnectionType = "vchan"  // 验证通道（captcha）
-	ConnTypeFactor ConnectionType = "factor" // 认证因子（totp, email_otp, webauthn）
+	ConnTypeFactor ConnectionType = "factor" // 认证因子（totp, email-code, webauthn）
 )
 
 // ==================== Connection 标识 ====================
@@ -59,7 +59,7 @@ const (
 // ==================== Cache Key 前缀 ====================
 
 const (
-	CacheKeyPrefixEmailOTP = "email_otp:" // 邮件验证码 cache key 前缀
+	CacheKeyPrefixEmailOTP = "email-code:" // 邮件验证码 cache key 前缀
 )
 
 // ==================== OAuth ====================

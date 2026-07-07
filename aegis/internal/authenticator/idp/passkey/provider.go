@@ -3,6 +3,7 @@ package passkey
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/heliannuuthus/aegis/internal/authenticator/idp"
@@ -40,10 +41,6 @@ func (*Provider) Type() string {
 // params[0]: principal（忽略）
 // params[1]: strategy（忽略）
 func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error) {
-	if p.webauthnSvc == nil {
-		return nil, fmt.Errorf("webauthn service not configured")
-	}
-
 	if proof == "" {
 		return nil, fmt.Errorf("webauthn assertion is required")
 	}
@@ -69,7 +66,8 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*mod
 
 	// 更新凭证签名计数（防重放）
 	if credential != nil {
-		if err := p.webauthnSvc.UpdateCredentialSignCount(ctx, string(credential.ID), credential.Authenticator.SignCount); err != nil {
+		credentialID := base64.RawURLEncoding.EncodeToString(credential.ID)
+		if err := p.webauthnSvc.UpdateCredentialSignCount(ctx, credentialID, credential.Authenticator.SignCount); err != nil {
 			logger.Warnf("[Passkey] UpdateCredentialSignCount failed: %v", err)
 		}
 	}
@@ -94,25 +92,15 @@ func (*Provider) FetchAdditionalInfo(_ context.Context, _ string, _ ...any) (*id
 
 // Prepare 准备前端配置
 func (p *Provider) Prepare() *types.ConnectionConfig {
-	cfg := &types.ConnectionConfig{
+	return &types.ConnectionConfig{
 		Connection: TypePasskey,
+		Identifier: p.webauthnSvc.GetRPID(),
 	}
-
-	// 添加 RP ID 作为 identifier
-	if p.webauthnSvc != nil {
-		cfg.Identifier = p.webauthnSvc.GetRPID()
-	}
-
-	return cfg
 }
 
 // BeginLogin 开始 Passkey 登录流程
 // 返回 WebAuthn options 供前端使用
 func (p *Provider) BeginLogin(ctx context.Context) (*webauthn.LoginBeginResponse, error) {
-	if p.webauthnSvc == nil {
-		return nil, fmt.Errorf("webauthn service not configured")
-	}
-
 	// 使用 Discoverable Login（无需提前知道用户）
 	return p.webauthnSvc.BeginDiscoverableLogin(ctx)
 }

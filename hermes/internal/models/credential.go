@@ -21,6 +21,7 @@ type UserCredential struct {
 	OpenID       string     `gorm:"column:openid;size:64;not null;index" json:"openid"`
 	CredentialID *string    `gorm:"column:credential_id;size:256;uniqueIndex" json:"credential_id,omitempty"`
 	Type         string     `gorm:"column:type;size:32;not null" json:"type"`
+	Label        string     `gorm:"column:label;size:128;not null;default:''" json:"label"`
 	Enabled      bool       `gorm:"column:enabled;not null;default:0" json:"enabled"`
 	LastUsedAt   *time.Time `gorm:"column:last_used_at" json:"last_used_at,omitempty"`
 	CreatedAt    time.Time  `gorm:"column:created_at;not null" json:"created_at"`
@@ -54,6 +55,7 @@ type WebAuthnSecret struct {
 type CredentialSummary struct {
 	ID           uint       `json:"id"`
 	Type         string     `json:"type"`
+	Label        string     `json:"label"`
 	CredentialID string     `json:"credential_id,omitempty"` // WebAuthn 专用
 	Enabled      bool       `json:"enabled"`
 	LastUsedAt   *time.Time `json:"last_used_at,omitempty"`

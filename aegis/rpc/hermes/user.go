@@ -188,6 +188,7 @@ func (c *Client) CreateCredential(ctx context.Context, cred *models.UserCredenti
 		Openid: cred.OpenID,
 		Type:   cred.Type,
 		Secret: cred.Secret,
+		Label:  cred.Label,
 	}
 	if cred.CredentialID != nil {
 		pbReq.CredentialId = cred.CredentialID
@@ -270,6 +271,11 @@ func (c *Client) UpdateCredential(ctx context.Context, credentialID string, upda
 			pbReq.Secret = &s
 		}
 	}
+	if v, ok := updates["label"]; ok {
+		if s, ok := v.(string); ok {
+			pbReq.Label = &s
+		}
+	}
 	if v, ok := updates["last_used_at"]; ok {
 		if t, ok := v.(time.Time); ok {
 			pbReq.LastUsedAt = timestamppb.New(t)
@@ -289,6 +295,11 @@ func (c *Client) UpdateCredentialByInternalID(ctx context.Context, id uint, upda
 	if v, ok := updates["secret"]; ok {
 		if s, ok := v.(string); ok {
 			pbReq.Secret = &s
+		}
+	}
+	if v, ok := updates["label"]; ok {
+		if s, ok := v.(string); ok {
+			pbReq.Label = &s
 		}
 	}
 	if v, ok := updates["last_used_at"]; ok {

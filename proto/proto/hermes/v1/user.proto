@@ -189,6 +189,7 @@ message UserCredential {
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
   string secret = 9; // 加密后的密文（gRPC 内部传输，不暴露给前端）
+  string label = 10;
 }
 
 message UserCredentialList {
@@ -200,6 +201,7 @@ message CreateCredentialRequest {
   optional string credential_id = 2;
   string type = 3;
   string secret = 4;
+  string label = 5;
 }
 
 message GetCredentialsByTypeRequest {
@@ -211,6 +213,7 @@ message UpdateCredentialRequest {
   string credential_id = 1;
   optional string secret = 2;
   optional google.protobuf.Timestamp last_used_at = 3;
+  optional string label = 4;
 }
 
 message UpdateCredentialSignCountRequest {
@@ -233,6 +236,7 @@ message UpdateCredentialByInternalIDRequest {
   optional bool enabled = 2;
   optional string secret = 3;
   optional google.protobuf.Timestamp last_used_at = 4;
+  optional string label = 5;
 }
 
 message OpenIDResponse {

@@ -49,6 +49,7 @@ type CredentialProvider interface {
 	DisableTOTP(ctx context.Context, openid string) error
 	SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error
 	SetWebAuthnEnabled(ctx context.Context, openid, credentialID string, enabled bool) error
+	RenameWebAuthn(ctx context.Context, openid, credentialID, label string) error
 	DeleteWebAuthn(ctx context.Context, openid, credentialID string) error
 	GetUserMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error)
 	GetUserCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error)

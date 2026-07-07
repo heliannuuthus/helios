@@ -11,8 +11,19 @@ import (
 
 	"github.com/pquerna/otp/totp"
 
+	aegisconfig "github.com/heliannuuthus/aegis/config"
+	"github.com/heliannuuthus/aegis/internal/cache"
+	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/models"
 	"github.com/heliannuuthus/pkg/logger"
+)
+
+const (
+	pendingMFATypeTOTP = "mfa:totp"
+
+	pendingMFADataOpenID = "openid"
+	pendingMFADataSecret = "secret"
+	pendingMFADataLabel  = "label"
 )
 
 // CredentialStore 凭证 CRUD 存储接口
@@ -32,11 +43,18 @@ type CredentialStore interface {
 // 底层通过 CredentialStore 做 CRUD 存储
 type CredentialService struct {
 	store CredentialStore
+	cache *cache.Manager
 }
 
 // NewCredentialService 创建凭证业务服务
-func NewCredentialService(store CredentialStore) *CredentialService {
-	return &CredentialService{store: store}
+func NewCredentialService(store CredentialStore, cacheManager *cache.Manager) (*CredentialService, error) {
+	if store == nil {
+		return nil, errors.New("credential store is required")
+	}
+	if cacheManager == nil {
+		return nil, errors.New("credential cache is required")
+	}
+	return &CredentialService{store: store, cache: cacheManager}, nil
 }
 
 // ==================== TOTP ====================
@@ -52,10 +70,6 @@ func isActiveTOTPCredential(c *models.UserCredential) bool {
 	return c.Enabled
 }
 
-func isPendingTOTPCredential(c *models.UserCredential) bool {
-	return c.Type == string(models.CredentialTypeTOTP) && !isActiveTOTPCredential(c)
-}
-
 // credentialActiveInMFA MFA 展示与摘要：TOTP 按激活判定；WebAuthn 等以行存在且 enabled（遗留软禁用）
 func credentialActiveInMFA(c *models.UserCredential) bool {
 	switch models.CredentialType(c.Type) {
@@ -66,7 +80,7 @@ func credentialActiveInMFA(c *models.UserCredential) bool {
 	}
 }
 
-// SetupTOTP 初始化 TOTP（明文 Secret 交给 store，Hermes 层负责加密）
+// SetupTOTP 初始化 TOTP pending MFA；确认成功后才写入凭证表
 func (s *CredentialService) SetupTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
 	creds, err := s.store.GetUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
 	if err != nil {
@@ -79,7 +93,7 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *models.TOTPSetup
 	}
 	if len(creds) > 0 {
 		if err := s.store.DeleteCredentialByOpenIDAndType(ctx, req.OpenID, string(models.CredentialTypeTOTP)); err != nil {
-			return nil, fmt.Errorf("清理未完成的 TOTP 失败: %w", err)
+			return nil, fmt.Errorf("清理历史未激活 TOTP 失败: %w", err)
 		}
 	}
 
@@ -97,60 +111,71 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *models.TOTPSetup
 	otpauthURI := fmt.Sprintf("otpauth://totp/%s:%s?secret=%s&issuer=%s&algorithm=SHA1&digits=6&period=30",
 		url.PathEscape(issuer), url.PathEscape(req.OpenID), secret, url.QueryEscape(issuer))
 
-	credential := &models.UserCredential{
-		OpenID:  req.OpenID,
-		Type:    string(models.CredentialTypeTOTP),
-		Enabled: false,
-		Secret:  secret,
-	}
-
-	if err := s.store.CreateCredential(ctx, credential); err != nil {
-		return nil, fmt.Errorf("保存凭证失败: %w", err)
+	challenge := types.NewChallenge(
+		"",
+		"",
+		pendingMFATypeTOTP,
+		types.ChannelTypeTOTP,
+		req.OpenID,
+		aegisconfig.GetChallengeBusinessExpiresIn(),
+		nil,
+		"",
+	)
+	challenge.SetData(pendingMFADataOpenID, req.OpenID)
+	challenge.SetData(pendingMFADataSecret, secret)
+	challenge.SetData(pendingMFADataLabel, "身份验证器 App")
+	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
+		return nil, fmt.Errorf("保存 TOTP pending MFA 失败: %w", err)
 	}
 
 	return &models.TOTPSetupResponse{
-		Secret:       secret,
-		OTPAuthURI:   otpauthURI,
-		CredentialID: credential.ID,
+		UID:        challenge.ID,
+		Secret:     secret,
+		OTPAuthURI: otpauthURI,
 	}, nil
 }
 
-// ConfirmTOTP 确认 TOTP 绑定（验证一次后写入 last_used_at）
+// ConfirmTOTP 确认 TOTP 绑定（验证一次后写入凭证表）
 func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error {
-	creds, err := s.store.GetUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
+	challenge, err := s.cache.GetChallenge(ctx, req.UID)
 	if err != nil {
-		return fmt.Errorf("查询凭证失败: %w", err)
+		return errors.New("pending MFA 不存在或已过期")
+	}
+	if challenge.IsExpired() {
+		return errors.New("pending MFA 已过期")
+	}
+	if challenge.Type != pendingMFATypeTOTP || challenge.ChannelType != types.ChannelTypeTOTP {
+		return errors.New("pending MFA 类型不匹配")
+	}
+	if challenge.GetStringData(pendingMFADataOpenID) != req.OpenID {
+		return errors.New("pending MFA 不存在")
 	}
 
-	var credential *models.UserCredential
-	for i := range creds {
-		if creds[i].ID == req.CredentialID && isPendingTOTPCredential(&creds[i]) {
-			credential = &creds[i]
-			break
-		}
+	secret := challenge.GetStringData(pendingMFADataSecret)
+	if secret == "" {
+		return errors.New("pending MFA 数据无效")
 	}
-	if credential == nil {
-		return errors.New("凭证不存在或已激活")
-	}
-
-	// Hermes 层已解密 TOTP Secret
-	if !totp.Validate(req.Code, credential.Secret) {
+	if !totp.Validate(req.Code, secret) {
 		return errors.New("验证码错误")
 	}
 
 	now := time.Now()
-	updates := map[string]any{
-		"last_used_at": now,
-		"enabled":      true,
+	credential := &models.UserCredential{
+		OpenID:     req.OpenID,
+		Type:       string(models.CredentialTypeTOTP),
+		Label:      challenge.GetStringData(pendingMFADataLabel),
+		Enabled:    true,
+		LastUsedAt: &now,
+		Secret:     secret,
 	}
-	if credential.CredentialID != nil {
-		if err := s.store.UpdateCredential(ctx, *credential.CredentialID, updates); err != nil {
-			return fmt.Errorf("确认 TOTP 失败: %w", err)
-		}
-	} else {
-		if err := s.store.UpdateCredentialByInternalID(ctx, credential.ID, updates); err != nil {
-			return fmt.Errorf("确认 TOTP 失败: %w", err)
-		}
+	if credential.Label == "" {
+		credential.Label = "身份验证器 App"
+	}
+	if err := s.store.CreateCredential(ctx, credential); err != nil {
+		return fmt.Errorf("保存 TOTP 凭证失败: %w", err)
+	}
+	if err := s.cache.DeleteChallenge(ctx, req.UID); err != nil {
+		logger.Warnf("[Credential] 删除 TOTP pending MFA 失败 - UID: %s, err: %v", req.UID, err)
 	}
 
 	logger.Infof("[Credential] TOTP 绑定成功 - OpenID: %s", req.OpenID)
@@ -217,6 +242,24 @@ func (s *CredentialService) SetWebAuthnEnabled(ctx context.Context, openid, cred
 	return nil
 }
 
+// RenameWebAuthn 更新 WebAuthn/Passkey 凭证名称
+func (s *CredentialService) RenameWebAuthn(ctx context.Context, openid, credentialID, label string) error {
+	if label == "" {
+		return errors.New("label is required")
+	}
+	cred, err := s.store.GetCredentialByID(ctx, credentialID)
+	if err != nil {
+		return errors.New("凭证不存在")
+	}
+	if cred.OpenID != openid {
+		return errors.New("凭证不存在")
+	}
+	if err := s.store.UpdateCredential(ctx, credentialID, map[string]any{"label": label}); err != nil {
+		return fmt.Errorf("更新凭证名称失败: %w", err)
+	}
+	return nil
+}
+
 // DeleteWebAuthn 删除 WebAuthn 凭证
 func (s *CredentialService) DeleteWebAuthn(ctx context.Context, openid, credentialID string) error {
 	if err := s.store.DeleteCredential(ctx, openid, credentialID); err != nil {
@@ -267,6 +310,7 @@ func (s *CredentialService) GetUserCredentialSummaries(ctx context.Context, open
 		summary := models.CredentialSummary{
 			ID:         cred.ID,
 			Type:       cred.Type,
+			Label:      cred.Label,
 			Enabled:    credentialActiveInMFA(&cred),
 			LastUsedAt: cred.LastUsedAt,
 			CreatedAt:  cred.CreatedAt,

@@ -242,6 +242,7 @@ func credentialFromProto(pb *hermesv1.UserCredential) *models.UserCredential {
 		OpenID:       pb.Openid,
 		CredentialID: pb.CredentialId,
 		Type:         pb.Type,
+		Label:        pb.Label,
 		Enabled:      pb.Enabled,
 		Secret:       pb.Secret,
 	}
