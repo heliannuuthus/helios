@@ -502,6 +502,38 @@ func GetSecretBytes(audience string) ([]byte, error) {
 	return secretBytes, nil
 }
 
+// ==================== Iris 配置 ====================
+
+// GetIrisAudience 获取 Iris 服务 audience（用于 /user 路由 token 验证）
+func GetIrisAudience() string {
+	audience := Cfg().GetString("iris.audience")
+	if audience == "" {
+		return "iris"
+	}
+	return audience
+}
+
+// GetIrisSecretKey 获取 Iris 服务解密密钥（原始字符串）
+func GetIrisSecretKey() string {
+	return Cfg().GetString("iris.secret-key")
+}
+
+// GetIrisSecretKeyBytes 获取 Iris 服务密钥（48 字节 seed: 16-byte salt + 32-byte key）
+func GetIrisSecretKeyBytes() ([]byte, error) {
+	secretStr := GetIrisSecretKey()
+	if secretStr == "" {
+		return nil, fmt.Errorf("iris.secret-key 未配置")
+	}
+	secretBytes, err := base64.RawURLEncoding.DecodeString(secretStr)
+	if err != nil {
+		return nil, fmt.Errorf("解码 iris.secret-key 失败: %w", err)
+	}
+	if len(secretBytes) != 48 {
+		return nil, fmt.Errorf("iris.secret-key 长度错误: 期望 48 字节 seed, 实际 %d 字节", len(secretBytes))
+	}
+	return secretBytes, nil
+}
+
 // ==================== Mail 配置 ====================
 
 // MailConfig 邮件配置

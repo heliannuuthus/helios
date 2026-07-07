@@ -621,7 +621,7 @@ type MiddlewareFactory struct {
 
 ```go
 // Iris 用户信息路由（需要 iris audience 的 Token）
-irisMw := app.MiddlewareFactory.WithAudience(irisconfig.GetAegisAudience())
+irisMw := app.MiddlewareFactory.WithAudience(aegisconfig.GetIrisAudience())
 userGroup := r.Group("/user")
 userGroup.Use(irisMw.RequireAuth())
 ```

@@ -20,7 +20,6 @@ const (
 	ZweiConfigName   = "zwei"
 	HermesConfigName = "hermes"
 	AegisConfigName  = "aegis"
-	IrisConfigName   = "iris"
 	ChaosConfigName  = "chaos"
 )
 
@@ -37,7 +36,6 @@ var (
 	zweiCfg   *Cfg
 	hermesCfg *Cfg
 	aegisCfg  *Cfg
-	irisCfg   *Cfg
 	chaosCfg  *Cfg
 )
 
@@ -47,7 +45,6 @@ func Load() {
 	LoadZwei()
 	LoadHermes()
 	LoadAegis()
-	LoadIris()
 	LoadChaos()
 }
 
@@ -83,14 +80,6 @@ func LoadAegis() {
 	aegisCfg = newCfg(AegisConfigName, ConfigFile, "./aegis")
 }
 
-// LoadIris 加载 Iris 配置
-func LoadIris() {
-	if irisCfg != nil {
-		return
-	}
-	irisCfg = newCfg(IrisConfigName, ConfigFile, "./aegis")
-}
-
 // LoadChaos 加载 Chaos 配置
 func LoadChaos() {
 	if chaosCfg != nil {
@@ -121,14 +110,6 @@ func Aegis() *Cfg {
 		LoadAegis()
 	}
 	return aegisCfg
-}
-
-// Iris 返回 Iris 配置单例
-func Iris() *Cfg {
-	if irisCfg == nil {
-		LoadIris()
-	}
-	return irisCfg
 }
 
 // Chaos 返回 Chaos 配置单例
