@@ -14,7 +14,6 @@ import (
 	"github.com/heliannuuthus/aegis"
 	aegisconfig "github.com/heliannuuthus/aegis/config"
 	"github.com/heliannuuthus/aegis/iris"
-	irisconfig "github.com/heliannuuthus/aegis/iris/config"
 	"github.com/heliannuuthus/aegis/middleware"
 	hermesrpc "github.com/heliannuuthus/aegis/rpc/hermes"
 	"github.com/heliannuuthus/pkg/aegis/guard"
@@ -26,7 +25,6 @@ import (
 func main() {
 	config.LoadConfig()
 	config.LoadAegis()
-	config.LoadIris()
 	logger.InitWithConfig(logger.Config{
 		Format: config.GetLogFormat(),
 		Level:  config.GetLogLevel(),
@@ -100,7 +98,7 @@ func main() {
 	}
 
 	profile := aegisHandler.Profile()
-	irisGuard := guard.NewGin(irisconfig.GetAegisAudience())
+	irisGuard := guard.NewGin(aegisconfig.GetIrisAudience())
 	userGroup := r.Group("/user")
 	{
 		userRoutes := []struct {

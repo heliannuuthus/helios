@@ -48,6 +48,8 @@ WORKDIR /app
 
 COPY --from=builder /server .
 
+RUN mkdir -p aegis hermes zwei chaos
+
 ARG ENV=""
 ENV APP_ENV=${ENV}
 

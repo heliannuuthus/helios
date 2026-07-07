@@ -10,7 +10,8 @@ services:
       - "50051:50051"
       - "8081:18000"
     volumes:
-      - ./config:/app/config:ro
+      - ./config.toml:/app/config.toml:ro
+      - ./hermes/config.toml:/app/hermes/config.toml:ro
     environment:
       HERMES_DB_URL: mysql://helios:helios@db:3306/hermes?charset=utf8mb4&parseTime=true&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s
     depends_on:
@@ -32,7 +33,8 @@ services:
     ports:
       - "18000:18000"
     volumes:
-      - ./config:/app/config:ro
+      - ./config.toml:/app/config.toml:ro
+      - ./aegis/config.toml:/app/aegis/config.toml:ro
     environment:
       HERMES_GRPC_ADDR: hermes:50051
       AEGIS_REDIS_URL: redis://:helios@cache:6379/0
@@ -56,7 +58,8 @@ services:
     ports:
       - "18001:18000"
     volumes:
-      - ./config:/app/config:ro
+      - ./config.toml:/app/config.toml:ro
+      - ./zwei/config.toml:/app/zwei/config.toml:ro
     environment:
       ZWEI_DB_URL: mysql://helios:helios@db:3306/zwei?charset=utf8mb4&parseTime=true&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s
     depends_on:
@@ -78,7 +81,8 @@ services:
     ports:
       - "18002:18000"
     volumes:
-      - ./config:/app/config:ro
+      - ./config.toml:/app/config.toml:ro
+      - ./chaos/config.toml:/app/chaos/config.toml:ro
     environment:
       CHAOS_DB_URL: mysql://helios:helios@db:3306/chaos?charset=utf8mb4&parseTime=true&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s
     depends_on:

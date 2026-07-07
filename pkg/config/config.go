@@ -12,20 +12,14 @@ import (
 )
 
 const (
-	// 配置文件名（位于 config/ 目录）
-	ConfigFile       = "base"
-	ZweiConfigFile   = "zwei"
-	HermesConfigFile = "hermes"
-	AegisConfigFile  = "aegis"
-	IrisConfigFile   = "iris"
-	ChaosConfigFile  = "chaos"
+	// 配置文件名。每个模块根目录使用 config.toml。
+	ConfigFile = "config"
 
 	// 配置名称
 	ConfigName       = "base"
 	ZweiConfigName   = "zwei"
 	HermesConfigName = "hermes"
 	AegisConfigName  = "aegis"
-	IrisConfigName   = "iris"
 	ChaosConfigName  = "chaos"
 )
 
@@ -42,7 +36,6 @@ var (
 	zweiCfg   *Cfg
 	hermesCfg *Cfg
 	aegisCfg  *Cfg
-	irisCfg   *Cfg
 	chaosCfg  *Cfg
 )
 
@@ -52,7 +45,6 @@ func Load() {
 	LoadZwei()
 	LoadHermes()
 	LoadAegis()
-	LoadIris()
 	LoadChaos()
 }
 
@@ -61,7 +53,7 @@ func LoadConfig() {
 	if cfg != nil {
 		return
 	}
-	cfg = newCfg(ConfigName, ConfigFile)
+	cfg = newCfg(ConfigName)
 }
 
 // LoadZwei 加载 Zwei 配置
@@ -69,7 +61,7 @@ func LoadZwei() {
 	if zweiCfg != nil {
 		return
 	}
-	zweiCfg = newCfg(ZweiConfigName, ZweiConfigFile)
+	zweiCfg = newCfg(ZweiConfigName, "./zwei")
 }
 
 // LoadHermes 加载 Hermes 配置
@@ -77,7 +69,7 @@ func LoadHermes() {
 	if hermesCfg != nil {
 		return
 	}
-	hermesCfg = newCfg(HermesConfigName, HermesConfigFile)
+	hermesCfg = newCfg(HermesConfigName, "./hermes")
 }
 
 // LoadAegis 加载 Aegis 配置
@@ -85,15 +77,7 @@ func LoadAegis() {
 	if aegisCfg != nil {
 		return
 	}
-	aegisCfg = newCfg(AegisConfigName, AegisConfigFile)
-}
-
-// LoadIris 加载 Iris 配置
-func LoadIris() {
-	if irisCfg != nil {
-		return
-	}
-	irisCfg = newCfg(IrisConfigName, IrisConfigFile, "./aegis")
+	aegisCfg = newCfg(AegisConfigName, "./aegis")
 }
 
 // LoadChaos 加载 Chaos 配置
@@ -101,7 +85,7 @@ func LoadChaos() {
 	if chaosCfg != nil {
 		return
 	}
-	chaosCfg = newCfg(ChaosConfigName, ChaosConfigFile)
+	chaosCfg = newCfg(ChaosConfigName, "./chaos")
 }
 
 // Zwei 返回 Zwei 配置单例
@@ -126,14 +110,6 @@ func Aegis() *Cfg {
 		LoadAegis()
 	}
 	return aegisCfg
-}
-
-// Iris 返回 Iris 配置单例
-func Iris() *Cfg {
-	if irisCfg == nil {
-		LoadIris()
-	}
-	return irisCfg
 }
 
 // Chaos 返回 Chaos 配置单例
@@ -206,17 +182,17 @@ func GetLogFormat() string {
 }
 
 // newCfg 创建新的配置实例，extraPaths 为额外搜索目录
-func newCfg(name, configFile string, extraPaths ...string) *Cfg {
+func newCfg(name string, extraPaths ...string) *Cfg {
 	v := viper.New()
 
-	v.SetConfigName(configFile)
+	v.SetConfigName(ConfigFile)
 	v.SetConfigType("toml")
-	v.AddConfigPath(".")
-	v.AddConfigPath("./config")
-	v.AddConfigPath("./" + configFile)
 	for _, p := range extraPaths {
 		v.AddConfigPath(p)
 	}
+	v.AddConfigPath(".")
+	v.AddConfigPath("./config")
+	v.AddConfigPath("./" + ConfigFile)
 
 	// 设置环境变量前缀和自动绑定
 	prefix := strings.ToUpper(name)
@@ -230,7 +206,7 @@ func newCfg(name, configFile string, extraPaths ...string) *Cfg {
 		if !errors.As(err, &configFileNotFoundErr) {
 			panic(fmt.Sprintf("[%s] 读取配置文件失败: %s", name, err.Error()))
 		}
-		panic(fmt.Sprintf("[%s] 配置文件 %s.toml 不存在", name, configFile))
+		panic(fmt.Sprintf("[%s] 配置文件 %s.toml 不存在", name, ConfigFile))
 	}
 
 	cfg := &Cfg{
