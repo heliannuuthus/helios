@@ -375,6 +375,7 @@ func (h *Handler) InitiateChallenge(c *gin.Context) {
 	c.JSON(http.StatusOK, &challenge.InitiateResponse{
 		ChallengeID: ch.ID,
 		RetryAfter:  ch.RetryAfter,
+		Options:     challengeOptions(ch),
 	})
 }
 
@@ -1179,6 +1180,7 @@ func (h *Handler) handlePrerequisiteVerification(c *gin.Context, ctx context.Con
 	}
 	c.JSON(http.StatusOK, &challenge.VerifyResponse{
 		RetryAfter: ch.RetryAfter,
+		Options:    challengeOptions(ch),
 	})
 }
 
@@ -1225,6 +1227,11 @@ func (h *Handler) initiateChallenge(ctx context.Context, ch *types.Challenge) er
 		return err
 	}
 	return h.challengeSvc.Save(ctx, ch)
+}
+
+func challengeOptions(ch *types.Challenge) any {
+	options, _ := ch.GetData(types.ChallengeDataOptions)
+	return options
 }
 
 // --- Token 引用链 ---

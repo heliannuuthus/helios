@@ -209,7 +209,7 @@ func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvid
 
 	registry.Register(authenticate.NewFactorAuthenticator(factor.NewTOTPFactor(credentialStore), ac, tokenVerifier))
 
-	registry.Register(authenticate.NewFactorAuthenticator(factor.NewWebAuthnProvider(webauthnSvc), ac, tokenVerifier))
+	registry.Register(authenticate.NewFactorAuthenticator(factor.NewWebAuthnProvider(webauthnSvc, userSvc), ac, tokenVerifier))
 
 	logger.Infof("[Auth] Registry 初始化完成: %v", registry.Summary())
 	return registry

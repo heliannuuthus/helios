@@ -314,20 +314,20 @@ func (s *MFAService) CreateWebAuthnEnrollment(ctx context.Context, user *models.
 		existingCredentials = nil
 	}
 
-	resp, err := s.webauthnSvc.BeginRegistration(ctx, user, existingCredentials)
+	resp, err := s.webauthnSvc.InitializeRegistration(ctx, user, existingCredentials)
 	if err != nil {
 		return nil, err
 	}
 
 	return &WebAuthnBeginResponse{
-		ChallengeID: resp.ChallengeID,
+		ChallengeID: resp.CeremonyID,
 		Options:     resp.Options,
 	}, nil
 }
 
 // ConfirmWebAuthnEnrollment 完成 WebAuthn 凭证绑定并保存凭证。
 func (s *MFAService) ConfirmWebAuthnEnrollment(ctx context.Context, openid, challengeID string, r *http.Request) (*WebAuthnCredentialInfo, error) {
-	credential, err := s.webauthnSvc.FinishRegistration(ctx, challengeID, r)
+	credential, err := s.webauthnSvc.CompleteRegistration(ctx, challengeID, r)
 	if err != nil {
 		return nil, err
 	}

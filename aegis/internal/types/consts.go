@@ -33,10 +33,9 @@ const (
 // Challenge.Data map 中使用的 key
 
 const (
-	ChallengeDataSiteKey   = "site_key"  // Captcha 站点密钥
-	ChallengeDataNext      = "next"      // 下一步操作类型
-	ChallengeDataSession   = "session"   // WebAuthn session 数据
-	ChallengeDataOperation = "operation" // WebAuthn 操作类型
+	ChallengeDataSiteKey = "site_key" // Captcha 站点密钥
+	ChallengeDataNext    = "next"     // 下一步操作类型
+	ChallengeDataOptions = "options"  // WebAuthn public key options
 )
 
 // ==================== Rate Limit Key 前缀 ====================

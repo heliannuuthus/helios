@@ -165,6 +165,7 @@ func GetCacheKeyPrefix(cacheType string) string {
 		"user_token":                   "auth:user:rt:",
 		"otp":                          "auth:otp:",
 		"challenge":                    "auth:ch:",
+		"webauthn-ceremony":            "auth:webauthn:ceremony:",
 		"domain":                       "domain:",
 		"application":                  "app:",
 		"service":                      "svc:",

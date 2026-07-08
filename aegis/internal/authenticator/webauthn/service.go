@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-json-experiment/json"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
 
@@ -21,7 +20,7 @@ import (
 )
 
 const (
-	DefaultWebAuthnSessionTTL = 5 * time.Minute
+	DefaultWebAuthnCeremonyTTL = 5 * time.Minute
 )
 
 // Service WebAuthn 协议引擎（internal，仅 aegis 内部使用）
@@ -74,8 +73,8 @@ func (s *Service) GetRPID() string {
 
 // ==================== 注册流程 ====================
 
-// BeginRegistration 开始注册
-func (s *Service) BeginRegistration(ctx context.Context, user *models.UserWithDecrypted, existingCredentials []*StoredWebAuthnCredential) (*RegistrationBeginResponse, error) {
+// InitializeRegistration 初始化注册，生成 WebAuthn creation options 并保存协议 session。
+func (s *Service) InitializeRegistration(ctx context.Context, user *models.UserWithDecrypted, existingCredentials []*StoredWebAuthnCredential) (*RegistrationOptions, error) {
 	credentials := make([]webauthn.Credential, 0, len(existingCredentials))
 	for _, cred := range existingCredentials {
 		credentials = append(credentials, cred.ToWebAuthnCredential())
@@ -94,63 +93,39 @@ func (s *Service) BeginRegistration(ctx context.Context, user *models.UserWithDe
 		}),
 	)
 	if err != nil {
-		logger.Errorf("[WebAuthn] BeginRegistration failed: %v", err)
-		return nil, fmt.Errorf("begin registration failed: %w", err)
+		logger.Errorf("[WebAuthn] InitializeRegistration failed: %v", err)
+		return nil, fmt.Errorf("initialize registration failed: %w", err)
 	}
 
-	challenge := types.NewChallenge("", "", "", types.ChannelTypeWebAuthn, "", DefaultWebAuthnSessionTTL, nil, "")
-
-	sessionData := &SessionData{
+	ceremonyID := types.GenerateChallengeID()
+	if err := s.cache.SaveWebAuthnCeremony(ctx, &cache.WebAuthnCeremony{
+		ID:          ceremonyID,
+		Operation:   OperationRegistration,
 		OpenID:      user.OpenID,
-		Challenge:   session.Challenge,
 		SessionData: session,
-	}
-	sessionBytes, err := json.Marshal(sessionData)
-	if err != nil {
-		return nil, fmt.Errorf("marshal session data failed: %w", err)
-	}
-	challenge.SetData(types.ChallengeDataSession, string(sessionBytes))
-	challenge.SetData(types.ChallengeDataOperation, OperationRegistration)
-
-	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
-		return nil, fmt.Errorf("save challenge failed: %w", err)
+	}, DefaultWebAuthnCeremonyTTL); err != nil {
+		return nil, err
 	}
 
-	logger.Infof("[WebAuthn] BeginRegistration success - OpenID: %s, ChallengeID: %s", user.OpenID, challenge.ID)
+	logger.Infof("[WebAuthn] InitializeRegistration success - OpenID: %s, CeremonyID: %s", user.OpenID, ceremonyID)
 
-	return &RegistrationBeginResponse{
-		Options:     options,
-		ChallengeID: challenge.ID,
+	return &RegistrationOptions{
+		Options:    options,
+		CeremonyID: ceremonyID,
 	}, nil
 }
 
-// FinishRegistration 完成注册
-func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r *http.Request) (*webauthn.Credential, error) {
-	challenge, err := s.cache.GetChallenge(ctx, challengeID)
+// CompleteRegistration 完成注册，验证 attestation 并返回可保存的 WebAuthn credential。
+func (s *Service) CompleteRegistration(ctx context.Context, ceremonyID string, r *http.Request) (*webauthn.Credential, error) {
+	ceremony, err := s.cache.GetWebAuthnCeremony(ctx, ceremonyID)
 	if err != nil {
-		return nil, fmt.Errorf("challenge not found")
+		return nil, err
+	}
+	if ceremony.Operation != OperationRegistration {
+		return nil, fmt.Errorf("invalid webauthn ceremony operation")
 	}
 
-	if challenge.IsExpired() {
-		return nil, fmt.Errorf("challenge expired")
-	}
-
-	operation := challenge.GetStringData(types.ChallengeDataOperation)
-	if operation != OperationRegistration {
-		return nil, fmt.Errorf("invalid challenge operation")
-	}
-
-	sessionStr := challenge.GetStringData(types.ChallengeDataSession)
-	if sessionStr == "" {
-		return nil, fmt.Errorf("session data not found")
-	}
-
-	var sessionData SessionData
-	if err := json.Unmarshal([]byte(sessionStr), &sessionData); err != nil {
-		return nil, fmt.Errorf("unmarshal session data failed: %w", err)
-	}
-
-	user, err := s.cache.GetUser(ctx, sessionData.OpenID)
+	user, err := s.cache.GetUser(ctx, ceremony.OpenID)
 	if err != nil {
 		return nil, fmt.Errorf("user not found: %w", err)
 	}
@@ -168,17 +143,17 @@ func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r 
 
 	webauthnUser := NewUser(user, credentials)
 
-	credential, err := s.webauthn.FinishRegistration(webauthnUser, *sessionData.SessionData, r)
+	credential, err := s.webauthn.FinishRegistration(webauthnUser, *ceremony.SessionData, r)
 	if err != nil {
-		logger.Errorf("[WebAuthn] FinishRegistration failed: %v", err)
-		return nil, fmt.Errorf("finish registration failed: %w", err)
+		logger.Errorf("[WebAuthn] CompleteRegistration failed: %v", err)
+		return nil, fmt.Errorf("complete registration failed: %w", err)
 	}
 
-	if err := s.cache.DeleteChallenge(ctx, challengeID); err != nil {
-		logger.Warnf("[WebAuthn] DeleteChallenge failed after registration: %v", err)
+	if err := s.cache.DeleteWebAuthnCeremony(ctx, ceremonyID); err != nil {
+		logger.Warnf("[WebAuthn] DeleteWebAuthnCeremony failed after registration: %v", err)
 	}
 
-	logger.Infof("[WebAuthn] FinishRegistration success - OpenID: %s, CredentialID: %s",
+	logger.Infof("[WebAuthn] CompleteRegistration success - OpenID: %s, CredentialID: %s",
 		user.OpenID, base64.RawURLEncoding.EncodeToString(credential.ID))
 
 	return credential, nil
@@ -186,8 +161,12 @@ func (s *Service) FinishRegistration(ctx context.Context, challengeID string, r 
 
 // ==================== 登录流程 ====================
 
-// BeginLogin 开始登录
-func (s *Service) BeginLogin(ctx context.Context, user *models.UserWithDecrypted, existingCredentials []*StoredWebAuthnCredential) (*LoginBeginResponse, error) {
+// InitializeAuthenticationCeremony creates assertion options and stores WebAuthn ceremony data.
+func (s *Service) InitializeAuthenticationCeremony(ctx context.Context, ceremonyID string, user *models.UserWithDecrypted, existingCredentials []*StoredWebAuthnCredential, ttl time.Duration) (*protocol.CredentialAssertion, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user is required")
+	}
+
 	credentials := make([]webauthn.Credential, 0, len(existingCredentials))
 	for _, cred := range existingCredentials {
 		credentials = append(credentials, cred.ToWebAuthnCredential())
@@ -206,90 +185,56 @@ func (s *Service) BeginLogin(ctx context.Context, user *models.UserWithDecrypted
 		webauthn.WithUserVerification(protocol.VerificationPreferred),
 	)
 	if err != nil {
-		logger.Errorf("[WebAuthn] BeginLogin failed: %v", err)
-		return nil, fmt.Errorf("begin login failed: %w", err)
+		logger.Errorf("[WebAuthn] InitializeAuthentication failed: %v", err)
+		return nil, fmt.Errorf("initialize authentication failed: %w", err)
 	}
 
-	challenge := types.NewChallenge("", "", "", types.ChannelTypeWebAuthn, "", DefaultWebAuthnSessionTTL, nil, "")
-
-	sessionData := &SessionData{
+	if ttl <= 0 {
+		ttl = DefaultWebAuthnCeremonyTTL
+	}
+	if err := s.cache.SaveWebAuthnCeremony(ctx, &cache.WebAuthnCeremony{
+		ID:          ceremonyID,
+		Operation:   OperationLogin,
 		OpenID:      user.OpenID,
-		Challenge:   session.Challenge,
 		SessionData: session,
-	}
-	sessionBytes, err := json.Marshal(sessionData)
-	if err != nil {
-		return nil, fmt.Errorf("marshal session data failed: %w", err)
-	}
-	challenge.SetData(types.ChallengeDataSession, string(sessionBytes))
-	challenge.SetData(types.ChallengeDataOperation, OperationLogin)
-
-	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
-		return nil, fmt.Errorf("save challenge failed: %w", err)
+	}, ttl); err != nil {
+		return nil, err
 	}
 
-	logger.Infof("[WebAuthn] BeginLogin success - OpenID: %s, ChallengeID: %s", user.OpenID, challenge.ID)
-
-	return &LoginBeginResponse{
-		Options:     options,
-		ChallengeID: challenge.ID,
-	}, nil
+	logger.Infof("[WebAuthn] InitializeAuthentication success - OpenID: %s, CeremonyID: %s", user.OpenID, ceremonyID)
+	return options, nil
 }
 
-// BeginDiscoverableLogin 开始可发现凭证登录（Passkey 无用户名登录）
-func (s *Service) BeginDiscoverableLogin(ctx context.Context) (*LoginBeginResponse, error) {
+// InitializeDiscoverableAuthenticationCeremony creates discoverable login options and stores WebAuthn ceremony data.
+func (s *Service) InitializeDiscoverableAuthenticationCeremony(ctx context.Context, ceremonyID string, ttl time.Duration) (*protocol.CredentialAssertion, error) {
 	options, session, err := s.webauthn.BeginDiscoverableLogin(
 		webauthn.WithUserVerification(protocol.VerificationPreferred),
 	)
 	if err != nil {
-		logger.Errorf("[WebAuthn] BeginDiscoverableLogin failed: %v", err)
-		return nil, fmt.Errorf("begin discoverable login failed: %w", err)
+		logger.Errorf("[WebAuthn] InitializeDiscoverableAuthentication failed: %v", err)
+		return nil, fmt.Errorf("initialize discoverable authentication failed: %w", err)
 	}
 
-	challenge := types.NewChallenge("", "", "", types.ChannelTypeWebAuthn, "", DefaultWebAuthnSessionTTL, nil, "")
-
-	sessionData := &SessionData{
-		Challenge:   session.Challenge,
+	if ttl <= 0 {
+		ttl = DefaultWebAuthnCeremonyTTL
+	}
+	if err := s.cache.SaveWebAuthnCeremony(ctx, &cache.WebAuthnCeremony{
+		ID:          ceremonyID,
+		Operation:   OperationDiscoverableLogin,
 		SessionData: session,
-	}
-	sessionBytes, err := json.Marshal(sessionData)
-	if err != nil {
-		return nil, fmt.Errorf("marshal session data failed: %w", err)
-	}
-	challenge.SetData(types.ChallengeDataSession, string(sessionBytes))
-	challenge.SetData(types.ChallengeDataOperation, OperationDiscoverableLogin)
-
-	if err := s.cache.SaveChallenge(ctx, challenge); err != nil {
-		return nil, fmt.Errorf("save challenge failed: %w", err)
+	}, ttl); err != nil {
+		return nil, err
 	}
 
-	logger.Infof("[WebAuthn] BeginDiscoverableLogin success - ChallengeID: %s", challenge.ID)
-
-	return &LoginBeginResponse{
-		Options:     options,
-		ChallengeID: challenge.ID,
-	}, nil
+	logger.Infof("[WebAuthn] InitializeDiscoverableAuthentication success - CeremonyID: %s", ceremonyID)
+	return options, nil
 }
 
-// FinishLogin 完成登录
-func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertionBody []byte) (string, *webauthn.Credential, error) {
-	challenge, err := s.cache.GetChallenge(ctx, challengeID)
+// VerifyAuthentication 验证 assertion 并返回认证出的用户与凭证。
+func (s *Service) VerifyAuthentication(ctx context.Context, ceremonyID string, assertionBody []byte) (string, *webauthn.Credential, error) {
+	ceremony, err := s.cache.GetWebAuthnCeremony(ctx, ceremonyID)
 	if err != nil {
-		return "", nil, fmt.Errorf("challenge not found")
-	}
-
-	if challenge.IsExpired() {
-		return "", nil, fmt.Errorf("challenge expired")
-	}
-
-	sessionStr := challenge.GetStringData(types.ChallengeDataSession)
-	if sessionStr == "" {
-		return "", nil, fmt.Errorf("session data not found")
-	}
-
-	var sessionData SessionData
-	if err := json.Unmarshal([]byte(sessionStr), &sessionData); err != nil {
-		return "", nil, fmt.Errorf("unmarshal session data failed: %w", err)
+		return "", nil, err
 	}
 
 	parsedResponse, err := protocol.ParseCredentialRequestResponseBytes(assertionBody)
@@ -297,13 +242,11 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertion
 		return "", nil, fmt.Errorf("parse credential assertion failed: %w", err)
 	}
 
-	operation := challenge.GetStringData(types.ChallengeDataOperation)
-
 	var openid string
 	var credential *webauthn.Credential
 
-	if operation == OperationDiscoverableLogin {
-		credential, err = s.finishDiscoverableLogin(ctx, sessionData.SessionData, parsedResponse)
+	if ceremony.Operation == OperationDiscoverableLogin {
+		credential, err = s.verifyDiscoverableAuthentication(ctx, ceremony.SessionData, parsedResponse)
 		if err != nil {
 			return "", nil, err
 		}
@@ -312,7 +255,7 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertion
 			return "", nil, fmt.Errorf("user not found for credential: %w", err)
 		}
 	} else {
-		openid = sessionData.OpenID
+		openid = ceremony.OpenID
 		if openid == "" {
 			return "", nil, fmt.Errorf("openid not found in session")
 		}
@@ -334,18 +277,18 @@ func (s *Service) FinishLogin(ctx context.Context, challengeID string, assertion
 
 		webauthnUser := NewUser(user, credentials)
 
-		credential, err = s.webauthn.ValidateLogin(webauthnUser, *sessionData.SessionData, parsedResponse)
+		credential, err = s.webauthn.ValidateLogin(webauthnUser, *ceremony.SessionData, parsedResponse)
 		if err != nil {
 			logger.Errorf("[WebAuthn] ValidateLogin failed: %v", err)
 			return "", nil, fmt.Errorf("validate login failed: %w", err)
 		}
 	}
 
-	if err := s.cache.DeleteChallenge(ctx, challengeID); err != nil {
-		logger.Warnf("[WebAuthn] DeleteChallenge failed after login: %v", err)
+	if err := s.cache.DeleteWebAuthnCeremony(ctx, ceremonyID); err != nil {
+		logger.Warnf("[WebAuthn] DeleteWebAuthnCeremony failed after login: %v", err)
 	}
 
-	logger.Infof("[WebAuthn] FinishLogin success - OpenID: %s", openid)
+	logger.Infof("[WebAuthn] VerifyAuthentication success - OpenID: %s", openid)
 
 	return openid, credential, nil
 }
@@ -418,8 +361,8 @@ func (s *Service) getUserWebAuthnCredentials(ctx context.Context, openid string)
 	return result, nil
 }
 
-// finishDiscoverableLogin 完成可发现凭证登录
-func (s *Service) finishDiscoverableLogin(ctx context.Context, session *webauthn.SessionData, parsedResponse *protocol.ParsedCredentialAssertionData) (*webauthn.Credential, error) {
+// verifyDiscoverableAuthentication verifies a discoverable WebAuthn authentication assertion.
+func (s *Service) verifyDiscoverableAuthentication(ctx context.Context, session *webauthn.SessionData, parsedResponse *protocol.ParsedCredentialAssertionData) (*webauthn.Credential, error) {
 	credentialID := base64.RawURLEncoding.EncodeToString(parsedResponse.RawID)
 	openid, err := s.GetOpenIDByCredentialID(ctx, credentialID)
 	if err != nil {
