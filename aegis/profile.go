@@ -17,14 +17,16 @@ import (
 )
 
 type ProfileHandler struct {
-	userSvc contract.UserProvider
-	mfaSvc  *MFAService
+	userSvc     contract.UserProvider
+	identitySvc contract.IdentityProvider
+	mfaSvc      *MFAService
 }
 
-func NewProfileHandler(userSvc contract.UserProvider, mfaSvc *MFAService) *ProfileHandler {
+func NewProfileHandler(userSvc contract.UserProvider, identitySvc contract.IdentityProvider, mfaSvc *MFAService) *ProfileHandler {
 	return &ProfileHandler{
-		userSvc: userSvc,
-		mfaSvc:  mfaSvc,
+		userSvc:     userSvc,
+		identitySvc: identitySvc,
+		mfaSvc:      mfaSvc,
 	}
 }
 
@@ -157,7 +159,7 @@ func (h *ProfileHandler) ListIdentities(c *gin.Context) {
 		return
 	}
 
-	identities, err := h.userSvc.ListUserIdentities(c.Request.Context(), openid)
+	identities, err := h.identitySvc.ListUserIdentities(c.Request.Context(), openid)
 	if err != nil {
 		profileError(c, errors.NewServerError(err.Error()))
 		return

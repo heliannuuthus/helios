@@ -16,7 +16,6 @@ service UserService {
   rpc GetByIdentity(GetByIdentityRequest) returns (User);
   rpc GetByEmail(GetByEmailRequest) returns (DecryptedUser);
   rpc GetByPhonePlain(GetByPhonePlainRequest) returns (DecryptedUser);
-  rpc GetByUsername(GetByUsernameRequest) returns (DecryptedUser);
   rpc GetDecryptedUser(OpenIDRequest) returns (DecryptedUser);
   rpc GetDecryptedUserByIdentity(GetByIdentityRequest) returns (DecryptedUser);
 
@@ -94,10 +93,6 @@ message GetByEmailRequest {
 
 message GetByPhonePlainRequest {
   string phone = 1;
-}
-
-message GetByUsernameRequest {
-  string username = 1;
 }
 
 message CreateUserRequest {

@@ -24,7 +24,6 @@ const (
 	UserService_GetByIdentity_FullMethodName                   = "/hermes.v1.UserService/GetByIdentity"
 	UserService_GetByEmail_FullMethodName                      = "/hermes.v1.UserService/GetByEmail"
 	UserService_GetByPhonePlain_FullMethodName                 = "/hermes.v1.UserService/GetByPhonePlain"
-	UserService_GetByUsername_FullMethodName                   = "/hermes.v1.UserService/GetByUsername"
 	UserService_GetDecryptedUser_FullMethodName                = "/hermes.v1.UserService/GetDecryptedUser"
 	UserService_GetDecryptedUserByIdentity_FullMethodName      = "/hermes.v1.UserService/GetDecryptedUserByIdentity"
 	UserService_CreateUser_FullMethodName                      = "/hermes.v1.UserService/CreateUser"
@@ -61,7 +60,6 @@ type UserServiceClient interface {
 	GetByIdentity(ctx context.Context, in *GetByIdentityRequest, opts ...grpc.CallOption) (*User, error)
 	GetByEmail(ctx context.Context, in *GetByEmailRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
 	GetByPhonePlain(ctx context.Context, in *GetByPhonePlainRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
-	GetByUsername(ctx context.Context, in *GetByUsernameRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
 	GetDecryptedUser(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
 	GetDecryptedUserByIdentity(ctx context.Context, in *GetByIdentityRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
 	CreateUser(ctx context.Context, in *CreateUserRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
@@ -130,16 +128,6 @@ func (c *userServiceClient) GetByPhonePlain(ctx context.Context, in *GetByPhoneP
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DecryptedUser)
 	err := c.cc.Invoke(ctx, UserService_GetByPhonePlain_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetByUsername(ctx context.Context, in *GetByUsernameRequest, opts ...grpc.CallOption) (*DecryptedUser, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(DecryptedUser)
-	err := c.cc.Invoke(ctx, UserService_GetByUsername_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +384,6 @@ type UserServiceServer interface {
 	GetByIdentity(context.Context, *GetByIdentityRequest) (*User, error)
 	GetByEmail(context.Context, *GetByEmailRequest) (*DecryptedUser, error)
 	GetByPhonePlain(context.Context, *GetByPhonePlainRequest) (*DecryptedUser, error)
-	GetByUsername(context.Context, *GetByUsernameRequest) (*DecryptedUser, error)
 	GetDecryptedUser(context.Context, *OpenIDRequest) (*DecryptedUser, error)
 	GetDecryptedUserByIdentity(context.Context, *GetByIdentityRequest) (*DecryptedUser, error)
 	CreateUser(context.Context, *CreateUserRequest) (*DecryptedUser, error)
@@ -442,9 +429,6 @@ func (UnimplementedUserServiceServer) GetByEmail(context.Context, *GetByEmailReq
 }
 func (UnimplementedUserServiceServer) GetByPhonePlain(context.Context, *GetByPhonePlainRequest) (*DecryptedUser, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetByPhonePlain not implemented")
-}
-func (UnimplementedUserServiceServer) GetByUsername(context.Context, *GetByUsernameRequest) (*DecryptedUser, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetByUsername not implemented")
 }
 func (UnimplementedUserServiceServer) GetDecryptedUser(context.Context, *OpenIDRequest) (*DecryptedUser, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetDecryptedUser not implemented")
@@ -607,24 +591,6 @@ func _UserService_GetByPhonePlain_Handler(srv interface{}, ctx context.Context, 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).GetByPhonePlain(ctx, req.(*GetByPhonePlainRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetByUsername_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetByUsernameRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetByUsername(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetByUsername_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetByUsername(ctx, req.(*GetByUsernameRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1083,10 +1049,6 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetByPhonePlain",
 			Handler:    _UserService_GetByPhonePlain_Handler,
-		},
-		{
-			MethodName: "GetByUsername",
-			Handler:    _UserService_GetByUsername_Handler,
 		},
 		{
 			MethodName: "GetDecryptedUser",

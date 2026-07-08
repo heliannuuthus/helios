@@ -55,18 +55,6 @@ func (s *userServiceServer) GetByPhonePlain(ctx context.Context, req *hermesv1.G
 	return decryptedUserToProto(u), nil
 }
 
-func (s *userServiceServer) GetByUsername(ctx context.Context, req *hermesv1.GetByUsernameRequest) (*hermesv1.DecryptedUser, error) {
-	u, err := s.svc.GetUserByUsername(ctx, req.GetUsername())
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	decrypted, err := s.svc.GetDecryptedUserByOpenID(ctx, u.OpenID)
-	if err != nil {
-		return nil, toStatus(err)
-	}
-	return decryptedUserToProto(decrypted), nil
-}
-
 func (s *userServiceServer) GetDecryptedUser(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.DecryptedUser, error) {
 	u, err := s.svc.GetDecryptedUserByOpenID(ctx, req.GetOpenid())
 	if err != nil {

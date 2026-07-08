@@ -37,12 +37,15 @@ import (
 )
 
 // Initialize 初始化 Auth 模块，返回 Handler
-func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, credentialStore contract.CredentialStore, cacheManager *cache.Manager) (*Handler, error) {
+func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, identitySvc contract.IdentityProvider, credentialStore contract.CredentialStore, cacheManager *cache.Manager) (*Handler, error) {
 	if hermesSvc == nil {
 		return nil, fmt.Errorf("hermes service is required")
 	}
 	if userSvc == nil {
 		return nil, fmt.Errorf("user service is required")
+	}
+	if identitySvc == nil {
+		return nil, fmt.Errorf("identity service is required")
 	}
 	if credentialStore == nil {
 		return nil, fmt.Errorf("credential store is required")
@@ -60,7 +63,7 @@ func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 		logger.Info("[Auth] 邮件发送器初始化完成")
 	}
 
-	webauthnSvc, captchaVerifier, err := initProviders(cacheManager, userSvc)
+	webauthnSvc, captchaVerifier, err := initProviders(cacheManager, credentialStore)
 	if err != nil {
 		return nil, err
 	}
@@ -73,18 +76,18 @@ func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 	totpVerifier := totp.NewVerifier(mfaSvc)
 	logger.Info("[Auth] TOTP 验证器初始化完成")
 
-	registry := initRegistry(hermesSvc, userSvc, cacheManager, emailSender, webauthnSvc, captchaVerifier, totpVerifier, ac, tokenSvc)
+	registry := initRegistry(hermesSvc, userSvc, identitySvc, cacheManager, emailSender, webauthnSvc, captchaVerifier, totpVerifier, ac, tokenSvc)
 
 	pool, err := async.NewPool(64)
 	if err != nil {
 		return nil, err
 	}
 
-	userService := user.NewService(cacheManager, userSvc)
+	userService := user.NewService(cacheManager, userSvc, identitySvc)
 	authenticateSvc := authenticate.NewService(cacheManager, ac)
 	authorizeSvc := authorize.NewService(cacheManager, hermesSvc, userService, tokenSvc, pool, 5*time.Minute)
 	challengeSvc := challenge.NewService(cacheManager, registry)
-	profileHandler := NewProfileHandler(userSvc, mfaSvc)
+	profileHandler := NewProfileHandler(userSvc, identitySvc, mfaSvc)
 
 	handler := NewHandler(authenticateSvc, authorizeSvc, challengeSvc, userService, cacheManager, tokenSvc, mfaSvc, profileHandler, pool)
 	logger.Info("[Auth] 模块初始化完成")
@@ -157,8 +160,8 @@ func initKeyProviders(cm *cache.Manager) (key.MultiOf, key.MultiOf, key.MultiOf,
 }
 
 // initProviders 初始化底层认证能力（WebAuthn、Captcha）
-func initProviders(cacheManager *cache.Manager, userSvc contract.UserProvider) (*webauthn.Service, captcha.Verifier, error) {
-	webauthnSvc, err := webauthn.NewService(cacheManager, userSvc)
+func initProviders(cacheManager *cache.Manager, credentialStore contract.CredentialStore) (*webauthn.Service, captcha.Verifier, error) {
+	webauthnSvc, err := webauthn.NewService(cacheManager, credentialStore)
 	if err != nil {
 		return nil, nil, fmt.Errorf("init webauthn service: %w", err)
 	}
@@ -174,7 +177,7 @@ func initProviders(cacheManager *cache.Manager, userSvc contract.UserProvider) (
 }
 
 // initRegistry 初始化全局 Registry（注册胶水层 Authenticator）
-func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier factor.TOTPVerifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
+func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, identitySvc contract.IdentityProvider, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier factor.TOTPVerifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
 	registry := authenticator.NewRegistry()
 
 	// ==================== IDP Authenticators ====================
@@ -189,8 +192,8 @@ func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvid
 	registerIDP(github.NewProvider(hermesSvc))
 	registerIDP(google.NewProvider(hermesSvc))
 
-	registerIDP(idpuser.NewProvider(userSvc))
-	registerIDP(staff.NewProvider(userSvc))
+	registerIDP(idpuser.NewProvider(userSvc, identitySvc))
+	registerIDP(staff.NewProvider(userSvc, identitySvc))
 
 	registerIDP(passkey.NewProvider(webauthnSvc))
 	logger.Info("[Auth] Passkey IDP 注册完成")

@@ -21,14 +21,6 @@ func (c *Client) GetUserByOpenID(ctx context.Context, openid string) (*models.Us
 	return decryptedUserFromProto(resp), nil
 }
 
-func (c *Client) GetUserByUsername(ctx context.Context, username string) (*models.UserWithDecrypted, error) {
-	resp, err := c.user.GetByUsername(ctx, &hermesv1.GetByUsernameRequest{Username: username})
-	if err != nil {
-		return nil, err
-	}
-	return decryptedUserFromProto(resp), nil
-}
-
 func (c *Client) GetUserByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error) {
 	resp, err := c.user.GetByEmail(ctx, &hermesv1.GetByEmailRequest{Email: email})
 	if err != nil {

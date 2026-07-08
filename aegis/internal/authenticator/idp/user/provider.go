@@ -27,11 +27,15 @@ type credential struct {
 
 // Provider C 端用户账号密码 Provider
 type Provider struct {
-	userSvc contract.UserProvider
+	userSvc     contract.UserProfileProvider
+	identitySvc contract.IdentityProvider
 }
 
-func NewProvider(userSvc contract.UserProvider) *Provider {
-	return &Provider{userSvc: userSvc}
+func NewProvider(userSvc contract.UserProfileProvider, identitySvc contract.IdentityProvider) *Provider {
+	return &Provider{
+		userSvc:     userSvc,
+		identitySvc: identitySvc,
+	}
 }
 
 // Type 返回 IDP 类型
@@ -126,7 +130,7 @@ func (p *Provider) loginByPassword(ctx context.Context, identifier, password str
 
 // getCredential 获取 C 端用户凭证
 func (p *Provider) getCredential(ctx context.Context, identifier string) (*credential, error) {
-	user, identity, err := idp.ResolveUserIdentity(ctx, p.userSvc, idp.TypeUser, identifier)
+	user, identity, err := idp.ResolveUserIdentity(ctx, p.userSvc, p.identitySvc, idp.TypeUser, identifier)
 	if err != nil {
 		return nil, err
 	}

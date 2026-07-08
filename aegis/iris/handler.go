@@ -19,8 +19,9 @@ import (
 
 // Handler 用户信息处理器
 type Handler struct {
-	userSvc contract.UserProvider
-	mfaSvc  *aegis.MFAService
+	userSvc     contract.UserProvider
+	identitySvc contract.IdentityProvider
+	mfaSvc      *aegis.MFAService
 }
 
 // getOpenID 从 context 中获取用户标识
@@ -40,10 +41,11 @@ func encodeCredentialID(id []byte) string {
 }
 
 // NewHandler 创建用户信息处理器
-func NewHandler(userSvc contract.UserProvider, mfaSvc *aegis.MFAService) *Handler {
+func NewHandler(userSvc contract.UserProvider, identitySvc contract.IdentityProvider, mfaSvc *aegis.MFAService) *Handler {
 	return &Handler{
-		userSvc: userSvc,
-		mfaSvc:  mfaSvc,
+		userSvc:     userSvc,
+		identitySvc: identitySvc,
+		mfaSvc:      mfaSvc,
 	}
 }
 
@@ -224,7 +226,7 @@ func (h *Handler) ListIdentities(c *gin.Context) {
 		return
 	}
 
-	identities, err := h.userSvc.ListUserIdentities(c.Request.Context(), openid)
+	identities, err := h.identitySvc.ListUserIdentities(c.Request.Context(), openid)
 	if err != nil {
 		errorResponse(c, autherrors.NewServerError(err.Error()))
 		return

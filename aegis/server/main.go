@@ -59,7 +59,7 @@ func main() {
 	logger.Infof("[Auth] Redis 连接成功: %s", redisURL)
 
 	cacheManager := cache.NewManager(client, client, redis)
-	aegisHandler, err := aegis.Initialize(client, client, client, cacheManager)
+	aegisHandler, err := aegis.Initialize(client, client, client, client, cacheManager)
 	if err != nil {
 		logger.Fatalf("初始化 aegis 失败: %v", err)
 	}
