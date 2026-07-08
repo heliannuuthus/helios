@@ -155,7 +155,7 @@ func (s *MFAService) FinishWebAuthnVerification(ctx context.Context, challengeID
 	}
 
 	if credential != nil {
-		if err := s.webauthnSvc.UpdateCredentialSignCount(ctx, base64.RawURLEncoding.EncodeToString(credential.ID), credential.Authenticator.SignCount); err != nil {
+		if err := s.webauthnSvc.PatchCredentialSignCount(ctx, base64.RawURLEncoding.EncodeToString(credential.ID), credential.Authenticator.SignCount); err != nil {
 			logger.Warnf("failed to update webauthn credential sign count: %v", err)
 		}
 	}

@@ -25,20 +25,17 @@ type UserProvider interface {
 	GetDecryptedUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error)
 	GetUserIdentitiesByOpenID(ctx context.Context, openid string) (models.Identities, error)
 	GetIdentities(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error)
-	UpdateLastLogin(ctx context.Context, openid string) error
 	GetUserByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error)
 	GetUserByPhone(ctx context.Context, phone string) (*models.UserWithDecrypted, error)
 	AddIdentity(ctx context.Context, identity *models.UserIdentity) error
 	CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error)
-	GetUserByIdentifier(ctx context.Context, identifier string) (*models.PasswordStoreCredential, error)
-	GetStaffByIdentifier(ctx context.Context, identifier string) (*models.PasswordStoreCredential, error)
+	GetPasswordCredential(ctx context.Context, idp, identifier string) (*models.PasswordStoreCredential, error)
+	PatchUser(ctx context.Context, openid string, updates map[string]any) error
 	CreateCredential(ctx context.Context, cred *models.UserCredential) error
-	UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error
+	PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
 	GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error)
 	GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
-	UpdateUser(ctx context.Context, openid string, updates map[string]any) error
-	UpdatePassword(ctx context.Context, openid, oldPassword, newPassword string) error
 }
 
 // CredentialProvider provides credential persistence and type-specific operations

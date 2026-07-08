@@ -62,8 +62,8 @@ func (p *WebAuthnProvider) Verify(ctx context.Context, proof string, params ...a
 	// 更新凭证签名计数
 	if credential != nil {
 		credentialID := base64.RawURLEncoding.EncodeToString(credential.ID)
-		if err := p.webauthnSvc.UpdateCredentialSignCount(ctx, credentialID, credential.Authenticator.SignCount); err != nil {
-			logger.Warnf("[WebAuthn Factor] UpdateCredentialSignCount failed: %v", err)
+		if err := p.webauthnSvc.PatchCredentialSignCount(ctx, credentialID, credential.Authenticator.SignCount); err != nil {
+			logger.Warnf("[WebAuthn Factor] PatchCredentialSignCount failed: %v", err)
 		}
 	}
 

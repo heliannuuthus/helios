@@ -27,24 +27,19 @@ const (
 	UserService_GetDecryptedUser_FullMethodName                = "/hermes.v1.UserService/GetDecryptedUser"
 	UserService_GetDecryptedUserByIdentity_FullMethodName      = "/hermes.v1.UserService/GetDecryptedUserByIdentity"
 	UserService_CreateUser_FullMethodName                      = "/hermes.v1.UserService/CreateUser"
-	UserService_UpdateUser_FullMethodName                      = "/hermes.v1.UserService/UpdateUser"
-	UserService_UpdateLastLogin_FullMethodName                 = "/hermes.v1.UserService/UpdateLastLogin"
-	UserService_UpdatePassword_FullMethodName                  = "/hermes.v1.UserService/UpdatePassword"
+	UserService_PatchUser_FullMethodName                       = "/hermes.v1.UserService/PatchUser"
 	UserService_GetIdentities_FullMethodName                   = "/hermes.v1.UserService/GetIdentities"
 	UserService_GetIdentitiesByIdentity_FullMethodName         = "/hermes.v1.UserService/GetIdentitiesByIdentity"
 	UserService_GetIdentityByType_FullMethodName               = "/hermes.v1.UserService/GetIdentityByType"
 	UserService_AddIdentity_FullMethodName                     = "/hermes.v1.UserService/AddIdentity"
-	UserService_GetUserByIdentifier_FullMethodName             = "/hermes.v1.UserService/GetUserByIdentifier"
-	UserService_GetStaffByIdentifier_FullMethodName            = "/hermes.v1.UserService/GetStaffByIdentifier"
+	UserService_GetPasswordCredential_FullMethodName           = "/hermes.v1.UserService/GetPasswordCredential"
 	UserService_CreateCredential_FullMethodName                = "/hermes.v1.UserService/CreateCredential"
 	UserService_GetCredentialByID_FullMethodName               = "/hermes.v1.UserService/GetCredentialByID"
 	UserService_GetUserCredentials_FullMethodName              = "/hermes.v1.UserService/GetUserCredentials"
 	UserService_GetUserCredentialsByType_FullMethodName        = "/hermes.v1.UserService/GetUserCredentialsByType"
-	UserService_UpdateCredential_FullMethodName                = "/hermes.v1.UserService/UpdateCredential"
-	UserService_UpdateCredentialSignCount_FullMethodName       = "/hermes.v1.UserService/UpdateCredentialSignCount"
+	UserService_PatchCredential_FullMethodName                 = "/hermes.v1.UserService/PatchCredential"
 	UserService_DeleteCredential_FullMethodName                = "/hermes.v1.UserService/DeleteCredential"
 	UserService_DeleteCredentialByOpenIDAndType_FullMethodName = "/hermes.v1.UserService/DeleteCredentialByOpenIDAndType"
-	UserService_UpdateCredentialByInternalID_FullMethodName    = "/hermes.v1.UserService/UpdateCredentialByInternalID"
 	UserService_GetOpenIDByCredentialID_FullMethodName         = "/hermes.v1.UserService/GetOpenIDByCredentialID"
 	UserService_CreateGroup_FullMethodName                     = "/hermes.v1.UserService/CreateGroup"
 	UserService_GetGroup_FullMethodName                        = "/hermes.v1.UserService/GetGroup"
@@ -68,24 +63,19 @@ type UserServiceClient interface {
 	GetDecryptedUser(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
 	GetDecryptedUserByIdentity(ctx context.Context, in *GetByIdentityRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
 	CreateUser(ctx context.Context, in *CreateUserRequest, opts ...grpc.CallOption) (*DecryptedUser, error)
-	UpdateUser(ctx context.Context, in *UpdateUserRequest, opts ...grpc.CallOption) (*User, error)
-	UpdateLastLogin(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	UpdatePassword(ctx context.Context, in *UpdatePasswordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PatchUser(ctx context.Context, in *PatchUserRequest, opts ...grpc.CallOption) (*User, error)
 	GetIdentities(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*IdentityList, error)
 	GetIdentitiesByIdentity(ctx context.Context, in *GetByIdentityRequest, opts ...grpc.CallOption) (*IdentityList, error)
 	GetIdentityByType(ctx context.Context, in *GetIdentityByTypeRequest, opts ...grpc.CallOption) (*UserIdentity, error)
 	AddIdentity(ctx context.Context, in *AddIdentityRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	GetUserByIdentifier(ctx context.Context, in *GetByIdentifierRequest, opts ...grpc.CallOption) (*PasswordStoreCredential, error)
-	GetStaffByIdentifier(ctx context.Context, in *GetByIdentifierRequest, opts ...grpc.CallOption) (*PasswordStoreCredential, error)
+	GetPasswordCredential(ctx context.Context, in *GetPasswordCredentialRequest, opts ...grpc.CallOption) (*PasswordStoreCredential, error)
 	CreateCredential(ctx context.Context, in *CreateCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetCredentialByID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*UserCredential, error)
 	GetUserCredentials(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*UserCredentialList, error)
 	GetUserCredentialsByType(ctx context.Context, in *GetCredentialsByTypeRequest, opts ...grpc.CallOption) (*UserCredentialList, error)
-	UpdateCredential(ctx context.Context, in *UpdateCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	UpdateCredentialSignCount(ctx context.Context, in *UpdateCredentialSignCountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PatchCredential(ctx context.Context, in *PatchCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteCredential(ctx context.Context, in *DeleteCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteCredentialByOpenIDAndType(ctx context.Context, in *DeleteCredentialByTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	UpdateCredentialByInternalID(ctx context.Context, in *UpdateCredentialByInternalIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetOpenIDByCredentialID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*OpenIDResponse, error)
 	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Group, error)
 	GetGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*Group, error)
@@ -174,30 +164,10 @@ func (c *userServiceClient) CreateUser(ctx context.Context, in *CreateUserReques
 	return out, nil
 }
 
-func (c *userServiceClient) UpdateUser(ctx context.Context, in *UpdateUserRequest, opts ...grpc.CallOption) (*User, error) {
+func (c *userServiceClient) PatchUser(ctx context.Context, in *PatchUserRequest, opts ...grpc.CallOption) (*User, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(User)
-	err := c.cc.Invoke(ctx, UserService_UpdateUser_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) UpdateLastLogin(ctx context.Context, in *OpenIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_UpdateLastLogin_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) UpdatePassword(ctx context.Context, in *UpdatePasswordRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_UpdatePassword_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, UserService_PatchUser_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -244,20 +214,10 @@ func (c *userServiceClient) AddIdentity(ctx context.Context, in *AddIdentityRequ
 	return out, nil
 }
 
-func (c *userServiceClient) GetUserByIdentifier(ctx context.Context, in *GetByIdentifierRequest, opts ...grpc.CallOption) (*PasswordStoreCredential, error) {
+func (c *userServiceClient) GetPasswordCredential(ctx context.Context, in *GetPasswordCredentialRequest, opts ...grpc.CallOption) (*PasswordStoreCredential, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PasswordStoreCredential)
-	err := c.cc.Invoke(ctx, UserService_GetUserByIdentifier_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) GetStaffByIdentifier(ctx context.Context, in *GetByIdentifierRequest, opts ...grpc.CallOption) (*PasswordStoreCredential, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PasswordStoreCredential)
-	err := c.cc.Invoke(ctx, UserService_GetStaffByIdentifier_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, UserService_GetPasswordCredential_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -304,20 +264,10 @@ func (c *userServiceClient) GetUserCredentialsByType(ctx context.Context, in *Ge
 	return out, nil
 }
 
-func (c *userServiceClient) UpdateCredential(ctx context.Context, in *UpdateCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *userServiceClient) PatchCredential(ctx context.Context, in *PatchCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_UpdateCredential_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) UpdateCredentialSignCount(ctx context.Context, in *UpdateCredentialSignCountRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_UpdateCredentialSignCount_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, UserService_PatchCredential_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -338,16 +288,6 @@ func (c *userServiceClient) DeleteCredentialByOpenIDAndType(ctx context.Context,
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, UserService_DeleteCredentialByOpenIDAndType_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *userServiceClient) UpdateCredentialByInternalID(ctx context.Context, in *UpdateCredentialByInternalIDRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, UserService_UpdateCredentialByInternalID_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -447,24 +387,19 @@ type UserServiceServer interface {
 	GetDecryptedUser(context.Context, *OpenIDRequest) (*DecryptedUser, error)
 	GetDecryptedUserByIdentity(context.Context, *GetByIdentityRequest) (*DecryptedUser, error)
 	CreateUser(context.Context, *CreateUserRequest) (*DecryptedUser, error)
-	UpdateUser(context.Context, *UpdateUserRequest) (*User, error)
-	UpdateLastLogin(context.Context, *OpenIDRequest) (*emptypb.Empty, error)
-	UpdatePassword(context.Context, *UpdatePasswordRequest) (*emptypb.Empty, error)
+	PatchUser(context.Context, *PatchUserRequest) (*User, error)
 	GetIdentities(context.Context, *OpenIDRequest) (*IdentityList, error)
 	GetIdentitiesByIdentity(context.Context, *GetByIdentityRequest) (*IdentityList, error)
 	GetIdentityByType(context.Context, *GetIdentityByTypeRequest) (*UserIdentity, error)
 	AddIdentity(context.Context, *AddIdentityRequest) (*emptypb.Empty, error)
-	GetUserByIdentifier(context.Context, *GetByIdentifierRequest) (*PasswordStoreCredential, error)
-	GetStaffByIdentifier(context.Context, *GetByIdentifierRequest) (*PasswordStoreCredential, error)
+	GetPasswordCredential(context.Context, *GetPasswordCredentialRequest) (*PasswordStoreCredential, error)
 	CreateCredential(context.Context, *CreateCredentialRequest) (*emptypb.Empty, error)
 	GetCredentialByID(context.Context, *CredentialIDRequest) (*UserCredential, error)
 	GetUserCredentials(context.Context, *OpenIDRequest) (*UserCredentialList, error)
 	GetUserCredentialsByType(context.Context, *GetCredentialsByTypeRequest) (*UserCredentialList, error)
-	UpdateCredential(context.Context, *UpdateCredentialRequest) (*emptypb.Empty, error)
-	UpdateCredentialSignCount(context.Context, *UpdateCredentialSignCountRequest) (*emptypb.Empty, error)
+	PatchCredential(context.Context, *PatchCredentialRequest) (*emptypb.Empty, error)
 	DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error)
 	DeleteCredentialByOpenIDAndType(context.Context, *DeleteCredentialByTypeRequest) (*emptypb.Empty, error)
-	UpdateCredentialByInternalID(context.Context, *UpdateCredentialByInternalIDRequest) (*emptypb.Empty, error)
 	GetOpenIDByCredentialID(context.Context, *CredentialIDRequest) (*OpenIDResponse, error)
 	CreateGroup(context.Context, *CreateGroupRequest) (*Group, error)
 	GetGroup(context.Context, *GetGroupRequest) (*Group, error)
@@ -504,14 +439,8 @@ func (UnimplementedUserServiceServer) GetDecryptedUserByIdentity(context.Context
 func (UnimplementedUserServiceServer) CreateUser(context.Context, *CreateUserRequest) (*DecryptedUser, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateUser not implemented")
 }
-func (UnimplementedUserServiceServer) UpdateUser(context.Context, *UpdateUserRequest) (*User, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateUser not implemented")
-}
-func (UnimplementedUserServiceServer) UpdateLastLogin(context.Context, *OpenIDRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateLastLogin not implemented")
-}
-func (UnimplementedUserServiceServer) UpdatePassword(context.Context, *UpdatePasswordRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdatePassword not implemented")
+func (UnimplementedUserServiceServer) PatchUser(context.Context, *PatchUserRequest) (*User, error) {
+	return nil, status.Error(codes.Unimplemented, "method PatchUser not implemented")
 }
 func (UnimplementedUserServiceServer) GetIdentities(context.Context, *OpenIDRequest) (*IdentityList, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetIdentities not implemented")
@@ -525,11 +454,8 @@ func (UnimplementedUserServiceServer) GetIdentityByType(context.Context, *GetIde
 func (UnimplementedUserServiceServer) AddIdentity(context.Context, *AddIdentityRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method AddIdentity not implemented")
 }
-func (UnimplementedUserServiceServer) GetUserByIdentifier(context.Context, *GetByIdentifierRequest) (*PasswordStoreCredential, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetUserByIdentifier not implemented")
-}
-func (UnimplementedUserServiceServer) GetStaffByIdentifier(context.Context, *GetByIdentifierRequest) (*PasswordStoreCredential, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetStaffByIdentifier not implemented")
+func (UnimplementedUserServiceServer) GetPasswordCredential(context.Context, *GetPasswordCredentialRequest) (*PasswordStoreCredential, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPasswordCredential not implemented")
 }
 func (UnimplementedUserServiceServer) CreateCredential(context.Context, *CreateCredentialRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateCredential not implemented")
@@ -543,20 +469,14 @@ func (UnimplementedUserServiceServer) GetUserCredentials(context.Context, *OpenI
 func (UnimplementedUserServiceServer) GetUserCredentialsByType(context.Context, *GetCredentialsByTypeRequest) (*UserCredentialList, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUserCredentialsByType not implemented")
 }
-func (UnimplementedUserServiceServer) UpdateCredential(context.Context, *UpdateCredentialRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateCredential not implemented")
-}
-func (UnimplementedUserServiceServer) UpdateCredentialSignCount(context.Context, *UpdateCredentialSignCountRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateCredentialSignCount not implemented")
+func (UnimplementedUserServiceServer) PatchCredential(context.Context, *PatchCredentialRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method PatchCredential not implemented")
 }
 func (UnimplementedUserServiceServer) DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteCredential not implemented")
 }
 func (UnimplementedUserServiceServer) DeleteCredentialByOpenIDAndType(context.Context, *DeleteCredentialByTypeRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteCredentialByOpenIDAndType not implemented")
-}
-func (UnimplementedUserServiceServer) UpdateCredentialByInternalID(context.Context, *UpdateCredentialByInternalIDRequest) (*emptypb.Empty, error) {
-	return nil, status.Error(codes.Unimplemented, "method UpdateCredentialByInternalID not implemented")
 }
 func (UnimplementedUserServiceServer) GetOpenIDByCredentialID(context.Context, *CredentialIDRequest) (*OpenIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOpenIDByCredentialID not implemented")
@@ -729,56 +649,20 @@ func _UserService_CreateUser_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_UpdateUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateUserRequest)
+func _UserService_PatchUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PatchUserRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(UserServiceServer).UpdateUser(ctx, in)
+		return srv.(UserServiceServer).PatchUser(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: UserService_UpdateUser_FullMethodName,
+		FullMethod: UserService_PatchUser_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).UpdateUser(ctx, req.(*UpdateUserRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_UpdateLastLogin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(OpenIDRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).UpdateLastLogin(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_UpdateLastLogin_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).UpdateLastLogin(ctx, req.(*OpenIDRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_UpdatePassword_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdatePasswordRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).UpdatePassword(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_UpdatePassword_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).UpdatePassword(ctx, req.(*UpdatePasswordRequest))
+		return srv.(UserServiceServer).PatchUser(ctx, req.(*PatchUserRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -855,38 +739,20 @@ func _UserService_AddIdentity_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_GetUserByIdentifier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetByIdentifierRequest)
+func _UserService_GetPasswordCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPasswordCredentialRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(UserServiceServer).GetUserByIdentifier(ctx, in)
+		return srv.(UserServiceServer).GetPasswordCredential(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: UserService_GetUserByIdentifier_FullMethodName,
+		FullMethod: UserService_GetPasswordCredential_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetUserByIdentifier(ctx, req.(*GetByIdentifierRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_GetStaffByIdentifier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetByIdentifierRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).GetStaffByIdentifier(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_GetStaffByIdentifier_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).GetStaffByIdentifier(ctx, req.(*GetByIdentifierRequest))
+		return srv.(UserServiceServer).GetPasswordCredential(ctx, req.(*GetPasswordCredentialRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -963,38 +829,20 @@ func _UserService_GetUserCredentialsByType_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_UpdateCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateCredentialRequest)
+func _UserService_PatchCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PatchCredentialRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(UserServiceServer).UpdateCredential(ctx, in)
+		return srv.(UserServiceServer).PatchCredential(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: UserService_UpdateCredential_FullMethodName,
+		FullMethod: UserService_PatchCredential_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).UpdateCredential(ctx, req.(*UpdateCredentialRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_UpdateCredentialSignCount_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateCredentialSignCountRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).UpdateCredentialSignCount(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_UpdateCredentialSignCount_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).UpdateCredentialSignCount(ctx, req.(*UpdateCredentialSignCountRequest))
+		return srv.(UserServiceServer).PatchCredential(ctx, req.(*PatchCredentialRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1031,24 +879,6 @@ func _UserService_DeleteCredentialByOpenIDAndType_Handler(srv interface{}, ctx c
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).DeleteCredentialByOpenIDAndType(ctx, req.(*DeleteCredentialByTypeRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _UserService_UpdateCredentialByInternalID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateCredentialByInternalIDRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(UserServiceServer).UpdateCredentialByInternalID(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: UserService_UpdateCredentialByInternalID_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(UserServiceServer).UpdateCredentialByInternalID(ctx, req.(*UpdateCredentialByInternalIDRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1233,16 +1063,8 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _UserService_CreateUser_Handler,
 		},
 		{
-			MethodName: "UpdateUser",
-			Handler:    _UserService_UpdateUser_Handler,
-		},
-		{
-			MethodName: "UpdateLastLogin",
-			Handler:    _UserService_UpdateLastLogin_Handler,
-		},
-		{
-			MethodName: "UpdatePassword",
-			Handler:    _UserService_UpdatePassword_Handler,
+			MethodName: "PatchUser",
+			Handler:    _UserService_PatchUser_Handler,
 		},
 		{
 			MethodName: "GetIdentities",
@@ -1261,12 +1083,8 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _UserService_AddIdentity_Handler,
 		},
 		{
-			MethodName: "GetUserByIdentifier",
-			Handler:    _UserService_GetUserByIdentifier_Handler,
-		},
-		{
-			MethodName: "GetStaffByIdentifier",
-			Handler:    _UserService_GetStaffByIdentifier_Handler,
+			MethodName: "GetPasswordCredential",
+			Handler:    _UserService_GetPasswordCredential_Handler,
 		},
 		{
 			MethodName: "CreateCredential",
@@ -1285,12 +1103,8 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _UserService_GetUserCredentialsByType_Handler,
 		},
 		{
-			MethodName: "UpdateCredential",
-			Handler:    _UserService_UpdateCredential_Handler,
-		},
-		{
-			MethodName: "UpdateCredentialSignCount",
-			Handler:    _UserService_UpdateCredentialSignCount_Handler,
+			MethodName: "PatchCredential",
+			Handler:    _UserService_PatchCredential_Handler,
 		},
 		{
 			MethodName: "DeleteCredential",
@@ -1299,10 +1113,6 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteCredentialByOpenIDAndType",
 			Handler:    _UserService_DeleteCredentialByOpenIDAndType_Handler,
-		},
-		{
-			MethodName: "UpdateCredentialByInternalID",
-			Handler:    _UserService_UpdateCredentialByInternalID_Handler,
 		},
 		{
 			MethodName: "GetOpenIDByCredentialID",

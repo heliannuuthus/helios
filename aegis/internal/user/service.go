@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"time"
 
 	"github.com/heliannuuthus/aegis/contract"
 	autherrors "github.com/heliannuuthus/aegis/errors"
@@ -47,7 +48,7 @@ func (s *Service) GetIdentities(ctx context.Context, identity *models.UserIdenti
 
 // UpdateLastLogin 更新最后登录时间
 func (s *Service) UpdateLastLogin(ctx context.Context, openid string) error {
-	return s.userSvc.UpdateLastLogin(ctx, openid)
+	return s.userSvc.PatchUser(ctx, openid, map[string]any{"last_login_at": time.Now()})
 }
 
 // FindUserByEmail 通过邮箱查找已有用户（用于 Account Linking）

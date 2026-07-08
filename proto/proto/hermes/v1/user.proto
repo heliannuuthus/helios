@@ -22,9 +22,7 @@ service UserService {
   // ---- 用户写入 ----
 
   rpc CreateUser(CreateUserRequest) returns (DecryptedUser);
-  rpc UpdateUser(UpdateUserRequest) returns (User);
-  rpc UpdateLastLogin(OpenIDRequest) returns (google.protobuf.Empty);
-  rpc UpdatePassword(UpdatePasswordRequest) returns (google.protobuf.Empty);
+  rpc PatchUser(PatchUserRequest) returns (User);
 
   // ---- 身份管理 ----
 
@@ -35,8 +33,7 @@ service UserService {
 
   // ---- 密码认证（PasswordStore） ----
 
-  rpc GetUserByIdentifier(GetByIdentifierRequest) returns (PasswordStoreCredential);
-  rpc GetStaffByIdentifier(GetByIdentifierRequest) returns (PasswordStoreCredential);
+  rpc GetPasswordCredential(GetPasswordCredentialRequest) returns (PasswordStoreCredential);
 
   // ---- 凭证通用 ----
 
@@ -44,11 +41,9 @@ service UserService {
   rpc GetCredentialByID(CredentialIDRequest) returns (UserCredential);
   rpc GetUserCredentials(OpenIDRequest) returns (UserCredentialList);
   rpc GetUserCredentialsByType(GetCredentialsByTypeRequest) returns (UserCredentialList);
-  rpc UpdateCredential(UpdateCredentialRequest) returns (google.protobuf.Empty);
-  rpc UpdateCredentialSignCount(UpdateCredentialSignCountRequest) returns (google.protobuf.Empty);
+  rpc PatchCredential(PatchCredentialRequest) returns (google.protobuf.Empty);
   rpc DeleteCredential(DeleteCredentialRequest) returns (google.protobuf.Empty);
   rpc DeleteCredentialByOpenIDAndType(DeleteCredentialByTypeRequest) returns (google.protobuf.Empty);
-  rpc UpdateCredentialByInternalID(UpdateCredentialByInternalIDRequest) returns (google.protobuf.Empty);
   rpc GetOpenIDByCredentialID(CredentialIDRequest) returns (OpenIDResponse);
 
 
@@ -113,18 +108,14 @@ message TUserInfo {
   optional string raw_data = 6;
 }
 
-message UpdateUserRequest {
+message PatchUserRequest {
   string openid = 1;
   optional string nickname = 2;
   optional string picture = 3;
   optional string email = 4;
   optional int32 status = 5;
-}
-
-message UpdatePasswordRequest {
-  string openid = 1;
-  string old_password = 2;
-  string new_password = 3;
+  optional string password_hash = 6;
+  optional google.protobuf.Timestamp last_login_at = 7;
 }
 
 // ==================== Identity ====================
@@ -160,8 +151,9 @@ message AddIdentityRequest {
 
 // ==================== Password Store ====================
 
-message GetByIdentifierRequest {
-  string identifier = 1;
+message GetPasswordCredentialRequest {
+  string idp = 1;
+  string identifier = 2;
 }
 
 message PasswordStoreCredential {
@@ -209,16 +201,13 @@ message GetCredentialsByTypeRequest {
   string type = 2;
 }
 
-message UpdateCredentialRequest {
+message PatchCredentialRequest {
   string credential_id = 1;
   optional string secret = 2;
   optional google.protobuf.Timestamp last_used_at = 3;
   optional string label = 4;
-}
-
-message UpdateCredentialSignCountRequest {
-  string credential_id = 1;
-  uint32 sign_count = 2;
+  optional bool enabled = 5;
+  optional uint32 sign_count = 6;
 }
 
 message DeleteCredentialRequest {
@@ -229,14 +218,6 @@ message DeleteCredentialRequest {
 message DeleteCredentialByTypeRequest {
   string openid = 1;
   string type = 2;
-}
-
-message UpdateCredentialByInternalIDRequest {
-  uint32 id = 1;
-  optional bool enabled = 2;
-  optional string secret = 3;
-  optional google.protobuf.Timestamp last_used_at = 4;
-  optional string label = 5;
 }
 
 message OpenIDResponse {

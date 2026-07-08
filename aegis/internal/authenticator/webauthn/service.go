@@ -373,9 +373,12 @@ func (s *Service) SaveCredential(ctx context.Context, openid string, credential 
 	return s.userSvc.CreateCredential(ctx, dbCred)
 }
 
-// UpdateCredentialSignCount 更新凭证签名计数
-func (s *Service) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
-	return s.userSvc.UpdateCredentialSignCount(ctx, credentialID, signCount)
+// PatchCredentialSignCount 更新凭证签名计数
+func (s *Service) PatchCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
+	return s.userSvc.PatchCredential(ctx, credentialID, map[string]any{
+		"sign_count":   signCount,
+		"last_used_at": time.Now(),
+	})
 }
 
 // DeleteCredential 删除凭证

@@ -33,8 +33,7 @@ type CredentialStore interface {
 	GetUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error)
 	GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
 	GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error)
-	UpdateCredential(ctx context.Context, credentialID string, updates map[string]any) error
-	UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error
+	PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
 	DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error
 }
@@ -254,7 +253,7 @@ func (s *CredentialService) RenameWebAuthn(ctx context.Context, openid, credenti
 	if cred.OpenID != openid {
 		return errors.New("凭证不存在")
 	}
-	if err := s.store.UpdateCredential(ctx, credentialID, map[string]any{"label": label}); err != nil {
+	if err := s.store.PatchCredential(ctx, credentialID, map[string]any{"label": label}); err != nil {
 		return fmt.Errorf("更新凭证名称失败: %w", err)
 	}
 	return nil

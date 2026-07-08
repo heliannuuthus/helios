@@ -105,14 +105,14 @@ func (h *ProfileHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	if hasPasswordUpdate {
-		if err := h.userSvc.UpdatePassword(ctx, openid, req.OldPassword, req.Password.Value()); err != nil {
+		if err := ChangePassword(ctx, h.userSvc, openid, req.OldPassword, req.Password.Value()); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
 	}
 
 	if hasProfileUpdates {
-		if err := h.userSvc.UpdateUser(ctx, openid, updates); err != nil {
+		if err := h.userSvc.PatchUser(ctx, openid, updates); err != nil {
 			profileError(c, errors.NewServerError(err.Error()))
 			return
 		}

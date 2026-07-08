@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/hermes/config"
@@ -221,39 +220,9 @@ func (s *Service) createWithIdentities(ctx context.Context, user *models.User, i
 	})
 }
 
-// UpdateUser 更新用户
-func (s *Service) UpdateUser(ctx context.Context, openid string, updates map[string]any) error {
+// PatchUser patches user fields by openid.
+func (s *Service) PatchUser(ctx context.Context, openid string, updates map[string]any) error {
 	return s.db.WithContext(ctx).Model(&models.User{}).Where("openid = ?", openid).Updates(updates).Error
-}
-
-// UpdateLastLogin 更新最后登录时间
-func (s *Service) UpdateLastLogin(ctx context.Context, openid string) error {
-	return s.UpdateUser(ctx, openid, map[string]any{"last_login_at": time.Now()})
-}
-
-// UpdatePassword 修改用户密码（验证旧密码后更新）
-func (s *Service) UpdatePassword(ctx context.Context, openid, oldPassword, newPassword string) error {
-	user, err := s.GetUserByOpenID(ctx, openid)
-	if err != nil {
-		return errors.New("user not found")
-	}
-
-	if user.PasswordHash != nil && *user.PasswordHash != "" {
-		if oldPassword == "" {
-			return errors.New("old password is required")
-		}
-		if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(oldPassword)); err != nil {
-			return errors.New("old password is incorrect")
-		}
-	}
-
-	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
-	if err != nil {
-		return fmt.Errorf("hash password failed: %w", err)
-	}
-
-	hashStr := string(hash)
-	return s.UpdateUser(ctx, openid, map[string]any{"password_hash": hashStr})
 }
 
 // ==================== WebAuthn 凭证管理 ====================
@@ -300,17 +269,16 @@ func (s *Service) GetUserCredentialsByType(ctx context.Context, openid, credType
 	return credentials, nil
 }
 
-// UpdateCredential 更新凭证
-func (s *Service) UpdateCredential(ctx context.Context, credentialID string, updates map[string]any) error {
+// PatchCredential patches credential fields by credential_id.
+func (s *Service) PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error {
+	if signCount, ok := updates["sign_count"]; ok {
+		delete(updates, "sign_count")
+		updates["secret"] = gorm.Expr("JSON_SET(secret, '$.sign_count', ?)", signCount)
+		if _, ok := updates["last_used_at"]; !ok {
+			updates["last_used_at"] = time.Now()
+		}
+	}
 	return s.db.WithContext(ctx).Model(&models.UserCredential{}).Where("credential_id = ?", credentialID).Updates(updates).Error
-}
-
-// UpdateCredentialSignCount 更新凭证签名计数
-func (s *Service) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
-	return s.UpdateCredential(ctx, credentialID, map[string]any{
-		"secret":       gorm.Expr("JSON_SET(secret, '$.sign_count', ?)", signCount),
-		"last_used_at": time.Now(),
-	})
 }
 
 // DeleteCredential 删除凭证
@@ -337,11 +305,6 @@ func (s *Service) GetCredentialByInternalID(ctx context.Context, id uint) (*mode
 	return &cred, nil
 }
 
-// UpdateCredentialByInternalID 根据内部主键 ID 更新凭证
-func (s *Service) UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error {
-	return s.db.WithContext(ctx).Model(&models.UserCredential{}).Where("_id = ?", id).Updates(updates).Error
-}
-
 // DeleteCredentialByOpenIDAndType 根据 openid 和类型删除凭证
 func (s *Service) DeleteCredentialByOpenIDAndType(ctx context.Context, openid string, credType string) error {
 	return s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Delete(&models.UserCredential{}).Error
@@ -349,14 +312,9 @@ func (s *Service) DeleteCredentialByOpenIDAndType(ctx context.Context, openid st
 
 // ==================== PasswordStore 接口实现（供 password IDP 使用）====================
 
-// GetUserByIdentifier 根据标识符获取 C 端用户凭证信息
-func (s *Service) GetUserByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error) {
-	return s.getByIdentifierWithIDP(ctx, identifier, "user")
-}
-
-// GetStaffByIdentifier 根据标识符获取 B 端平台人员凭证信息
-func (s *Service) GetStaffByIdentifier(ctx context.Context, identifier string) (*dto.PasswordStoreCredential, error) {
-	return s.getByIdentifierWithIDP(ctx, identifier, "staff")
+// GetPasswordCredential resolves a password credential by an upper-layer identity tag.
+func (s *Service) GetPasswordCredential(ctx context.Context, idpType, identifier string) (*dto.PasswordStoreCredential, error) {
+	return s.getByIdentifierWithIDP(ctx, identifier, idpType)
 }
 
 // getUserByEmail 根据邮箱查找用户（内部使用，返回基础 User）
@@ -370,6 +328,10 @@ func (s *Service) getUserByEmail(ctx context.Context, email string) (*models.Use
 
 // getByIdentifierWithIDP 根据标识符查找用户，并验证用户具有指定 IDP 的主身份
 func (s *Service) getByIdentifierWithIDP(ctx context.Context, identifier, idpType string) (*dto.PasswordStoreCredential, error) {
+	if user, err := s.getUserByIdentityTag(ctx, idpType, identifier); err == nil {
+		return s.toPasswordStoreCredentialWithIDP(ctx, user, idpType)
+	}
+
 	// 1. 尝试用户名（最左模糊匹配）
 	user, err := s.GetUserByUsername(ctx, identifier)
 	if err == nil {
@@ -394,6 +356,14 @@ func (s *Service) getByIdentifierWithIDP(ctx context.Context, identifier, idpTyp
 	}
 
 	return nil, errors.New("user not found")
+}
+
+func (s *Service) getUserByIdentityTag(ctx context.Context, idpType, tOpenID string) (*models.User, error) {
+	var identity models.UserIdentity
+	if err := s.db.WithContext(ctx).Where("idp = ? AND t_openid = ?", idpType, tOpenID).First(&identity).Error; err != nil {
+		return nil, err
+	}
+	return s.GetUserByOpenID(ctx, identity.UID)
 }
 
 // toPasswordStoreCredentialWithIDP 转换为密码存储凭证，同时验证用户具有指定 IDP 的身份

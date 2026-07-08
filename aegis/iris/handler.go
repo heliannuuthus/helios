@@ -125,7 +125,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 
 	// 处理密码修改
 	if hasPasswordUpdate {
-		if err := h.userSvc.UpdatePassword(ctx, openid, req.OldPassword, req.Password.Value()); err != nil {
+		if err := aegis.ChangePassword(ctx, h.userSvc, openid, req.OldPassword, req.Password.Value()); err != nil {
 			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -133,7 +133,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 
 	// 处理其他字段更新
 	if hasProfileUpdates {
-		if err := h.userSvc.UpdateUser(ctx, openid, updates); err != nil {
+		if err := h.userSvc.PatchUser(ctx, openid, updates); err != nil {
 			errorResponse(c, autherrors.NewServerError(err.Error()))
 			return
 		}

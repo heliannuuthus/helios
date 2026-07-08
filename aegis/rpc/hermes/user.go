@@ -75,8 +75,8 @@ func (c *Client) CreateUser(ctx context.Context, identity *models.UserIdentity, 
 	return decryptedUserFromProto(resp), nil
 }
 
-func (c *Client) UpdateUser(ctx context.Context, openid string, updates map[string]any) error {
-	pbReq := &hermesv1.UpdateUserRequest{Openid: openid}
+func (c *Client) PatchUser(ctx context.Context, openid string, updates map[string]any) error {
+	pbReq := &hermesv1.PatchUserRequest{Openid: openid}
 	if v, ok := updates["nickname"]; ok {
 		if s, ok := v.(string); ok {
 			pbReq.Nickname = &s
@@ -98,25 +98,21 @@ func (c *Client) UpdateUser(ctx context.Context, openid string, updates map[stri
 			pbReq.Status = &i
 		}
 	}
-	_, err := c.user.UpdateUser(ctx, pbReq)
+	if v, ok := updates["password_hash"]; ok {
+		if s, ok := v.(string); ok {
+			pbReq.PasswordHash = &s
+		}
+	}
+	if v, ok := updates["last_login_at"]; ok {
+		if t, ok := v.(time.Time); ok {
+			pbReq.LastLoginAt = timestamppb.New(t)
+		}
+	}
+	_, err := c.user.PatchUser(ctx, pbReq)
 	if err != nil {
 		return fmt.Errorf("更新用户失败: %w", err)
 	}
 	return nil
-}
-
-func (c *Client) UpdateLastLogin(ctx context.Context, openid string) error {
-	_, err := c.user.UpdateLastLogin(ctx, &hermesv1.OpenIDRequest{Openid: openid})
-	return err
-}
-
-func (c *Client) UpdatePassword(ctx context.Context, openid, oldPassword, newPassword string) error {
-	_, err := c.user.UpdatePassword(ctx, &hermesv1.UpdatePasswordRequest{
-		Openid:      openid,
-		OldPassword: oldPassword,
-		NewPassword: newPassword,
-	})
-	return err
 }
 
 // ==================== Identity ====================
@@ -165,16 +161,11 @@ func (c *Client) AddIdentity(ctx context.Context, identity *models.UserIdentity)
 
 // ==================== Password Store ====================
 
-func (c *Client) GetUserByIdentifier(ctx context.Context, identifier string) (*models.PasswordStoreCredential, error) {
-	resp, err := c.user.GetUserByIdentifier(ctx, &hermesv1.GetByIdentifierRequest{Identifier: identifier})
-	if err != nil {
-		return nil, err
-	}
-	return passwordStoreCredentialFromProto(resp), nil
-}
-
-func (c *Client) GetStaffByIdentifier(ctx context.Context, identifier string) (*models.PasswordStoreCredential, error) {
-	resp, err := c.user.GetStaffByIdentifier(ctx, &hermesv1.GetByIdentifierRequest{Identifier: identifier})
+func (c *Client) GetPasswordCredential(ctx context.Context, idp, identifier string) (*models.PasswordStoreCredential, error) {
+	resp, err := c.user.GetPasswordCredential(ctx, &hermesv1.GetPasswordCredentialRequest{
+		Idp:        idp,
+		Identifier: identifier,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -194,14 +185,6 @@ func (c *Client) CreateCredential(ctx context.Context, cred *models.UserCredenti
 		pbReq.CredentialId = cred.CredentialID
 	}
 	_, err := c.user.CreateCredential(ctx, pbReq)
-	return err
-}
-
-func (c *Client) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
-	_, err := c.user.UpdateCredentialSignCount(ctx, &hermesv1.UpdateCredentialSignCountRequest{
-		CredentialId: credentialID,
-		SignCount:    signCount,
-	})
 	return err
 }
 
@@ -264,29 +247,8 @@ func (c *Client) GetCredentialByID(ctx context.Context, credentialID string) (*m
 	return credentialFromProto(resp), nil
 }
 
-func (c *Client) UpdateCredential(ctx context.Context, credentialID string, updates map[string]any) error {
-	pbReq := &hermesv1.UpdateCredentialRequest{CredentialId: credentialID}
-	if v, ok := updates["secret"]; ok {
-		if s, ok := v.(string); ok {
-			pbReq.Secret = &s
-		}
-	}
-	if v, ok := updates["label"]; ok {
-		if s, ok := v.(string); ok {
-			pbReq.Label = &s
-		}
-	}
-	if v, ok := updates["last_used_at"]; ok {
-		if t, ok := v.(time.Time); ok {
-			pbReq.LastUsedAt = timestamppb.New(t)
-		}
-	}
-	_, err := c.user.UpdateCredential(ctx, pbReq)
-	return err
-}
-
-func (c *Client) UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error {
-	pbReq := &hermesv1.UpdateCredentialByInternalIDRequest{Id: uint32(id)}
+func (c *Client) PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error {
+	pbReq := &hermesv1.PatchCredentialRequest{CredentialId: credentialID}
 	if v, ok := updates["enabled"]; ok {
 		if b, ok := v.(bool); ok {
 			pbReq.Enabled = &b
@@ -307,6 +269,18 @@ func (c *Client) UpdateCredentialByInternalID(ctx context.Context, id uint, upda
 			pbReq.LastUsedAt = timestamppb.New(t)
 		}
 	}
-	_, err := c.user.UpdateCredentialByInternalID(ctx, pbReq)
+	if v, ok := updates["sign_count"]; ok {
+		switch n := v.(type) {
+		case uint32:
+			pbReq.SignCount = &n
+		case uint:
+			signCount := uint32(n)
+			pbReq.SignCount = &signCount
+		case int:
+			signCount := uint32(n)
+			pbReq.SignCount = &signCount
+		}
+	}
+	_, err := c.user.PatchCredential(ctx, pbReq)
 	return err
 }
