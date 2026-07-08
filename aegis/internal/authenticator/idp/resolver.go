@@ -2,11 +2,6 @@ package idp
 
 import "context"
 
-// KeyResolver 动态解析 IDP 密钥（app 覆盖 → domain 默认 → t_idp_key）
-type KeyResolver interface {
-	GetIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error)
-}
-
 // contextKey 用于在 context 中传递 appID
 type contextKey struct{}
 

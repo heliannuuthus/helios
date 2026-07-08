@@ -14,6 +14,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/heliannuuthus/aegis/config"
+	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/models"
@@ -22,15 +23,15 @@ import (
 
 // MPProvider 支付宝小程序 Provider
 type MPProvider struct {
-	resolver  idp.KeyResolver
+	keys      contract.KeyProvider
 	publicKey *rsa.PublicKey // 支付宝公钥，用于验签
 }
 
 // NewMPProvider 创建支付宝小程序 Provider
-func NewMPProvider(resolver idp.KeyResolver) *MPProvider {
+func NewMPProvider(keys contract.KeyProvider) *MPProvider {
 	cfg := config.Cfg()
 	p := &MPProvider{
-		resolver: resolver,
+		keys: keys,
 	}
 
 	// 解析公钥（可选，用于验签）
@@ -67,7 +68,7 @@ func (p *MPProvider) Login(ctx context.Context, proof string, params ...any) (*m
 		}
 	}
 
-	alipayAppID, alipaySecret, err := p.resolver.GetIDPKey(ctx, appID, idp.TypeAlipayMP)
+	alipayAppID, alipaySecret, err := p.keys.GetIDPKey(ctx, appID, idp.TypeAlipayMP)
 	if err != nil {
 		return nil, fmt.Errorf("解析支付宝小程序 IDP 密钥失败: %w", err)
 	}
@@ -119,7 +120,7 @@ func (p *MPProvider) Exchange(ctx context.Context, proof string, _ ...any) (*idp
 	}
 
 	appID := idp.AppIDFromContext(ctx)
-	alipayAppID, alipaySecret, err := p.resolver.GetIDPKey(ctx, appID, idp.TypeAlipayMP)
+	alipayAppID, alipaySecret, err := p.keys.GetIDPKey(ctx, appID, idp.TypeAlipayMP)
 	if err != nil {
 		return nil, fmt.Errorf("解析支付宝小程序 IDP 密钥失败: %w", err)
 	}

@@ -10,7 +10,6 @@ type HermesProvider interface {
 	ProvisionProvider
 	KeyProvider
 	RelationshipProvider
-	IDPKeyProvider
 }
 
 type ProvisionProvider interface {
@@ -24,15 +23,12 @@ type ProvisionProvider interface {
 
 type KeyProvider interface {
 	GetKeys(ctx context.Context, ownerType, ownerID string) ([][]byte, error)
+	GetIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error)
 }
 
 type RelationshipProvider interface {
 	ListApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error)
 	ListRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error)
-}
-
-type IDPKeyProvider interface {
-	GetIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error)
 }
 
 type UserProvider interface {

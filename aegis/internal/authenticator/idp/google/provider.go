@@ -12,6 +12,7 @@ import (
 	"github.com/tidwall/gjson"
 
 	"github.com/heliannuuthus/aegis/config"
+	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/models"
@@ -25,15 +26,15 @@ const (
 
 // Provider Google OAuth Provider
 type Provider struct {
-	resolver    idp.KeyResolver
+	keys        contract.KeyProvider
 	redirectURI string
 }
 
 // NewProvider 创建 Google Provider
-func NewProvider(resolver idp.KeyResolver) *Provider {
+func NewProvider(keys contract.KeyProvider) *Provider {
 	cfg := config.Cfg()
 	return &Provider{
-		resolver:    resolver,
+		keys:        keys,
 		redirectURI: cfg.GetString("idps.google.redirect-uri"),
 	}
 }
@@ -58,7 +59,7 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*mod
 		}
 	}
 
-	clientID, clientSecret, err := p.resolver.GetIDPKey(ctx, appID, idp.TypeGoogle)
+	clientID, clientSecret, err := p.keys.GetIDPKey(ctx, appID, idp.TypeGoogle)
 	if err != nil {
 		return nil, fmt.Errorf("解析 Google IDP 密钥失败: %w", err)
 	}
