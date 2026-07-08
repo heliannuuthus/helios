@@ -32,17 +32,9 @@ type RelationshipProvider interface {
 }
 
 type UserProvider interface {
-	UserProfileProvider
-	UserWriteProvider
-}
-
-type UserProfileProvider interface {
 	GetUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error)
 	GetUserByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error)
 	GetUserByPhone(ctx context.Context, phone string) (*models.UserWithDecrypted, error)
-}
-
-type UserWriteProvider interface {
 	CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error)
 	PatchUser(ctx context.Context, openid string, updates map[string]any) error
 }

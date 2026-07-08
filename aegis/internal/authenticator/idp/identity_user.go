@@ -10,7 +10,7 @@ import (
 
 var errIdentityUserNotFound = errors.New("user not found")
 
-func ResolveUserIdentity(ctx context.Context, users contract.UserProfileProvider, identities contract.IdentityProvider, idpType, principal string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
+func ResolveUserIdentity(ctx context.Context, users contract.UserProvider, identities contract.IdentityProvider, idpType, principal string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
 	if principal == "" {
 		return nil, nil, errIdentityUserNotFound
 	}
@@ -35,7 +35,7 @@ func ResolveUserIdentity(ctx context.Context, users contract.UserProfileProvider
 	return nil, nil, errIdentityUserNotFound
 }
 
-func resolveByIdentityTag(ctx context.Context, users contract.UserProfileProvider, identityProvider contract.IdentityProvider, idpType, principal string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
+func resolveByIdentityTag(ctx context.Context, users contract.UserProvider, identityProvider contract.IdentityProvider, idpType, principal string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
 	identities, err := identityProvider.ListIdentitiesByIdentity(ctx, "", idpType, principal)
 	if err != nil {
 		return nil, nil, err
@@ -51,7 +51,7 @@ func resolveByIdentityTag(ctx context.Context, users contract.UserProfileProvide
 	return user, identity, nil
 }
 
-func resolveByOpenID(ctx context.Context, users contract.UserProfileProvider, identities contract.IdentityProvider, idpType, openid string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
+func resolveByOpenID(ctx context.Context, users contract.UserProvider, identities contract.IdentityProvider, idpType, openid string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
 	user, err := users.GetUserByOpenID(ctx, openid)
 	if err != nil {
 		return nil, nil, err
@@ -63,7 +63,7 @@ func resolveByOpenID(ctx context.Context, users contract.UserProfileProvider, id
 	return user, identity, nil
 }
 
-func resolveByEmail(ctx context.Context, users contract.UserProfileProvider, identities contract.IdentityProvider, idpType, email string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
+func resolveByEmail(ctx context.Context, users contract.UserProvider, identities contract.IdentityProvider, idpType, email string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
 	user, err := users.GetUserByEmail(ctx, email)
 	if err != nil {
 		return nil, nil, err
@@ -75,7 +75,7 @@ func resolveByEmail(ctx context.Context, users contract.UserProfileProvider, ide
 	return user, identity, nil
 }
 
-func resolveByPhone(ctx context.Context, users contract.UserProfileProvider, identities contract.IdentityProvider, idpType, phone string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
+func resolveByPhone(ctx context.Context, users contract.UserProvider, identities contract.IdentityProvider, idpType, phone string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
 	user, err := users.GetUserByPhone(ctx, phone)
 	if err != nil {
 		return nil, nil, err

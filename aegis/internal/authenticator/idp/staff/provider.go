@@ -27,11 +27,11 @@ type credential struct {
 
 // Provider B 端平台人员账号密码 Provider
 type Provider struct {
-	userSvc     contract.UserProfileProvider
+	userSvc     contract.UserProvider
 	identitySvc contract.IdentityProvider
 }
 
-func NewProvider(userSvc contract.UserProfileProvider, identitySvc contract.IdentityProvider) *Provider {
+func NewProvider(userSvc contract.UserProvider, identitySvc contract.IdentityProvider) *Provider {
 	return &Provider{
 		userSvc:     userSvc,
 		identitySvc: identitySvc,
