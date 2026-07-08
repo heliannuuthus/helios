@@ -55,7 +55,7 @@ func (p *MPProvider) Login(ctx context.Context, proof string, params ...any) (*m
 		}
 	}
 
-	ttAppID, ttAppSecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeTTMP)
+	ttAppID, ttAppSecret, err := p.resolver.GetIDPKey(ctx, appID, idp.TypeTTMP)
 	if err != nil {
 		return nil, fmt.Errorf("解析抖音小程序 IDP 密钥失败: %w", err)
 	}
@@ -215,7 +215,7 @@ func (p *MPProvider) parseUserInfo(bodyBytes []byte) (*models.TUserInfo, error) 
 // 新版 API：code → RSA 加密的密文 → 用应用私钥解密 → phoneNumber
 func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, error) {
 	appID := idp.AppIDFromContext(ctx)
-	ttAppID, ttSecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeTTMP)
+	ttAppID, ttSecret, err := p.resolver.GetIDPKey(ctx, appID, idp.TypeTTMP)
 	if err != nil {
 		return "", fmt.Errorf("解析抖音小程序 IDP 密钥失败: %w", err)
 	}

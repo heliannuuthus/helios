@@ -143,7 +143,7 @@ func (s *userServiceServer) PatchUser(ctx context.Context, req *hermesv1.PatchUs
 }
 
 func (s *userServiceServer) GetIdentities(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.IdentityList, error) {
-	identities, err := s.svc.GetUserIdentitiesByOpenID(ctx, req.GetOpenid())
+	identities, err := s.svc.ListUserIdentities(ctx, req.GetOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -151,7 +151,7 @@ func (s *userServiceServer) GetIdentities(ctx context.Context, req *hermesv1.Ope
 }
 
 func (s *userServiceServer) GetIdentitiesByIdentity(ctx context.Context, req *hermesv1.GetByIdentityRequest) (*hermesv1.IdentityList, error) {
-	identities, err := s.svc.GetIdentities(ctx, req.GetDomain(), req.GetIdp(), req.GetTOpenid())
+	identities, err := s.svc.ListIdentitiesByIdentity(ctx, req.GetDomain(), req.GetIdp(), req.GetTOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -174,7 +174,7 @@ func (s *userServiceServer) AddIdentity(ctx context.Context, req *hermesv1.AddId
 		TOpenID: req.GetTOpenid(),
 		RawData: ptrOrEmpty(req.RawData),
 	}
-	if err := s.svc.AddIdentity(ctx, identity); err != nil {
+	if err := s.svc.CreateIdentity(ctx, identity); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -214,7 +214,7 @@ func (s *userServiceServer) GetCredentialByID(ctx context.Context, req *hermesv1
 }
 
 func (s *userServiceServer) GetUserCredentials(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.UserCredentialList, error) {
-	creds, err := s.svc.GetUserCredentials(ctx, req.GetOpenid())
+	creds, err := s.svc.ListUserCredentials(ctx, req.GetOpenid())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -222,7 +222,7 @@ func (s *userServiceServer) GetUserCredentials(ctx context.Context, req *hermesv
 }
 
 func (s *userServiceServer) GetUserCredentialsByType(ctx context.Context, req *hermesv1.GetCredentialsByTypeRequest) (*hermesv1.UserCredentialList, error) {
-	creds, err := s.svc.GetUserCredentialsByType(ctx, req.GetOpenid(), req.GetType())
+	creds, err := s.svc.ListUserCredentialsByType(ctx, req.GetOpenid(), req.GetType())
 	if err != nil {
 		return nil, toStatus(err)
 	}

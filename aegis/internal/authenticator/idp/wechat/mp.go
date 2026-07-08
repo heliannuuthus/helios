@@ -48,7 +48,7 @@ func (p *MPProvider) Login(ctx context.Context, proof string, params ...any) (*m
 		}
 	}
 
-	wxAppID, wxAppSecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeWechatMP)
+	wxAppID, wxAppSecret, err := p.resolver.GetIDPKey(ctx, appID, idp.TypeWechatMP)
 	if err != nil {
 		return nil, fmt.Errorf("解析微信小程序 IDP 密钥失败: %w", err)
 	}
@@ -153,7 +153,7 @@ func (p *MPProvider) Exchange(ctx context.Context, proof string, _ ...any) (*idp
 // getPhoneNumber 获取微信手机号（内部方法）
 func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, error) {
 	appID := idp.AppIDFromContext(ctx)
-	wxAppID, wxAppSecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeWechatMP)
+	wxAppID, wxAppSecret, err := p.resolver.GetIDPKey(ctx, appID, idp.TypeWechatMP)
 	if err != nil {
 		return "", fmt.Errorf("解析微信小程序 IDP 密钥失败: %w", err)
 	}

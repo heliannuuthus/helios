@@ -30,8 +30,8 @@ const (
 // hermes.UserService（直连）和 rpc/hermes.Client（gRPC）均可实现
 type CredentialStore interface {
 	CreateCredential(ctx context.Context, cred *models.UserCredential) error
-	GetUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error)
-	GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
+	ListUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error)
+	ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
 	GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error)
 	PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
@@ -79,9 +79,9 @@ func credentialActiveInMFA(c *models.UserCredential) bool {
 	}
 }
 
-// SetupTOTP 初始化 TOTP pending MFA；确认成功后才写入凭证表
-func (s *CredentialService) SetupTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
-	creds, err := s.store.GetUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
+// BeginTOTP 初始化 TOTP pending MFA；确认成功后才写入凭证表
+func (s *CredentialService) BeginTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
+	creds, err := s.store.ListUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
 	if err != nil {
 		return nil, fmt.Errorf("查询 TOTP 失败: %w", err)
 	}
@@ -134,8 +134,8 @@ func (s *CredentialService) SetupTOTP(ctx context.Context, req *models.TOTPSetup
 	}, nil
 }
 
-// ConfirmTOTP 确认 TOTP 绑定（验证一次后写入凭证表）
-func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error {
+// CompleteTOTP 确认 TOTP 绑定（验证一次后写入凭证表）
+func (s *CredentialService) CompleteTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error {
 	challenge, err := s.cache.GetChallenge(ctx, req.UID)
 	if err != nil {
 		return errors.New("pending MFA 不存在或已过期")
@@ -183,7 +183,7 @@ func (s *CredentialService) ConfirmTOTP(ctx context.Context, req *models.Confirm
 
 // VerifyTOTP 验证 TOTP
 func (s *CredentialService) VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error {
-	creds, err := s.store.GetUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
+	creds, err := s.store.ListUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
 	if err != nil {
 		return fmt.Errorf("查询凭证失败: %w", err)
 	}
@@ -204,8 +204,8 @@ func (s *CredentialService) VerifyTOTP(ctx context.Context, req *models.VerifyTO
 	return nil
 }
 
-// DisableTOTP 禁用 TOTP（按类型删除全部凭证行）
-func (s *CredentialService) DisableTOTP(ctx context.Context, openid string) error {
+// DeleteTOTP 禁用 TOTP（按类型删除全部凭证行）
+func (s *CredentialService) DeleteTOTP(ctx context.Context, openid string) error {
 	if err := s.store.DeleteCredentialByOpenIDAndType(ctx, openid, string(models.CredentialTypeTOTP)); err != nil {
 		return fmt.Errorf("删除 TOTP 凭证失败: %w", err)
 	}
@@ -213,39 +213,18 @@ func (s *CredentialService) DisableTOTP(ctx context.Context, openid string) erro
 	return nil
 }
 
-// SetTOTPEnabled 关闭 TOTP 即删除凭证；开启请走 Setup/Confirm 流程
-func (s *CredentialService) SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error {
+// PatchTOTP 关闭 TOTP 即删除凭证；开启请走 Setup/Confirm 流程
+func (s *CredentialService) PatchTOTP(ctx context.Context, openid string, enabled bool) error {
 	if enabled {
 		return errors.New("启用 TOTP 请使用扫码绑定流程")
 	}
-	return s.DisableTOTP(ctx, openid)
+	return s.DeleteTOTP(ctx, openid)
 }
 
 // ==================== WebAuthn ====================
 
-// SetWebAuthnEnabled 关闭即删除凭证；已存在则视为已启用
-func (s *CredentialService) SetWebAuthnEnabled(ctx context.Context, openid, credentialID string, enabled bool) error {
-	if enabled {
-		cred, err := s.store.GetCredentialByID(ctx, credentialID)
-		if err != nil {
-			return errors.New("凭证不存在")
-		}
-		if cred.OpenID != openid {
-			return errors.New("凭证不存在")
-		}
-		return nil
-	}
-	if err := s.store.DeleteCredential(ctx, openid, credentialID); err != nil {
-		return fmt.Errorf("删除凭证失败: %w", err)
-	}
-	return nil
-}
-
-// RenameWebAuthn 更新 WebAuthn/Passkey 凭证名称
-func (s *CredentialService) RenameWebAuthn(ctx context.Context, openid, credentialID, label string) error {
-	if label == "" {
-		return errors.New("label is required")
-	}
+// PatchWebAuthnCredential 更新 WebAuthn/Passkey 凭证元数据；关闭即删除凭证。
+func (s *CredentialService) PatchWebAuthnCredential(ctx context.Context, openid, credentialID string, updates map[string]any) error {
 	cred, err := s.store.GetCredentialByID(ctx, credentialID)
 	if err != nil {
 		return errors.New("凭证不存在")
@@ -253,14 +232,35 @@ func (s *CredentialService) RenameWebAuthn(ctx context.Context, openid, credenti
 	if cred.OpenID != openid {
 		return errors.New("凭证不存在")
 	}
-	if err := s.store.PatchCredential(ctx, credentialID, map[string]any{"label": label}); err != nil {
-		return fmt.Errorf("更新凭证名称失败: %w", err)
+
+	if enabled, ok := updates["enabled"].(bool); ok && !enabled {
+		if err := s.store.DeleteCredential(ctx, openid, credentialID); err != nil {
+			return fmt.Errorf("删除凭证失败: %w", err)
+		}
+		return nil
+	}
+
+	patch := make(map[string]any)
+	if label, ok := updates["label"].(string); ok {
+		if label == "" {
+			return errors.New("label is required")
+		}
+		patch["label"] = label
+	}
+	if enabled, ok := updates["enabled"].(bool); ok {
+		patch["enabled"] = enabled
+	}
+	if len(patch) == 0 {
+		return nil
+	}
+	if err := s.store.PatchCredential(ctx, credentialID, patch); err != nil {
+		return fmt.Errorf("更新凭证失败: %w", err)
 	}
 	return nil
 }
 
-// DeleteWebAuthn 删除 WebAuthn 凭证
-func (s *CredentialService) DeleteWebAuthn(ctx context.Context, openid, credentialID string) error {
+// DeleteWebAuthnCredential 删除 WebAuthn 凭证
+func (s *CredentialService) DeleteWebAuthnCredential(ctx context.Context, openid, credentialID string) error {
 	if err := s.store.DeleteCredential(ctx, openid, credentialID); err != nil {
 		return fmt.Errorf("删除凭证失败: %w", err)
 	}
@@ -270,9 +270,9 @@ func (s *CredentialService) DeleteWebAuthn(ctx context.Context, openid, credenti
 
 // ==================== MFA 状态 ====================
 
-// GetUserMFAStatus 获取用户 MFA 状态
-func (s *CredentialService) GetUserMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error) {
-	credentials, err := s.store.GetUserCredentials(ctx, openid)
+// GetMFAStatus 获取用户 MFA 状态
+func (s *CredentialService) GetMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error) {
+	credentials, err := s.store.ListUserCredentials(ctx, openid)
 	if err != nil {
 		return nil, err
 	}
@@ -294,9 +294,9 @@ func (s *CredentialService) GetUserMFAStatus(ctx context.Context, openid string)
 	return status, nil
 }
 
-// GetUserCredentialSummaries 获取用户凭证摘要列表
-func (s *CredentialService) GetUserCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error) {
-	credentials, err := s.store.GetUserCredentials(ctx, openid)
+// ListCredentialSummaries 获取用户凭证摘要列表
+func (s *CredentialService) ListCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error) {
+	credentials, err := s.store.ListUserCredentials(ctx, openid)
 	if err != nil {
 		return nil, err
 	}

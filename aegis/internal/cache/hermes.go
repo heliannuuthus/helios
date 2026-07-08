@@ -131,7 +131,7 @@ func (cm *Manager) GetAppServiceRelations(ctx context.Context, appID string) ([]
 	}
 
 	// 从 hermes 获取
-	relations, err := cm.hermesSvc.GetApplicationServiceRelations(ctx, appID)
+	relations, err := cm.hermesSvc.ListApplicationServiceRelations(ctx, appID)
 	if err != nil {
 		return nil, err
 	}
@@ -145,8 +145,8 @@ func (cm *Manager) GetAppServiceRelations(ctx context.Context, appID string) ([]
 	return relations, nil
 }
 
-// GetDomainIDPConfigs 获取域 IDP 配置（带缓存）
-func (cm *Manager) GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error) {
+// ListDomainIDPConfigs 获取域 IDP 配置（带缓存）
+func (cm *Manager) ListDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error) {
 	cacheKey := config.GetCacheKeyPrefix("domain-idp-config") + domainID
 
 	if cm.domainIDPConfigCache != nil {
@@ -155,7 +155,7 @@ func (cm *Manager) GetDomainIDPConfigs(ctx context.Context, domainID string) ([]
 		}
 	}
 
-	configs, err := cm.hermesSvc.GetDomainIDPConfigs(ctx, domainID)
+	configs, err := cm.hermesSvc.ListDomainIDPConfigs(ctx, domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -168,8 +168,8 @@ func (cm *Manager) GetDomainIDPConfigs(ctx context.Context, domainID string) ([]
 	return configs, nil
 }
 
-// GetApplicationIDPConfigs 获取应用 IDP 配置（带缓存）
-func (cm *Manager) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
+// ListApplicationIDPConfigs 获取应用 IDP 配置（带缓存）
+func (cm *Manager) ListApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
 	cacheKey := config.GetCacheKeyPrefix("app-idp-config") + appID
 
 	// 尝试从缓存获取
@@ -180,7 +180,7 @@ func (cm *Manager) GetApplicationIDPConfigs(ctx context.Context, appID string) (
 	}
 
 	// 从 hermes 获取
-	configs, err := cm.hermesSvc.GetApplicationIDPConfigs(ctx, appID)
+	configs, err := cm.hermesSvc.ListApplicationIDPConfigs(ctx, appID)
 	if err != nil {
 		return nil, err
 	}

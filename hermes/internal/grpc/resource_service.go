@@ -39,7 +39,7 @@ func (s *resourceServiceServer) SetApplicationServiceRelations(ctx context.Conte
 }
 
 func (s *resourceServiceServer) GetApplicationServiceRelations(ctx context.Context, req *hermesv1.GetApplicationServiceRelationsRequest) (*hermesv1.ApplicationServiceRelationList, error) {
-	rels, err := s.svc.GetApplicationServiceRelations(ctx, req.GetAppId())
+	rels, err := s.svc.ListApplicationServiceRelations(ctx, req.GetAppId())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -154,7 +154,7 @@ func (s *resourceServiceServer) ListRelationships(ctx context.Context, req *herm
 }
 
 func (s *resourceServiceServer) FindRelationships(ctx context.Context, req *hermesv1.FindRelationshipsRequest) (*hermesv1.Relationships, error) {
-	rels, err := s.svc.FindRelationships(ctx, req.GetServiceId(), req.GetSubjectType(), req.GetSubjectId())
+	rels, err := s.svc.ListRelationshipsBySubject(ctx, req.GetServiceId(), req.GetSubjectType(), req.GetSubjectId())
 	if err != nil {
 		return nil, toStatus(err)
 	}

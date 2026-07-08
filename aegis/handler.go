@@ -129,7 +129,7 @@ func (h *Handler) Authorize(c *gin.Context) {
 		return
 	}
 
-	idpConfigs, err := h.cache.GetApplicationIDPConfigs(ctx, req.ClientID)
+	idpConfigs, err := h.cache.ListApplicationIDPConfigs(ctx, req.ClientID)
 	if err != nil {
 		h.authorizeErrorResponse(c, autherrors.NewServerError("query idp configs failed"))
 		return
@@ -519,7 +519,7 @@ func (h *Handler) ConfirmIdentify(c *gin.Context) {
 	logger.Infof("[Handler] Account Linking 成功 - OpenID: %s, Connection: %s", identifiedUser.OpenID, connection)
 
 	// 获取关联后的全部身份，完成登录流程
-	allIdentities, err := h.userSvc.GetIdentities(ctx, newIdentity)
+	allIdentities, err := h.userSvc.ListIdentitiesByIdentity(ctx, newIdentity)
 	if err != nil {
 		h.errorResponse(c, autherrors.NewServerError("failed to load identities"))
 		return
@@ -971,7 +971,7 @@ func (h *Handler) resolveUser(ctx context.Context, flow *types.AuthFlow) error {
 	}
 
 	// 1. 查询用户的全部身份
-	allIdentities, err := h.userSvc.GetIdentities(ctx, identity)
+	allIdentities, err := h.userSvc.ListIdentitiesByIdentity(ctx, identity)
 	if err != nil {
 		return err
 	}
@@ -989,7 +989,7 @@ func (h *Handler) resolveUser(ctx context.Context, flow *types.AuthFlow) error {
 		}
 
 		// 未找到已有用户，检查该 IDP 是否在域的 IDP 配置中（有配置即允许）
-		domainIDPConfigs, err := h.cache.GetDomainIDPConfigs(ctx, domain)
+		domainIDPConfigs, err := h.cache.ListDomainIDPConfigs(ctx, domain)
 		if err != nil {
 			return fmt.Errorf("get domain idp configs: %w", err)
 		}

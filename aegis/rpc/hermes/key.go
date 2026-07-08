@@ -18,7 +18,7 @@ func (c *Client) GetKeys(ctx context.Context, ownerType, ownerID string) ([][]by
 	return resp.Keys, nil
 }
 
-func (c *Client) ResolveIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error) {
+func (c *Client) GetIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error) {
 	resp, err := c.key.ResolveIDPKey(ctx, &hermesv1.ResolveIDPKeyRequest{
 		AppId:   appID,
 		IdpType: idpType,

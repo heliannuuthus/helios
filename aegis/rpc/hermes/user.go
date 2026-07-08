@@ -117,7 +117,7 @@ func (c *Client) PatchUser(ctx context.Context, openid string, updates map[strin
 
 // ==================== Identity ====================
 
-func (c *Client) GetUserIdentitiesByOpenID(ctx context.Context, openid string) (models.Identities, error) {
+func (c *Client) ListUserIdentities(ctx context.Context, openid string) (models.Identities, error) {
 	resp, err := c.user.GetIdentities(ctx, &hermesv1.OpenIDRequest{Openid: openid})
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ func (c *Client) GetUserIdentitiesByOpenID(ctx context.Context, openid string) (
 	return identities, nil
 }
 
-func (c *Client) GetIdentities(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error) {
+func (c *Client) ListIdentitiesByIdentity(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error) {
 	resp, err := c.user.GetIdentitiesByIdentity(ctx, &hermesv1.GetByIdentityRequest{
 		Domain:  domain,
 		Idp:     idp,
@@ -145,7 +145,7 @@ func (c *Client) GetIdentities(ctx context.Context, domain, idp, tOpenID string)
 	return identities, nil
 }
 
-func (c *Client) AddIdentity(ctx context.Context, identity *models.UserIdentity) error {
+func (c *Client) CreateIdentity(ctx context.Context, identity *models.UserIdentity) error {
 	pbReq := &hermesv1.AddIdentityRequest{
 		Domain:  identity.Domain,
 		Openid:  identity.UID,
@@ -212,7 +212,7 @@ func (c *Client) GetOpenIDByCredentialID(ctx context.Context, credentialID strin
 	return resp.Openid, nil
 }
 
-func (c *Client) GetUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
+func (c *Client) ListUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
 	resp, err := c.user.GetUserCredentials(ctx, &hermesv1.OpenIDRequest{Openid: openid})
 	if err != nil {
 		return nil, err
@@ -224,7 +224,7 @@ func (c *Client) GetUserCredentials(ctx context.Context, openid string) ([]model
 	return creds, nil
 }
 
-func (c *Client) GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
+func (c *Client) ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
 	resp, err := c.user.GetUserCredentialsByType(ctx, &hermesv1.GetCredentialsByTypeRequest{
 		Openid: openid,
 		Type:   credType,

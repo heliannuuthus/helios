@@ -67,7 +67,7 @@ func (p *MPProvider) Login(ctx context.Context, proof string, params ...any) (*m
 		}
 	}
 
-	alipayAppID, alipaySecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeAlipayMP)
+	alipayAppID, alipaySecret, err := p.resolver.GetIDPKey(ctx, appID, idp.TypeAlipayMP)
 	if err != nil {
 		return nil, fmt.Errorf("解析支付宝小程序 IDP 密钥失败: %w", err)
 	}
@@ -119,7 +119,7 @@ func (p *MPProvider) Exchange(ctx context.Context, proof string, _ ...any) (*idp
 	}
 
 	appID := idp.AppIDFromContext(ctx)
-	alipayAppID, alipaySecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeAlipayMP)
+	alipayAppID, alipaySecret, err := p.resolver.GetIDPKey(ctx, appID, idp.TypeAlipayMP)
 	if err != nil {
 		return nil, fmt.Errorf("解析支付宝小程序 IDP 密钥失败: %w", err)
 	}

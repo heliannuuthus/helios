@@ -114,7 +114,7 @@ func (h *Handler) DeleteIDPKey(c *gin.Context) {
 // ListDomainIDPConfigs GET /hermes/domains/:domain_id/idp-configs
 func (h *Handler) ListDomainIDPConfigs(c *gin.Context) {
 	domainID := c.Param("domain_id")
-	configs, err := h.service.GetDomainIDPConfigs(c.Request.Context(), domainID)
+	configs, err := h.service.ListDomainIDPConfigs(c.Request.Context(), domainID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -492,7 +492,7 @@ func (h *Handler) ListApplicationIDPConfigs(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "application not found in this domain"})
 		return
 	}
-	configs, err := h.service.GetApplicationIDPConfigs(c.Request.Context(), appID)
+	configs, err := h.service.ListApplicationIDPConfigs(c.Request.Context(), appID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -593,8 +593,8 @@ func (h *Handler) DeleteApplicationIDPConfig(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-// GetApplicationServiceRelations GET /hermes/domains/:domain_id/applications/:app_id/relations
-func (h *Handler) GetApplicationServiceRelations(c *gin.Context) {
+// ListApplicationServiceRelations GET /hermes/domains/:domain_id/applications/:app_id/relations
+func (h *Handler) ListApplicationServiceRelations(c *gin.Context) {
 	domainID := c.Param("domain_id")
 	appID := c.Param("app_id")
 	app, err := h.service.GetApplication(c.Request.Context(), appID)
@@ -606,7 +606,7 @@ func (h *Handler) GetApplicationServiceRelations(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "application not found in this domain"})
 		return
 	}
-	relations, err := h.service.GetApplicationServiceRelations(c.Request.Context(), appID)
+	relations, err := h.service.ListApplicationServiceRelations(c.Request.Context(), appID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

@@ -18,7 +18,7 @@ func (c *Client) GetDomain(ctx context.Context, domainID string) (*models.Domain
 	return domainFromProto(resp), nil
 }
 
-func (c *Client) GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error) {
+func (c *Client) ListDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error) {
 	resp, err := c.provision.GetDomainIDPConfigs(ctx, &hermesv1.GetDomainRequest{DomainId: domainID})
 	if err != nil {
 		return nil, fmt.Errorf("获取域 IDP 配置失败: %w", err)
@@ -40,7 +40,7 @@ func (c *Client) GetApplication(ctx context.Context, appID string) (*models.Appl
 	return applicationFromProto(resp), nil
 }
 
-func (c *Client) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
+func (c *Client) ListApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
 	resp, err := c.provision.GetApplicationIDPConfigs(ctx, &hermesv1.GetApplicationRequest{AppId: appID})
 	if err != nil {
 		return nil, fmt.Errorf("获取应用 IDP 配置失败: %w", err)

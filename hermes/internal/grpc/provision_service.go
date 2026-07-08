@@ -61,7 +61,7 @@ func (s *provisionServiceServer) UpdateDomain(ctx context.Context, req *hermesv1
 // ==================== Domain IDP Config ====================
 
 func (s *provisionServiceServer) GetDomainIDPConfigs(ctx context.Context, req *hermesv1.GetDomainRequest) (*hermesv1.DomainIDPConfigList, error) {
-	configs, err := s.svc.GetDomainIDPConfigs(ctx, req.GetDomainId())
+	configs, err := s.svc.ListDomainIDPConfigs(ctx, req.GetDomainId())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -97,7 +97,7 @@ func (s *provisionServiceServer) UpdateDomainIDPConfig(ctx context.Context, req 
 		return nil, toStatus(err)
 	}
 
-	configs, err := s.svc.GetDomainIDPConfigs(ctx, req.GetDomainId())
+	configs, err := s.svc.ListDomainIDPConfigs(ctx, req.GetDomainId())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -220,7 +220,7 @@ func (s *provisionServiceServer) UpdateApplication(ctx context.Context, req *her
 // ==================== Application IDP Config ====================
 
 func (s *provisionServiceServer) GetApplicationIDPConfigs(ctx context.Context, req *hermesv1.GetApplicationRequest) (*hermesv1.ApplicationIDPConfigList, error) {
-	configs, err := s.svc.GetApplicationIDPConfigs(ctx, req.GetAppId())
+	configs, err := s.svc.ListApplicationIDPConfigs(ctx, req.GetAppId())
 	if err != nil {
 		return nil, toStatus(err)
 	}
@@ -256,7 +256,7 @@ func (s *provisionServiceServer) UpdateApplicationIDPConfig(ctx context.Context,
 		return nil, toStatus(err)
 	}
 
-	configs, err := s.svc.GetApplicationIDPConfigs(ctx, req.GetAppId())
+	configs, err := s.svc.ListApplicationIDPConfigs(ctx, req.GetAppId())
 	if err != nil {
 		return nil, toStatus(err)
 	}

@@ -10,7 +10,7 @@ import (
 
 // ==================== Application Service Relations ====================
 
-func (c *Client) GetApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error) {
+func (c *Client) ListApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error) {
 	resp, err := c.resource.GetApplicationServiceRelations(ctx, &hermesv1.GetApplicationServiceRelationsRequest{AppId: appID})
 	if err != nil {
 		return nil, fmt.Errorf("获取应用服务关系失败: %w", err)
@@ -24,7 +24,7 @@ func (c *Client) GetApplicationServiceRelations(ctx context.Context, appID strin
 
 // ==================== Relationship ====================
 
-func (c *Client) FindRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
+func (c *Client) ListRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
 	resp, err := c.resource.FindRelationships(ctx, &hermesv1.FindRelationshipsRequest{
 		ServiceId:   serviceID,
 		SubjectType: subjectType,

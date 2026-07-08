@@ -33,17 +33,17 @@ func (s *Service) GetUser(ctx context.Context, openid string) (*models.UserWithD
 
 // GetIdentityTypes 获取用户已绑定的身份类型列表
 func (s *Service) GetIdentityTypes(ctx context.Context, openid string) ([]string, error) {
-	identities, err := s.userSvc.GetUserIdentitiesByOpenID(ctx, openid)
+	identities, err := s.userSvc.ListUserIdentities(ctx, openid)
 	if err != nil {
 		return nil, err
 	}
 	return identities.IDPTypes(), nil
 }
 
-// GetIdentities 通过身份查找该用户的全部身份
+// ListIdentitiesByIdentity 通过身份查找该用户的全部身份
 // 用户不存在返回空切片，仅基础设施故障返回 error
-func (s *Service) GetIdentities(ctx context.Context, identity *models.UserIdentity) (models.Identities, error) {
-	return s.userSvc.GetIdentities(ctx, identity.Domain, identity.IDP, identity.TOpenID)
+func (s *Service) ListIdentitiesByIdentity(ctx context.Context, identity *models.UserIdentity) (models.Identities, error) {
+	return s.userSvc.ListIdentitiesByIdentity(ctx, identity.Domain, identity.IDP, identity.TOpenID)
 }
 
 // UpdateLastLogin 更新最后登录时间
@@ -63,7 +63,7 @@ func (s *Service) FindUserByPhone(ctx context.Context, phone string) (*models.Us
 
 // LinkIdentity 将新的 IDP 身份关联到已有用户
 func (s *Service) LinkIdentity(ctx context.Context, identity *models.UserIdentity) error {
-	return s.userSvc.AddIdentity(ctx, identity)
+	return s.userSvc.CreateIdentity(ctx, identity)
 }
 
 // CreateUser 创建用户，返回全部身份
@@ -75,5 +75,5 @@ func (s *Service) CreateUser(ctx context.Context, identity *models.UserIdentity,
 
 	s.cache.CacheUser(newUser)
 
-	return s.userSvc.GetUserIdentitiesByOpenID(ctx, newUser.OpenID)
+	return s.userSvc.ListUserIdentities(ctx, newUser.OpenID)
 }

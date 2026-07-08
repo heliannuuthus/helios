@@ -110,7 +110,7 @@ func (s *Service) GetDecryptedUserByIdentity(ctx context.Context, domain, idp, t
 
 // GetIdentities 根据 domain + idp + t_openid 查找该用户的全部身份
 // 用户不存在返回空切片（非 error），仅基础设施故障才返回 error
-func (s *Service) GetIdentities(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error) {
+func (s *Service) ListIdentitiesByIdentity(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error) {
 	var matched models.UserIdentity
 	if err := s.db.WithContext(ctx).
 		Where("domain = ? AND idp = ? AND t_openid = ?", domain, idp, tOpenID).
@@ -120,11 +120,11 @@ func (s *Service) GetIdentities(ctx context.Context, domain, idp, tOpenID string
 		}
 		return nil, err
 	}
-	return s.GetUserIdentitiesByOpenID(ctx, matched.UID)
+	return s.ListUserIdentities(ctx, matched.UID)
 }
 
-// GetUserIdentitiesByOpenID 获取用户所有身份关联
-func (s *Service) GetUserIdentitiesByOpenID(ctx context.Context, openid string) (models.Identities, error) {
+// ListUserIdentities 获取用户所有身份关联
+func (s *Service) ListUserIdentities(ctx context.Context, openid string) (models.Identities, error) {
 	var identities models.Identities
 	if err := s.db.WithContext(ctx).Where("uid = ?", openid).Find(&identities).Error; err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ func (s *Service) GetUserIdentityByType(ctx context.Context, domain, openid, idp
 }
 
 // AddIdentity 添加身份关联
-func (s *Service) AddIdentity(ctx context.Context, identity *models.UserIdentity) error {
+func (s *Service) CreateIdentity(ctx context.Context, identity *models.UserIdentity) error {
 	return s.db.WithContext(ctx).Create(identity).Error
 }
 
@@ -249,8 +249,8 @@ func (s *Service) GetCredentialByID(ctx context.Context, credentialID string) (*
 	return &cred, nil
 }
 
-// GetUserCredentials 获取用户所有凭证（TOTP 类型自动解密 Secret）
-func (s *Service) GetUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
+// ListUserCredentials 获取用户所有凭证（TOTP 类型自动解密 Secret）
+func (s *Service) ListUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
 	if err := s.db.WithContext(ctx).Where("openid = ?", openid).Find(&credentials).Error; err != nil {
 		return nil, err
@@ -259,8 +259,8 @@ func (s *Service) GetUserCredentials(ctx context.Context, openid string) ([]mode
 	return credentials, nil
 }
 
-// GetUserCredentialsByType 获取用户指定类型的凭证（TOTP 类型自动解密 Secret）
-func (s *Service) GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
+// ListUserCredentialsByType 获取用户指定类型的凭证（TOTP 类型自动解密 Secret）
+func (s *Service) ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
 	if err := s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Find(&credentials).Error; err != nil {
 		return nil, err

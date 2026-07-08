@@ -398,7 +398,7 @@ func (s *Service) GetOpenIDByCredentialID(ctx context.Context, credentialID stri
 
 // getUserWebAuthnCredentials 获取用户的 WebAuthn 凭证列表
 func (s *Service) getUserWebAuthnCredentials(ctx context.Context, openid string) ([]*StoredWebAuthnCredential, error) {
-	credentials, err := s.userSvc.GetUserCredentialsByType(ctx, openid, string(models.CredentialTypeWebAuthn))
+	credentials, err := s.userSvc.ListUserCredentialsByType(ctx, openid, string(models.CredentialTypeWebAuthn))
 	if err != nil {
 		return nil, err
 	}

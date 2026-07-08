@@ -15,10 +15,10 @@ type HermesProvider interface {
 
 type ProvisionProvider interface {
 	GetDomain(ctx context.Context, domainID string) (*models.Domain, error)
-	GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error)
+	ListDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error)
 	GetApplication(ctx context.Context, appID string) (*models.Application, error)
 	GetService(ctx context.Context, serviceID string) (*models.Service, error)
-	GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error)
+	ListApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error)
 	GetServiceChallengeSetting(ctx context.Context, serviceID, challengeType string) (*models.ServiceChallengeSetting, error)
 }
 
@@ -27,12 +27,12 @@ type KeyProvider interface {
 }
 
 type RelationshipProvider interface {
-	GetApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error)
-	FindRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error)
+	ListApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error)
+	ListRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error)
 }
 
 type IDPKeyProvider interface {
-	ResolveIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error)
+	GetIDPKey(ctx context.Context, appID, idpType string) (tAppID, tSecret string, err error)
 }
 
 type UserProvider interface {
@@ -50,9 +50,9 @@ type UserProfileProvider interface {
 }
 
 type IdentityProvider interface {
-	GetUserIdentitiesByOpenID(ctx context.Context, openid string) (models.Identities, error)
-	GetIdentities(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error)
-	AddIdentity(ctx context.Context, identity *models.UserIdentity) error
+	ListUserIdentities(ctx context.Context, openid string) (models.Identities, error)
+	ListIdentitiesByIdentity(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error)
+	CreateIdentity(ctx context.Context, identity *models.UserIdentity) error
 	CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error)
 }
 
@@ -65,7 +65,7 @@ type UserCredentialProvider interface {
 	PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
 	GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error)
-	GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
+	ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
 }
 
 // MFAProvider provides the MFA operations that back MFAService.
@@ -77,20 +77,19 @@ type MFAProvider interface {
 }
 
 type TOTPProvider interface {
-	SetupTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error)
-	ConfirmTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error
+	BeginTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error)
+	CompleteTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error
 	VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error
-	DisableTOTP(ctx context.Context, openid string) error
-	SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error
+	DeleteTOTP(ctx context.Context, openid string) error
+	PatchTOTP(ctx context.Context, openid string, enabled bool) error
 }
 
 type WebAuthnCredentialProvider interface {
-	SetWebAuthnEnabled(ctx context.Context, openid, credentialID string, enabled bool) error
-	RenameWebAuthn(ctx context.Context, openid, credentialID, label string) error
-	DeleteWebAuthn(ctx context.Context, openid, credentialID string) error
+	PatchWebAuthnCredential(ctx context.Context, openid, credentialID string, updates map[string]any) error
+	DeleteWebAuthnCredential(ctx context.Context, openid, credentialID string) error
 }
 
 type MFASummaryProvider interface {
-	GetUserMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error)
-	GetUserCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error)
+	GetMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error)
+	ListCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error)
 }

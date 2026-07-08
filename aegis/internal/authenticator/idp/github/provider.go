@@ -55,7 +55,7 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*mod
 		}
 	}
 
-	clientID, clientSecret, err := p.resolver.ResolveIDPKey(ctx, appID, idp.TypeGithub)
+	clientID, clientSecret, err := p.resolver.GetIDPKey(ctx, appID, idp.TypeGithub)
 	if err != nil {
 		return nil, fmt.Errorf("解析 GitHub IDP 密钥失败: %w", err)
 	}

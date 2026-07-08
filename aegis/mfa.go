@@ -32,44 +32,40 @@ func (s *MFAService) GetRPID() string {
 	return s.webauthnSvc.GetRPID()
 }
 
-func (s *MFAService) SetupTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
-	return s.mfaProvider.SetupTOTP(ctx, req)
+func (s *MFAService) BeginTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
+	return s.mfaProvider.BeginTOTP(ctx, req)
 }
 
-func (s *MFAService) ConfirmTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error {
-	return s.mfaProvider.ConfirmTOTP(ctx, req)
+func (s *MFAService) CompleteTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error {
+	return s.mfaProvider.CompleteTOTP(ctx, req)
 }
 
 func (s *MFAService) VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error {
 	return s.mfaProvider.VerifyTOTP(ctx, req)
 }
 
-func (s *MFAService) DisableTOTP(ctx context.Context, openid string) error {
-	return s.mfaProvider.DisableTOTP(ctx, openid)
+func (s *MFAService) DeleteTOTP(ctx context.Context, openid string) error {
+	return s.mfaProvider.DeleteTOTP(ctx, openid)
 }
 
-func (s *MFAService) SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error {
-	return s.mfaProvider.SetTOTPEnabled(ctx, openid, enabled)
+func (s *MFAService) PatchTOTP(ctx context.Context, openid string, enabled bool) error {
+	return s.mfaProvider.PatchTOTP(ctx, openid, enabled)
 }
 
-func (s *MFAService) SetWebAuthnEnabled(ctx context.Context, openid, credentialID string, enabled bool) error {
-	return s.mfaProvider.SetWebAuthnEnabled(ctx, openid, credentialID, enabled)
+func (s *MFAService) PatchWebAuthnCredential(ctx context.Context, openid, credentialID string, updates map[string]any) error {
+	return s.mfaProvider.PatchWebAuthnCredential(ctx, openid, credentialID, updates)
 }
 
-func (s *MFAService) RenameWebAuthn(ctx context.Context, openid, credentialID, label string) error {
-	return s.mfaProvider.RenameWebAuthn(ctx, openid, credentialID, label)
+func (s *MFAService) DeleteWebAuthnCredential(ctx context.Context, openid, credentialID string) error {
+	return s.mfaProvider.DeleteWebAuthnCredential(ctx, openid, credentialID)
 }
 
-func (s *MFAService) DeleteWebAuthn(ctx context.Context, openid, credentialID string) error {
-	return s.mfaProvider.DeleteWebAuthn(ctx, openid, credentialID)
+func (s *MFAService) GetMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error) {
+	return s.mfaProvider.GetMFAStatus(ctx, openid)
 }
 
-func (s *MFAService) GetUserMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error) {
-	return s.mfaProvider.GetUserMFAStatus(ctx, openid)
-}
-
-func (s *MFAService) GetUserCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error) {
-	return s.mfaProvider.GetUserCredentialSummaries(ctx, openid)
+func (s *MFAService) ListCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error) {
+	return s.mfaProvider.ListCredentialSummaries(ctx, openid)
 }
 
 // ==================== 对外类型定义 ====================
