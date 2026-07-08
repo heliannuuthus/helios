@@ -20,12 +20,6 @@ type ConfirmTOTPRequest struct {
 	Code   string
 }
 
-// VerifyTOTPRequest TOTP 验证请求
-type VerifyTOTPRequest struct {
-	OpenID string
-	Code   string
-}
-
 // RegisterWebAuthnRequest WebAuthn 注册请求
 type RegisterWebAuthnRequest struct {
 	OpenID          string

@@ -171,28 +171,6 @@ func (s *MFAService) CompleteTOTP(ctx context.Context, req *models.ConfirmTOTPRe
 	return nil
 }
 
-func (s *MFAService) VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error {
-	creds, err := s.store.ListUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
-	if err != nil {
-		return fmt.Errorf("查询凭证失败: %w", err)
-	}
-	var active []models.UserCredential
-	for i := range creds {
-		if isActiveTOTPCredential(&creds[i]) {
-			active = append(active, creds[i])
-		}
-	}
-	if len(active) == 0 {
-		return errors.New("用户未绑定 TOTP")
-	}
-
-	if !totp.Validate(req.Code, active[0].Secret) {
-		return errors.New("验证码错误")
-	}
-
-	return nil
-}
-
 func (s *MFAService) PatchCredential(ctx context.Context, openid, credType, credentialID string, updates map[string]any) error {
 	if models.CredentialType(credType) == models.CredentialTypeTOTP {
 		enabled, ok := updates["enabled"].(bool)

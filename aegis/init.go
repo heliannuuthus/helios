@@ -20,7 +20,6 @@ import (
 	"github.com/heliannuuthus/aegis/internal/authenticator/idp/tt"
 	idpuser "github.com/heliannuuthus/aegis/internal/authenticator/idp/user"
 	"github.com/heliannuuthus/aegis/internal/authenticator/idp/wechat"
-	"github.com/heliannuuthus/aegis/internal/authenticator/totp"
 	"github.com/heliannuuthus/aegis/internal/authenticator/vchan"
 	"github.com/heliannuuthus/aegis/internal/authenticator/webauthn"
 	"github.com/heliannuuthus/aegis/internal/authorize"
@@ -73,10 +72,8 @@ func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 	logger.Info("[Auth] 访问控制管理器初始化完成")
 
 	mfaSvc := NewMFAService(credentialStore, cacheManager, webauthnSvc)
-	totpVerifier := totp.NewVerifier(mfaSvc)
-	logger.Info("[Auth] TOTP 验证器初始化完成")
 
-	registry := initRegistry(hermesSvc, userSvc, identitySvc, cacheManager, emailSender, webauthnSvc, captchaVerifier, totpVerifier, ac, tokenSvc)
+	registry := initRegistry(hermesSvc, userSvc, identitySvc, credentialStore, cacheManager, emailSender, webauthnSvc, captchaVerifier, ac, tokenSvc)
 
 	pool, err := async.NewPool(64)
 	if err != nil {
@@ -177,7 +174,7 @@ func initProviders(cacheManager *cache.Manager, credentialStore contract.Credent
 }
 
 // initRegistry 初始化全局 Registry（注册胶水层 Authenticator）
-func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, identitySvc contract.IdentityProvider, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier factor.TOTPVerifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
+func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, identitySvc contract.IdentityProvider, credentialStore contract.CredentialStore, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
 	registry := authenticator.NewRegistry()
 
 	// ==================== IDP Authenticators ====================
@@ -210,7 +207,7 @@ func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvid
 		registry.Register(authenticate.NewFactorAuthenticator(factor.NewEmailOTPProvider(emailSender, cacheManager), ac, tokenVerifier))
 	}
 
-	registry.Register(authenticate.NewFactorAuthenticator(factor.NewTOTPFactor(totpVerifier), ac, tokenVerifier))
+	registry.Register(authenticate.NewFactorAuthenticator(factor.NewTOTPFactor(credentialStore), ac, tokenVerifier))
 
 	registry.Register(authenticate.NewFactorAuthenticator(factor.NewWebAuthnProvider(webauthnSvc), ac, tokenVerifier))
 

@@ -66,7 +66,3 @@ type CredentialStore interface {
 	PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
 }
-
-type TOTPVerifier interface {
-	VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error
-}
