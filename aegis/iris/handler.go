@@ -68,7 +68,7 @@ func (h *Handler) GetProfile(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userSvc.GetDecryptedUserByOpenID(c.Request.Context(), openid)
+	user, err := h.userSvc.GetUserByOpenID(c.Request.Context(), openid)
 	if err != nil {
 		errorResponse(c, autherrors.NewNotFound("user not found"))
 		return
@@ -542,7 +542,7 @@ func (h *Handler) DeleteMFA(c *gin.Context) {
 func (h *Handler) beginWebAuthnRegistration(c *gin.Context, openID, credType string) {
 	ctx := c.Request.Context()
 
-	user, err := h.userSvc.GetDecryptedUserByOpenID(ctx, openID)
+	user, err := h.userSvc.GetUserByOpenID(ctx, openID)
 	if err != nil {
 		errorResponse(c, autherrors.NewNotFound("user not found"))
 		return

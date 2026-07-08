@@ -5,10 +5,10 @@ import (
 	"github.com/heliannuuthus/pkg/patch"
 )
 
-// ==================== PasswordAuth ====================
+// ==================== PasswordLogin ====================
 
-// PasswordAuth 密码存储凭证（IDP 身份解析结果）
-type PasswordAuth struct {
+// PasswordLogin 密码登录材料（IDP 身份解析结果）
+type PasswordLogin struct {
 	OpenID       string
 	PasswordHash string
 	Nickname     string

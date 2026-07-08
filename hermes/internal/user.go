@@ -310,10 +310,10 @@ func (s *Service) DeleteCredentialByOpenIDAndType(ctx context.Context, openid st
 	return s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Delete(&models.UserCredential{}).Error
 }
 
-// ==================== PasswordStore 接口实现（供 password IDP 使用）====================
+// ==================== Password Login ====================
 
-// GetPasswordAuth resolves a password credential by an upper-layer identity tag.
-func (s *Service) GetPasswordAuth(ctx context.Context, idpType, identifier string) (*dto.PasswordAuth, error) {
+// GetPasswordLogin resolves password login material by an upper-layer identity tag.
+func (s *Service) GetPasswordLogin(ctx context.Context, idpType, identifier string) (*dto.PasswordLogin, error) {
 	return s.getByIdentifierWithIDP(ctx, identifier, idpType)
 }
 
@@ -327,22 +327,22 @@ func (s *Service) getUserByEmail(ctx context.Context, email string) (*models.Use
 }
 
 // getByIdentifierWithIDP 根据标识符查找用户，并验证用户具有指定 IDP 的主身份
-func (s *Service) getByIdentifierWithIDP(ctx context.Context, identifier, idpType string) (*dto.PasswordAuth, error) {
+func (s *Service) getByIdentifierWithIDP(ctx context.Context, identifier, idpType string) (*dto.PasswordLogin, error) {
 	if user, err := s.getUserByIdentityTag(ctx, idpType, identifier); err == nil {
-		return s.toPasswordAuthWithIDP(ctx, user, idpType)
+		return s.toPasswordLoginWithIDP(ctx, user, idpType)
 	}
 
 	// 1. 尝试用户名（最左模糊匹配）
 	user, err := s.GetUserByUsername(ctx, identifier)
 	if err == nil {
-		return s.toPasswordAuthWithIDP(ctx, user, idpType)
+		return s.toPasswordLoginWithIDP(ctx, user, idpType)
 	}
 
 	// 2. 尝试邮箱
 	if isEmail(identifier) {
 		userByEmail, err := s.getUserByEmail(ctx, identifier)
 		if err == nil {
-			return s.toPasswordAuthWithIDP(ctx, userByEmail, idpType)
+			return s.toPasswordLoginWithIDP(ctx, userByEmail, idpType)
 		}
 	}
 
@@ -351,7 +351,7 @@ func (s *Service) getByIdentifierWithIDP(ctx context.Context, identifier, idpTyp
 		phoneHash := hashPhone(identifier)
 		var userByPhone models.User
 		if err := s.db.WithContext(ctx).Where("phone = ?", phoneHash).First(&userByPhone).Error; err == nil {
-			return s.toPasswordAuthWithIDP(ctx, &userByPhone, idpType)
+			return s.toPasswordLoginWithIDP(ctx, &userByPhone, idpType)
 		}
 	}
 
@@ -366,21 +366,21 @@ func (s *Service) getUserByIdentityTag(ctx context.Context, idpType, tOpenID str
 	return s.GetUserByOpenID(ctx, identity.UID)
 }
 
-// toPasswordAuthWithIDP 转换为密码存储凭证，同时验证用户具有指定 IDP 的身份
-func (s *Service) toPasswordAuthWithIDP(ctx context.Context, user *models.User, idpType string) (*dto.PasswordAuth, error) {
+// toPasswordLoginWithIDP 转换为密码登录材料，同时验证用户具有指定 IDP 的身份
+func (s *Service) toPasswordLoginWithIDP(ctx context.Context, user *models.User, idpType string) (*dto.PasswordLogin, error) {
 	var identity models.UserIdentity
 	if err := s.db.WithContext(ctx).Where("uid = ? AND idp = ?", user.OpenID, idpType).First(&identity).Error; err != nil {
 		return nil, errors.New("user not found")
 	}
 
-	cred := s.toPasswordAuth(user)
+	cred := s.toPasswordLogin(user)
 	cred.OpenID = identity.TOpenID
 	return cred, nil
 }
 
-// toPasswordAuth 转换为密码存储凭证
-func (s *Service) toPasswordAuth(user *models.User) *dto.PasswordAuth {
-	cred := &dto.PasswordAuth{
+// toPasswordLogin 转换为密码登录材料
+func (s *Service) toPasswordLogin(user *models.User) *dto.PasswordLogin {
+	cred := &dto.PasswordLogin{
 		Status: user.Status,
 	}
 	if user.PasswordHash != nil {

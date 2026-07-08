@@ -11,7 +11,7 @@ import (
 )
 
 func ChangePassword(ctx context.Context, userSvc contract.UserProvider, openid, oldPassword, newPassword string) error {
-	cred, err := userSvc.GetPasswordAuth(ctx, idp.TypeGlobal, openid)
+	cred, err := userSvc.GetPasswordLogin(ctx, idp.TypeGlobal, openid)
 	if err != nil {
 		return errors.New("user not found")
 	}

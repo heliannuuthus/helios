@@ -13,7 +13,7 @@ import (
 
 // ==================== User Query ====================
 
-func (c *Client) GetDecryptedUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
+func (c *Client) GetUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
 	resp, err := c.user.GetDecryptedUser(ctx, &hermesv1.OpenIDRequest{Openid: openid})
 	if err != nil {
 		return nil, err
@@ -161,7 +161,7 @@ func (c *Client) CreateIdentity(ctx context.Context, identity *models.UserIdenti
 
 // ==================== Password Store ====================
 
-func (c *Client) GetPasswordAuth(ctx context.Context, idp, identifier string) (*models.PasswordAuth, error) {
+func (c *Client) GetPasswordLogin(ctx context.Context, idp, identifier string) (*models.PasswordLogin, error) {
 	resp, err := c.user.GetPasswordCredential(ctx, &hermesv1.GetPasswordCredentialRequest{
 		Idp:        idp,
 		Identifier: identifier,
@@ -169,7 +169,7 @@ func (c *Client) GetPasswordAuth(ctx context.Context, idp, identifier string) (*
 	if err != nil {
 		return nil, err
 	}
-	return passwordAuthFromProto(resp), nil
+	return passwordLoginFromProto(resp), nil
 }
 
 // ==================== Credential ====================

@@ -37,15 +37,20 @@ type IDPKeyProvider interface {
 
 type UserProvider interface {
 	UserProfileProvider
+	UserWriteProvider
 	IdentityProvider
-	PasswordAuthReader
+	PasswordLoginReader
 	CredentialStore
 }
 
 type UserProfileProvider interface {
-	GetDecryptedUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error)
+	GetUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error)
 	GetUserByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error)
 	GetUserByPhone(ctx context.Context, phone string) (*models.UserWithDecrypted, error)
+}
+
+type UserWriteProvider interface {
+	CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error)
 	PatchUser(ctx context.Context, openid string, updates map[string]any) error
 }
 
@@ -53,11 +58,10 @@ type IdentityProvider interface {
 	ListUserIdentities(ctx context.Context, openid string) (models.Identities, error)
 	ListIdentitiesByIdentity(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error)
 	CreateIdentity(ctx context.Context, identity *models.UserIdentity) error
-	CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error)
 }
 
-type PasswordAuthReader interface {
-	GetPasswordAuth(ctx context.Context, idp, identifier string) (*models.PasswordAuth, error)
+type PasswordLoginReader interface {
+	GetPasswordLogin(ctx context.Context, idp, identifier string) (*models.PasswordLogin, error)
 }
 
 type CredentialStore interface {
