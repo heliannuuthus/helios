@@ -5,10 +5,10 @@ import (
 	"github.com/heliannuuthus/pkg/patch"
 )
 
-// ==================== PasswordStoreCredential ====================
+// ==================== PasswordAuth ====================
 
-// PasswordStoreCredential 密码存储凭证（IDP 身份解析结果）
-type PasswordStoreCredential struct {
+// PasswordAuth 密码存储凭证（IDP 身份解析结果）
+type PasswordAuth struct {
 	OpenID       string
 	PasswordHash string
 	Nickname     string

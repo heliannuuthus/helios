@@ -37,15 +37,15 @@ import (
 )
 
 // Initialize 初始化 Auth 模块，返回 Handler
-func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, mfaProvider contract.MFAProvider, cacheManager *cache.Manager) (*Handler, error) {
+func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, credentialSvc contract.CredentialService, cacheManager *cache.Manager) (*Handler, error) {
 	if hermesSvc == nil {
 		return nil, fmt.Errorf("hermes service is required")
 	}
 	if userSvc == nil {
 		return nil, fmt.Errorf("user service is required")
 	}
-	if mfaProvider == nil {
-		return nil, fmt.Errorf("mfa provider is required")
+	if credentialSvc == nil {
+		return nil, fmt.Errorf("credential service is required")
 	}
 	if cacheManager == nil {
 		return nil, fmt.Errorf("cache manager is required")
@@ -60,7 +60,7 @@ func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 		logger.Info("[Auth] 邮件发送器初始化完成")
 	}
 
-	webauthnSvc, captchaVerifier, totpVerifier, err := initProviders(mfaProvider, cacheManager, userSvc)
+	webauthnSvc, captchaVerifier, totpVerifier, err := initProviders(credentialSvc, cacheManager, userSvc)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 	authenticateSvc := authenticate.NewService(cacheManager, ac)
 	authorizeSvc := authorize.NewService(cacheManager, hermesSvc, userService, tokenSvc, pool, 5*time.Minute)
 	challengeSvc := challenge.NewService(cacheManager, registry)
-	mfaSvc := NewMFAService(mfaProvider, webauthnSvc)
+	mfaSvc := NewMFAService(credentialSvc, webauthnSvc)
 	profileHandler := NewProfileHandler(userSvc, mfaSvc)
 
 	handler := NewHandler(authenticateSvc, authorizeSvc, challengeSvc, userService, cacheManager, tokenSvc, mfaSvc, profileHandler, pool)
@@ -153,8 +153,8 @@ func initKeyProviders(cm *cache.Manager) (key.MultiOf, key.MultiOf, key.MultiOf,
 	return domainSign, domainVerify, serviceKey, appVerify
 }
 
-// initProviders 初始化底层 Provider（WebAuthn、Captcha、TOTP）
-func initProviders(mfaProvider contract.MFAProvider, cacheManager *cache.Manager, userSvc contract.UserProvider) (*webauthn.Service, captcha.Verifier, factor.TOTPVerifier, error) {
+// initProviders 初始化底层认证能力（WebAuthn、Captcha、TOTP）
+func initProviders(credentialSvc contract.CredentialService, cacheManager *cache.Manager, userSvc contract.UserProvider) (*webauthn.Service, captcha.Verifier, factor.TOTPVerifier, error) {
 	webauthnSvc, err := webauthn.NewService(cacheManager, userSvc)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("init webauthn service: %w", err)
@@ -168,7 +168,7 @@ func initProviders(mfaProvider contract.MFAProvider, cacheManager *cache.Manager
 	}
 
 	// TOTP
-	totpVerifier := totp.NewVerifier(mfaProvider)
+	totpVerifier := totp.NewVerifier(credentialSvc)
 	logger.Info("[Auth] TOTP 验证器初始化完成")
 
 	return webauthnSvc, captchaVerifier, totpVerifier, nil
@@ -208,7 +208,7 @@ func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvid
 		registry.Register(authenticate.NewFactorAuthenticator(factor.NewEmailOTPProvider(emailSender, cacheManager), ac, tokenVerifier))
 	}
 
-	registry.Register(authenticate.NewFactorAuthenticator(factor.NewTOTPProvider(totpVerifier), ac, tokenVerifier))
+	registry.Register(authenticate.NewFactorAuthenticator(factor.NewTOTPFactor(totpVerifier), ac, tokenVerifier))
 
 	registry.Register(authenticate.NewFactorAuthenticator(factor.NewWebAuthnProvider(webauthnSvc), ac, tokenVerifier))
 

@@ -126,7 +126,7 @@ func (p *Provider) loginByPassword(ctx context.Context, identifier, password str
 
 // getCredential 获取 B 端平台人员凭证
 func (p *Provider) getCredential(ctx context.Context, identifier string) (*credential, error) {
-	cred, err := p.userSvc.GetPasswordCredential(ctx, idp.TypeStaff, identifier)
+	cred, err := p.userSvc.GetPasswordAuth(ctx, idp.TypeStaff, identifier)
 	if err != nil {
 		return nil, err
 	}

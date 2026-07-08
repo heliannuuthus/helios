@@ -181,11 +181,11 @@ func (s *userServiceServer) AddIdentity(ctx context.Context, req *hermesv1.AddId
 }
 
 func (s *userServiceServer) GetPasswordCredential(ctx context.Context, req *hermesv1.GetPasswordCredentialRequest) (*hermesv1.PasswordStoreCredential, error) {
-	cred, err := s.svc.GetPasswordCredential(ctx, req.GetIdp(), req.GetIdentifier())
+	cred, err := s.svc.GetPasswordAuth(ctx, req.GetIdp(), req.GetIdentifier())
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	return passwordStoreCredentialToProto(cred), nil
+	return passwordAuthToProto(cred), nil
 }
 
 func (s *userServiceServer) CreateCredential(ctx context.Context, req *hermesv1.CreateCredentialRequest) (*emptypb.Empty, error) {
@@ -411,7 +411,7 @@ func identitiesToProto(identities models.Identities) *hermesv1.IdentityList {
 	return &hermesv1.IdentityList{Identities: out}
 }
 
-func passwordStoreCredentialToProto(c *dto.PasswordStoreCredential) *hermesv1.PasswordStoreCredential {
+func passwordAuthToProto(c *dto.PasswordAuth) *hermesv1.PasswordStoreCredential {
 	pb := &hermesv1.PasswordStoreCredential{
 		Openid:       c.OpenID,
 		PasswordHash: c.PasswordHash,

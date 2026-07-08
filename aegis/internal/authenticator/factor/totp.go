@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	_ Provider = (*TOTPProvider)(nil)
+	_ Provider = (*TOTPFactor)(nil)
 )
 
 // TOTPVerifier TOTP 验证接口
@@ -16,24 +16,24 @@ type TOTPVerifier interface {
 	Verify(ctx context.Context, openid, code string) (bool, error)
 }
 
-// TOTPProvider TOTP 认证因子 Provider
-type TOTPProvider struct {
+// TOTPFactor TOTP 认证因子
+type TOTPFactor struct {
 	verifier TOTPVerifier
 }
 
-// NewTOTPProvider 创建 TOTP 认证因子 Provider
-func NewTOTPProvider(verifier TOTPVerifier) *TOTPProvider {
-	return &TOTPProvider{
+// NewTOTPFactor 创建 TOTP 认证因子
+func NewTOTPFactor(verifier TOTPVerifier) *TOTPFactor {
+	return &TOTPFactor{
 		verifier: verifier,
 	}
 }
 
 // Type 返回因子类型标识
-func (*TOTPProvider) Type() string {
+func (*TOTPFactor) Type() string {
 	return TypeTOTP
 }
 
-func (p *TOTPProvider) Initiate(_ context.Context, challenge *types.Challenge) error {
+func (p *TOTPFactor) Initiate(_ context.Context, challenge *types.Challenge) error {
 	if challenge.Channel == "" {
 		return fmt.Errorf("user_id is required for totp")
 	}
@@ -43,7 +43,7 @@ func (p *TOTPProvider) Initiate(_ context.Context, challenge *types.Challenge) e
 // Verify 验证 TOTP 验证码
 // proof: TOTP 码
 // params[0]: openid (string)
-func (p *TOTPProvider) Verify(ctx context.Context, proof string, params ...any) (bool, error) {
+func (p *TOTPFactor) Verify(ctx context.Context, proof string, params ...any) (bool, error) {
 	if proof == "" {
 		return false, nil
 	}
@@ -64,7 +64,7 @@ func (p *TOTPProvider) Verify(ctx context.Context, proof string, params ...any) 
 }
 
 // Prepare 准备前端公开配置
-func (*TOTPProvider) Prepare() *types.ConnectionConfig {
+func (*TOTPFactor) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
 		Connection: TypeTOTP,
 	}

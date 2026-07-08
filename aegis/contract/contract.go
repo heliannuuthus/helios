@@ -38,8 +38,8 @@ type IDPKeyProvider interface {
 type UserProvider interface {
 	UserProfileProvider
 	IdentityProvider
-	PasswordCredentialProvider
-	UserCredentialProvider
+	PasswordAuthReader
+	CredentialStore
 }
 
 type UserProfileProvider interface {
@@ -56,40 +56,33 @@ type IdentityProvider interface {
 	CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error)
 }
 
-type PasswordCredentialProvider interface {
-	GetPasswordCredential(ctx context.Context, idp, identifier string) (*models.PasswordStoreCredential, error)
+type PasswordAuthReader interface {
+	GetPasswordAuth(ctx context.Context, idp, identifier string) (*models.PasswordAuth, error)
 }
 
-type UserCredentialProvider interface {
+type CredentialStore interface {
 	CreateCredential(ctx context.Context, cred *models.UserCredential) error
+	GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error)
+	GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error)
+	ListUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error)
+	ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
 	PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
-	GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error)
-	ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
+	DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error
 }
 
-// MFAProvider provides the MFA operations that back MFAService.
-// HTTP handlers should depend on MFAService instead.
-type MFAProvider interface {
-	TOTPProvider
-	WebAuthnCredentialProvider
-	MFASummaryProvider
-}
-
-type TOTPProvider interface {
+type CredentialService interface {
 	BeginTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error)
 	CompleteTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error
 	VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error
 	DeleteTOTP(ctx context.Context, openid string) error
 	PatchTOTP(ctx context.Context, openid string, enabled bool) error
-}
-
-type WebAuthnCredentialProvider interface {
 	PatchWebAuthnCredential(ctx context.Context, openid, credentialID string, updates map[string]any) error
 	DeleteWebAuthnCredential(ctx context.Context, openid, credentialID string) error
-}
-
-type MFASummaryProvider interface {
 	GetMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error)
 	ListCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error)
+}
+
+type TOTPVerifier interface {
+	VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error
 }

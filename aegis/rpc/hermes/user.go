@@ -161,7 +161,7 @@ func (c *Client) CreateIdentity(ctx context.Context, identity *models.UserIdenti
 
 // ==================== Password Store ====================
 
-func (c *Client) GetPasswordCredential(ctx context.Context, idp, identifier string) (*models.PasswordStoreCredential, error) {
+func (c *Client) GetPasswordAuth(ctx context.Context, idp, identifier string) (*models.PasswordAuth, error) {
 	resp, err := c.user.GetPasswordCredential(ctx, &hermesv1.GetPasswordCredentialRequest{
 		Idp:        idp,
 		Identifier: identifier,
@@ -169,7 +169,7 @@ func (c *Client) GetPasswordCredential(ctx context.Context, idp, identifier stri
 	if err != nil {
 		return nil, err
 	}
-	return passwordStoreCredentialFromProto(resp), nil
+	return passwordAuthFromProto(resp), nil
 }
 
 // ==================== Credential ====================

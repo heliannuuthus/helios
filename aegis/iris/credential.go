@@ -12,6 +12,7 @@ import (
 	"github.com/pquerna/otp/totp"
 
 	aegisconfig "github.com/heliannuuthus/aegis/config"
+	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/cache"
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/models"
@@ -26,27 +27,15 @@ const (
 	pendingMFADataLabel  = "label"
 )
 
-// CredentialStore 凭证 CRUD 存储接口
-// hermes.UserService（直连）和 rpc/hermes.Client（gRPC）均可实现
-type CredentialStore interface {
-	CreateCredential(ctx context.Context, cred *models.UserCredential) error
-	ListUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error)
-	ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
-	GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error)
-	PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error
-	DeleteCredential(ctx context.Context, openid, credentialID string) error
-	DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error
-}
-
 // CredentialService 凭证业务服务（TOTP/WebAuthn 业务逻辑）
 // 底层通过 CredentialStore 做 CRUD 存储
 type CredentialService struct {
-	store CredentialStore
+	store contract.CredentialStore
 	cache *cache.Manager
 }
 
 // NewCredentialService 创建凭证业务服务
-func NewCredentialService(store CredentialStore, cacheManager *cache.Manager) (*CredentialService, error) {
+func NewCredentialService(store contract.CredentialStore, cacheManager *cache.Manager) (*CredentialService, error) {
 	if store == nil {
 		return nil, errors.New("credential store is required")
 	}

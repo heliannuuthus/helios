@@ -10,12 +10,12 @@ import (
 )
 
 type Verifier struct {
-	totpProvider contract.TOTPProvider
+	verifier contract.TOTPVerifier
 }
 
-func NewVerifier(totpProvider contract.TOTPProvider) *Verifier {
+func NewVerifier(verifier contract.TOTPVerifier) *Verifier {
 	return &Verifier{
-		totpProvider: totpProvider,
+		verifier: verifier,
 	}
 }
 
@@ -26,7 +26,7 @@ func (v *Verifier) Verify(ctx context.Context, openid, code string) (bool, error
 		return false, nil
 	}
 
-	err := v.totpProvider.VerifyTOTP(ctx, &models.VerifyTOTPRequest{
+	err := v.verifier.VerifyTOTP(ctx, &models.VerifyTOTPRequest{
 		OpenID: openid,
 		Code:   code,
 	})

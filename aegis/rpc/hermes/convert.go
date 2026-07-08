@@ -259,11 +259,11 @@ func credentialFromProto(pb *hermesv1.UserCredential) *models.UserCredential {
 	return c
 }
 
-func passwordStoreCredentialFromProto(pb *hermesv1.PasswordStoreCredential) *models.PasswordStoreCredential {
+func passwordAuthFromProto(pb *hermesv1.PasswordStoreCredential) *models.PasswordAuth {
 	if pb == nil {
 		return nil
 	}
-	cred := &models.PasswordStoreCredential{
+	cred := &models.PasswordAuth{
 		OpenID:       pb.Openid,
 		PasswordHash: pb.PasswordHash,
 		Status:       int8(pb.Status),

@@ -60,11 +60,11 @@ func main() {
 	logger.Infof("[Auth] Redis 连接成功: %s", redisURL)
 
 	cacheManager := cache.NewManager(client, client, redis)
-	mfaProvider, err := iris.NewCredentialService(client, cacheManager)
+	credentialSvc, err := iris.NewCredentialService(client, cacheManager)
 	if err != nil {
 		logger.Fatalf("初始化 iris credential service 失败: %v", err)
 	}
-	aegisHandler, err := aegis.Initialize(client, client, mfaProvider, cacheManager)
+	aegisHandler, err := aegis.Initialize(client, client, credentialSvc, cacheManager)
 	if err != nil {
 		logger.Fatalf("初始化 aegis 失败: %v", err)
 	}
