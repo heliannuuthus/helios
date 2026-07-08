@@ -293,13 +293,13 @@ func (h *Handler) GetMFAStatus(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	status, err := h.mfaSvc.GetMFAStatus(ctx, openid)
+	status, err := h.mfaSvc.Status(ctx, openid)
 	if err != nil {
 		errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
 	}
 
-	summaries, err := h.mfaSvc.ListCredentialSummaries(ctx, openid)
+	summaries, err := h.mfaSvc.ListCredentials(ctx, openid)
 	if err != nil {
 		errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
@@ -340,7 +340,7 @@ func (h *Handler) SetupMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		resp, err := h.mfaSvc.BeginTOTP(ctx, &models.TOTPSetupRequest{
+		resp, err := h.mfaSvc.CreateTOTPEnrollment(ctx, &models.TOTPSetupRequest{
 			OpenID:  openid,
 			AppName: req.AppName,
 		})
@@ -404,7 +404,7 @@ func (h *Handler) CompleteMFA(c *gin.Context) {
 			errorResponse(c, autherrors.NewInvalidRequest("code is required"))
 			return
 		}
-		err := h.mfaSvc.CompleteTOTP(ctx, &models.ConfirmTOTPRequest{
+		err := h.mfaSvc.ConfirmTOTPEnrollment(ctx, &models.ConfirmTOTPRequest{
 			OpenID: openid,
 			UID:    uid,
 			Code:   req.Code,
@@ -459,7 +459,7 @@ func (h *Handler) UpdateMFA(c *gin.Context) {
 			errorResponse(c, autherrors.NewInvalidRequest("enabled is required for totp"))
 			return
 		}
-		err := h.mfaSvc.PatchCredential(ctx, openid, req.Type, "", map[string]any{"enabled": *req.Enabled})
+		err := h.mfaSvc.UpdateCredential(ctx, openid, req.Type, "", map[string]any{"enabled": *req.Enabled})
 		if err != nil {
 			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 			return
@@ -477,7 +477,7 @@ func (h *Handler) UpdateMFA(c *gin.Context) {
 		if req.Enabled != nil {
 			updates["enabled"] = *req.Enabled
 		}
-		if err := h.mfaSvc.PatchCredential(ctx, openid, req.Type, req.CredentialID, updates); err != nil {
+		if err := h.mfaSvc.UpdateCredential(ctx, openid, req.Type, req.CredentialID, updates); err != nil {
 			errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -549,7 +549,7 @@ func (h *Handler) beginWebAuthnRegistration(c *gin.Context, openID, credType str
 		errorResponse(c, autherrors.NewNotFound("user not found"))
 		return
 	}
-	resp, err := h.mfaSvc.BeginWebAuthnRegistration(ctx, user)
+	resp, err := h.mfaSvc.CreateWebAuthnEnrollment(ctx, user)
 	if err != nil {
 		errorResponse(c, autherrors.NewServerError(err.Error()))
 		return
@@ -574,7 +574,7 @@ func (h *Handler) finishWebAuthnRegistration(c *gin.Context, openID, credType, u
 	}
 
 	c.Request.Body = io.NopCloser(bytes.NewReader(credentialJSON))
-	credInfo, err := h.mfaSvc.FinishWebAuthnRegistration(c.Request.Context(), openID, uid, c.Request)
+	credInfo, err := h.mfaSvc.ConfirmWebAuthnEnrollment(c.Request.Context(), openID, uid, c.Request)
 	if err != nil {
 		errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
 		return

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base32"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -71,7 +70,7 @@ func credentialActiveInMFA(c *models.UserCredential) bool {
 	}
 }
 
-func (s *MFAService) BeginTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
+func (s *MFAService) CreateTOTPEnrollment(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
 	creds, err := s.store.ListUserCredentialsByType(ctx, req.OpenID, string(models.CredentialTypeTOTP))
 	if err != nil {
 		return nil, fmt.Errorf("查询 TOTP 失败: %w", err)
@@ -125,7 +124,7 @@ func (s *MFAService) BeginTOTP(ctx context.Context, req *models.TOTPSetupRequest
 	}, nil
 }
 
-func (s *MFAService) CompleteTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error {
+func (s *MFAService) ConfirmTOTPEnrollment(ctx context.Context, req *models.ConfirmTOTPRequest) error {
 	challenge, err := s.cache.GetChallenge(ctx, req.UID)
 	if err != nil {
 		return errors.New("pending MFA 不存在或已过期")
@@ -171,7 +170,7 @@ func (s *MFAService) CompleteTOTP(ctx context.Context, req *models.ConfirmTOTPRe
 	return nil
 }
 
-func (s *MFAService) PatchCredential(ctx context.Context, openid, credType, credentialID string, updates map[string]any) error {
+func (s *MFAService) UpdateCredential(ctx context.Context, openid, credType, credentialID string, updates map[string]any) error {
 	if models.CredentialType(credType) == models.CredentialTypeTOTP {
 		enabled, ok := updates["enabled"].(bool)
 		if !ok {
@@ -237,7 +236,7 @@ func (s *MFAService) DeleteCredential(ctx context.Context, openid, credType, cre
 	return nil
 }
 
-func (s *MFAService) GetMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error) {
+func (s *MFAService) Status(ctx context.Context, openid string) (*models.MFAStatus, error) {
 	credentials, err := s.store.ListUserCredentials(ctx, openid)
 	if err != nil {
 		return nil, err
@@ -260,7 +259,7 @@ func (s *MFAService) GetMFAStatus(ctx context.Context, openid string) (*models.M
 	return status, nil
 }
 
-func (s *MFAService) ListCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error) {
+func (s *MFAService) ListCredentials(ctx context.Context, openid string) ([]models.CredentialSummary, error) {
 	credentials, err := s.store.ListUserCredentials(ctx, openid)
 	if err != nil {
 		return nil, err
@@ -308,8 +307,8 @@ type WebAuthnCredentialInfo struct {
 
 // ==================== WebAuthn 凭证注册 ====================
 
-// BeginWebAuthnRegistration 开始 WebAuthn 凭证注册
-func (s *MFAService) BeginWebAuthnRegistration(ctx context.Context, user *models.UserWithDecrypted) (*WebAuthnBeginResponse, error) {
+// CreateWebAuthnEnrollment 开始 WebAuthn 凭证绑定。
+func (s *MFAService) CreateWebAuthnEnrollment(ctx context.Context, user *models.UserWithDecrypted) (*WebAuthnBeginResponse, error) {
 	existingCredentials, err := s.webauthnSvc.ListCredentials(ctx, user.OpenID)
 	if err != nil {
 		existingCredentials = nil
@@ -326,8 +325,8 @@ func (s *MFAService) BeginWebAuthnRegistration(ctx context.Context, user *models
 	}, nil
 }
 
-// FinishWebAuthnRegistration 完成 WebAuthn 凭证注册并保存凭证
-func (s *MFAService) FinishWebAuthnRegistration(ctx context.Context, openid, challengeID string, r *http.Request) (*WebAuthnCredentialInfo, error) {
+// ConfirmWebAuthnEnrollment 完成 WebAuthn 凭证绑定并保存凭证。
+func (s *MFAService) ConfirmWebAuthnEnrollment(ctx context.Context, openid, challengeID string, r *http.Request) (*WebAuthnCredentialInfo, error) {
 	credential, err := s.webauthnSvc.FinishRegistration(ctx, challengeID, r)
 	if err != nil {
 		return nil, err
@@ -338,49 +337,6 @@ func (s *MFAService) FinishWebAuthnRegistration(ctx context.Context, openid, cha
 	}
 
 	return &WebAuthnCredentialInfo{
-		ID:        credential.ID,
-		SignCount: credential.Authenticator.SignCount,
-	}, nil
-}
-
-// ==================== WebAuthn 凭证验证 ====================
-
-// BeginWebAuthnVerification 开始 WebAuthn 凭证验证（MFA 验证场景）
-func (s *MFAService) BeginWebAuthnVerification(ctx context.Context, user *models.UserWithDecrypted) (*WebAuthnBeginResponse, error) {
-	existingCredentials, err := s.webauthnSvc.ListCredentials(ctx, user.OpenID)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(existingCredentials) == 0 {
-		return nil, fmt.Errorf("no webauthn credentials found")
-	}
-
-	resp, err := s.webauthnSvc.BeginLogin(ctx, user, existingCredentials)
-	if err != nil {
-		return nil, err
-	}
-
-	return &WebAuthnBeginResponse{
-		ChallengeID: resp.ChallengeID,
-		Options:     resp.Options,
-	}, nil
-}
-
-// FinishWebAuthnVerification 完成 WebAuthn 凭证验证
-func (s *MFAService) FinishWebAuthnVerification(ctx context.Context, challengeID string, assertionBody []byte) (string, *WebAuthnCredentialInfo, error) {
-	openid, credential, err := s.webauthnSvc.FinishLogin(ctx, challengeID, assertionBody)
-	if err != nil {
-		return "", nil, err
-	}
-
-	if credential != nil {
-		if err := s.webauthnSvc.PatchCredentialSignCount(ctx, base64.RawURLEncoding.EncodeToString(credential.ID), credential.Authenticator.SignCount); err != nil {
-			logger.Warnf("failed to update webauthn credential sign count: %v", err)
-		}
-	}
-
-	return openid, &WebAuthnCredentialInfo{
 		ID:        credential.ID,
 		SignCount: credential.Authenticator.SignCount,
 	}, nil
