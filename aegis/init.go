@@ -80,8 +80,8 @@ func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 	authenticateSvc := authenticate.NewService(cacheManager, ac)
 	authorizeSvc := authorize.NewService(cacheManager, hermesSvc, userService, tokenSvc, pool, 5*time.Minute)
 	challengeSvc := challenge.NewService(cacheManager, registry)
-	mfaSvc := NewMFAService(webauthnSvc)
-	profileHandler := NewProfileHandler(userSvc, credentialSvc, mfaSvc)
+	mfaSvc := NewMFAService(credentialSvc, webauthnSvc)
+	profileHandler := NewProfileHandler(userSvc, mfaSvc)
 
 	handler := NewHandler(authenticateSvc, authorizeSvc, challengeSvc, userService, cacheManager, tokenSvc, mfaSvc, profileHandler, pool)
 	logger.Info("[Auth] 模块初始化完成")

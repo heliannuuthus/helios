@@ -17,16 +17,14 @@ import (
 )
 
 type ProfileHandler struct {
-	userSvc       contract.UserProvider
-	credentialSvc contract.CredentialProvider
-	mfaSvc        *MFAService
+	userSvc contract.UserProvider
+	mfaSvc  *MFAService
 }
 
-func NewProfileHandler(userSvc contract.UserProvider, credentialSvc contract.CredentialProvider, mfaSvc *MFAService) *ProfileHandler {
+func NewProfileHandler(userSvc contract.UserProvider, mfaSvc *MFAService) *ProfileHandler {
 	return &ProfileHandler{
-		userSvc:       userSvc,
-		credentialSvc: credentialSvc,
-		mfaSvc:        mfaSvc,
+		userSvc: userSvc,
+		mfaSvc:  mfaSvc,
 	}
 }
 
@@ -200,13 +198,13 @@ func (h *ProfileHandler) GetMFAStatus(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	status, err := h.credentialSvc.GetUserMFAStatus(ctx, openid)
+	status, err := h.mfaSvc.GetUserMFAStatus(ctx, openid)
 	if err != nil {
 		profileError(c, errors.NewServerError(err.Error()))
 		return
 	}
 
-	summaries, err := h.credentialSvc.GetUserCredentialSummaries(ctx, openid)
+	summaries, err := h.mfaSvc.GetUserCredentialSummaries(ctx, openid)
 	if err != nil {
 		profileError(c, errors.NewServerError(err.Error()))
 		return
@@ -240,7 +238,7 @@ func (h *ProfileHandler) SetupMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		resp, err := h.credentialSvc.SetupTOTP(ctx, &models.TOTPSetupRequest{
+		resp, err := h.mfaSvc.SetupTOTP(ctx, &models.TOTPSetupRequest{
 			OpenID:  openid,
 			AppName: req.AppName,
 		})
@@ -295,7 +293,7 @@ func (h *ProfileHandler) CompleteMFA(c *gin.Context) {
 			profileError(c, errors.NewInvalidRequest("code is required"))
 			return
 		}
-		err := h.credentialSvc.ConfirmTOTP(ctx, &models.ConfirmTOTPRequest{
+		err := h.mfaSvc.ConfirmTOTP(ctx, &models.ConfirmTOTPRequest{
 			OpenID: openid,
 			UID:    uid,
 			Code:   req.Code,
@@ -347,7 +345,7 @@ func (h *ProfileHandler) UpdateMFA(c *gin.Context) {
 			profileError(c, errors.NewInvalidRequest("enabled is required for totp"))
 			return
 		}
-		if err := h.credentialSvc.SetTOTPEnabled(ctx, openid, *req.Enabled); err != nil {
+		if err := h.mfaSvc.SetTOTPEnabled(ctx, openid, *req.Enabled); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -357,13 +355,13 @@ func (h *ProfileHandler) UpdateMFA(c *gin.Context) {
 			return
 		}
 		if req.Label != "" {
-			if err := h.credentialSvc.RenameWebAuthn(ctx, openid, req.CredentialID, req.Label); err != nil {
+			if err := h.mfaSvc.RenameWebAuthn(ctx, openid, req.CredentialID, req.Label); err != nil {
 				profileError(c, errors.NewInvalidRequest(err.Error()))
 				return
 			}
 		}
 		if req.Enabled != nil {
-			if err := h.credentialSvc.SetWebAuthnEnabled(ctx, openid, req.CredentialID, *req.Enabled); err != nil {
+			if err := h.mfaSvc.SetWebAuthnEnabled(ctx, openid, req.CredentialID, *req.Enabled); err != nil {
 				profileError(c, errors.NewInvalidRequest(err.Error()))
 				return
 			}
@@ -398,7 +396,7 @@ func (h *ProfileHandler) DeleteMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		if err := h.credentialSvc.DisableTOTP(ctx, openid); err != nil {
+		if err := h.mfaSvc.DisableTOTP(ctx, openid); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -407,7 +405,7 @@ func (h *ProfileHandler) DeleteMFA(c *gin.Context) {
 			profileError(c, errors.NewInvalidRequest("credential_id is required"))
 			return
 		}
-		if err := h.credentialSvc.DeleteWebAuthn(ctx, openid, req.CredentialID); err != nil {
+		if err := h.mfaSvc.DeleteWebAuthn(ctx, openid, req.CredentialID); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}

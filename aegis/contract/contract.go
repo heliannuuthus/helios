@@ -41,7 +41,8 @@ type UserProvider interface {
 	UpdatePassword(ctx context.Context, openid, oldPassword, newPassword string) error
 }
 
-// CredentialProvider 凭证业务接口（TOTP/WebAuthn 业务逻辑，由 iris 层实现）
+// CredentialProvider provides credential persistence and type-specific operations
+// used by MFAService. HTTP handlers should depend on MFAService instead.
 type CredentialProvider interface {
 	SetupTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error)
 	ConfirmTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error

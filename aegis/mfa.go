@@ -6,27 +6,70 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/authenticator/webauthn"
 	"github.com/heliannuuthus/aegis/models"
 	"github.com/heliannuuthus/pkg/logger"
 )
 
-// MFAService 对外暴露的 MFA 服务门面
-// 封装 WebAuthn 凭证管理和验证操作，供 iris 等外部模块使用
+// MFAService owns MFA orchestration. Handlers talk to this service; WebAuthn
+// remains the protocol engine behind passkey/webauthn flows.
 type MFAService struct {
-	webauthnSvc *webauthn.Service
+	credentialSvc contract.CredentialProvider
+	webauthnSvc   *webauthn.Service
 }
 
 // NewMFAService 创建 MFA 服务
-func NewMFAService(webauthnSvc *webauthn.Service) *MFAService {
+func NewMFAService(credentialSvc contract.CredentialProvider, webauthnSvc *webauthn.Service) *MFAService {
 	return &MFAService{
-		webauthnSvc: webauthnSvc,
+		credentialSvc: credentialSvc,
+		webauthnSvc:   webauthnSvc,
 	}
 }
 
 // GetRPID 获取 WebAuthn RP ID
 func (s *MFAService) GetRPID() string {
 	return s.webauthnSvc.GetRPID()
+}
+
+func (s *MFAService) SetupTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
+	return s.credentialSvc.SetupTOTP(ctx, req)
+}
+
+func (s *MFAService) ConfirmTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error {
+	return s.credentialSvc.ConfirmTOTP(ctx, req)
+}
+
+func (s *MFAService) VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error {
+	return s.credentialSvc.VerifyTOTP(ctx, req)
+}
+
+func (s *MFAService) DisableTOTP(ctx context.Context, openid string) error {
+	return s.credentialSvc.DisableTOTP(ctx, openid)
+}
+
+func (s *MFAService) SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error {
+	return s.credentialSvc.SetTOTPEnabled(ctx, openid, enabled)
+}
+
+func (s *MFAService) SetWebAuthnEnabled(ctx context.Context, openid, credentialID string, enabled bool) error {
+	return s.credentialSvc.SetWebAuthnEnabled(ctx, openid, credentialID, enabled)
+}
+
+func (s *MFAService) RenameWebAuthn(ctx context.Context, openid, credentialID, label string) error {
+	return s.credentialSvc.RenameWebAuthn(ctx, openid, credentialID, label)
+}
+
+func (s *MFAService) DeleteWebAuthn(ctx context.Context, openid, credentialID string) error {
+	return s.credentialSvc.DeleteWebAuthn(ctx, openid, credentialID)
+}
+
+func (s *MFAService) GetUserMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error) {
+	return s.credentialSvc.GetUserMFAStatus(ctx, openid)
+}
+
+func (s *MFAService) GetUserCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error) {
+	return s.credentialSvc.GetUserCredentialSummaries(ctx, openid)
 }
 
 // ==================== 对外类型定义 ====================
