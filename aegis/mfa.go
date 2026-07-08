@@ -82,7 +82,7 @@ func (s *MFAService) BeginTOTP(ctx context.Context, req *models.TOTPSetupRequest
 		}
 	}
 	if len(creds) > 0 {
-		if err := s.store.DeleteCredentialByOpenIDAndType(ctx, req.OpenID, string(models.CredentialTypeTOTP)); err != nil {
+		if err := s.deleteCredentials(ctx, req.OpenID, creds); err != nil {
 			return nil, fmt.Errorf("清理历史未激活 TOTP 失败: %w", err)
 		}
 	}
@@ -241,7 +241,11 @@ func (s *MFAService) PatchCredential(ctx context.Context, openid, credType, cred
 
 func (s *MFAService) DeleteCredential(ctx context.Context, openid, credType, credentialID string) error {
 	if models.CredentialType(credType) == models.CredentialTypeTOTP {
-		if err := s.store.DeleteCredentialByOpenIDAndType(ctx, openid, string(models.CredentialTypeTOTP)); err != nil {
+		credentials, err := s.store.ListUserCredentialsByType(ctx, openid, string(models.CredentialTypeTOTP))
+		if err != nil {
+			return fmt.Errorf("查询 TOTP 凭证失败: %w", err)
+		}
+		if err := s.deleteCredentials(ctx, openid, credentials); err != nil {
 			return fmt.Errorf("删除 TOTP 凭证失败: %w", err)
 		}
 		logger.Infof("[Credential] TOTP 已禁用 - OpenID: %s", openid)
@@ -252,6 +256,19 @@ func (s *MFAService) DeleteCredential(ctx context.Context, openid, credType, cre
 		return fmt.Errorf("删除凭证失败: %w", err)
 	}
 	logger.Infof("[Credential] MFA 凭证已删除 - OpenID: %s, Type: %s", openid, credType)
+	return nil
+}
+
+func (s *MFAService) deleteCredentials(ctx context.Context, openid string, credentials []models.UserCredential) error {
+	for i := range credentials {
+		credentialID := credentials[i].CredentialID
+		if credentialID == nil || *credentialID == "" {
+			continue
+		}
+		if err := s.store.DeleteCredential(ctx, openid, *credentialID); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

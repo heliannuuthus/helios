@@ -65,7 +65,6 @@ type CredentialStore interface {
 	ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error)
 	PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error
 	DeleteCredential(ctx context.Context, openid, credentialID string) error
-	DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error
 }
 
 type TOTPVerifier interface {

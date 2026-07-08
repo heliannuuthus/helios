@@ -263,13 +263,6 @@ func (s *userServiceServer) DeleteCredential(ctx context.Context, req *hermesv1.
 	return &emptypb.Empty{}, nil
 }
 
-func (s *userServiceServer) DeleteCredentialByOpenIDAndType(ctx context.Context, req *hermesv1.DeleteCredentialByTypeRequest) (*emptypb.Empty, error) {
-	if err := s.svc.DeleteCredentialByOpenIDAndType(ctx, req.GetOpenid(), req.GetType()); err != nil {
-		return nil, toStatus(err)
-	}
-	return &emptypb.Empty{}, nil
-}
-
 func (s *userServiceServer) GetOpenIDByCredentialID(ctx context.Context, req *hermesv1.CredentialIDRequest) (*hermesv1.OpenIDResponse, error) {
 	openid, err := s.svc.GetOpenIDByCredentialID(ctx, req.GetCredentialId())
 	if err != nil {

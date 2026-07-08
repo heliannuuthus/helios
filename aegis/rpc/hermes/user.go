@@ -183,14 +183,6 @@ func (c *Client) DeleteCredential(ctx context.Context, openid, credentialID stri
 	return err
 }
 
-func (c *Client) DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error {
-	_, err := c.user.DeleteCredentialByOpenIDAndType(ctx, &hermesv1.DeleteCredentialByTypeRequest{
-		Openid: openid,
-		Type:   credType,
-	})
-	return err
-}
-
 func (c *Client) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
 	resp, err := c.user.GetOpenIDByCredentialID(ctx, &hermesv1.CredentialIDRequest{CredentialId: credentialID})
 	if err != nil {

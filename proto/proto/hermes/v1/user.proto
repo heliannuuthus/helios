@@ -43,7 +43,6 @@ service UserService {
   rpc GetUserCredentialsByType(GetCredentialsByTypeRequest) returns (UserCredentialList);
   rpc PatchCredential(PatchCredentialRequest) returns (google.protobuf.Empty);
   rpc DeleteCredential(DeleteCredentialRequest) returns (google.protobuf.Empty);
-  rpc DeleteCredentialByOpenIDAndType(DeleteCredentialByTypeRequest) returns (google.protobuf.Empty);
   rpc GetOpenIDByCredentialID(CredentialIDRequest) returns (OpenIDResponse);
 
 
@@ -214,11 +213,6 @@ message PatchCredentialRequest {
 message DeleteCredentialRequest {
   string openid = 1;
   string credential_id = 2;
-}
-
-message DeleteCredentialByTypeRequest {
-  string openid = 1;
-  string type = 2;
 }
 
 message OpenIDResponse {

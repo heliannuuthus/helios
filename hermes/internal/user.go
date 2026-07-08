@@ -307,11 +307,6 @@ func (s *Service) GetCredentialByInternalID(ctx context.Context, id uint) (*mode
 	return &cred, nil
 }
 
-// DeleteCredentialByOpenIDAndType 根据 openid 和类型删除凭证
-func (s *Service) DeleteCredentialByOpenIDAndType(ctx context.Context, openid string, credType string) error {
-	return s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Delete(&models.UserCredential{}).Error
-}
-
 // getUserByEmail 根据邮箱查找用户（内部使用，返回基础 User）
 func (s *Service) getUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
