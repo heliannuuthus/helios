@@ -39,8 +39,8 @@ type UserProvider interface {
 	UserProfileProvider
 	UserWriteProvider
 	IdentityProvider
-	PasswordLoginReader
 	CredentialStore
+	GetPasswordLogin(ctx context.Context, idp, identifier string) (*models.PasswordLogin, error)
 }
 
 type UserProfileProvider interface {
@@ -58,10 +58,6 @@ type IdentityProvider interface {
 	ListUserIdentities(ctx context.Context, openid string) (models.Identities, error)
 	ListIdentitiesByIdentity(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error)
 	CreateIdentity(ctx context.Context, identity *models.UserIdentity) error
-}
-
-type PasswordLoginReader interface {
-	GetPasswordLogin(ctx context.Context, idp, identifier string) (*models.PasswordLogin, error)
 }
 
 type CredentialStore interface {
