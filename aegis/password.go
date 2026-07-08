@@ -7,19 +7,18 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/heliannuuthus/aegis/contract"
-	"github.com/heliannuuthus/aegis/internal/authenticator/idp"
 )
 
 func ChangePassword(ctx context.Context, userSvc contract.UserProvider, openid, oldPassword, newPassword string) error {
-	cred, err := userSvc.GetPasswordLogin(ctx, idp.TypeGlobal, openid)
+	user, err := userSvc.GetUserByOpenID(ctx, openid)
 	if err != nil {
 		return errors.New("user not found")
 	}
-	if cred.PasswordHash != "" {
+	if user.PasswordHash != nil && *user.PasswordHash != "" {
 		if oldPassword == "" {
 			return errors.New("old password is required")
 		}
-		if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(oldPassword)); err != nil {
+		if err := bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(oldPassword)); err != nil {
 			return errors.New("old password is incorrect")
 		}
 	}

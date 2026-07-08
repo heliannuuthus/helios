@@ -112,9 +112,11 @@ func (s *Service) GetDecryptedUserByIdentity(ctx context.Context, domain, idp, t
 // 用户不存在返回空切片（非 error），仅基础设施故障才返回 error
 func (s *Service) ListIdentitiesByIdentity(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error) {
 	var matched models.UserIdentity
-	if err := s.db.WithContext(ctx).
-		Where("domain = ? AND idp = ? AND t_openid = ?", domain, idp, tOpenID).
-		First(&matched).Error; err != nil {
+	query := s.db.WithContext(ctx).Where("idp = ? AND t_openid = ?", idp, tOpenID)
+	if domain != "" {
+		query = query.Where("domain = ?", domain)
+	}
+	if err := query.First(&matched).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -310,13 +312,6 @@ func (s *Service) DeleteCredentialByOpenIDAndType(ctx context.Context, openid st
 	return s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Delete(&models.UserCredential{}).Error
 }
 
-// ==================== Password Login ====================
-
-// GetPasswordLogin resolves password login material by an upper-layer identity tag.
-func (s *Service) GetPasswordLogin(ctx context.Context, idpType, identifier string) (*dto.PasswordLogin, error) {
-	return s.getByIdentifierWithIDP(ctx, identifier, idpType)
-}
-
 // getUserByEmail 根据邮箱查找用户（内部使用，返回基础 User）
 func (s *Service) getUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
@@ -324,78 +319,6 @@ func (s *Service) getUserByEmail(ctx context.Context, email string) (*models.Use
 		return nil, err
 	}
 	return &user, nil
-}
-
-// getByIdentifierWithIDP 根据标识符查找用户，并验证用户具有指定 IDP 的主身份
-func (s *Service) getByIdentifierWithIDP(ctx context.Context, identifier, idpType string) (*dto.PasswordLogin, error) {
-	if user, err := s.getUserByIdentityTag(ctx, idpType, identifier); err == nil {
-		return s.toPasswordLoginWithIDP(ctx, user, idpType)
-	}
-
-	// 1. 尝试用户名（最左模糊匹配）
-	user, err := s.GetUserByUsername(ctx, identifier)
-	if err == nil {
-		return s.toPasswordLoginWithIDP(ctx, user, idpType)
-	}
-
-	// 2. 尝试邮箱
-	if isEmail(identifier) {
-		userByEmail, err := s.getUserByEmail(ctx, identifier)
-		if err == nil {
-			return s.toPasswordLoginWithIDP(ctx, userByEmail, idpType)
-		}
-	}
-
-	// 3. 尝试手机号
-	if isPhone(identifier) {
-		phoneHash := hashPhone(identifier)
-		var userByPhone models.User
-		if err := s.db.WithContext(ctx).Where("phone = ?", phoneHash).First(&userByPhone).Error; err == nil {
-			return s.toPasswordLoginWithIDP(ctx, &userByPhone, idpType)
-		}
-	}
-
-	return nil, errors.New("user not found")
-}
-
-func (s *Service) getUserByIdentityTag(ctx context.Context, idpType, tOpenID string) (*models.User, error) {
-	var identity models.UserIdentity
-	if err := s.db.WithContext(ctx).Where("idp = ? AND t_openid = ?", idpType, tOpenID).First(&identity).Error; err != nil {
-		return nil, err
-	}
-	return s.GetUserByOpenID(ctx, identity.UID)
-}
-
-// toPasswordLoginWithIDP 转换为密码登录材料，同时验证用户具有指定 IDP 的身份
-func (s *Service) toPasswordLoginWithIDP(ctx context.Context, user *models.User, idpType string) (*dto.PasswordLogin, error) {
-	var identity models.UserIdentity
-	if err := s.db.WithContext(ctx).Where("uid = ? AND idp = ?", user.OpenID, idpType).First(&identity).Error; err != nil {
-		return nil, errors.New("user not found")
-	}
-
-	cred := s.toPasswordLogin(user)
-	cred.OpenID = identity.TOpenID
-	return cred, nil
-}
-
-// toPasswordLogin 转换为密码登录材料
-func (s *Service) toPasswordLogin(user *models.User) *dto.PasswordLogin {
-	cred := &dto.PasswordLogin{
-		Status: user.Status,
-	}
-	if user.PasswordHash != nil {
-		cred.PasswordHash = *user.PasswordHash
-	}
-	if user.Nickname != nil {
-		cred.Nickname = *user.Nickname
-	}
-	if user.Email != nil {
-		cred.Email = *user.Email
-	}
-	if user.Picture != nil {
-		cred.Picture = *user.Picture
-	}
-	return cred
 }
 
 // ==================== Group 相关 ====================
@@ -533,30 +456,6 @@ func generateRandomAvatar(seed string) string {
 		hash = -hash
 	}
 	return fmt.Sprintf("https://api.dicebear.com/7.x/avataaars/svg?seed=%s&size=200", fmt.Sprintf("user%d", hash%10))
-}
-
-func isEmail(s string) bool {
-	for _, c := range s {
-		if c == '@' {
-			return true
-		}
-	}
-	return false
-}
-
-func isPhone(s string) bool {
-	if len(s) < 10 || len(s) > 15 {
-		return false
-	}
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			if c == '+' && s[0] == '+' {
-				continue
-			}
-			return false
-		}
-	}
-	return true
 }
 
 func hashPhone(phone string) string {

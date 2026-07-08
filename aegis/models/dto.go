@@ -1,15 +1,5 @@
 package models
 
-// PasswordLogin 密码登录材料（IDP 身份解析结果）
-type PasswordLogin struct {
-	OpenID       string
-	PasswordHash string
-	Nickname     string
-	Email        string
-	Picture      string
-	Status       int8
-}
-
 // TOTPSetupRequest TOTP 设置请求
 type TOTPSetupRequest struct {
 	OpenID  string

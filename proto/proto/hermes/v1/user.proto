@@ -16,6 +16,7 @@ service UserService {
   rpc GetByIdentity(GetByIdentityRequest) returns (User);
   rpc GetByEmail(GetByEmailRequest) returns (DecryptedUser);
   rpc GetByPhonePlain(GetByPhonePlainRequest) returns (DecryptedUser);
+  rpc GetByUsername(GetByUsernameRequest) returns (DecryptedUser);
   rpc GetDecryptedUser(OpenIDRequest) returns (DecryptedUser);
   rpc GetDecryptedUserByIdentity(GetByIdentityRequest) returns (DecryptedUser);
 
@@ -72,6 +73,7 @@ message User {
   optional google.protobuf.Timestamp last_login_at = 8;
   google.protobuf.Timestamp created_at = 9;
   google.protobuf.Timestamp updated_at = 10;
+  optional string password_hash = 11;
 }
 
 // DecryptedUser 解密后的用户（含明文手机号）
@@ -92,6 +94,10 @@ message GetByEmailRequest {
 
 message GetByPhonePlainRequest {
   string phone = 1;
+}
+
+message GetByUsernameRequest {
+  string username = 1;
 }
 
 message CreateUserRequest {

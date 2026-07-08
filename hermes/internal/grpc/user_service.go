@@ -5,6 +5,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gorm.io/gorm"
 
 	hermes "github.com/heliannuuthus/hermes/internal"
 	"github.com/heliannuuthus/hermes/internal/dto"
@@ -52,6 +53,18 @@ func (s *userServiceServer) GetByPhonePlain(ctx context.Context, req *hermesv1.G
 		return nil, toStatus(err)
 	}
 	return decryptedUserToProto(u), nil
+}
+
+func (s *userServiceServer) GetByUsername(ctx context.Context, req *hermesv1.GetByUsernameRequest) (*hermesv1.DecryptedUser, error) {
+	u, err := s.svc.GetUserByUsername(ctx, req.GetUsername())
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	decrypted, err := s.svc.GetDecryptedUserByOpenID(ctx, u.OpenID)
+	if err != nil {
+		return nil, toStatus(err)
+	}
+	return decryptedUserToProto(decrypted), nil
 }
 
 func (s *userServiceServer) GetDecryptedUser(ctx context.Context, req *hermesv1.OpenIDRequest) (*hermesv1.DecryptedUser, error) {
@@ -181,11 +194,11 @@ func (s *userServiceServer) AddIdentity(ctx context.Context, req *hermesv1.AddId
 }
 
 func (s *userServiceServer) GetPasswordCredential(ctx context.Context, req *hermesv1.GetPasswordCredentialRequest) (*hermesv1.PasswordStoreCredential, error) {
-	cred, err := s.svc.GetPasswordLogin(ctx, req.GetIdp(), req.GetIdentifier())
+	user, identity, err := s.resolvePasswordCredentialUser(ctx, req.GetIdp(), req.GetIdentifier())
 	if err != nil {
 		return nil, toStatus(err)
 	}
-	return passwordLoginToProto(cred), nil
+	return passwordCredentialToProto(user, identity), nil
 }
 
 func (s *userServiceServer) CreateCredential(ctx context.Context, req *hermesv1.CreateCredentialRequest) (*emptypb.Empty, error) {
@@ -378,6 +391,9 @@ func userToProto(u *models.User) *hermesv1.User {
 	if u.LastLoginAt != nil {
 		pb.LastLoginAt = timestamppb.New(*u.LastLoginAt)
 	}
+	if u.PasswordHash != nil {
+		pb.PasswordHash = u.PasswordHash
+	}
 	return pb
 }
 
@@ -411,20 +427,69 @@ func identitiesToProto(identities models.Identities) *hermesv1.IdentityList {
 	return &hermesv1.IdentityList{Identities: out}
 }
 
-func passwordLoginToProto(c *dto.PasswordLogin) *hermesv1.PasswordStoreCredential {
+func (s *userServiceServer) resolvePasswordCredentialUser(ctx context.Context, idpType, identifier string) (*models.User, *models.UserIdentity, error) {
+	if user, identity, err := s.resolvePasswordCredentialByIdentity(ctx, idpType, identifier); err == nil {
+		return user, identity, nil
+	}
+	if user, err := s.svc.GetUserByOpenID(ctx, identifier); err == nil {
+		return s.withPasswordCredentialIdentity(ctx, user, idpType)
+	}
+	if user, err := s.svc.GetUserByUsername(ctx, identifier); err == nil {
+		return s.withPasswordCredentialIdentity(ctx, user, idpType)
+	}
+	if user, err := s.svc.GetUserByEmail(ctx, identifier); err == nil {
+		return s.withPasswordCredentialIdentity(ctx, &user.User, idpType)
+	}
+	if user, err := s.svc.GetUserByPhone(ctx, identifier); err == nil {
+		return s.withPasswordCredentialIdentity(ctx, &user.User, idpType)
+	}
+	return nil, nil, gorm.ErrRecordNotFound
+}
+
+func (s *userServiceServer) resolvePasswordCredentialByIdentity(ctx context.Context, idpType, identifier string) (*models.User, *models.UserIdentity, error) {
+	identities, err := s.svc.ListIdentitiesByIdentity(ctx, "", idpType, identifier)
+	if err != nil {
+		return nil, nil, err
+	}
+	identity := identities.FindByIDP(idpType)
+	if identity == nil {
+		return nil, nil, gorm.ErrRecordNotFound
+	}
+	user, err := s.svc.GetUserByOpenID(ctx, identity.UID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return user, identity, nil
+}
+
+func (s *userServiceServer) withPasswordCredentialIdentity(ctx context.Context, user *models.User, idpType string) (*models.User, *models.UserIdentity, error) {
+	identities, err := s.svc.ListUserIdentities(ctx, user.OpenID)
+	if err != nil {
+		return nil, nil, err
+	}
+	identity := identities.FindByIDP(idpType)
+	if identity == nil {
+		return nil, nil, gorm.ErrRecordNotFound
+	}
+	return user, identity, nil
+}
+
+func passwordCredentialToProto(user *models.User, identity *models.UserIdentity) *hermesv1.PasswordStoreCredential {
 	pb := &hermesv1.PasswordStoreCredential{
-		Openid:       c.OpenID,
-		PasswordHash: c.PasswordHash,
-		Status:       int32(c.Status),
+		Openid: identity.TOpenID,
+		Status: int32(user.Status),
 	}
-	if c.Nickname != "" {
-		pb.Nickname = &c.Nickname
+	if user.PasswordHash != nil {
+		pb.PasswordHash = *user.PasswordHash
 	}
-	if c.Email != "" {
-		pb.Email = &c.Email
+	if user.Nickname != nil {
+		pb.Nickname = user.Nickname
 	}
-	if c.Picture != "" {
-		pb.Picture = &c.Picture
+	if user.Email != nil {
+		pb.Email = user.Email
+	}
+	if user.Picture != nil {
+		pb.Picture = user.Picture
 	}
 	return pb
 }

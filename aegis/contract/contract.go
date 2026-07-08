@@ -40,11 +40,11 @@ type UserProvider interface {
 	UserWriteProvider
 	IdentityProvider
 	CredentialStore
-	GetPasswordLogin(ctx context.Context, idp, identifier string) (*models.PasswordLogin, error)
 }
 
 type UserProfileProvider interface {
 	GetUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error)
+	GetUserByUsername(ctx context.Context, username string) (*models.UserWithDecrypted, error)
 	GetUserByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error)
 	GetUserByPhone(ctx context.Context, phone string) (*models.UserWithDecrypted, error)
 }

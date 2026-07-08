@@ -126,18 +126,25 @@ func (p *Provider) loginByPassword(ctx context.Context, identifier, password str
 
 // getCredential 获取 B 端平台人员凭证
 func (p *Provider) getCredential(ctx context.Context, identifier string) (*credential, error) {
-	cred, err := p.userSvc.GetPasswordLogin(ctx, idp.TypeStaff, identifier)
+	user, identity, err := idp.ResolveUserIdentity(ctx, p.userSvc, idp.TypeStaff, identifier)
 	if err != nil {
 		return nil, err
 	}
 	return &credential{
-		OpenID:       cred.OpenID,
-		PasswordHash: cred.PasswordHash,
-		Nickname:     cred.Nickname,
-		Email:        cred.Email,
-		Picture:      cred.Picture,
-		Status:       cred.Status,
+		OpenID:       identity.TOpenID,
+		PasswordHash: stringValue(user.PasswordHash),
+		Nickname:     stringValue(user.Nickname),
+		Email:        stringValue(user.Email),
+		Picture:      stringValue(user.Picture),
+		Status:       user.Status,
 	}, nil
+}
+
+func stringValue(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // maskIdentifier 脱敏标识符（用于日志）

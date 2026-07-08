@@ -196,6 +196,7 @@ func userFromProto(pb *hermesv1.User) *models.User {
 		Picture:       pb.Picture,
 		Email:         pb.Email,
 		EmailVerified: pb.EmailVerified,
+		PasswordHash:  pb.PasswordHash,
 	}
 	if pb.LastLoginAt != nil {
 		t := pb.LastLoginAt.AsTime()
@@ -257,27 +258,6 @@ func credentialFromProto(pb *hermesv1.UserCredential) *models.UserCredential {
 		c.UpdatedAt = pb.UpdatedAt.AsTime()
 	}
 	return c
-}
-
-func passwordLoginFromProto(pb *hermesv1.PasswordStoreCredential) *models.PasswordLogin {
-	if pb == nil {
-		return nil
-	}
-	cred := &models.PasswordLogin{
-		OpenID:       pb.Openid,
-		PasswordHash: pb.PasswordHash,
-		Status:       int8(pb.Status),
-	}
-	if pb.Nickname != nil {
-		cred.Nickname = *pb.Nickname
-	}
-	if pb.Email != nil {
-		cred.Email = *pb.Email
-	}
-	if pb.Picture != nil {
-		cred.Picture = *pb.Picture
-	}
-	return cred
 }
 
 // ==================== helpers ====================
