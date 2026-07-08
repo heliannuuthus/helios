@@ -35,8 +35,8 @@ func (s *Service) SetApplicationServiceRelations(ctx context.Context, req *dto.A
 	return nil
 }
 
-// GetApplicationServiceRelations 获取应用可访问的服务和关系
-func (s *Service) GetApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error) {
+// ListApplicationServiceRelations 获取应用可访问的服务和关系
+func (s *Service) ListApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error) {
 	var relations []models.ApplicationServiceRelation
 	if err := s.db.WithContext(ctx).Where("app_id = ?", appID).Find(&relations).Error; err != nil {
 		return nil, fmt.Errorf("获取应用服务关系失败: %w", err)
@@ -118,8 +118,8 @@ func (s *Service) ListRelationships(ctx context.Context, req *dto.ListRequest) (
 	return pagination.CursorPaginate[models.Relationship](query, req.Pagination)
 }
 
-// FindRelationships 按精确条件查询关系（不分页），供内部服务调用
-func (s *Service) FindRelationships(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
+// ListRelationshipsBySubject 按精确条件查询关系（不分页），供内部服务调用
+func (s *Service) ListRelationshipsBySubject(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
 	var rels []models.Relationship
 	query := s.db.WithContext(ctx).Where("service_id = ? AND subject_type = ? AND subject_id = ?", serviceID, subjectType, subjectID)
 	if err := query.Find(&rels).Error; err != nil {

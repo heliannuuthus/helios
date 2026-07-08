@@ -13,13 +13,15 @@ import (
 
 	"github.com/heliannuuthus/aegis"
 	aegisconfig "github.com/heliannuuthus/aegis/config"
-	"github.com/heliannuuthus/aegis/iris"
+	"github.com/heliannuuthus/aegis/internal/cache"
 	"github.com/heliannuuthus/aegis/middleware"
+	"github.com/heliannuuthus/aegis/models"
 	hermesrpc "github.com/heliannuuthus/aegis/rpc/hermes"
 	"github.com/heliannuuthus/pkg/aegis/guard"
 	"github.com/heliannuuthus/pkg/aegis/utilities/key"
 	"github.com/heliannuuthus/pkg/config"
 	"github.com/heliannuuthus/pkg/logger"
+	pkgredis "github.com/heliannuuthus/pkg/redis"
 )
 
 func main() {
@@ -46,8 +48,18 @@ func main() {
 
 	initTokenManager(client)
 
-	credentialSvc := iris.NewCredentialService(client)
-	aegisHandler, err := aegis.Initialize(client, client, credentialSvc)
+	redisURL := aegisconfig.Cfg().GetString("redis.url")
+	if redisURL == "" {
+		redisURL = "redis://localhost:6379/0"
+	}
+	redis, err := pkgredis.NewClient(redisURL)
+	if err != nil {
+		logger.Fatalf("连接 Redis 失败: %v", err)
+	}
+	logger.Infof("[Auth] Redis 连接成功: %s", redisURL)
+
+	cacheManager := cache.NewManager(client, client, redis)
+	aegisHandler, err := aegis.Initialize(client, client, client, client, cacheManager)
 	if err != nil {
 		logger.Fatalf("初始化 aegis 失败: %v", err)
 	}
@@ -115,7 +127,7 @@ func main() {
 			{"DELETE", "/identities/:idp", profile.UnbindIdentity},
 			{"GET", "/mfa", profile.GetMFAStatus},
 			{"POST", "/mfa", profile.SetupMFA},
-			{"PUT", "/mfa", profile.VerifyMFA},
+			{"POST", "/mfa/:uid", profile.CompleteMFA},
 			{"PATCH", "/mfa", profile.UpdateMFA},
 			{"DELETE", "/mfa", profile.DeleteMFA},
 		}
@@ -139,7 +151,7 @@ func main() {
 func initTokenManager(client *hermesrpc.Client) {
 	endpoint := aegisconfig.GetIssuer()
 	seed := key.SingleOf(func(_ context.Context, _ string) ([]byte, error) {
-		keys, err := client.GetDomainKeys(context.Background(), "consumer")
+		keys, err := client.GetKeys(context.Background(), models.KeyOwnerDomain, "consumer")
 		if err != nil {
 			return nil, err
 		}

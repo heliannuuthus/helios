@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS t_domain_idp_config (
     idp_type     VARCHAR(32)   NOT NULL COMMENT 'IDP 类型：github/google/wxmp/ttmp 等',
     priority     INT           NOT NULL DEFAULT 0 COMMENT '排序优先级（值越大越靠前）',
     strategy     VARCHAR(256)  DEFAULT NULL COMMENT '认证方式：password,webauthn',
-    delegate     VARCHAR(256)  DEFAULT NULL COMMENT '可替代主认证的独立验证方式（email_otp,totp,webauthn）',
+    delegate     VARCHAR(256)  DEFAULT NULL COMMENT '可替代主认证的独立验证方式（email-code,totp,webauthn）',
     `require`    VARCHAR(256)  DEFAULT NULL COMMENT '前置条件（captcha 等）',
     t_app_id     VARCHAR(256)  NOT NULL COMMENT '引用 t_idp_key 的 t_app_id',
     -- 时间戳
@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS t_application_idp_config (
     `type`       VARCHAR(32)   NOT NULL COMMENT 'IDP 类型：github/google/wxmp/user/staff',
     priority     INT           NOT NULL DEFAULT 0 COMMENT '排序优先级（值越大越靠前）',
     strategy     VARCHAR(256)  DEFAULT NULL COMMENT '认证方式（仅 user/staff）：password,webauthn',
-    delegate     VARCHAR(256)  DEFAULT NULL COMMENT '可替代主认证的独立验证方式（email_otp,totp,webauthn）',
+    delegate     VARCHAR(256)  DEFAULT NULL COMMENT '可替代主认证的独立验证方式（email-code,totp,webauthn）',
     `require`    VARCHAR(256)  DEFAULT NULL COMMENT '前置条件（captcha 等）',
     t_app_id     VARCHAR(256)  DEFAULT NULL COMMENT '引用 t_idp_key 的 t_app_id（NULL=使用域默认）',
     -- 时间戳
@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS t_service_challenge_setting (
     _id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     -- 业务字段
     service_id   VARCHAR(32)  NOT NULL COMMENT '服务 ID',
-    `type`       VARCHAR(64)  NOT NULL COMMENT 'Challenge 类型[:场景]，如 email_otp / email_otp:login',
+    `type`       VARCHAR(64)  NOT NULL COMMENT 'Challenge 类型[:场景]，如 email-code / email-code:login',
     expires_in   INT UNSIGNED NOT NULL DEFAULT 300 COMMENT 'Challenge 有效期（秒）',
     limits       JSON         NOT NULL COMMENT '限流配置，如 {"1m": 1, "24h": 10}',
     -- 时间戳
@@ -271,6 +271,7 @@ CREATE TABLE IF NOT EXISTS t_user_credential (
     openid           VARCHAR(64)   NOT NULL COMMENT '用户标识（关联 t_user.openid）',
     `type`           VARCHAR(32)   NOT NULL COMMENT '凭证类型：totp/webauthn/passkey',
     credential_id    VARCHAR(256)  DEFAULT NULL COMMENT 'WebAuthn 凭证 ID（Base64 编码）',
+    label            VARCHAR(128)  NOT NULL DEFAULT '' COMMENT '凭证名称，创建时推断，用户可重命名',
     secret           VARCHAR(2048) NOT NULL COMMENT '凭证数据（AES-GCM 加密，Base64 编码的 JSON）',
     enabled          TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '是否已启用',
     -- 时间戳

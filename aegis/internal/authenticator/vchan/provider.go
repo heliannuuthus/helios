@@ -9,7 +9,7 @@ import (
 
 // Provider 验证渠道提供者接口
 // 与 factor.Provider 方法签名相同，但分属不同包、代表不同概念
-// factor = 认证因子（email_otp / totp / webauthn）
+// factor = 认证因子（email-code / totp / webauthn）
 // vchan  = 验证渠道（captcha 等前置验证）
 type Provider interface {
 	// Type 返回渠道类型标识

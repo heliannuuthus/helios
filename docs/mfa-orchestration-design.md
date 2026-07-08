@@ -65,7 +65,7 @@ MFA 作为新阶段加入 AuthFlow 状态机：
 type RiskContext struct {
     UserID        string            // 用户 ID
     ClientID      string            // 应用 ID
-    LoginMethod   string            // 主认证方式（password / passkey / delegate:email_otp ...）
+    LoginMethod   string            // 主认证方式（password / passkey / delegate:email-code ...）
     IP            string            // 请求 IP
     UserAgent     string            // 浏览器 UA
     GeoLocation   *GeoLocation      // IP 归属地
@@ -122,10 +122,10 @@ const (
  │                                            │
  │  主认证 + 授权完成                           │
  │  风险评估：RequireMFA = true                │
- │  AllowedChannels: [totp, email_otp]        │
+ │  AllowedChannels: [totp, email-code]        │
  │                                            │
  │  HTTP 302                                  │
- │  Location: /mfa?channels=totp,email_otp    │
+ │  Location: /mfa?channels=totp,email-code    │
  │            &flow_id=xxx                    │
  │ ─────────────────────────────────────────> │
  │                                            │  前端根据 channels 条件渲染
@@ -139,7 +139,7 @@ const (
 
 ```http
 HTTP/1.1 302 Found
-Location: /mfa?channels=totp,email_otp&flow_id=abc123
+Location: /mfa?channels=totp,email-code&flow_id=abc123
 ```
 
 前端解析 `channels` 参数，条件渲染对应的验证 UI。
@@ -155,7 +155,7 @@ Content-Type: application/json
 {
     "status": "mfa_required",
     "flow_id": "abc123",
-    "allowed_channels": ["totp", "email_otp"],
+    "allowed_channels": ["totp", "email-code"],
     "expires_in": 300
 }
 ```
@@ -233,10 +233,10 @@ type MFACompleteRequest struct {
 
 | 主认证方式 | 主认证因子类别 | 允许的 MFA 因子类别 | 允许的 Channel Type |
 |-----------|-------------|-------------------|-------------------|
-| password | Knowledge | Possession, Inherence | totp, email_otp, sms_otp, webauthn |
+| password | Knowledge | Possession, Inherence | totp, email-code, sms-code, webauthn |
 | passkey | Inherence + Possession | Knowledge | 一般不需要 MFA |
-| delegate:email_otp | Possession | Knowledge, Inherence | webauthn |
-| delegate:sms_otp | Possession | Knowledge, Inherence | webauthn |
+| delegate:email-code | Possession | Knowledge, Inherence | webauthn |
+| delegate:sms-code | Possession | Knowledge, Inherence | webauthn |
 | delegate:totp | Possession | Knowledge, Inherence | webauthn |
 
 ---
@@ -267,11 +267,11 @@ type AuthFlow struct {
 ### 7.2 条件渲染
 
 ```tsx
-// allowed_channels = ["totp", "email_otp"]
+// allowed_channels = ["totp", "email-code"]
 
 {allowedChannels.includes("totp") && <TOTPInput />}
-{allowedChannels.includes("email_otp") && <EmailOTPFlow />}
-{allowedChannels.includes("sms_otp") && <SMSOTPFlow />}
+{allowedChannels.includes("email-code") && <EmailOTPFlow />}
+{allowedChannels.includes("sms-code") && <SMSOTPFlow />}
 {allowedChannels.includes("webauthn") && <WebAuthnFlow />}
 ```
 
@@ -319,7 +319,7 @@ type TrustedDevice struct {
 
 ConnectionsMap 是"登录前看到什么"，MFA 是"登录后需要什么"。提前暴露 MFA 配置：
 - 泄露安全策略（攻击者知道 MFA 方式后可针对性准备）
-- 增加前端复杂度（需要区分"delegate 用的 email_otp"和"MFA 用的 email_otp"）
+- 增加前端复杂度（需要区分"delegate 用的 email-code"和"MFA 用的 email-code"）
 - 语义错误（MFA 是运行时的动态决策，不是静态配置的展示）
 
 ### 9.2 为什么用 SPA JSON 而不是真 302
@@ -328,7 +328,7 @@ ConnectionsMap 是"登录前看到什么"，MFA 是"登录后需要什么"。提
 
 ### 9.3 为什么因子类别校验
 
-不做因子类别校验的话，password + email（同为 Knowledge? 否，email_otp 是 Possession）基本上主流组合都满足 MFA。但严格校验能防止：
+不做因子类别校验的话，password + email（同为 Knowledge? 否，email-code 是 Possession）基本上主流组合都满足 MFA。但严格校验能防止：
 - password + password hint 之类的伪 MFA
 - 确保真正的多因素覆盖
 

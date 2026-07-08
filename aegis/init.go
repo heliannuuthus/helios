@@ -20,7 +20,6 @@ import (
 	"github.com/heliannuuthus/aegis/internal/authenticator/idp/tt"
 	idpuser "github.com/heliannuuthus/aegis/internal/authenticator/idp/user"
 	"github.com/heliannuuthus/aegis/internal/authenticator/idp/wechat"
-	"github.com/heliannuuthus/aegis/internal/authenticator/totp"
 	"github.com/heliannuuthus/aegis/internal/authenticator/vchan"
 	"github.com/heliannuuthus/aegis/internal/authenticator/webauthn"
 	"github.com/heliannuuthus/aegis/internal/authorize"
@@ -33,20 +32,26 @@ import (
 	"github.com/heliannuuthus/pkg/async"
 	"github.com/heliannuuthus/pkg/logger"
 	"github.com/heliannuuthus/pkg/mail"
-	pkgredis "github.com/heliannuuthus/pkg/redis"
 	"github.com/heliannuuthus/pkg/throttle"
 )
 
 // Initialize 初始化 Auth 模块，返回 Handler
-func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, credentialSvc contract.CredentialProvider) (*Handler, error) {
-	redisURL := getRedisURL()
-	redis, err := pkgredis.NewClient(redisURL)
-	if err != nil {
-		return nil, err
+func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, identitySvc contract.IdentityProvider, credentialStore contract.CredentialStore, cacheManager *cache.Manager) (*Handler, error) {
+	if hermesSvc == nil {
+		return nil, fmt.Errorf("hermes service is required")
 	}
-	logger.Infof("[Auth] Redis 连接成功: %s", redisURL)
-
-	cacheManager := cache.NewManager(hermesSvc, userSvc, redis)
+	if userSvc == nil {
+		return nil, fmt.Errorf("user service is required")
+	}
+	if identitySvc == nil {
+		return nil, fmt.Errorf("identity service is required")
+	}
+	if credentialStore == nil {
+		return nil, fmt.Errorf("credential store is required")
+	}
+	if cacheManager == nil {
+		return nil, fmt.Errorf("cache manager is required")
+	}
 
 	domainSign, domainVerify, serviceKey, appVerify := initKeyProviders(cacheManager)
 	tokenSvc := token.NewService(cacheManager, domainSign, domainVerify, serviceKey, appVerify)
@@ -57,25 +62,29 @@ func Initialize(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 		logger.Info("[Auth] 邮件发送器初始化完成")
 	}
 
-	webauthnSvc, captchaVerifier, totpVerifier := initProviders(credentialSvc, cacheManager, userSvc)
+	webauthnSvc, captchaVerifier, err := initProviders(cacheManager, credentialStore)
+	if err != nil {
+		return nil, err
+	}
 
-	throttler := throttle.NewThrottler(redis)
+	throttler := throttle.NewThrottler(cacheManager.Redis())
 	ac := accessctl.NewManager(throttler)
 	logger.Info("[Auth] 访问控制管理器初始化完成")
 
-	registry := initRegistry(hermesSvc, userSvc, cacheManager, emailSender, webauthnSvc, captchaVerifier, totpVerifier, ac, tokenSvc)
+	mfaSvc := NewMFAService(credentialStore, cacheManager, webauthnSvc)
+
+	registry := initRegistry(hermesSvc, userSvc, identitySvc, credentialStore, cacheManager, emailSender, webauthnSvc, captchaVerifier, ac, tokenSvc)
 
 	pool, err := async.NewPool(64)
 	if err != nil {
 		return nil, err
 	}
 
-	userService := user.NewService(cacheManager, userSvc)
+	userService := user.NewService(cacheManager, userSvc, identitySvc)
 	authenticateSvc := authenticate.NewService(cacheManager, ac)
 	authorizeSvc := authorize.NewService(cacheManager, hermesSvc, userService, tokenSvc, pool, 5*time.Minute)
 	challengeSvc := challenge.NewService(cacheManager, registry)
-	mfaSvc := NewMFAService(webauthnSvc)
-	profileHandler := NewProfileHandler(userSvc, credentialSvc, mfaSvc)
+	profileHandler := NewProfileHandler(userSvc, identitySvc, mfaSvc)
 
 	handler := NewHandler(authenticateSvc, authorizeSvc, challengeSvc, userService, cacheManager, tokenSvc, mfaSvc, profileHandler, pool)
 	logger.Info("[Auth] 模块初始化完成")
@@ -147,16 +156,13 @@ func initKeyProviders(cm *cache.Manager) (key.MultiOf, key.MultiOf, key.MultiOf,
 	return domainSign, domainVerify, serviceKey, appVerify
 }
 
-// initProviders 初始化底层 Provider（WebAuthn、Captcha、TOTP）
-func initProviders(credentialSvc contract.CredentialProvider, cacheManager *cache.Manager, userSvc contract.UserProvider) (*webauthn.Service, captcha.Verifier, factor.TOTPVerifier) {
-	// WebAuthn
-	var webauthnSvc *webauthn.Service
-	if svc, err := webauthn.NewService(cacheManager, userSvc); err != nil {
-		logger.Warnf("[Auth] WebAuthn 初始化失败: %v", err)
-	} else {
-		webauthnSvc = svc
-		logger.Info("[Auth] WebAuthn 初始化完成")
+// initProviders 初始化底层认证能力（WebAuthn、Captcha）
+func initProviders(cacheManager *cache.Manager, credentialStore contract.CredentialStore) (*webauthn.Service, captcha.Verifier, error) {
+	webauthnSvc, err := webauthn.NewService(cacheManager, credentialStore)
+	if err != nil {
+		return nil, nil, fmt.Errorf("init webauthn service: %w", err)
 	}
+	logger.Info("[Auth] WebAuthn 初始化完成")
 
 	// Captcha
 	captchaVerifier := initCaptchaVerifier()
@@ -164,18 +170,11 @@ func initProviders(credentialSvc contract.CredentialProvider, cacheManager *cach
 		logger.Infof("[Auth] Captcha 验证器初始化完成: provider=%s", captchaVerifier.GetProvider())
 	}
 
-	// TOTP
-	var totpVerifier factor.TOTPVerifier
-	if credentialSvc != nil {
-		totpVerifier = totp.NewVerifier(credentialSvc)
-		logger.Info("[Auth] TOTP 验证器初始化完成")
-	}
-
-	return webauthnSvc, captchaVerifier, totpVerifier
+	return webauthnSvc, captchaVerifier, nil
 }
 
 // initRegistry 初始化全局 Registry（注册胶水层 Authenticator）
-func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, totpVerifier factor.TOTPVerifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
+func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, identitySvc contract.IdentityProvider, credentialStore contract.CredentialStore, cacheManager *cache.Manager, emailSender *mail.Sender, webauthnSvc *webauthn.Service, captchaVerifier captcha.Verifier, ac *accessctl.Manager, tokenVerifier authenticate.ChallengeTokenVerifier) *authenticator.Registry {
 	registry := authenticator.NewRegistry()
 
 	// ==================== IDP Authenticators ====================
@@ -190,15 +189,11 @@ func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvid
 	registerIDP(github.NewProvider(hermesSvc))
 	registerIDP(google.NewProvider(hermesSvc))
 
-	if userSvc != nil {
-		registerIDP(idpuser.NewProvider(userSvc))
-		registerIDP(staff.NewProvider(userSvc))
-	}
+	registerIDP(idpuser.NewProvider(userSvc, identitySvc))
+	registerIDP(staff.NewProvider(userSvc, identitySvc))
 
-	if webauthnSvc != nil {
-		registerIDP(passkey.NewProvider(webauthnSvc))
-		logger.Info("[Auth] Passkey IDP 注册完成")
-	}
+	registerIDP(passkey.NewProvider(webauthnSvc))
+	logger.Info("[Auth] Passkey IDP 注册完成")
 
 	// ==================== VChan Authenticators ====================
 
@@ -212,26 +207,12 @@ func initRegistry(hermesSvc contract.HermesProvider, userSvc contract.UserProvid
 		registry.Register(authenticate.NewFactorAuthenticator(factor.NewEmailOTPProvider(emailSender, cacheManager), ac, tokenVerifier))
 	}
 
-	if totpVerifier != nil {
-		registry.Register(authenticate.NewFactorAuthenticator(factor.NewTOTPProvider(totpVerifier), ac, tokenVerifier))
-	}
+	registry.Register(authenticate.NewFactorAuthenticator(factor.NewTOTPFactor(credentialStore), ac, tokenVerifier))
 
-	if webauthnSvc != nil {
-		registry.Register(authenticate.NewFactorAuthenticator(factor.NewWebAuthnProvider(webauthnSvc), ac, tokenVerifier))
-	}
+	registry.Register(authenticate.NewFactorAuthenticator(factor.NewWebAuthnProvider(webauthnSvc), ac, tokenVerifier))
 
 	logger.Infof("[Auth] Registry 初始化完成: %v", registry.Summary())
 	return registry
-}
-
-// getRedisURL 获取 Redis URL
-func getRedisURL() string {
-	cfg := config.Cfg()
-	url := cfg.GetString("redis.url")
-	if url == "" {
-		url = "redis://localhost:6379/0"
-	}
-	return url
 }
 
 // initCaptchaVerifier 初始化 Captcha 验证器

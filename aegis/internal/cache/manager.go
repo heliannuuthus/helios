@@ -87,6 +87,10 @@ func NewManager(hermesSvc contract.HermesProvider, userSvc contract.UserProvider
 	}
 }
 
+func (cm *Manager) Redis() pkgredis.Client {
+	return cm.redis
+}
+
 func (cm *Manager) Close() {
 	cm.domainCache.Close()
 	cm.applicationCache.Close()

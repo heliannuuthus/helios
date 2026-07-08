@@ -13,7 +13,7 @@ import (
 
 // ==================== User Query ====================
 
-func (c *Client) GetDecryptedUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
+func (c *Client) GetUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
 	resp, err := c.user.GetDecryptedUser(ctx, &hermesv1.OpenIDRequest{Openid: openid})
 	if err != nil {
 		return nil, err
@@ -75,8 +75,8 @@ func (c *Client) CreateUser(ctx context.Context, identity *models.UserIdentity, 
 	return decryptedUserFromProto(resp), nil
 }
 
-func (c *Client) UpdateUser(ctx context.Context, openid string, updates map[string]any) error {
-	pbReq := &hermesv1.UpdateUserRequest{Openid: openid}
+func (c *Client) PatchUser(ctx context.Context, openid string, updates map[string]any) error {
+	pbReq := &hermesv1.PatchUserRequest{Openid: openid}
 	if v, ok := updates["nickname"]; ok {
 		if s, ok := v.(string); ok {
 			pbReq.Nickname = &s
@@ -98,30 +98,26 @@ func (c *Client) UpdateUser(ctx context.Context, openid string, updates map[stri
 			pbReq.Status = &i
 		}
 	}
-	_, err := c.user.UpdateUser(ctx, pbReq)
+	if v, ok := updates["password_hash"]; ok {
+		if s, ok := v.(string); ok {
+			pbReq.PasswordHash = &s
+		}
+	}
+	if v, ok := updates["last_login_at"]; ok {
+		if t, ok := v.(time.Time); ok {
+			pbReq.LastLoginAt = timestamppb.New(t)
+		}
+	}
+	_, err := c.user.PatchUser(ctx, pbReq)
 	if err != nil {
 		return fmt.Errorf("更新用户失败: %w", err)
 	}
 	return nil
 }
 
-func (c *Client) UpdateLastLogin(ctx context.Context, openid string) error {
-	_, err := c.user.UpdateLastLogin(ctx, &hermesv1.OpenIDRequest{Openid: openid})
-	return err
-}
-
-func (c *Client) UpdatePassword(ctx context.Context, openid, oldPassword, newPassword string) error {
-	_, err := c.user.UpdatePassword(ctx, &hermesv1.UpdatePasswordRequest{
-		Openid:      openid,
-		OldPassword: oldPassword,
-		NewPassword: newPassword,
-	})
-	return err
-}
-
 // ==================== Identity ====================
 
-func (c *Client) GetUserIdentitiesByOpenID(ctx context.Context, openid string) (models.Identities, error) {
+func (c *Client) ListUserIdentities(ctx context.Context, openid string) (models.Identities, error) {
 	resp, err := c.user.GetIdentities(ctx, &hermesv1.OpenIDRequest{Openid: openid})
 	if err != nil {
 		return nil, err
@@ -133,7 +129,7 @@ func (c *Client) GetUserIdentitiesByOpenID(ctx context.Context, openid string) (
 	return identities, nil
 }
 
-func (c *Client) GetIdentities(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error) {
+func (c *Client) ListIdentitiesByIdentity(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error) {
 	resp, err := c.user.GetIdentitiesByIdentity(ctx, &hermesv1.GetByIdentityRequest{
 		Domain:  domain,
 		Idp:     idp,
@@ -149,7 +145,7 @@ func (c *Client) GetIdentities(ctx context.Context, domain, idp, tOpenID string)
 	return identities, nil
 }
 
-func (c *Client) AddIdentity(ctx context.Context, identity *models.UserIdentity) error {
+func (c *Client) CreateIdentity(ctx context.Context, identity *models.UserIdentity) error {
 	pbReq := &hermesv1.AddIdentityRequest{
 		Domain:  identity.Domain,
 		Openid:  identity.UID,
@@ -163,24 +159,6 @@ func (c *Client) AddIdentity(ctx context.Context, identity *models.UserIdentity)
 	return err
 }
 
-// ==================== Password Store ====================
-
-func (c *Client) GetUserByIdentifier(ctx context.Context, identifier string) (*models.PasswordStoreCredential, error) {
-	resp, err := c.user.GetUserByIdentifier(ctx, &hermesv1.GetByIdentifierRequest{Identifier: identifier})
-	if err != nil {
-		return nil, err
-	}
-	return passwordStoreCredentialFromProto(resp), nil
-}
-
-func (c *Client) GetStaffByIdentifier(ctx context.Context, identifier string) (*models.PasswordStoreCredential, error) {
-	resp, err := c.user.GetStaffByIdentifier(ctx, &hermesv1.GetByIdentifierRequest{Identifier: identifier})
-	if err != nil {
-		return nil, err
-	}
-	return passwordStoreCredentialFromProto(resp), nil
-}
-
 // ==================== Credential ====================
 
 func (c *Client) CreateCredential(ctx context.Context, cred *models.UserCredential) error {
@@ -188,6 +166,7 @@ func (c *Client) CreateCredential(ctx context.Context, cred *models.UserCredenti
 		Openid: cred.OpenID,
 		Type:   cred.Type,
 		Secret: cred.Secret,
+		Label:  cred.Label,
 	}
 	if cred.CredentialID != nil {
 		pbReq.CredentialId = cred.CredentialID
@@ -196,26 +175,10 @@ func (c *Client) CreateCredential(ctx context.Context, cred *models.UserCredenti
 	return err
 }
 
-func (c *Client) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
-	_, err := c.user.UpdateCredentialSignCount(ctx, &hermesv1.UpdateCredentialSignCountRequest{
-		CredentialId: credentialID,
-		SignCount:    signCount,
-	})
-	return err
-}
-
 func (c *Client) DeleteCredential(ctx context.Context, openid, credentialID string) error {
 	_, err := c.user.DeleteCredential(ctx, &hermesv1.DeleteCredentialRequest{
 		Openid:       openid,
 		CredentialId: credentialID,
-	})
-	return err
-}
-
-func (c *Client) DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error {
-	_, err := c.user.DeleteCredentialByOpenIDAndType(ctx, &hermesv1.DeleteCredentialByTypeRequest{
-		Openid: openid,
-		Type:   credType,
 	})
 	return err
 }
@@ -228,7 +191,7 @@ func (c *Client) GetOpenIDByCredentialID(ctx context.Context, credentialID strin
 	return resp.Openid, nil
 }
 
-func (c *Client) GetUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
+func (c *Client) ListUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
 	resp, err := c.user.GetUserCredentials(ctx, &hermesv1.OpenIDRequest{Openid: openid})
 	if err != nil {
 		return nil, err
@@ -240,7 +203,7 @@ func (c *Client) GetUserCredentials(ctx context.Context, openid string) ([]model
 	return creds, nil
 }
 
-func (c *Client) GetUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
+func (c *Client) ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
 	resp, err := c.user.GetUserCredentialsByType(ctx, &hermesv1.GetCredentialsByTypeRequest{
 		Openid: openid,
 		Type:   credType,
@@ -263,24 +226,8 @@ func (c *Client) GetCredentialByID(ctx context.Context, credentialID string) (*m
 	return credentialFromProto(resp), nil
 }
 
-func (c *Client) UpdateCredential(ctx context.Context, credentialID string, updates map[string]any) error {
-	pbReq := &hermesv1.UpdateCredentialRequest{CredentialId: credentialID}
-	if v, ok := updates["secret"]; ok {
-		if s, ok := v.(string); ok {
-			pbReq.Secret = &s
-		}
-	}
-	if v, ok := updates["last_used_at"]; ok {
-		if t, ok := v.(time.Time); ok {
-			pbReq.LastUsedAt = timestamppb.New(t)
-		}
-	}
-	_, err := c.user.UpdateCredential(ctx, pbReq)
-	return err
-}
-
-func (c *Client) UpdateCredentialByInternalID(ctx context.Context, id uint, updates map[string]any) error {
-	pbReq := &hermesv1.UpdateCredentialByInternalIDRequest{Id: uint32(id)}
+func (c *Client) PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error {
+	pbReq := &hermesv1.PatchCredentialRequest{CredentialId: credentialID}
 	if v, ok := updates["enabled"]; ok {
 		if b, ok := v.(bool); ok {
 			pbReq.Enabled = &b
@@ -291,11 +238,28 @@ func (c *Client) UpdateCredentialByInternalID(ctx context.Context, id uint, upda
 			pbReq.Secret = &s
 		}
 	}
+	if v, ok := updates["label"]; ok {
+		if s, ok := v.(string); ok {
+			pbReq.Label = &s
+		}
+	}
 	if v, ok := updates["last_used_at"]; ok {
 		if t, ok := v.(time.Time); ok {
 			pbReq.LastUsedAt = timestamppb.New(t)
 		}
 	}
-	_, err := c.user.UpdateCredentialByInternalID(ctx, pbReq)
+	if v, ok := updates["sign_count"]; ok {
+		switch n := v.(type) {
+		case uint32:
+			pbReq.SignCount = &n
+		case uint:
+			signCount := uint32(n)
+			pbReq.SignCount = &signCount
+		case int:
+			signCount := uint32(n)
+			pbReq.SignCount = &signCount
+		}
+	}
+	_, err := c.user.PatchCredential(ctx, pbReq)
 	return err
 }

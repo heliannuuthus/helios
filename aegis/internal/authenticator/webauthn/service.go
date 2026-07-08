@@ -29,10 +29,10 @@ type Service struct {
 	webauthn *webauthn.WebAuthn
 	rpID     string
 	cache    *cache.Manager
-	userSvc  contract.UserProvider
+	store    contract.CredentialStore
 }
 
-func NewService(cm *cache.Manager, userSvc contract.UserProvider) (*Service, error) {
+func NewService(cm *cache.Manager, store contract.CredentialStore) (*Service, error) {
 	cfg := config.Cfg()
 
 	rpID := cfg.GetString("mfa.webauthn.rp-id")
@@ -63,7 +63,7 @@ func NewService(cm *cache.Manager, userSvc contract.UserProvider) (*Service, err
 		webauthn: wa,
 		rpID:     rpID,
 		cache:    cm,
-		userSvc:  userSvc,
+		store:    store,
 	}, nil
 }
 
@@ -365,21 +365,25 @@ func (s *Service) SaveCredential(ctx context.Context, openid string, credential 
 		OpenID:       openid,
 		CredentialID: &credentialID,
 		Type:         string(models.CredentialTypeWebAuthn),
+		Label:        InferCredentialLabel(credential),
 		Secret:       secretJSON,
 		Enabled:      true,
 	}
 
-	return s.userSvc.CreateCredential(ctx, dbCred)
+	return s.store.CreateCredential(ctx, dbCred)
 }
 
-// UpdateCredentialSignCount 更新凭证签名计数
-func (s *Service) UpdateCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
-	return s.userSvc.UpdateCredentialSignCount(ctx, credentialID, signCount)
+// PatchCredentialSignCount 更新凭证签名计数
+func (s *Service) PatchCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
+	return s.store.PatchCredential(ctx, credentialID, map[string]any{
+		"sign_count":   signCount,
+		"last_used_at": time.Now(),
+	})
 }
 
 // DeleteCredential 删除凭证
 func (s *Service) DeleteCredential(ctx context.Context, openid, credentialID string) error {
-	return s.userSvc.DeleteCredential(ctx, openid, credentialID)
+	return s.store.DeleteCredential(ctx, openid, credentialID)
 }
 
 // ListCredentials 列出用户的所有 WebAuthn 凭证
@@ -389,12 +393,12 @@ func (s *Service) ListCredentials(ctx context.Context, openid string) ([]*Stored
 
 // GetOpenIDByCredentialID 根据凭证 ID 获取用户 OpenID
 func (s *Service) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
-	return s.userSvc.GetOpenIDByCredentialID(ctx, credentialID)
+	return s.store.GetOpenIDByCredentialID(ctx, credentialID)
 }
 
 // getUserWebAuthnCredentials 获取用户的 WebAuthn 凭证列表
 func (s *Service) getUserWebAuthnCredentials(ctx context.Context, openid string) ([]*StoredWebAuthnCredential, error) {
-	credentials, err := s.userSvc.GetUserCredentialsByType(ctx, openid, string(models.CredentialTypeWebAuthn))
+	credentials, err := s.store.ListUserCredentialsByType(ctx, openid, string(models.CredentialTypeWebAuthn))
 	if err != nil {
 		return nil, err
 	}

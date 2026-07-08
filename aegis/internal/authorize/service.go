@@ -254,7 +254,7 @@ func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudi
 
 // CheckRelation 检查用户是否具有指定的关系
 func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID string, relations []string, objectType, objectID string) (map[string]bool, error) {
-	rels, err := s.hermesSvc.FindRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
+	rels, err := s.hermesSvc.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
 	if err != nil {
 		return nil, err
 	}

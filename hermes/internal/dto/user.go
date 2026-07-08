@@ -5,18 +5,6 @@ import (
 	"github.com/heliannuuthus/pkg/patch"
 )
 
-// ==================== PasswordStoreCredential ====================
-
-// PasswordStoreCredential 密码存储凭证（IDP 身份解析结果）
-type PasswordStoreCredential struct {
-	OpenID       string
-	PasswordHash string
-	Nickname     string
-	Email        string
-	Picture      string
-	Status       int8
-}
-
 // ==================== Group ====================
 
 // GroupCreateRequest 创建组请求

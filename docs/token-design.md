@@ -247,7 +247,7 @@ kid    = h + base64url(d)    // 总长 51 字符
   "exp": "2024-01-01T00:15:00Z",
   "nbf": "2024-01-01T00:00:00Z",
   "jti": "a1b2c3d4e5f67890",
-  "ctp": "email_otp",
+  "ctp": "email-code",
   "typ": "login"
 }
 ```

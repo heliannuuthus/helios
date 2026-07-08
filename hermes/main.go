@@ -116,7 +116,7 @@ func startHTTP(svc *hermes.Service) {
 			{
 				domainApps.GET("", handler.ListApplications)
 				domainApps.GET("/:app_id", handler.GetApplication)
-				domainApps.GET("/:app_id/relations", handler.GetApplicationServiceRelations)
+				domainApps.GET("/:app_id/relations", handler.ListApplicationServiceRelations)
 				domainApps.GET("/:app_id/idp-configs", handler.ListApplicationIDPConfigs)
 				domainApps.POST("", adminRelation, handler.CreateApplication)
 				domainApps.PATCH("/:app_id", adminRelation, handler.UpdateApplication)

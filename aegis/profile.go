@@ -17,16 +17,16 @@ import (
 )
 
 type ProfileHandler struct {
-	userSvc       contract.UserProvider
-	credentialSvc contract.CredentialProvider
-	mfaSvc        *MFAService
+	userSvc     contract.UserProvider
+	identitySvc contract.IdentityProvider
+	mfaSvc      *MFAService
 }
 
-func NewProfileHandler(userSvc contract.UserProvider, credentialSvc contract.CredentialProvider, mfaSvc *MFAService) *ProfileHandler {
+func NewProfileHandler(userSvc contract.UserProvider, identitySvc contract.IdentityProvider, mfaSvc *MFAService) *ProfileHandler {
 	return &ProfileHandler{
-		userSvc:       userSvc,
-		credentialSvc: credentialSvc,
-		mfaSvc:        mfaSvc,
+		userSvc:     userSvc,
+		identitySvc: identitySvc,
+		mfaSvc:      mfaSvc,
 	}
 }
 
@@ -55,7 +55,7 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userSvc.GetDecryptedUserByOpenID(c.Request.Context(), openid)
+	user, err := h.userSvc.GetUserByOpenID(c.Request.Context(), openid)
 	if err != nil {
 		profileError(c, errors.NewNotFound("user not found"))
 		return
@@ -107,14 +107,14 @@ func (h *ProfileHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	if hasPasswordUpdate {
-		if err := h.userSvc.UpdatePassword(ctx, openid, req.OldPassword, req.Password.Value()); err != nil {
+		if err := ChangePassword(ctx, h.userSvc, openid, req.OldPassword, req.Password.Value()); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
 	}
 
 	if hasProfileUpdates {
-		if err := h.userSvc.UpdateUser(ctx, openid, updates); err != nil {
+		if err := h.userSvc.PatchUser(ctx, openid, updates); err != nil {
 			profileError(c, errors.NewServerError(err.Error()))
 			return
 		}
@@ -159,7 +159,7 @@ func (h *ProfileHandler) ListIdentities(c *gin.Context) {
 		return
 	}
 
-	identities, err := h.userSvc.GetUserIdentitiesByOpenID(c.Request.Context(), openid)
+	identities, err := h.identitySvc.ListUserIdentities(c.Request.Context(), openid)
 	if err != nil {
 		profileError(c, errors.NewServerError(err.Error()))
 		return
@@ -200,13 +200,13 @@ func (h *ProfileHandler) GetMFAStatus(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	status, err := h.credentialSvc.GetUserMFAStatus(ctx, openid)
+	status, err := h.mfaSvc.GetMFAStatus(ctx, openid)
 	if err != nil {
 		profileError(c, errors.NewServerError(err.Error()))
 		return
 	}
 
-	summaries, err := h.credentialSvc.GetUserCredentialSummaries(ctx, openid)
+	summaries, err := h.mfaSvc.ListCredentialSummaries(ctx, openid)
 	if err != nil {
 		profileError(c, errors.NewServerError(err.Error()))
 		return
@@ -219,11 +219,8 @@ func (h *ProfileHandler) GetMFAStatus(c *gin.Context) {
 }
 
 type SetupMFARequest struct {
-	Type        string         `json:"type" binding:"required,oneof=totp webauthn passkey"`
-	Action      string         `json:"action,omitempty"`
-	AppName     string         `json:"app_name,omitempty"`
-	ChallengeID string         `json:"challenge_id,omitempty"`
-	Credential  jsontext.Value `json:"credential,omitempty"`
+	Type    string `json:"type" binding:"required,oneof=totp webauthn passkey"`
+	AppName string `json:"app_name,omitempty"`
 }
 
 func (h *ProfileHandler) SetupMFA(c *gin.Context) {
@@ -243,7 +240,7 @@ func (h *ProfileHandler) SetupMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		resp, err := h.credentialSvc.SetupTOTP(ctx, &models.TOTPSetupRequest{
+		resp, err := h.mfaSvc.BeginTOTP(ctx, &models.TOTPSetupRequest{
 			OpenID:  openid,
 			AppName: req.AppName,
 		})
@@ -252,44 +249,45 @@ func (h *ProfileHandler) SetupMFA(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"type":          "totp",
-			"credential_id": resp.CredentialID,
-			"secret":        resp.Secret,
-			"otpauth_uri":   resp.OTPAuthURI,
+			"type":        "totp",
+			"uid":         resp.UID,
+			"secret":      resp.Secret,
+			"otpauth_uri": resp.OTPAuthURI,
 		})
 
 	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		h.setupWebAuthn(c, openid, req.Type, req.Action, req.ChallengeID, req.Credential)
+		h.beginWebAuthnRegistration(c, openid, req.Type)
 
 	default:
 		profileError(c, errors.NewInvalidRequest("unsupported credential type"))
 	}
 }
 
-type VerifyMFARequest struct {
-	Type         string         `json:"type" binding:"required,oneof=totp webauthn passkey"`
-	Action       string         `json:"action,omitempty"`
-	CredentialID uint           `json:"credential_id,omitempty"`
-	Code         string         `json:"code,omitempty"`
-	Confirm      bool           `json:"confirm,omitempty"`
-	ChallengeID  string         `json:"challenge_id,omitempty"`
-	Credential   jsontext.Value `json:"credential,omitempty"`
+type CompleteMFARequest struct {
+	Type       string         `json:"type" binding:"required,oneof=totp webauthn passkey"`
+	Code       string         `json:"code,omitempty"`
+	Credential jsontext.Value `json:"credential,omitempty"`
 }
 
-func (h *ProfileHandler) VerifyMFA(c *gin.Context) {
+func (h *ProfileHandler) CompleteMFA(c *gin.Context) {
 	openid := profileOpenID(c)
 	if openid == "" {
 		profileError(c, errors.NewInvalidToken("not authenticated"))
 		return
 	}
 
-	var req VerifyMFARequest
+	var req CompleteMFARequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		profileError(c, errors.NewInvalidRequest(err.Error()))
 		return
 	}
 
 	ctx := c.Request.Context()
+	uid := c.Param("uid")
+	if uid == "" {
+		profileError(c, errors.NewInvalidRequest("uid is required"))
+		return
+	}
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
@@ -297,34 +295,19 @@ func (h *ProfileHandler) VerifyMFA(c *gin.Context) {
 			profileError(c, errors.NewInvalidRequest("code is required"))
 			return
 		}
-		if req.Confirm {
-			if req.CredentialID == 0 {
-				profileError(c, errors.NewInvalidRequest("credential_id is required for confirm"))
-				return
-			}
-			err := h.credentialSvc.ConfirmTOTP(ctx, &models.ConfirmTOTPRequest{
-				OpenID:       openid,
-				CredentialID: req.CredentialID,
-				Code:         req.Code,
-			})
-			if err != nil {
-				profileError(c, errors.NewInvalidRequest(err.Error()))
-				return
-			}
-		} else {
-			err := h.credentialSvc.VerifyTOTP(ctx, &models.VerifyTOTPRequest{
-				OpenID: openid,
-				Code:   req.Code,
-			})
-			if err != nil {
-				profileError(c, errors.NewAccessDenied(err.Error()))
-				return
-			}
+		err := h.mfaSvc.CompleteTOTP(ctx, &models.ConfirmTOTPRequest{
+			OpenID: openid,
+			UID:    uid,
+			Code:   req.Code,
+		})
+		if err != nil {
+			profileError(c, errors.NewInvalidRequest(err.Error()))
+			return
 		}
 		c.JSON(http.StatusOK, gin.H{"type": "totp", "success": true})
 
 	case models.CredentialTypeWebAuthn, models.CredentialTypePasskey:
-		h.verifyWebAuthn(c, openid, req.Type, req.Action, req.ChallengeID, req.Credential)
+		h.finishWebAuthnRegistration(c, openid, req.Type, uid, req.Credential)
 
 	default:
 		profileError(c, errors.NewInvalidRequest("unsupported credential type"))
@@ -335,6 +318,7 @@ type UpdateMFARequest struct {
 	Type         string `json:"type" binding:"required,oneof=totp webauthn passkey"`
 	CredentialID string `json:"credential_id,omitempty"`
 	Enabled      *bool  `json:"enabled"`
+	Label        string `json:"label,omitempty"`
 }
 
 func (h *ProfileHandler) UpdateMFA(c *gin.Context) {
@@ -350,8 +334,8 @@ func (h *ProfileHandler) UpdateMFA(c *gin.Context) {
 		return
 	}
 
-	if req.Enabled == nil {
-		profileError(c, errors.NewInvalidRequest("enabled is required"))
+	if req.Enabled == nil && req.Label == "" {
+		profileError(c, errors.NewInvalidRequest("enabled or label is required"))
 		return
 	}
 
@@ -359,7 +343,12 @@ func (h *ProfileHandler) UpdateMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		if err := h.credentialSvc.SetTOTPEnabled(ctx, openid, *req.Enabled); err != nil {
+		if req.Enabled == nil {
+			profileError(c, errors.NewInvalidRequest("enabled is required for totp"))
+			return
+		}
+		updates := map[string]any{"enabled": *req.Enabled}
+		if err := h.mfaSvc.PatchCredential(ctx, openid, req.Type, "", updates); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -368,7 +357,14 @@ func (h *ProfileHandler) UpdateMFA(c *gin.Context) {
 			profileError(c, errors.NewInvalidRequest("credential_id is required"))
 			return
 		}
-		if err := h.credentialSvc.SetWebAuthnEnabled(ctx, openid, req.CredentialID, *req.Enabled); err != nil {
+		updates := make(map[string]any)
+		if req.Label != "" {
+			updates["label"] = req.Label
+		}
+		if req.Enabled != nil {
+			updates["enabled"] = *req.Enabled
+		}
+		if err := h.mfaSvc.PatchCredential(ctx, openid, req.Type, req.CredentialID, updates); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -402,7 +398,7 @@ func (h *ProfileHandler) DeleteMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		if err := h.credentialSvc.DisableTOTP(ctx, openid); err != nil {
+		if err := h.mfaSvc.DeleteCredential(ctx, openid, req.Type, ""); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -411,7 +407,7 @@ func (h *ProfileHandler) DeleteMFA(c *gin.Context) {
 			profileError(c, errors.NewInvalidRequest("credential_id is required"))
 			return
 		}
-		if err := h.credentialSvc.DeleteWebAuthn(ctx, openid, req.CredentialID); err != nil {
+		if err := h.mfaSvc.DeleteCredential(ctx, openid, req.Type, req.CredentialID); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -423,110 +419,45 @@ func (h *ProfileHandler) DeleteMFA(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
-func (h *ProfileHandler) setupWebAuthn(c *gin.Context, openID, credType, action, challengeID string, credentialJSON jsontext.Value) {
-	if !h.mfaSvc.WebAuthnEnabled() {
-		profileError(c, errors.NewServerError("webauthn not enabled"))
-		return
-	}
-
+func (h *ProfileHandler) beginWebAuthnRegistration(c *gin.Context, openID, credType string) {
 	ctx := c.Request.Context()
 
-	switch action {
-	case "", "begin":
-		user, err := h.userSvc.GetDecryptedUserByOpenID(ctx, openID)
-		if err != nil {
-			profileError(c, errors.NewNotFound("user not found"))
-			return
-		}
-		resp, err := h.mfaSvc.BeginWebAuthnRegistration(ctx, user)
-		if err != nil {
-			profileError(c, errors.NewServerError(err.Error()))
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"type":         credType,
-			"action":       "begin",
-			"options":      resp.Options,
-			"challenge_id": resp.ChallengeID,
-		})
-
-	case "finish":
-		if challengeID == "" {
-			profileError(c, errors.NewInvalidRequest("challenge_id is required for finish"))
-			return
-		}
-		if len(credentialJSON) == 0 {
-			profileError(c, errors.NewInvalidRequest("credential data is required for finish"))
-			return
-		}
-		c.Request.Body = io.NopCloser(bytes.NewReader(credentialJSON))
-
-		credInfo, err := h.mfaSvc.FinishWebAuthnRegistration(ctx, openID, challengeID, c.Request)
-		if err != nil {
-			profileError(c, errors.NewInvalidRequest(err.Error()))
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"type":          credType,
-			"action":        "finish",
-			"success":       true,
-			"credential_id": base64.RawURLEncoding.EncodeToString(credInfo.ID),
-		})
-
-	default:
-		profileError(c, errors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
+	user, err := h.userSvc.GetUserByOpenID(ctx, openID)
+	if err != nil {
+		profileError(c, errors.NewNotFound("user not found"))
+		return
 	}
+	resp, err := h.mfaSvc.BeginWebAuthnRegistration(ctx, user)
+	if err != nil {
+		profileError(c, errors.NewServerError(err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"type":    credType,
+		"uid":     resp.ChallengeID,
+		"options": resp.Options,
+	})
 }
 
-func (h *ProfileHandler) verifyWebAuthn(c *gin.Context, openID, credType, action, challengeID string, credentialJSON jsontext.Value) {
-	if !h.mfaSvc.WebAuthnEnabled() {
-		profileError(c, errors.NewServerError("webauthn not enabled"))
+func (h *ProfileHandler) finishWebAuthnRegistration(c *gin.Context, openID, credType, uid string, credentialJSON jsontext.Value) {
+	if uid == "" {
+		profileError(c, errors.NewInvalidRequest("uid is required"))
+		return
+	}
+	if len(credentialJSON) == 0 {
+		profileError(c, errors.NewInvalidRequest("credential data is required"))
 		return
 	}
 
-	ctx := c.Request.Context()
-
-	switch action {
-	case "", "begin":
-		user, err := h.userSvc.GetDecryptedUserByOpenID(ctx, openID)
-		if err != nil {
-			profileError(c, errors.NewNotFound("user not found"))
-			return
-		}
-		resp, err := h.mfaSvc.BeginWebAuthnVerification(ctx, user)
-		if err != nil {
-			profileError(c, errors.NewServerError(err.Error()))
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"type":         credType,
-			"action":       "begin",
-			"options":      resp.Options,
-			"challenge_id": resp.ChallengeID,
-		})
-
-	case "finish":
-		if challengeID == "" {
-			profileError(c, errors.NewInvalidRequest("challenge_id is required for finish"))
-			return
-		}
-		if len(credentialJSON) == 0 {
-			profileError(c, errors.NewInvalidRequest("credential data is required for finish"))
-			return
-		}
-		openid, _, err := h.mfaSvc.FinishWebAuthnVerification(ctx, challengeID, credentialJSON)
-		if err != nil {
-			profileError(c, errors.NewAccessDenied(err.Error()))
-			return
-		}
-		c.JSON(http.StatusOK, gin.H{
-			"type":    credType,
-			"action":  "finish",
-			"success": true,
-			"openid":  openid,
-		})
-
-	default:
-		profileError(c, errors.NewInvalidRequest("invalid action, must be 'begin' or 'finish'"))
+	c.Request.Body = io.NopCloser(bytes.NewReader(credentialJSON))
+	credInfo, err := h.mfaSvc.FinishWebAuthnRegistration(c.Request.Context(), openID, uid, c.Request)
+	if err != nil {
+		profileError(c, errors.NewInvalidRequest(err.Error()))
+		return
 	}
+	c.JSON(http.StatusOK, gin.H{
+		"type":          credType,
+		"success":       true,
+		"credential_id": base64.RawURLEncoding.EncodeToString(credInfo.ID),
+	})
 }

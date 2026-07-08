@@ -375,8 +375,8 @@ func (s *Service) DeleteApplication(ctx context.Context, appID string) error {
 
 // ==================== Domain IDP Config 相关 ====================
 
-// GetDomainIDPConfigs 获取域下所有 IDP 配置（按 priority 降序）
-func (s *Service) GetDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error) {
+// ListDomainIDPConfigs 获取域下所有 IDP 配置（按 priority 降序）
+func (s *Service) ListDomainIDPConfigs(ctx context.Context, domainID string) ([]*models.DomainIDPConfig, error) {
 	var configs []*models.DomainIDPConfig
 	if err := s.db.WithContext(ctx).
 		Where("domain_id = ?", domainID).
@@ -453,8 +453,8 @@ func (s *Service) DeleteDomainIDPConfig(ctx context.Context, domainID, idpType s
 
 // ==================== Application IDP Config 相关 ====================
 
-// GetApplicationIDPConfigs 获取应用 IDP 配置列表（按 priority 降序）
-func (s *Service) GetApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
+// ListApplicationIDPConfigs 获取应用 IDP 配置列表（按 priority 降序）
+func (s *Service) ListApplicationIDPConfigs(ctx context.Context, appID string) ([]*models.ApplicationIDPConfig, error) {
 	var configs []*models.ApplicationIDPConfig
 	if err := s.db.WithContext(ctx).
 		Where("app_id = ?", appID).
@@ -613,7 +613,7 @@ func (s *Service) ensureIDPAllowedForApplication(ctx context.Context, appID, idp
 	if err != nil {
 		return err
 	}
-	configs, err := s.GetDomainIDPConfigs(ctx, app.DomainID)
+	configs, err := s.ListDomainIDPConfigs(ctx, app.DomainID)
 	if err != nil {
 		return err
 	}

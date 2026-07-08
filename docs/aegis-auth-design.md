@@ -219,7 +219,7 @@ type AuthFlow struct {
          ┌──────────────┼──────────────┐
          │              │              │
     [Required]     [Strategy]     [Delegate]
-    captcha 等    密码/passkey    email_otp/totp
+    captcha 等    密码/passkey    email-code/totp
     前置条件       IDP 主认证     通过 Challenge
     (AND, 全部)   (OR, 选一种)   (OR, 选一种)
          │              │              │
