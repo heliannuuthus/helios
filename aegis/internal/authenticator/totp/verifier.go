@@ -10,12 +10,12 @@ import (
 )
 
 type Verifier struct {
-	credentialSvc contract.CredentialProvider
+	totpProvider contract.TOTPProvider
 }
 
-func NewVerifier(credentialSvc contract.CredentialProvider) *Verifier {
+func NewVerifier(totpProvider contract.TOTPProvider) *Verifier {
 	return &Verifier{
-		credentialSvc: credentialSvc,
+		totpProvider: totpProvider,
 	}
 }
 
@@ -26,7 +26,7 @@ func (v *Verifier) Verify(ctx context.Context, openid, code string) (bool, error
 		return false, nil
 	}
 
-	err := v.credentialSvc.VerifyTOTP(ctx, &models.VerifyTOTPRequest{
+	err := v.totpProvider.VerifyTOTP(ctx, &models.VerifyTOTPRequest{
 		OpenID: openid,
 		Code:   code,
 	})

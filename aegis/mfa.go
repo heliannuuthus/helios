@@ -15,15 +15,15 @@ import (
 // MFAService owns MFA orchestration. Handlers talk to this service; WebAuthn
 // remains the protocol engine behind passkey/webauthn flows.
 type MFAService struct {
-	credentialSvc contract.CredentialProvider
-	webauthnSvc   *webauthn.Service
+	mfaProvider contract.MFAProvider
+	webauthnSvc *webauthn.Service
 }
 
 // NewMFAService 创建 MFA 服务
-func NewMFAService(credentialSvc contract.CredentialProvider, webauthnSvc *webauthn.Service) *MFAService {
+func NewMFAService(mfaProvider contract.MFAProvider, webauthnSvc *webauthn.Service) *MFAService {
 	return &MFAService{
-		credentialSvc: credentialSvc,
-		webauthnSvc:   webauthnSvc,
+		mfaProvider: mfaProvider,
+		webauthnSvc: webauthnSvc,
 	}
 }
 
@@ -33,43 +33,43 @@ func (s *MFAService) GetRPID() string {
 }
 
 func (s *MFAService) SetupTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error) {
-	return s.credentialSvc.SetupTOTP(ctx, req)
+	return s.mfaProvider.SetupTOTP(ctx, req)
 }
 
 func (s *MFAService) ConfirmTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error {
-	return s.credentialSvc.ConfirmTOTP(ctx, req)
+	return s.mfaProvider.ConfirmTOTP(ctx, req)
 }
 
 func (s *MFAService) VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error {
-	return s.credentialSvc.VerifyTOTP(ctx, req)
+	return s.mfaProvider.VerifyTOTP(ctx, req)
 }
 
 func (s *MFAService) DisableTOTP(ctx context.Context, openid string) error {
-	return s.credentialSvc.DisableTOTP(ctx, openid)
+	return s.mfaProvider.DisableTOTP(ctx, openid)
 }
 
 func (s *MFAService) SetTOTPEnabled(ctx context.Context, openid string, enabled bool) error {
-	return s.credentialSvc.SetTOTPEnabled(ctx, openid, enabled)
+	return s.mfaProvider.SetTOTPEnabled(ctx, openid, enabled)
 }
 
 func (s *MFAService) SetWebAuthnEnabled(ctx context.Context, openid, credentialID string, enabled bool) error {
-	return s.credentialSvc.SetWebAuthnEnabled(ctx, openid, credentialID, enabled)
+	return s.mfaProvider.SetWebAuthnEnabled(ctx, openid, credentialID, enabled)
 }
 
 func (s *MFAService) RenameWebAuthn(ctx context.Context, openid, credentialID, label string) error {
-	return s.credentialSvc.RenameWebAuthn(ctx, openid, credentialID, label)
+	return s.mfaProvider.RenameWebAuthn(ctx, openid, credentialID, label)
 }
 
 func (s *MFAService) DeleteWebAuthn(ctx context.Context, openid, credentialID string) error {
-	return s.credentialSvc.DeleteWebAuthn(ctx, openid, credentialID)
+	return s.mfaProvider.DeleteWebAuthn(ctx, openid, credentialID)
 }
 
 func (s *MFAService) GetUserMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error) {
-	return s.credentialSvc.GetUserMFAStatus(ctx, openid)
+	return s.mfaProvider.GetUserMFAStatus(ctx, openid)
 }
 
 func (s *MFAService) GetUserCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error) {
-	return s.credentialSvc.GetUserCredentialSummaries(ctx, openid)
+	return s.mfaProvider.GetUserCredentialSummaries(ctx, openid)
 }
 
 // ==================== 对外类型定义 ====================

@@ -4,23 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/heliannuuthus/aegis/models"
 	hermesv1 "github.com/heliannuuthus/proto/gen/proto/hermes/v1"
 )
 
-func (c *Client) GetDomainKeys(ctx context.Context, domainID string) ([][]byte, error) {
-	return c.getKeysByOwner(ctx, models.KeyOwnerDomain, domainID)
-}
-
-func (c *Client) GetApplicationKeys(ctx context.Context, appID string) ([][]byte, error) {
-	return c.getKeysByOwner(ctx, models.KeyOwnerApplication, appID)
-}
-
-func (c *Client) GetServiceKeys(ctx context.Context, serviceID string) ([][]byte, error) {
-	return c.getKeysByOwner(ctx, models.KeyOwnerService, serviceID)
-}
-
-func (c *Client) getKeysByOwner(ctx context.Context, ownerType, ownerID string) ([][]byte, error) {
+func (c *Client) GetKeys(ctx context.Context, ownerType, ownerID string) ([][]byte, error) {
 	resp, err := c.key.GetKeys(ctx, &hermesv1.GetKeysRequest{
 		OwnerType: ownerType,
 		OwnerId:   ownerID,

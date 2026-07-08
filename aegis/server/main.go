@@ -16,6 +16,7 @@ import (
 	"github.com/heliannuuthus/aegis/internal/cache"
 	"github.com/heliannuuthus/aegis/iris"
 	"github.com/heliannuuthus/aegis/middleware"
+	"github.com/heliannuuthus/aegis/models"
 	hermesrpc "github.com/heliannuuthus/aegis/rpc/hermes"
 	"github.com/heliannuuthus/pkg/aegis/guard"
 	"github.com/heliannuuthus/pkg/aegis/utilities/key"
@@ -59,11 +60,11 @@ func main() {
 	logger.Infof("[Auth] Redis 连接成功: %s", redisURL)
 
 	cacheManager := cache.NewManager(client, client, redis)
-	credentialSvc, err := iris.NewCredentialService(client, cacheManager)
+	mfaProvider, err := iris.NewCredentialService(client, cacheManager)
 	if err != nil {
 		logger.Fatalf("初始化 iris credential service 失败: %v", err)
 	}
-	aegisHandler, err := aegis.Initialize(client, client, credentialSvc, cacheManager)
+	aegisHandler, err := aegis.Initialize(client, client, mfaProvider, cacheManager)
 	if err != nil {
 		logger.Fatalf("初始化 aegis 失败: %v", err)
 	}
@@ -155,7 +156,7 @@ func main() {
 func initTokenManager(client *hermesrpc.Client) {
 	endpoint := aegisconfig.GetIssuer()
 	seed := key.SingleOf(func(_ context.Context, _ string) ([]byte, error) {
-		keys, err := client.GetDomainKeys(context.Background(), "consumer")
+		keys, err := client.GetKeys(context.Background(), models.KeyOwnerDomain, "consumer")
 		if err != nil {
 			return nil, err
 		}

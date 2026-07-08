@@ -25,7 +25,7 @@ func (cm *Manager) GetApplication(ctx context.Context, appID string) (*Applicati
 	if err != nil {
 		return nil, err
 	}
-	keys, err := cm.hermesSvc.GetApplicationKeys(ctx, appID)
+	keys, err := cm.hermesSvc.GetKeys(ctx, models.KeyOwnerApplication, appID)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (cm *Manager) GetService(ctx context.Context, serviceID string) (*ServiceWi
 	if err != nil {
 		return nil, err
 	}
-	keys, err := cm.hermesSvc.GetServiceKeys(ctx, serviceID)
+	keys, err := cm.hermesSvc.GetKeys(ctx, models.KeyOwnerService, serviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (cm *Manager) GetDomain(ctx context.Context, domainID string) (*DomainWithK
 	if err != nil {
 		return nil, err
 	}
-	keys, err := cm.hermesSvc.GetDomainKeys(ctx, domainID)
+	keys, err := cm.hermesSvc.GetKeys(ctx, models.KeyOwnerDomain, domainID)
 	if err != nil {
 		return nil, err
 	}
