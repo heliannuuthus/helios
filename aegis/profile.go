@@ -345,7 +345,8 @@ func (h *ProfileHandler) UpdateMFA(c *gin.Context) {
 			profileError(c, errors.NewInvalidRequest("enabled is required for totp"))
 			return
 		}
-		if err := h.mfaSvc.PatchTOTP(ctx, openid, *req.Enabled); err != nil {
+		updates := map[string]any{"enabled": *req.Enabled}
+		if err := h.mfaSvc.PatchCredential(ctx, openid, req.Type, "", updates); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -361,7 +362,7 @@ func (h *ProfileHandler) UpdateMFA(c *gin.Context) {
 		if req.Enabled != nil {
 			updates["enabled"] = *req.Enabled
 		}
-		if err := h.mfaSvc.PatchWebAuthnCredential(ctx, openid, req.CredentialID, updates); err != nil {
+		if err := h.mfaSvc.PatchCredential(ctx, openid, req.Type, req.CredentialID, updates); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -395,7 +396,7 @@ func (h *ProfileHandler) DeleteMFA(c *gin.Context) {
 
 	switch models.CredentialType(req.Type) {
 	case models.CredentialTypeTOTP:
-		if err := h.mfaSvc.DeleteTOTP(ctx, openid); err != nil {
+		if err := h.mfaSvc.DeleteCredential(ctx, openid, req.Type, ""); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}
@@ -404,7 +405,7 @@ func (h *ProfileHandler) DeleteMFA(c *gin.Context) {
 			profileError(c, errors.NewInvalidRequest("credential_id is required"))
 			return
 		}
-		if err := h.mfaSvc.DeleteWebAuthnCredential(ctx, openid, req.CredentialID); err != nil {
+		if err := h.mfaSvc.DeleteCredential(ctx, openid, req.Type, req.CredentialID); err != nil {
 			profileError(c, errors.NewInvalidRequest(err.Error()))
 			return
 		}

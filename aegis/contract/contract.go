@@ -75,18 +75,6 @@ type CredentialStore interface {
 	DeleteCredentialByOpenIDAndType(ctx context.Context, openid, credType string) error
 }
 
-type CredentialService interface {
-	BeginTOTP(ctx context.Context, req *models.TOTPSetupRequest) (*models.TOTPSetupResponse, error)
-	CompleteTOTP(ctx context.Context, req *models.ConfirmTOTPRequest) error
-	VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error
-	DeleteTOTP(ctx context.Context, openid string) error
-	PatchTOTP(ctx context.Context, openid string, enabled bool) error
-	PatchWebAuthnCredential(ctx context.Context, openid, credentialID string, updates map[string]any) error
-	DeleteWebAuthnCredential(ctx context.Context, openid, credentialID string) error
-	GetMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error)
-	ListCredentialSummaries(ctx context.Context, openid string) ([]models.CredentialSummary, error)
-}
-
 type TOTPVerifier interface {
 	VerifyTOTP(ctx context.Context, req *models.VerifyTOTPRequest) error
 }

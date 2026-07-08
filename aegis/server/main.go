@@ -14,7 +14,6 @@ import (
 	"github.com/heliannuuthus/aegis"
 	aegisconfig "github.com/heliannuuthus/aegis/config"
 	"github.com/heliannuuthus/aegis/internal/cache"
-	"github.com/heliannuuthus/aegis/iris"
 	"github.com/heliannuuthus/aegis/middleware"
 	"github.com/heliannuuthus/aegis/models"
 	hermesrpc "github.com/heliannuuthus/aegis/rpc/hermes"
@@ -60,11 +59,7 @@ func main() {
 	logger.Infof("[Auth] Redis 连接成功: %s", redisURL)
 
 	cacheManager := cache.NewManager(client, client, redis)
-	credentialSvc, err := iris.NewCredentialService(client, cacheManager)
-	if err != nil {
-		logger.Fatalf("初始化 iris credential service 失败: %v", err)
-	}
-	aegisHandler, err := aegis.Initialize(client, client, credentialSvc, cacheManager)
+	aegisHandler, err := aegis.Initialize(client, client, client, cacheManager)
 	if err != nil {
 		logger.Fatalf("初始化 aegis 失败: %v", err)
 	}
