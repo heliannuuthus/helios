@@ -237,19 +237,6 @@ func (s *MFAService) DeleteCredential(ctx context.Context, openid, credType, cre
 	return nil
 }
 
-func (s *MFAService) deleteCredentials(ctx context.Context, openid string, credentials []models.UserCredential) error {
-	for i := range credentials {
-		credentialID := credentials[i].CredentialID
-		if credentialID == nil || *credentialID == "" {
-			continue
-		}
-		if err := s.store.DeleteCredential(ctx, openid, *credentialID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (s *MFAService) GetMFAStatus(ctx context.Context, openid string) (*models.MFAStatus, error) {
 	credentials, err := s.store.ListUserCredentials(ctx, openid)
 	if err != nil {
@@ -408,4 +395,17 @@ func (s *MFAService) HasWebAuthnCredentials(ctx context.Context, openid string) 
 		return false, err
 	}
 	return len(creds) > 0, nil
+}
+
+func (s *MFAService) deleteCredentials(ctx context.Context, openid string, credentials []models.UserCredential) error {
+	for i := range credentials {
+		credentialID := credentials[i].CredentialID
+		if credentialID == nil || *credentialID == "" {
+			continue
+		}
+		if err := s.store.DeleteCredential(ctx, openid, *credentialID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
