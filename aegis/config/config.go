@@ -29,13 +29,14 @@ const (
 	DefaultAegisCacheTTL        = 2 * time.Minute
 
 	// Redis 缓存过期时间默认值
-	DefaultAegisAuthFlowExpiresIn     = 10 * time.Minute
-	DefaultAegisAuthFlowMaxLifetime   = 1 * time.Hour
-	DefaultAegisAuthCodeExpiresIn     = 5 * time.Minute
-	DefaultAegisOTPExpiresIn          = 5 * time.Minute
-	DefaultAegisChallengeExpiresIn    = 5 * time.Minute
-	DefaultAegisRefreshTokenExpiresIn = 7 * 24 * time.Hour
-	DefaultAegisPublicKeyCacheMaxAge  = 3 * time.Hour
+	DefaultAegisAuthFlowExpiresIn       = 10 * time.Minute
+	DefaultAegisAuthFlowMaxLifetime     = 1 * time.Hour
+	DefaultAegisAuthCodeExpiresIn       = 5 * time.Minute
+	DefaultAegisOTPExpiresIn            = 5 * time.Minute
+	DefaultAegisChallengeExpiresIn      = 5 * time.Minute
+	DefaultAegisTOTPEnrollmentExpiresIn = 5 * time.Minute
+	DefaultAegisRefreshTokenExpiresIn   = 7 * 24 * time.Hour
+	DefaultAegisPublicKeyCacheMaxAge    = 3 * time.Hour
 )
 
 // Cfg 返回 Aegis 配置单例
@@ -165,11 +166,13 @@ func GetCacheKeyPrefix(cacheType string) string {
 		"user_token":                   "auth:user:rt:",
 		"otp":                          "auth:otp:",
 		"challenge":                    "auth:ch:",
+		"totp_enrollment":              "totp:enrollment:",
 		"webauthn-ceremony":            "auth:webauthn:ceremony:",
 		"domain":                       "domain:",
 		"application":                  "app:",
 		"service":                      "svc:",
 		"user":                         "user:",
+		"idp-key":                      "idp-key:",
 		"application-service-relation": "app-svc-rel:",
 		"app-service":                  "app-svc:",
 		"challenge-config":             "ch-cfg:",
@@ -250,6 +253,13 @@ func GetChallengeExpiresIn() time.Duration {
 		return val
 	}
 	return DefaultAegisChallengeExpiresIn
+}
+
+func GetTOTPEnrollmentExpiresIn() time.Duration {
+	if val := Cfg().GetDuration("aegis.cache.totp_enrollment.expires_in"); val > 0 {
+		return val
+	}
+	return DefaultAegisTOTPEnrollmentExpiresIn
 }
 
 // GetRefreshTokenExpiresIn 获取 RefreshToken 过期时间

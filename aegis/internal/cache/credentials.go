@@ -9,7 +9,47 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"github.com/heliannuuthus/aegis/config"
+	"github.com/heliannuuthus/pkg/helpers"
 )
+
+type TOTPEnrollmentSession struct {
+	OpenID string `json:"openid"`
+	Secret string `json:"secret"`
+	Label  string `json:"label"`
+}
+
+func (cm *Manager) SaveTOTPEnrollmentSession(ctx context.Context, session *TOTPEnrollmentSession) (string, error) {
+	uid := helpers.GenerateID(16)
+	data, err := json.Marshal(session)
+	if err != nil {
+		return "", err
+	}
+	if err := cm.redis.Set(ctx, cm.totpEnrollmentKey(uid), string(data), config.GetTOTPEnrollmentExpiresIn()); err != nil {
+		return "", err
+	}
+	return uid, nil
+}
+
+func (cm *Manager) GetTOTPEnrollmentSession(ctx context.Context, uid string) (*TOTPEnrollmentSession, error) {
+	data, err := cm.redis.Get(ctx, cm.totpEnrollmentKey(uid))
+	if err != nil {
+		return nil, fmt.Errorf("totp enrollment session not found")
+	}
+
+	var session TOTPEnrollmentSession
+	if err := json.Unmarshal([]byte(data), &session); err != nil {
+		return nil, err
+	}
+	return &session, nil
+}
+
+func (cm *Manager) DeleteTOTPEnrollmentSession(ctx context.Context, uid string) error {
+	return cm.redis.Del(ctx, cm.totpEnrollmentKey(uid))
+}
+
+func (cm *Manager) totpEnrollmentKey(uid string) string {
+	return config.GetCacheKeyPrefix("totp_enrollment") + uid
+}
 
 // WebAuthnCeremony is the temporary state shared between WebAuthn begin and finish steps.
 type WebAuthnCeremony struct {
@@ -22,7 +62,6 @@ type WebAuthnCeremony struct {
 	ExpiresAt   time.Time             `json:"expires_at"`
 }
 
-// SaveWebAuthnCeremony stores a WebAuthn ceremony in Redis.
 func (cm *Manager) SaveWebAuthnCeremony(ctx context.Context, ceremony *WebAuthnCeremony, ttl time.Duration) error {
 	if ceremony == nil {
 		return fmt.Errorf("webauthn ceremony is required")
@@ -49,18 +88,15 @@ func (cm *Manager) SaveWebAuthnCeremony(ctx context.Context, ceremony *WebAuthnC
 		return fmt.Errorf("marshal webauthn ceremony: %w", err)
 	}
 
-	prefix := config.GetCacheKeyPrefix("webauthn-ceremony")
-	return cm.redis.Set(ctx, prefix+ceremony.ID, string(data), ttl)
+	return cm.redis.Set(ctx, cm.webAuthnCeremonyKey(ceremony.ID), string(data), ttl)
 }
 
-// GetWebAuthnCeremony loads a WebAuthn ceremony from Redis.
 func (cm *Manager) GetWebAuthnCeremony(ctx context.Context, ceremonyID string) (*WebAuthnCeremony, error) {
 	if ceremonyID == "" {
 		return nil, fmt.Errorf("webauthn ceremony id is required")
 	}
 
-	prefix := config.GetCacheKeyPrefix("webauthn-ceremony")
-	data, err := cm.redis.Get(ctx, prefix+ceremonyID)
+	data, err := cm.redis.Get(ctx, cm.webAuthnCeremonyKey(ceremonyID))
 	if err != nil {
 		return nil, fmt.Errorf("webauthn ceremony not found")
 	}
@@ -78,12 +114,13 @@ func (cm *Manager) GetWebAuthnCeremony(ctx context.Context, ceremonyID string) (
 	return &ceremony, nil
 }
 
-// DeleteWebAuthnCeremony removes a WebAuthn ceremony from Redis.
 func (cm *Manager) DeleteWebAuthnCeremony(ctx context.Context, ceremonyID string) error {
 	if ceremonyID == "" {
 		return fmt.Errorf("webauthn ceremony id is required")
 	}
+	return cm.redis.Del(ctx, cm.webAuthnCeremonyKey(ceremonyID))
+}
 
-	prefix := config.GetCacheKeyPrefix("webauthn-ceremony")
-	return cm.redis.Del(ctx, prefix+ceremonyID)
+func (cm *Manager) webAuthnCeremonyKey(ceremonyID string) string {
+	return config.GetCacheKeyPrefix("webauthn-ceremony") + ceremonyID
 }

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net/mail"
 
-	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/authenticator/webauthn"
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/aegis/rpc/hermes"
 	"github.com/heliannuuthus/pkg/logger"
 )
 
@@ -17,11 +17,11 @@ import (
 // 用于验证场景（区别于 Passkey IDP 的无密码登录场景）
 type WebAuthnProvider struct {
 	webauthnSvc *webauthn.Service
-	users       contract.UserProvider
+	users       *hermes.Client
 }
 
 // NewWebAuthnProvider 创建 WebAuthn 认证因子 Provider
-func NewWebAuthnProvider(webauthnSvc *webauthn.Service, users contract.UserProvider) *WebAuthnProvider {
+func NewWebAuthnProvider(webauthnSvc *webauthn.Service, users *hermes.Client) *WebAuthnProvider {
 	return &WebAuthnProvider{
 		webauthnSvc: webauthnSvc,
 		users:       users,

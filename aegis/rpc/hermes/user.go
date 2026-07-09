@@ -77,30 +77,15 @@ func (c *Client) CreateUser(ctx context.Context, identity *models.UserIdentity, 
 
 func (c *Client) PatchUser(ctx context.Context, openid string, updates map[string]any) error {
 	pbReq := &hermesv1.PatchUserRequest{Openid: openid}
-	if v, ok := updates["nickname"]; ok {
-		if s, ok := v.(string); ok {
-			pbReq.Nickname = &s
-		}
-	}
-	if v, ok := updates["picture"]; ok {
-		if s, ok := v.(string); ok {
-			pbReq.Picture = &s
-		}
-	}
-	if v, ok := updates["email"]; ok {
-		if s, ok := v.(string); ok {
-			pbReq.Email = &s
-		}
-	}
+	setStringPatch(updates, "nickname", &pbReq.Nickname)
+	setStringPatch(updates, "picture", &pbReq.Picture)
+	setStringPatch(updates, "email", &pbReq.Email)
+	setStringPatch(updates, "phone", &pbReq.Phone)
+	setStringPatch(updates, "password_hash", &pbReq.PasswordHash)
 	if v, ok := updates["status"]; ok {
 		if s, ok := v.(int8); ok {
 			i := int32(s)
 			pbReq.Status = &i
-		}
-	}
-	if v, ok := updates["password_hash"]; ok {
-		if s, ok := v.(string); ok {
-			pbReq.PasswordHash = &s
 		}
 	}
 	if v, ok := updates["last_login_at"]; ok {
@@ -113,6 +98,14 @@ func (c *Client) PatchUser(ctx context.Context, openid string, updates map[strin
 		return fmt.Errorf("更新用户失败: %w", err)
 	}
 	return nil
+}
+
+func setStringPatch(updates map[string]any, key string, target **string) {
+	if v, ok := updates[key]; ok {
+		if s, ok := v.(string); ok {
+			*target = &s
+		}
+	}
 }
 
 // ==================== Identity ====================
@@ -179,6 +172,14 @@ func (c *Client) DeleteCredential(ctx context.Context, openid, credentialID stri
 	_, err := c.user.DeleteCredential(ctx, &hermesv1.DeleteCredentialRequest{
 		Openid:       openid,
 		CredentialId: credentialID,
+	})
+	return err
+}
+
+func (c *Client) DeleteUserCredentialsByType(ctx context.Context, openid, credType string) error {
+	_, err := c.user.DeleteUserCredentialsByType(ctx, &hermesv1.GetCredentialsByTypeRequest{
+		Openid: openid,
+		Type:   credType,
 	})
 	return err
 }

@@ -19,7 +19,7 @@
 | `github.com/heliannuuthus/proto` | `proto/` | proto 定义 + 生成 gRPC 代码 |
 | `github.com/heliannuuthus/pkg` | `pkg/` | 公共基础设施（config/logger/patch/database 等） |
 | `github.com/heliannuuthus/hermes` | `hermes/` | IAM 数据层；入口 `hermes/main.go` |
-| `github.com/heliannuuthus/aegis` | `aegis/` | 认证 + 用户中心；入口 `aegis/server/main.go` |
+| `github.com/heliannuuthus/aegis` | `aegis/` | 认证 + 用户中心；入口 `aegis/main.go` |
 | `github.com/heliannuuthus/zwei` | `zwei/` | 业务 API；入口 `zwei/main.go` |
 | `github.com/heliannuuthus/chaos` | `chaos/` | 运维 API；入口 `chaos/main.go`，独立 DB |
 

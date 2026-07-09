@@ -9,7 +9,45 @@ import (
 	pasetokit "github.com/heliannuuthus/pkg/aegis/utilities/paseto"
 )
 
-// ==================== Hermes 数据（本地缓存 + DB）====================
+// Key 统一密钥结构（派生后的 raw bytes）。
+// 不同场景按需填充：
+//   - 签名域/应用：PrivateKey + PublicKey
+//   - 加密服务：SecretKey
+type Key struct {
+	SecretKey  []byte // 对称密钥（32 字节，v4.local 加解密）
+	PrivateKey []byte // Ed25519 私钥（64 字节，v4.public 签名）
+	PublicKey  []byte // Ed25519 公钥（32 字节，v4.public 验签）
+}
+
+type Keys struct {
+	Main Key
+	Keys []Key
+}
+
+// DomainWithKey aegis 内部的域（含派生后密钥）
+type DomainWithKey struct {
+	models.Domain
+	Keys Keys
+}
+
+// ServiceWithKey aegis 内部的服务（含派生后密钥）
+type ServiceWithKey struct {
+	models.Service
+	Keys Keys
+}
+
+// ApplicationWithKey aegis 内部的应用（含派生后密钥）
+type ApplicationWithKey struct {
+	models.Application
+	Keys Keys
+}
+
+type IDPKey struct {
+	AppID  string
+	Secret string
+}
+
+// ==================== Provision 数据（本地缓存 + RPC read-through）====================
 
 // GetApplication 获取应用（带缓存，密钥已派生）
 func (cm *Manager) GetApplication(ctx context.Context, appID string) (*ApplicationWithKey, error) {
@@ -21,11 +59,11 @@ func (cm *Manager) GetApplication(ctx context.Context, appID string) (*Applicati
 		}
 	}
 
-	app, err := cm.hermesSvc.GetApplication(ctx, appID)
+	app, err := cm.client.GetApplication(ctx, appID)
 	if err != nil {
 		return nil, err
 	}
-	keys, err := cm.hermesSvc.GetKeys(ctx, models.KeyOwnerApplication, appID)
+	keys, err := cm.client.GetKeys(ctx, models.KeyOwnerApplication, appID)
 	if err != nil {
 		return nil, err
 	}
@@ -57,11 +95,11 @@ func (cm *Manager) GetService(ctx context.Context, serviceID string) (*ServiceWi
 		}
 	}
 
-	svc, err := cm.hermesSvc.GetService(ctx, serviceID)
+	svc, err := cm.client.GetService(ctx, serviceID)
 	if err != nil {
 		return nil, err
 	}
-	keys, err := cm.hermesSvc.GetKeys(ctx, models.KeyOwnerService, serviceID)
+	keys, err := cm.client.GetKeys(ctx, models.KeyOwnerService, serviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,11 +131,11 @@ func (cm *Manager) GetDomain(ctx context.Context, domainID string) (*DomainWithK
 		}
 	}
 
-	domain, err := cm.hermesSvc.GetDomain(ctx, domainID)
+	domain, err := cm.client.GetDomain(ctx, domainID)
 	if err != nil {
 		return nil, err
 	}
-	keys, err := cm.hermesSvc.GetKeys(ctx, models.KeyOwnerDomain, domainID)
+	keys, err := cm.client.GetKeys(ctx, models.KeyOwnerDomain, domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -130,8 +168,8 @@ func (cm *Manager) GetAppServiceRelations(ctx context.Context, appID string) ([]
 		}
 	}
 
-	// 从 hermes 获取
-	relations, err := cm.hermesSvc.ListApplicationServiceRelations(ctx, appID)
+	// 从 provision RPC 获取
+	relations, err := cm.client.ListApplicationServiceRelations(ctx, appID)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +193,7 @@ func (cm *Manager) ListDomainIDPConfigs(ctx context.Context, domainID string) ([
 		}
 	}
 
-	configs, err := cm.hermesSvc.ListDomainIDPConfigs(ctx, domainID)
+	configs, err := cm.client.ListDomainIDPConfigs(ctx, domainID)
 	if err != nil {
 		return nil, err
 	}
@@ -179,8 +217,8 @@ func (cm *Manager) ListApplicationIDPConfigs(ctx context.Context, appID string) 
 		}
 	}
 
-	// 从 hermes 获取
-	configs, err := cm.hermesSvc.ListApplicationIDPConfigs(ctx, appID)
+	// 从 provision RPC 获取
+	configs, err := cm.client.ListApplicationIDPConfigs(ctx, appID)
 	if err != nil {
 		return nil, err
 	}
@@ -205,8 +243,8 @@ func (cm *Manager) GetServiceChallengeSetting(ctx context.Context, serviceID, ch
 		}
 	}
 
-	// 从 hermes 获取
-	result, err := cm.hermesSvc.GetServiceChallengeSetting(ctx, serviceID, challengeType)
+	// 从 provision RPC 获取
+	result, err := cm.client.GetServiceChallengeSetting(ctx, serviceID, challengeType)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +261,28 @@ func (cm *Manager) GetServiceChallengeSetting(ctx context.Context, serviceID, ch
 // serviceChallengeCacheKey 构造 ServiceChallengeSetting 缓存 key
 func serviceChallengeCacheKey(serviceID, challengeType string) string {
 	return config.GetCacheKeyPrefix("service-challenge-setting") + serviceID + ":" + challengeType
+}
+
+func (cm *Manager) GetIDPKey(ctx context.Context, appID, idpType string) (string, string, error) {
+	cacheKey := config.GetCacheKeyPrefix("idp-key") + appID + ":" + idpType
+
+	if cm.idpKeyCache != nil {
+		if cached, ok := cm.idpKeyCache.Get(cacheKey); ok {
+			return cached.AppID, cached.Secret, nil
+		}
+	}
+
+	tAppID, tSecret, err := cm.client.GetIDPKey(ctx, appID, idpType)
+	if err != nil {
+		return "", "", err
+	}
+
+	if cm.idpKeyCache != nil {
+		ttl := config.GetCacheTTL("idp-key")
+		cm.idpKeyCache.SetWithTTL(cacheKey, &IDPKey{AppID: tAppID, Secret: tSecret}, 1, ttl)
+	}
+
+	return tAppID, tSecret, nil
 }
 
 const ssoKeyName = "sso"

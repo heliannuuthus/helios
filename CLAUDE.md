@@ -122,7 +122,7 @@ golangci-lint run --fix ./...
 
 ### 编写 Update 请求体的规范
 
-**请求类型定义**（`types.go`）：
+**请求类型定义**（如 `request.go`）：
 
 ```go
 // 所有可选更新字段使用 patch.Optional[T]

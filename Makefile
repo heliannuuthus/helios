@@ -48,13 +48,13 @@ tidy:
 build:
 ifdef SERVICE
 ifeq ($(SERVICE),aegis)
-	cd aegis && go build $(LDFLAGS) -o ../bin/aegis ./server
+	cd aegis && go build $(LDFLAGS) -o ../bin/aegis .
 else
 	cd $(SERVICE) && go build $(LDFLAGS) -o ../bin/$(SERVICE) .
 endif
 else
 	cd hermes && go build $(LDFLAGS) -o ../bin/hermes .
-	cd aegis && go build $(LDFLAGS) -o ../bin/aegis ./server
+	cd aegis && go build $(LDFLAGS) -o ../bin/aegis .
 	cd zwei && go build $(LDFLAGS) -o ../bin/zwei .
 	cd chaos && go build $(LDFLAGS) -o ../bin/chaos .
 endif

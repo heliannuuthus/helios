@@ -29,8 +29,7 @@ func (cm *Manager) GetUser(ctx context.Context, openid string) (*models.UserWith
 		}
 	}
 
-	// 从 UserService 获取
-	result, err := cm.userSvc.GetUserByOpenID(ctx, openid)
+	result, err := cm.client.GetUserByOpenID(ctx, openid)
 	if err != nil {
 		return nil, err
 	}

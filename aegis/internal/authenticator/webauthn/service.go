@@ -12,10 +12,10 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	"github.com/heliannuuthus/aegis/config"
-	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/cache"
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/aegis/rpc/hermes"
 	"github.com/heliannuuthus/pkg/logger"
 )
 
@@ -25,13 +25,13 @@ const (
 
 // Service WebAuthn 协议引擎（internal，仅 aegis 内部使用）
 type Service struct {
-	webauthn *webauthn.WebAuthn
-	rpID     string
-	cache    *cache.Manager
-	store    contract.CredentialStore
+	webauthn    *webauthn.WebAuthn
+	rpID        string
+	cache       *cache.Manager
+	credentials *hermes.Client
 }
 
-func NewService(cm *cache.Manager, store contract.CredentialStore) (*Service, error) {
+func NewService(cm *cache.Manager, credentials *hermes.Client) (*Service, error) {
 	cfg := config.Cfg()
 
 	rpID := cfg.GetString("mfa.webauthn.rp-id")
@@ -59,10 +59,10 @@ func NewService(cm *cache.Manager, store contract.CredentialStore) (*Service, er
 	}
 
 	return &Service{
-		webauthn: wa,
-		rpID:     rpID,
-		cache:    cm,
-		store:    store,
+		webauthn:    wa,
+		rpID:        rpID,
+		cache:       cm,
+		credentials: credentials,
 	}, nil
 }
 
@@ -313,12 +313,12 @@ func (s *Service) SaveCredential(ctx context.Context, openid string, credential 
 		Enabled:      true,
 	}
 
-	return s.store.CreateCredential(ctx, dbCred)
+	return s.credentials.CreateCredential(ctx, dbCred)
 }
 
 // PatchCredentialSignCount 更新凭证签名计数
 func (s *Service) PatchCredentialSignCount(ctx context.Context, credentialID string, signCount uint32) error {
-	return s.store.PatchCredential(ctx, credentialID, map[string]any{
+	return s.credentials.PatchCredential(ctx, credentialID, map[string]any{
 		"sign_count":   signCount,
 		"last_used_at": time.Now(),
 	})
@@ -326,7 +326,7 @@ func (s *Service) PatchCredentialSignCount(ctx context.Context, credentialID str
 
 // DeleteCredential 删除凭证
 func (s *Service) DeleteCredential(ctx context.Context, openid, credentialID string) error {
-	return s.store.DeleteCredential(ctx, openid, credentialID)
+	return s.credentials.DeleteCredential(ctx, openid, credentialID)
 }
 
 // ListCredentials 列出用户的所有 WebAuthn 凭证
@@ -336,12 +336,12 @@ func (s *Service) ListCredentials(ctx context.Context, openid string) ([]*Stored
 
 // GetOpenIDByCredentialID 根据凭证 ID 获取用户 OpenID
 func (s *Service) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
-	return s.store.GetOpenIDByCredentialID(ctx, credentialID)
+	return s.credentials.GetOpenIDByCredentialID(ctx, credentialID)
 }
 
 // getUserWebAuthnCredentials 获取用户的 WebAuthn 凭证列表
 func (s *Service) getUserWebAuthnCredentials(ctx context.Context, openid string) ([]*StoredWebAuthnCredential, error) {
-	credentials, err := s.store.ListUserCredentialsByType(ctx, openid, string(models.CredentialTypeWebAuthn))
+	credentials, err := s.credentials.ListUserCredentialsByType(ctx, openid, string(models.CredentialTypeWebAuthn))
 	if err != nil {
 		return nil, err
 	}

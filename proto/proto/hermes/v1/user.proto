@@ -2,11 +2,11 @@ syntax = "proto3";
 
 package hermes.v1;
 
-option go_package = "github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1";
-
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "hermes/v1/common.proto";
+
+option go_package = "github.com/heliannuuthus/helios/proto/hermes/v1;hermesv1";
 
 // UserService 用户 + 身份 + 凭证（TOTP/WebAuthn）+ MFA + 密码认证 + 用户组
 service UserService {
@@ -43,9 +43,8 @@ service UserService {
   rpc GetUserCredentialsByType(GetCredentialsByTypeRequest) returns (UserCredentialList);
   rpc PatchCredential(PatchCredentialRequest) returns (google.protobuf.Empty);
   rpc DeleteCredential(DeleteCredentialRequest) returns (google.protobuf.Empty);
+  rpc DeleteUserCredentialsByType(GetCredentialsByTypeRequest) returns (google.protobuf.Empty);
   rpc GetOpenIDByCredentialID(CredentialIDRequest) returns (OpenIDResponse);
-
-
 
   // ---- Group ----
 
@@ -116,6 +115,7 @@ message PatchUserRequest {
   optional int32 status = 5;
   optional string password_hash = 6;
   optional google.protobuf.Timestamp last_login_at = 7;
+  optional string phone = 8;
 }
 
 // ==================== Identity ====================
@@ -218,8 +218,6 @@ message DeleteCredentialRequest {
 message OpenIDResponse {
   string openid = 1;
 }
-
-
 
 // ==================== Group ====================
 

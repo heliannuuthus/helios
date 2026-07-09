@@ -6,8 +6,8 @@ import (
 	"github.com/dgraph-io/ristretto/v2"
 
 	"github.com/heliannuuthus/aegis/config"
-	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/aegis/rpc/hermes"
 	"github.com/heliannuuthus/pkg/logger"
 	pkgredis "github.com/heliannuuthus/pkg/redis"
 )
@@ -28,8 +28,7 @@ var (
 // Manager 缓存管理器
 // 统管所有缓存操作：本地缓存（热数据）+ Redis（分布式数据）
 type Manager struct {
-	hermesSvc contract.HermesProvider
-	userSvc   contract.UserProvider
+	client *hermes.Client
 
 	// 本地缓存（ristretto，用于热数据）
 	domainCache      *ristretto.Cache[string, *DomainWithKey]
@@ -37,6 +36,7 @@ type Manager struct {
 	serviceCache     *ristretto.Cache[string, *ServiceWithKey]
 	relationCache    *ristretto.Cache[string, []models.ApplicationServiceRelation]
 	userCache        *ristretto.Cache[string, *models.UserWithDecrypted]
+	idpKeyCache      *ristretto.Cache[string, *IDPKey]
 
 	// 域 IDP 配置缓存：domain_id -> []*DomainIDPConfig
 	domainIDPConfigCache *ristretto.Cache[string, []*models.DomainIDPConfig]
@@ -70,16 +70,16 @@ func newConfiguredCache[V any](name string) *ristretto.Cache[string, V] {
 	return newCache[V](name, config.GetCacheNumCounters(name), config.GetCacheSize(name), config.GetCacheBufferItems(name))
 }
 
-func NewManager(hermesSvc contract.HermesProvider, userSvc contract.UserProvider, redis pkgredis.Client) *Manager {
+func NewManager(client *hermes.Client, redis pkgredis.Client) *Manager {
 	return &Manager{
-		hermesSvc:            hermesSvc,
-		userSvc:              userSvc,
+		client:               client,
 		redis:                redis,
 		domainCache:          newConfiguredCache[*DomainWithKey]("domain"),
 		applicationCache:     newConfiguredCache[*ApplicationWithKey]("application"),
 		serviceCache:         newConfiguredCache[*ServiceWithKey]("service"),
 		relationCache:        newConfiguredCache[[]models.ApplicationServiceRelation]("application-service-relation"),
 		userCache:            newConfiguredCache[*models.UserWithDecrypted]("user"),
+		idpKeyCache:          newConfiguredCache[*IDPKey]("idp-key"),
 		domainIDPConfigCache: newConfiguredCache[[]*models.DomainIDPConfig]("domain-idp-config"),
 		appIDPConfigCache:    newConfiguredCache[[]*models.ApplicationIDPConfig]("app-idp-config"),
 		challengeConfigCache: newConfiguredCache[*models.ServiceChallengeSetting]("challenge-config"),
@@ -97,6 +97,7 @@ func (cm *Manager) Close() {
 	cm.serviceCache.Close()
 	cm.relationCache.Close()
 	cm.userCache.Close()
+	cm.idpKeyCache.Close()
 	cm.domainIDPConfigCache.Close()
 	cm.appIDPConfigCache.Close()
 	cm.challengeConfigCache.Close()
