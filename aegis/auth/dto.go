@@ -16,6 +16,9 @@ type LoginRequest struct {
 	// 身份主体（用户名/邮箱/手机号/OpenID...）
 	Principal string `json:"principal,omitempty"`
 
+	// 认证会话 ID（如 Passkey/WebAuthn ceremony uid）
+	UID string `json:"uid,omitempty"`
+
 	// 凭证证明（any 类型，由各 authenticator 自行解析）
 	// 可能是 string（password/OTP/captcha token）或复杂对象（OAuth 回调数据等）
 	Proof any `json:"proof,omitempty"`
@@ -34,8 +37,8 @@ func (r LoginRequest) String() string {
 			proofHint = fmt.Sprintf("<%T>", v)
 		}
 	}
-	return fmt.Sprintf("{Connection: %s, Strategy: %s, Principal: %s, Proof: %s}",
-		r.Connection, r.Strategy, maskPrincipal(r.Principal), proofHint)
+	return fmt.Sprintf("{Connection: %s, Strategy: %s, Principal: %s, UID: %s, Proof: %s}",
+		r.Connection, r.Strategy, maskPrincipal(r.Principal), r.UID, proofHint)
 }
 
 func maskPrincipal(s string) string {
@@ -55,6 +58,23 @@ func maskPrincipal(s string) string {
 // LoginResponse 登录响应
 type LoginResponse struct {
 	Location string `json:"location"` // 重定向地址（携带 code 和 state）
+}
+
+// IDPInitiateRequest IDP 认证入口请求
+type IDPInitiateRequest struct {
+	Connection string `json:"connection" binding:"required"`
+	Strategy   string `json:"strategy,omitempty"`
+}
+
+// IDPInitiateResponse IDP 认证入口响应
+type IDPInitiateResponse struct {
+	Connection string         `json:"connection"`
+	Mode       string         `json:"mode"`
+	UID        string         `json:"uid,omitempty"`
+	URL        string         `json:"url,omitempty"`
+	Action     string         `json:"action,omitempty"`
+	Params     map[string]any `json:"params,omitempty"`
+	Options    any            `json:"options,omitempty"`
 }
 
 // RevokeRequest 撤销请求

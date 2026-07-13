@@ -41,8 +41,9 @@
 │  POST /auth/authorize    → authenticateSvc.CreateFlow()                  │
 │  GET  /auth/connections  → authenticateSvc.GetAvailableConnections()     │
 │  GET  /auth/context      → flow.Application / flow.Service               │
-│  POST /auth/challenge    → challengeSvc.Initiate() [WebAuthn begin]     │
-│  POST /auth/challenge/:cid → challengeSvc.VerifyProof() [assertion]     │
+│  POST /auth/idps          → passkey.Provider.Initiate()                  │
+│  POST /auth/challenge    → challengeSvc.Initiate() [Factor begin]       │
+│  POST /auth/challenge/:cid → challengeSvc.VerifyProof() [Factor proof]  │
 │  POST /auth/login        → authenticateSvc.Authenticate()                │
 │                                                                          │
 ├──────────────────────────────────────────────────────────────────────────┤
@@ -236,42 +237,18 @@ heliannuuthus@aegis:passkey_user
 ### 6.3 Passkey 登录完整时序
 
 ```
-┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐
-│  前端     │      │ /challenge│      │/challenge│      │ /login   │
-│ (pallas)  │      │  (POST)  │      │  /:cid   │      │  (POST)  │
-└────┬─────┘      └────┬─────┘      └────┬─────┘      └────┬─────┘
-     │                  │                  │                  │
-     │ 1. initiateChallenge               │                  │
-     │  { client_id, audience,            │                  │
-     │    type: "login",                  │                  │
-     │    channel_type: "webauthn" }      │                  │
-     ├─────────────────►│                  │                  │
-     │                  │                  │                  │
-     │  { challenge_id, │                  │                  │
-     │    options }     │                  │                  │
-     │◄─────────────────┤                  │                  │
-     │                  │                  │                  │
-     │ 2. convertToPublicKeyOptions()     │                  │
-     │    navigator.credentials.get()     │                  │
-     │    [用户触摸指纹/面容]               │                  │
-     │    convertAssertionResponse()      │                  │
-     │                  │                  │                  │
-     │ 3. continueChallenge(cid,          │                  │
-     │    { proof: assertionJSON })       │                  │
-     ├────────────────────────────────────►│                  │
-     │                  │                  │                  │
-     │  { verified: true,                 │                  │
-     │    challenge_token }               │                  │
-     │◄────────────────────────────────────┤                  │
-     │                  │                  │                  │
-     │ 4. login({ connection: "passkey",  │                  │
-     │    proof: challenge_token })       │                  │
-     ├───────────────────────────────────────────────────────►│
-     │                  │                  │                  │
-     │  { location: redirect_uri?code=xxx }                  │
-     │◄───────────────────────────────────────────────────────┤
-     │                  │                  │                  │
-     │ 5. window.location.href = location │                  │
+1. POST /auth/idps
+   { connection: "passkey" }
+   -> { connection: "passkey", mode: "webauthn", uid, options }
+
+2. 前端执行 WebAuthn
+   convertToPublicKeyOptions(options)
+   navigator.credentials.get()
+   convertAssertionResponse()
+
+3. POST /auth/login
+   { connection: "passkey", uid, proof: assertionJSON }
+   -> { location: redirect_uri?code=xxx }
 ```
 
 ### 6.4 遮盖层组件结构与交互设计
@@ -367,10 +344,11 @@ Registry 中每个 `Authenticator` 实现基础的认证接口（`Type()` / `Con
 
 | 能力接口 | 适用场景 | 发现方式 | 实现者 |
 |---------|---------|---------|--------|
-| `ChallengeVerifier` | 需要两阶段验证的方式（先发起 → 再验证） | 类型断言 | Factor（WebAuthn / Email OTP / TOTP）、VChan |
+| `ChallengeVerifier` | 需要两阶段验证的 factor（先发起 → 再验证） | 类型断言 | Factor（WebAuthn / Email OTP / TOTP）、VChan |
 | `ChallengeExchanger` | 需要一步交换的方式（如小程序 code 换手机号） | 类型断言 | 部分 IDP |
 
 `challengeSvc` 通过类型断言（`authenticator.(ChallengeVerifier)`）发现当前 Authenticator 是否具备 Challenge 能力，而非硬编码依赖。
+Passkey 是独立 IDP，使用 `/auth/idps` 初始化 ceremony，然后通过 `/auth/login` 直接提交 assertion，不复用普通 factor challenge。
 
 #### Initiate 阶段（创建 Challenge）
 
@@ -381,13 +359,13 @@ POST /auth/challenge
       → 从 Registry 获取 channel_type 对应的 Authenticator
       → 类型断言为 ChallengeVerifier
       → 调用 verifier.Initiate(ctx, challenge)
-          → WebAuthn: 根据 channel 是否为空选择 DiscoverableLogin 或 Login
+          → WebAuthn: 根据 channel 查找用户并创建 Login ceremony
           → 将 WebAuthn session 数据写入 Challenge.Data
   → challengeSvc.Save(): 序列化 Challenge 到 Redis（含 session 数据）
   → Handler: 返回 challenge_id + options
 ```
 
-**channel 路由规则**：当 `channel` 为空串时，WebAuthn Provider 调用 `BeginDiscoverableLogin()`（Passkey 场景，无需预知用户）；当 `channel` 非空（为用户邮箱或 ID）时，调用 `BeginLogin()`（Factor 场景，指定用户的 `allowCredentials`）。
+**channel 路由规则**：普通 WebAuthn factor 必须带 `channel`（用户邮箱或 ID），后端据此构建该用户的 `allowCredentials`。无用户上下文的 discoverable ceremony 只属于 Passkey IDP，不走 `/auth/challenge`。
 
 #### Verify 阶段（验证 Challenge）
 
@@ -398,23 +376,23 @@ POST /auth/challenge/:cid
       → 从 Registry 获取 Authenticator → 类型断言为 ChallengeVerifier
       → 调用 verifier.Verify(ctx, challenge, proof)
           → WebAuthn: 解析 assertion JSON → 调用 FinishLogin
-          → 通过 credential ID 反查用户 OpenID
   → Handler: 签发 challenge_token（PASETO v4.public 格式）
-      → Claims: { sub: openid, aud: audience, exp: +5min, challenge_id: cid }
+      → Claims: { sub: channel, aud: audience, exp: +5min }
 ```
 
-**Session 传递机制**：WebAuthn 协议要求 `BeginLogin` 和 `FinishLogin` 之间共享 session 数据（包含 challenge nonce、expected credentials 等）。本方案将 session 数据序列化后存入 `Challenge.Data["session"]`，随 Challenge 对象一起持久化到 Redis。Verify 阶段从 Redis 加载 Challenge 时自动恢复 session，TTL 为 5 分钟。
+**Session 传递机制**：WebAuthn 协议要求 `BeginLogin` 和 `FinishLogin` 之间共享 session 数据（包含 challenge nonce、expected credentials 等）。本方案将 WebAuthn ceremony 数据以 `challenge_id` 为 key 存入 Redis。Verify 阶段通过 path 中的 `challenge_id` 恢复 ceremony，TTL 为 5 分钟。
 
-#### Login 阶段
+#### Passkey Login 阶段
 
 ```
-POST /auth/login { connection: "passkey", proof: challenge_token }
+POST /auth/login { connection: "passkey", uid, proof: assertionJSON }
   → Handler: 获取 AuthFlow，设置当前 connection
   → authenticateSvc.Authenticate()
       → 从 Registry 获取 "passkey" → IDPAuthenticator
       → 调用 passkey.Provider.Login()
-          → 验证 challenge_token 的 PASETO 签名和有效期
-          → 从 token claims 中提取用户 OpenID
+          → 用 uid 恢复 WebAuthn ceremony
+          → 验证 assertion 签名、origin、rpId、challenge 和 signCount
+          → 从 credential 反查用户 OpenID
           → 返回 UserInfo
   → Handler: 解析用户身份 → 签发 authorization code → 返回 redirect location
 ```
@@ -423,13 +401,11 @@ POST /auth/login { connection: "passkey", proof: challenge_token }
 
 ```
 LoginRequest {
-  connection: "passkey"    → flow.SetConnection("passkey")
-  proof:      challenge_token → passkey.Provider.Login(ctx, proof, principal, strategy)
-  principal:  challenge_id    → 用于关联 WebAuthn session（当前通过 params[0] 传递）
+  connection: "passkey"       → flow.SetConnection("passkey")
+  uid:        ceremony uid     → passkey.Provider.Login(ctx, proof, ..., uid)
+  proof:      assertionJSON    → passkey.Provider.Login(ctx, proof, ..., uid)
 }
 ```
-
-> TODO：`challengeID` 当前暂用 `principal` 参数传递，后续应从 `challenge_token` claims 中直接提取。
 
 ## 8. 失败与降级策略
 
@@ -613,7 +589,7 @@ Challenge 验证（`challenge/service.go`）有独立的访问控制链：
   "audience": "svc_xxx",
   "type": "login",
   "channel_type": "webauthn",
-  "channel": ""
+  "channel": "user@example.com"
 }
 ```
 
@@ -623,7 +599,7 @@ Challenge 验证（`challenge/service.go`）有独立的访问控制链：
 | `audience` | string | 是 | 目标服务 ID |
 | `type` | string | 验证类可选 | 业务场景（`login` / `bind` / `verify` 等） |
 | `channel_type` | string | 是 | 验证方式（`webauthn` / `email-code` / `totp`） |
-| `channel` | string | 是 | 验证目标（Passkey 登录时为空串，WebAuthn Factor 时为邮箱） |
+| `channel` | string | 是 | 验证目标（邮箱 / 手机号 / user_id / wx_code ...；WebAuthn Factor 为邮箱或用户 ID） |
 
 响应：
 
@@ -696,6 +672,27 @@ WebAuthn 类型的响应会额外包含 `options`（`PublicKeyCredentialRequestO
 
 ### 13.2 Login API
 
+#### `POST /auth/idps` — IDP 认证入口
+
+Passkey 入口请求：
+
+```json
+{
+  "connection": "passkey"
+}
+```
+
+Passkey 入口响应：
+
+```json
+{
+  "connection": "passkey",
+  "mode": "webauthn",
+  "uid": "ch_xxx",
+  "options": {}
+}
+```
+
 #### `POST /auth/login` — 登录
 
 Passkey 登录请求：
@@ -703,7 +700,8 @@ Passkey 登录请求：
 ```json
 {
   "connection": "passkey",
-  "proof": "v4.public.challenge_token_xxx..."
+  "uid": "ch_xxx",
+  "proof": "{\"id\":\"...\",\"rawId\":\"...\",\"response\":{...},\"type\":\"public-key\"}"
 }
 ```
 
@@ -733,7 +731,8 @@ Staff Delegate（WebAuthn/Email OTP）登录请求：
 | `connection` | string | 是 | 连接标识（`passkey` / `staff` / `github` 等） |
 | `strategy` | string | 否 | 认证策略（仅 `staff` 的 `password` 策略需要） |
 | `principal` | string | 否 | 身份标识（邮箱；Passkey 登录不需要） |
-| `proof` | any | 是 | 认证凭证（密码 / challenge_token） |
+| `uid` | string | 否 | 认证会话 ID（Passkey 登录必填） |
+| `proof` | any | 是 | 认证凭证（密码 / challenge_token / WebAuthn assertion） |
 
 成功响应：
 
@@ -907,7 +906,7 @@ WebAuthn Delegate 登录发生在 `VerifyStep` 组件中，用户已经在上一
 
 #### 与 Passkey IDP 流程的关键差异点
 
-- **步骤 1**：Passkey IDP 的 `channel` 为空串，WebAuthn Factor 的 `channel` 为用户邮箱
+- **步骤 1**：Passkey IDP 走 `/auth/idps`，没有 `channel` 入参；WebAuthn Factor 走 `/auth/challenge`，`channel` 为用户邮箱
 - **步骤 2**：Passkey IDP 响应的 `allowCredentials` 为空（让浏览器/认证器自选），Factor 响应的 `allowCredentials` 列出该用户的所有已注册凭证 ID
 - **步骤 4**：Passkey IDP 的 `connection` 为 `"passkey"` 且不需要 `principal`，Factor 的 `connection` 为 `"staff"` 且需要 `principal`（邮箱）
 
@@ -922,7 +921,8 @@ WebAuthn Delegate 登录发生在 `VerifyStep` 组件中，用户已经在上一
 
 | 维度 | Passkey IDP | WebAuthn Factor (Staff Delegate) |
 |------|-------------|--------------------------------|
-| `channel` | 空串 | 用户邮箱（已在邮箱步骤确认） |
+| 初始化入口 | `/auth/idps` | `/auth/challenge` |
+| `channel` | 无 | 用户邮箱（已在邮箱步骤确认） |
 | `allowCredentials` | 空（Discoverable） | 非空（指定用户的已注册凭证） |
 | `login.connection` | `"passkey"` | `"staff"` |
 | `login.principal` | 不需要 | 用户邮箱 |
@@ -945,12 +945,10 @@ Staff Provider 对 delegate 的处理是**token 来源无关**的——无论 ch
 
 ## 15. 已知问题与后续优化
 
-1. **challengeID 传递方式**：当前 Passkey 登录通过 `principal` 参数传递 `challengeID`，语义不够清晰。后续应直接从 `challenge_token` 的 JWT claims 中提取，消除对 `principal` 的滥用。
+1. **凭证失效未清缓存**：`SecurityMask` 中检测到凭证不存在时仅关闭遮盖层，未调用 `passkeyUserCache.clear()`。下次访问仍会展示遮盖层。
 
-2. **凭证失效未清缓存**：`SecurityMask` 中检测到凭证不存在时仅关闭遮盖层，未调用 `passkeyUserCache.clear()`。下次访问仍会展示遮盖层。
+2. **缓存过期策略**：当前 `updated_at` 字段仅用于调试，未实现自动过期。建议设定合理的 TTL（如 90 天），超期不展示遮盖层。
 
-3. **缓存过期策略**：当前 `updated_at` 字段仅用于调试，未实现自动过期。建议设定合理的 TTL（如 90 天），超期不展示遮盖层。
+3. **多设备场景**：用户在设备 A 注册 Passkey 后在设备 B 登录，设备 B 无缓存不会显示遮盖层，但 Conditional UI（如果支持）可作为备选入口。
 
-4. **多设备场景**：用户在设备 A 注册 Passkey 后在设备 B 登录，设备 B 无缓存不会显示遮盖层，但 Conditional UI（如果支持）可作为备选入口。
-
-5. **Passkey 注册时的暂存依赖**：`setPendingUserInfo()` 依赖调用方（`SecuritySettings`）在注册前主动暂存。如果个人信息页重构，需确保此调用链不断。
+4. **Passkey 注册时的暂存依赖**：`setPendingUserInfo()` 依赖调用方（`SecuritySettings`）在注册前主动暂存。如果个人信息页重构，需确保此调用链不断。

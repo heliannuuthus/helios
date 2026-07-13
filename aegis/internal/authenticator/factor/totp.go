@@ -41,21 +41,16 @@ func (p *TOTPFactor) Initiate(_ context.Context, challenge *types.Challenge) err
 
 // Verify 验证 TOTP 验证码
 // proof: TOTP 码
-// params[0]: openid (string)
-func (p *TOTPFactor) Verify(ctx context.Context, proof string, params ...any) (bool, error) {
+func (p *TOTPFactor) Verify(ctx context.Context, challenge *types.Challenge, proof string) (bool, error) {
 	if proof == "" {
 		return false, nil
 	}
 
-	if len(params) < 1 {
-		return false, nil
-	}
-	openid, ok := params[0].(string)
-	if !ok || openid == "" {
+	if challenge == nil || challenge.Channel == "" {
 		return false, nil
 	}
 
-	return p.verifier.VerifyCode(ctx, openid, proof)
+	return p.verifier.VerifyCode(ctx, challenge.Channel, proof)
 }
 
 // Prepare 准备前端公开配置

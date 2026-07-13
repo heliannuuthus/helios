@@ -96,8 +96,7 @@ ON DUPLICATE KEY UPDATE relation = VALUES(relation);
 -- ==================== 服务 Challenge 配置 ====================
 INSERT INTO t_service_challenge_setting (service_id, `type`, expires_in, limits) VALUES
 ('iris', 'staff:verify', 300, '{"1m": 1, "24h": 10}'),
-('iris', 'user:verify', 300, '{"1m": 1, "24h": 10}'),
-('iris', 'passkey:verify', 300, '{"1m": 1, "24h": 10}')
+('iris', 'user:verify', 300, '{"1m": 1, "24h": 10}')
 ON DUPLICATE KEY UPDATE expires_in = VALUES(expires_in), limits = VALUES(limits);
 
 -- ==================== 用户 ====================

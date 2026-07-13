@@ -39,12 +39,7 @@ func (p *WebAuthnProvider) Initiate(ctx context.Context, challenge *types.Challe
 	}
 
 	if challenge.Channel == "" {
-		options, err := p.webauthnSvc.InitializeDiscoverableAuthenticationCeremony(ctx, challenge.ID, challenge.ExpiresIn())
-		if err != nil {
-			return err
-		}
-		challenge.SetData(types.ChallengeDataOptions, options)
-		return err
+		return fmt.Errorf("channel is required for webauthn factor")
 	}
 
 	user, err := p.resolveUser(ctx, challenge.Channel)
@@ -67,26 +62,17 @@ func (p *WebAuthnProvider) Initiate(ctx context.Context, challenge *types.Challe
 
 // Verify 验证 WebAuthn 凭证
 // proof: WebAuthn assertion JSON（前端 navigator.credentials.get() 序列化结果）
-// params[0]: channel (string) - user_id（未使用，但统一传入）
-// params[1]: challengeID (string)
-func (p *WebAuthnProvider) Verify(ctx context.Context, proof string, params ...any) (bool, error) {
+func (p *WebAuthnProvider) Verify(ctx context.Context, challenge *types.Challenge, proof string) (bool, error) {
 	if proof == "" {
 		return false, fmt.Errorf("webauthn assertion is required")
 	}
 
-	// 从 params 获取 challengeID
-	var challengeID string
-	if len(params) > 1 {
-		if id, ok := params[1].(string); ok {
-			challengeID = id
-		}
-	}
-	if challengeID == "" {
+	if challenge == nil || challenge.ID == "" {
 		return false, fmt.Errorf("challenge_id is required")
 	}
 
 	// 完成 WebAuthn 验证（从 proof 解析 assertion，不依赖 *http.Request）
-	_, credential, err := p.webauthnSvc.VerifyAuthentication(ctx, challengeID, []byte(proof))
+	_, credential, err := p.webauthnSvc.VerifyAuthentication(ctx, challenge.ID, []byte(proof))
 	if err != nil {
 		logger.Errorf("[WebAuthn Factor] VerifyAuthentication failed: %v", err)
 		return false, fmt.Errorf("webauthn verification failed: %w", err)

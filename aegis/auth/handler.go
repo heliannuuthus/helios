@@ -344,6 +344,55 @@ func (h *Handler) Login(c *gin.Context) {
 	actionRedirect(c, buildAuthCodeRedirectURL(flow.Request.RedirectURI, authCode))
 }
 
+// --- IDP authentication entry ---
+
+type idpInitiator interface {
+	Initiate(ctx context.Context, strategy string) (*idp.InitiateResponse, error)
+}
+
+// IDPs POST /auth/idps
+func (h *Handler) IDPs(c *gin.Context) {
+	var req IDPInitiateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		return
+	}
+
+	ctx := helpers.WithRemoteIP(c.Request.Context(), c.ClientIP())
+	flow := h.loadAuthFlow(c, ctx)
+	if flow == nil {
+		return
+	}
+	defer h.saveFlow(ctx, flow)
+
+	if err := ensureIDPEnabled(flow, req.Connection); err != nil {
+		h.errorResponse(c, err)
+		return
+	}
+
+	initiator, err := h.idpInitiator(req.Connection)
+	if err != nil {
+		h.errorResponse(c, err)
+		return
+	}
+
+	resp, err := initiator.Initiate(ctx, req.Strategy)
+	if err != nil {
+		h.errorResponse(c, autherrors.NewServerErrorf("idp initiate failed: %v", err))
+		return
+	}
+
+	c.JSON(http.StatusOK, &IDPInitiateResponse{
+		Connection: req.Connection,
+		Mode:       resp.Mode,
+		UID:        resp.UID,
+		URL:        resp.URL,
+		Action:     resp.Action,
+		Params:     resp.Params,
+		Options:    resp.Options,
+	})
+}
+
 // --- Challenge ---
 
 // InitiateChallenge POST /auth/challenge
@@ -953,7 +1002,7 @@ func (h *Handler) authenticate(c *gin.Context, ctx context.Context, flow *types.
 			return false, nil
 		}
 
-		success, err := h.authenticateSvc.Authenticate(ctx, flow, req.Proof, req.Principal, req.Strategy)
+		success, err := h.authenticateSvc.Authenticate(ctx, flow, req.Proof, req.Principal, req.Strategy, req.UID)
 		if err != nil {
 			return false, err
 		}
@@ -1216,6 +1265,11 @@ func (h *Handler) handleMainVerification(c *gin.Context, ctx context.Context, ch
 		return
 	}
 
+	if ch.Channel == "" {
+		h.errorResponse(c, autherrors.NewServerError("challenge subject is empty"))
+		return
+	}
+
 	if err = h.challengeSvc.Delete(ctx, ch.ID); err != nil {
 		logger.Warnf("[验证 Challenge] 删除 Challenge 失败: %v", err)
 	}
@@ -1240,6 +1294,47 @@ func (h *Handler) handleMainVerification(c *gin.Context, ctx context.Context, ch
 		ChallengeToken: tokenStr,
 		ExpiresIn:      int(ch.ExpiresIn().Seconds()),
 	})
+}
+
+func (h *Handler) loadAuthFlow(c *gin.Context, ctx context.Context) *types.AuthFlow {
+	flowID, err := getAuthSessionCookie(c)
+	if err != nil || flowID == "" {
+		h.errorResponse(c, autherrors.NewFlowNotFound("missing session"))
+		return nil
+	}
+
+	flow := h.authenticateSvc.GetAndValidateFlow(ctx, flowID)
+	if flow.Failed() {
+		h.flowErrorResponse(c, flow)
+		return nil
+	}
+	return flow
+}
+
+func (h *Handler) saveFlow(ctx context.Context, flow *types.AuthFlow) {
+	if err := h.authenticateSvc.SaveFlow(ctx, flow); err != nil {
+		logger.Warnf("[Handler] 保存 flow 失败: %v", err)
+	}
+}
+
+func (h *Handler) idpInitiator(connection string) (idpInitiator, error) {
+	auth, ok := authenticator.GlobalRegistry().Get(connection)
+	if !ok {
+		return nil, autherrors.NewInvalidRequestf("connection %s is not configured", connection)
+	}
+	initiator, ok := auth.(idpInitiator)
+	if !ok {
+		return nil, autherrors.NewInvalidRequestf("connection %s does not support idp initiate", connection)
+	}
+	return initiator, nil
+}
+
+func ensureIDPEnabled(flow *types.AuthFlow, connection string) error {
+	cfg := flow.ConnectionMap[connection]
+	if cfg == nil || cfg.Type != types.ConnTypeIDP {
+		return autherrors.NewInvalidRequestf("connection %s is not enabled for this application", connection)
+	}
+	return nil
 }
 
 func (h *Handler) initiateChallenge(ctx context.Context, ch *types.Challenge) error {
