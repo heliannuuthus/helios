@@ -311,8 +311,14 @@ func (s *Service) DeleteUserCredentialsByType(ctx context.Context, openid, credT
 
 // GetOpenIDByCredentialID 根据凭证 ID 获取用户 OpenID
 func (s *Service) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
-	cred, err := s.GetCredentialByID(ctx, credentialID)
-	if err != nil {
+	var cred models.UserCredential
+	if err := s.db.WithContext(ctx).
+		Select("openid").
+		Where("credential_id = ? AND enabled = ? AND type IN ?", credentialID, true, []string{
+			string(models.CredentialTypeWebAuthn),
+			string(models.CredentialTypePasskey),
+		}).
+		First(&cred).Error; err != nil {
 		return "", err
 	}
 	return cred.OpenID, nil
