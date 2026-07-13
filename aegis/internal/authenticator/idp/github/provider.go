@@ -62,16 +62,43 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*mod
 	}
 
 	code := proof
-	logger.Infof("[GitHub] 登录请求 - Code: %s...", code[:min(len(code), 10)])
+	logger.Infof("[GitHub] 处理 OAuth 回调")
 
 	// 第一步：用 code 换取 access_token
-	accessToken, err := p.getAccessToken(ctx, code, clientID, clientSecret)
+	redirectURI := ""
+	codeVerifier := ""
+	if oauthCtx := idp.OAuthLoginContextFromParams(params); oauthCtx != nil {
+		redirectURI = oauthCtx.RedirectURI
+		codeVerifier = oauthCtx.CodeVerifier
+	}
+	accessToken, err := p.getAccessToken(ctx, code, clientID, clientSecret, redirectURI, codeVerifier)
 	if err != nil {
 		return nil, err
 	}
 
 	// 第二步：用 access_token 获取用户信息
 	return p.getUserInfo(ctx, accessToken)
+}
+
+// Initiate builds the upstream GitHub authorization URL from the trusted AuthFlow transaction.
+func (p *Provider) Initiate(ctx context.Context, initiation *idp.InitiateContext, _ string) (*idp.InitiateResponse, error) {
+	if initiation == nil || initiation.Flow == nil || initiation.Flow.Request == nil || initiation.Transaction == nil {
+		return nil, errors.New("github oauth initiation context is incomplete")
+	}
+	clientID, _, err := p.cache.GetIDPKey(ctx, initiation.Flow.Request.ClientID, idp.TypeGithub)
+	if err != nil {
+		return nil, fmt.Errorf("解析 GitHub IDP 密钥失败: %w", err)
+	}
+	authorizationURL, err := buildAuthorizationURL(
+		clientID,
+		initiation.Transaction.RedirectURI,
+		initiation.Transaction.State,
+		initiation.Transaction.CodeChallenge,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &idp.InitiateResponse{URL: authorizationURL}, nil
 }
 
 // Resolve 社交登录不支持通过 principal 本地查找
@@ -92,11 +119,17 @@ func (p *Provider) Prepare() *types.ConnectionConfig {
 }
 
 // getAccessToken 用 code 换取 access_token
-func (p *Provider) getAccessToken(ctx context.Context, code, clientID, clientSecret string) (string, error) {
+func (p *Provider) getAccessToken(ctx context.Context, code, clientID, clientSecret, redirectURI, codeVerifier string) (string, error) {
 	form := url.Values{}
 	form.Set("client_id", clientID)
 	form.Set("client_secret", clientSecret)
 	form.Set("code", code)
+	if redirectURI != "" {
+		form.Set("redirect_uri", redirectURI)
+	}
+	if codeVerifier != "" {
+		form.Set("code_verifier", codeVerifier)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -122,7 +155,7 @@ func (p *Provider) getAccessToken(ctx context.Context, code, clientID, clientSec
 	}
 
 	bodyStr := string(bodyBytes)
-	logger.Debugf("[GitHub] access_token 响应: %s", bodyStr)
+	logger.Debugf("[GitHub] access_token endpoint status: %d", resp.StatusCode)
 
 	// 检查错误
 	if errMsg := gjson.Get(bodyStr, "error").String(); errMsg != "" {
@@ -137,6 +170,26 @@ func (p *Provider) getAccessToken(ctx context.Context, code, clientID, clientSec
 	}
 
 	return accessToken, nil
+}
+
+func buildAuthorizationURL(clientID, redirectURI, state, codeChallenge string) (string, error) {
+	if clientID == "" || redirectURI == "" || state == "" || codeChallenge == "" {
+		return "", errors.New("github oauth authorization parameters are incomplete")
+	}
+	u, err := url.Parse("https://github.com/login/oauth/authorize")
+	if err != nil {
+		return "", err
+	}
+	query := u.Query()
+	query.Set("client_id", clientID)
+	query.Set("redirect_uri", redirectURI)
+	query.Set("response_type", "code")
+	query.Set("scope", "user:email")
+	query.Set("state", state)
+	query.Set("code_challenge", codeChallenge)
+	query.Set("code_challenge_method", "S256")
+	u.RawQuery = query.Encode()
+	return u.String(), nil
 }
 
 // getUserInfo 获取用户信息
@@ -174,7 +227,6 @@ func (p *Provider) getUserInfo(ctx context.Context, accessToken string) (*models
 	}
 
 	bodyStr := string(bodyBytes)
-	logger.Debugf("[GitHub] 用户信息响应: %s", bodyStr)
 
 	// 提取用户 ID（GitHub 使用数字 ID）
 	userID := gjson.Get(bodyStr, "id").String()
@@ -245,7 +297,6 @@ func (p *Provider) getPrimaryEmail(ctx context.Context, accessToken string) stri
 	}
 
 	bodyStr := string(bodyBytes)
-	logger.Debugf("[GitHub] emails 响应: %s", bodyStr)
 
 	// 遍历邮箱列表，优先返回 primary 且 verified 的邮箱
 	emails := gjson.Parse(bodyStr).Array()

@@ -52,7 +52,7 @@ func InitDB() *gorm.DB {
 		if err != nil {
 			logger.Fatalf("连接 Hermes 数据库失败: %v", err)
 		}
-		logger.Infof("数据库连接成功 (hermes): %s", cfg.GetString("db.url"))
+		logger.Infof("数据库连接成功 (hermes)")
 		hermesDB = db
 	})
 	return hermesDB
@@ -122,6 +122,15 @@ func GetAegisAudience() string {
 		return "hermes"
 	}
 	return audience
+}
+
+// GetAegisIssuer 获取 Aegis API/issuer 端点。
+func GetAegisIssuer() string {
+	issuer := strings.TrimRight(Cfg().GetString("aegis.issuer"), "/")
+	if issuer == "" {
+		return "https://aegis.heliannuuthus.com/api"
+	}
+	return issuer
 }
 
 // GetAegisSecretKey 获取 Hermes 服务解密密钥（原始字符串）

@@ -16,7 +16,6 @@ const (
 	ConfigFile = "config"
 
 	// 配置名称
-	ConfigName       = "base"
 	ZweiConfigName   = "zwei"
 	HermesConfigName = "hermes"
 	AegisConfigName  = "aegis"
@@ -32,60 +31,51 @@ type Cfg struct {
 
 // 配置单例
 var (
-	cfg       *Cfg // 通用配置
+	cfg       *Cfg // 当前服务配置
 	zweiCfg   *Cfg
 	hermesCfg *Cfg
 	aegisCfg  *Cfg
 	chaosCfg  *Cfg
 )
 
-// Load 加载所有配置
-func Load() {
-	LoadConfig()
-	LoadZwei()
-	LoadHermes()
-	LoadAegis()
-	LoadChaos()
-}
-
-// LoadConfig 加载通用配置
-func LoadConfig() {
-	if cfg != nil {
-		return
-	}
-	cfg = newCfg(ConfigName)
-}
-
 // LoadZwei 加载 Zwei 配置
 func LoadZwei() {
 	if zweiCfg != nil {
+		cfg = zweiCfg
 		return
 	}
 	zweiCfg = newCfg(ZweiConfigName, "./zwei")
+	cfg = zweiCfg
 }
 
 // LoadHermes 加载 Hermes 配置
 func LoadHermes() {
 	if hermesCfg != nil {
+		cfg = hermesCfg
 		return
 	}
 	hermesCfg = newCfg(HermesConfigName, "./hermes")
+	cfg = hermesCfg
 }
 
 // LoadAegis 加载 Aegis 配置
 func LoadAegis() {
 	if aegisCfg != nil {
+		cfg = aegisCfg
 		return
 	}
 	aegisCfg = newCfg(AegisConfigName, "./aegis")
+	cfg = aegisCfg
 }
 
 // LoadChaos 加载 Chaos 配置
 func LoadChaos() {
 	if chaosCfg != nil {
+		cfg = chaosCfg
 		return
 	}
 	chaosCfg = newCfg(ChaosConfigName, "./chaos")
+	cfg = chaosCfg
 }
 
 // Zwei 返回 Zwei 配置单例
@@ -120,10 +110,11 @@ func Chaos() *Cfg {
 	return chaosCfg
 }
 
-// Config 返回通用配置单例
+// Config 返回当前服务配置。
+// 每个进程必须先调用对应的 LoadAegis/LoadHermes/LoadZwei/LoadChaos。
 func Config() *Cfg {
 	if cfg == nil {
-		LoadConfig()
+		panic("服务配置未加载")
 	}
 	return cfg
 }

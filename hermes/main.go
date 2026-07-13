@@ -20,7 +20,6 @@ import (
 )
 
 func main() {
-	config.LoadConfig()
 	config.LoadHermes()
 	logger.InitWithConfig(logger.Config{
 		Format: config.GetLogFormat(),
@@ -28,6 +27,7 @@ func main() {
 		Debug:  config.IsDebug(),
 	})
 	defer logger.Sync()
+	initTokenManager()
 
 	db := hermesconfig.InitDB()
 
@@ -35,6 +35,16 @@ func main() {
 
 	go startGRPC(svc)
 	startHTTP(svc)
+}
+
+func initTokenManager() {
+	seed, err := hermesconfig.GetAegisSecretKeyBytes()
+	if err != nil {
+		logger.Fatalf("初始化 Hermes token manager 失败: %v", err)
+	}
+	if err := guard.NewServiceTokenManager(hermesconfig.GetAegisIssuer(), hermesconfig.GetAegisAudience(), seed); err != nil {
+		logger.Fatalf("初始化 Hermes token manager 失败: %v", err)
+	}
 }
 
 func startGRPC(svc *hermes.Service) {

@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS t_idp_key (
     -- 业务字段
     idp_type     VARCHAR(32)   NOT NULL COMMENT 'IDP 类型：github/google/wxmp/ttmp 等',
     t_app_id     VARCHAR(256)  NOT NULL COMMENT '第三方 IDP 的 App ID / Client ID',
-    t_secret     VARCHAR(2048) NOT NULL COMMENT '加密 JSON（AES-GCM），含 secret/private_key 等',
+    t_secret     TEXT         NOT NULL COMMENT '加密 JSON（AES-GCM），含 secret/private_key 等',
     -- 时间戳
     created_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

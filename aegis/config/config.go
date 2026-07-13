@@ -32,6 +32,7 @@ const (
 	DefaultAegisAuthFlowExpiresIn       = 10 * time.Minute
 	DefaultAegisAuthFlowMaxLifetime     = 1 * time.Hour
 	DefaultAegisAuthCodeExpiresIn       = 5 * time.Minute
+	DefaultAegisOAuthStateExpiresIn     = 10 * time.Minute
 	DefaultAegisOTPExpiresIn            = 5 * time.Minute
 	DefaultAegisChallengeExpiresIn      = 5 * time.Minute
 	DefaultAegisTOTPEnrollmentExpiresIn = 5 * time.Minute
@@ -152,6 +153,16 @@ func GetEndpointCallback() string {
 	return endpoint
 }
 
+// GetIDPRedirectURI 获取上游 OAuth Provider 的固定回调地址。
+// 回调地址只来自服务端配置，禁止由浏览器请求覆盖。
+func GetIDPRedirectURI(connection string) string {
+	redirectURI := Cfg().GetString("idps." + connection + ".redirect-uri")
+	if redirectURI != "" {
+		return redirectURI
+	}
+	return strings.TrimRight(GetEndpoint(), "/") + "/" + connection + "/callback"
+}
+
 // ==================== Cache 配置 ====================
 
 // GetCacheKeyPrefix 获取缓存 key 前缀
@@ -162,6 +173,7 @@ func GetCacheKeyPrefix(cacheType string) string {
 	defaultPrefixes := map[string]string{
 		"auth_flow":                    "auth:flow:",
 		"auth_code":                    "auth:code:",
+		"oauth_state":                  "auth:oauth:state:",
 		"refresh_token":                "auth:rt:",
 		"user_token":                   "auth:user:rt:",
 		"otp":                          "auth:otp:",
@@ -229,6 +241,14 @@ func GetAuthFlowMaxLifetime() time.Duration {
 		return val
 	}
 	return DefaultAegisAuthFlowMaxLifetime
+}
+
+// GetOAuthStateExpiresIn 获取上游 OAuth state/PKCE transaction 过期时间。
+func GetOAuthStateExpiresIn() time.Duration {
+	if val := Cfg().GetDuration("aegis.cache.oauth_state.expires_in"); val > 0 {
+		return val
+	}
+	return DefaultAegisOAuthStateExpiresIn
 }
 
 // GetAuthCodeExpiresIn 获取 AuthCode 过期时间

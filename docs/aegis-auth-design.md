@@ -1,7 +1,7 @@
 # Aegis 认证授权系统设计文档
 
 > 涵盖：认证授权流程、Token 体系、SSO 机制、多 Audience 授权、中间件、安全设计
-> 更新日期：2026-02-17
+> 更新日期：2026-07-13
 
 ---
 
@@ -115,6 +115,18 @@ Handler (编排层)
      refresh_token, ... }
    ◄═══════════════════════
 ```
+
+### 2.1.1 第三方 OAuth IDP 入口
+
+Google/GitHub 登录由当前 `AuthFlow` 和 connection 名称决定，不使用 `mode` 字段：
+
+1. Pallas 发送 `POST /auth/idps`，请求体为 `{"connection":"google"}` 或 `{"connection":"github"}`，`strategy` 仅在 connection 配置需要时可选传入。
+2. Aegis 从 HttpOnly 会话 Cookie 取得 `AuthFlow`，生成随机 `state` 与 PKCE S256 verifier/challenge，并将绑定了 flow、connection 和固定回调地址的 transaction 短期保存到 Redis。
+3. Aegis 返回 HTTP 300，`Location` 为经过白名单校验的 Google/GitHub 授权地址；Pallas 只执行跳转，不构造上游 OAuth 参数。
+4. Provider 回调经网关转发到 `GET /auth/idps/:connection/callback`。Aegis 原子读取并删除 state transaction，校验会话、flow 和 connection 后，以服务端保存的 `code_verifier` 交换上游 token。
+5. 认证完成后，Aegis 使用 HTTP 303 跳回业务应用的已注册 `redirect_uri`。
+
+浏览器不能提交 `redirect_uri`、`state` 或 verifier；重复、过期或与 flow/connection 不匹配的 state 一律拒绝。
 
 ### 2.2 Authorize 端点（POST /auth/authorize）
 

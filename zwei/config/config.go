@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"strings"
@@ -26,6 +27,31 @@ func GetAegisAudience() string {
 	return audience
 }
 
+// GetAegisIssuer 获取 Aegis API/issuer 端点。
+func GetAegisIssuer() string {
+	issuer := strings.TrimRight(Cfg().GetString("aegis.issuer"), "/")
+	if issuer == "" {
+		return "https://aegis.heliannuuthus.com/api"
+	}
+	return issuer
+}
+
+// GetAegisSecretKeyBytes 获取 Zwei 服务的 48 字节 token seed。
+func GetAegisSecretKeyBytes() ([]byte, error) {
+	secret := Cfg().GetString("aegis.secret-key")
+	if secret == "" {
+		return nil, fmt.Errorf("zwei aegis.secret-key 未配置")
+	}
+	seed, err := base64.RawURLEncoding.DecodeString(secret)
+	if err != nil {
+		return nil, fmt.Errorf("解码 zwei aegis.secret-key 失败: %w", err)
+	}
+	if len(seed) != 48 {
+		return nil, fmt.Errorf("zwei aegis.secret-key 长度错误: 期望 48 字节 seed, 实际 %d 字节", len(seed))
+	}
+	return seed, nil
+}
+
 // InitDB 初始化 Zwei 数据库连接
 func InitDB() *gorm.DB {
 	cfg := Cfg()
@@ -35,7 +61,7 @@ func InitDB() *gorm.DB {
 	if err != nil {
 		logger.Fatalf("连接 Zwei 数据库失败: %v", err)
 	}
-	logger.Infof("数据库连接成功 (zwei): %s", dsn)
+	logger.Infof("数据库连接成功 (zwei)")
 	return db
 }
 

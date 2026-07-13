@@ -6,7 +6,7 @@ Hermes 初始化脚本
 1. 生成数据库加密密钥，直接写入 hermes/config.toml
 2. 生成域签名密钥（48 字节 seed: 16-byte salt + 32-byte key），写入 hermes/sql/init.sql
 3. 生成 SSO master key（48 字节 seed），直接写入 aegis/config.toml
-4. 生成服务密钥（48 字节 seed: 16-byte salt + 32-byte key），写入 hermes/config.toml / aegis/config.toml
+4. 生成服务密钥（48 字节 seed: 16-byte salt + 32-byte key），写入各服务 config.toml
 5. 生成加密后的域 / 服务 / 应用密钥，直接写入 hermes/sql/init.sql
 6. 生成初始用户密码（随机），写入 init.sql
 
@@ -26,6 +26,9 @@ hermes/config.toml:
   - [db] enc-key: Base64 编码的 32 字节 AES-256 密钥，用于加密敏感数据
   - [aegis] secret-key: Base64URL 编码的 48 字节 seed (16-byte salt + 32-byte key)，Hermes 服务密钥
   域元数据、域允许的 IDP、域签名密钥已落库（t_domain / t_domain_idp / t_key），不再写入本配置。
+
+zwei/config.toml / chaos/config.toml:
+  - [aegis] secret-key: Base64URL 编码的对应服务 48 字节 seed
 
 hermes/sql/init.sql:
   - t_key: 域 / 服务 / 应用密钥的密文（用 db.enc-key 加密）
@@ -71,6 +74,11 @@ INIT_SQL_PATH = PROJECT_ROOT / "hermes" / "sql" / "init.sql"
 
 HERMES_TOML = PROJECT_ROOT / "hermes" / "config.toml"
 AEGIS_TOML = PROJECT_ROOT / "aegis" / "config.toml"
+SERVICE_TOMLS = {
+    "hermes": HERMES_TOML,
+    "zwei": PROJECT_ROOT / "zwei" / "config.toml",
+    "chaos": PROJECT_ROOT / "chaos" / "config.toml",
+}
 
 
 # ==================== 预制数据定义 ====================
@@ -413,17 +421,22 @@ class Initializer:
                 encrypted_key=b64_encode(encrypted),
             ))
 
-    def update_hermes_toml(self):
-        """只写入 db.enc-key 与 aegis.secret-key。域元数据、域允许的 IDP、域签名密钥已落库，不写配置。"""
-        doc = load_toml(HERMES_TOML)
+    def update_service_configs(self):
+        """写入各服务的本地密钥；域和应用密钥仅落库。"""
+        hermes_doc = load_toml(HERMES_TOML)
+        ensure_table(hermes_doc, "db")["enc-key"] = b64_encode(self.db_enc_key)
+        save_toml(HERMES_TOML, hermes_doc)
 
-        ensure_table(doc, "db")["enc-key"] = b64_encode(self.db_enc_key)
-
-        hermes_data = next((kd for kd in self.keys_data if kd.owner_type == "service" and kd.owner_id == "hermes"), None)
-        if hermes_data:
-            ensure_table(doc, "aegis")["secret-key"] = b64url_encode(hermes_data.secret_key)
-
-        save_toml(HERMES_TOML, doc)
+        for service_id, path in SERVICE_TOMLS.items():
+            key_data = next((
+                kd for kd in self.keys_data
+                if kd.owner_type == "service" and kd.owner_id == service_id
+            ), None)
+            if key_data is None:
+                raise RuntimeError(f"服务 {service_id} 密钥未生成")
+            doc = load_toml(path)
+            ensure_table(doc, "aegis")["secret-key"] = b64url_encode(key_data.secret_key)
+            save_toml(path, doc)
 
     def update_aegis_toml(self):
         doc = load_toml(AEGIS_TOML)
@@ -595,8 +608,9 @@ class Initializer:
 
         print("正在写入配置文件...")
 
-        self.update_hermes_toml()
-        print(f"  ✅ 已写入: {HERMES_TOML}")
+        self.update_service_configs()
+        for path in SERVICE_TOMLS.values():
+            print(f"  ✅ 已写入: {path}")
 
         self.update_aegis_toml()
         print(f"  ✅ 已写入: {AEGIS_TOML}")

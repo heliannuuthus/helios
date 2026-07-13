@@ -1,0 +1,35 @@
+[app]
+name = "Zwei"
+version = "dev"
+debug = true
+
+[log]
+level = "debug"
+format = "console"
+
+[server]
+host = "0.0.0.0"
+port = 18000
+
+[db]
+url = "mysql://helios:helios@127.0.0.1:3306/zwei?charset=utf8mb4&parseTime=true&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s"
+
+[aegis]
+audience = "zwei"
+issuer = "https://aegis.heliannuuthus.com/api"
+# 由 scripts/initialize-hermes.py 生成。
+secret-key = ""
+
+[openrouter]
+api-key = ""
+model = "xiaomi/mimo-v2-flash:free"
+
+[amap]
+api-key = ""
+
+[[home.banners]]
+id = "banner_1"
+image-url = "https://example.com/banner1.jpg"
+title = "今日推荐"
+link = ""
+link-type = "none"

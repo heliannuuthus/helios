@@ -1,0 +1,36 @@
+[app]
+name = "Chaos"
+version = "dev"
+debug = true
+
+[log]
+level = "debug"
+format = "console"
+
+[server]
+host = "0.0.0.0"
+port = 18000
+
+[db]
+url = "mysql://helios:helios@127.0.0.1:3306/chaos?charset=utf8mb4&parseTime=true&loc=Local&timeout=10s&readTimeout=30s&writeTimeout=30s"
+
+[aegis]
+audience = "chaos"
+issuer = "https://aegis.heliannuuthus.com/api"
+# 由 scripts/initialize-hermes.py 生成。
+secret-key = ""
+
+[smtp]
+host = "smtp.exmail.qq.com"
+port = 465
+username = ""
+password = ""
+from = ""
+from-name = "Helios"
+
+[r2]
+account-id = ""
+access-key-id = ""
+access-key-secret = ""
+bucket = ""
+domain = ""

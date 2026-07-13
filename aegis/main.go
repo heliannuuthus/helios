@@ -24,7 +24,6 @@ import (
 )
 
 func main() {
-	config.LoadConfig()
 	config.LoadAegis()
 	logger.InitWithConfig(logger.Config{
 		Format: config.GetLogFormat(),
@@ -55,7 +54,7 @@ func main() {
 	if err != nil {
 		logger.Fatalf("连接 Redis 失败: %v", err)
 	}
-	logger.Infof("[Auth] Redis 连接成功: %s", redisURL)
+	logger.Infof("[Auth] Redis 连接成功")
 
 	cacheManager := cache.NewManager(client, redis)
 	aegisHandler, err := initializeAegis(client, cacheManager)
@@ -106,6 +105,7 @@ func main() {
 				registered[route.path] = true
 			}
 		}
+		authGroup.GET("/idps/:connection/callback", aegisHandler.OAuthCallback)
 		authGroup.POST("/check", aegisHandler.Check)
 	}
 

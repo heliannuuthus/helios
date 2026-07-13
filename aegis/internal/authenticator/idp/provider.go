@@ -35,12 +35,11 @@ type Provider interface {
 // Initiator 是 IDP 的认证入口能力。
 // 用于 OAuth redirect、Passkey ceremony、小程序 client action 等登录前置交互。
 type Initiator interface {
-	Initiate(ctx context.Context, strategy string) (*InitiateResponse, error)
+	Initiate(ctx context.Context, initiation *InitiateContext, strategy string) (*InitiateResponse, error)
 }
 
 // InitiateResponse IDP 认证入口响应。
 type InitiateResponse struct {
-	Mode    string         `json:"mode"`
 	UID     string         `json:"uid,omitempty"`
 	URL     string         `json:"url,omitempty"`
 	Action  string         `json:"action,omitempty"`

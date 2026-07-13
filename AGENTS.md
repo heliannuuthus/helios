@@ -1,4 +1,4 @@
-# Helios AGENTS（提炼版）
+# Helios AGENTS
 
 本文件是 Helios 的高优先级协作约束，面向 AI Agent 与开发者。
 
@@ -7,7 +7,7 @@
 1. 不要改 `/auth/authorize` 的方法和路径：必须是 `POST /auth/authorize`。
 2. 所有 PATCH 更新字段必须用 `patch.Optional[T]`，禁止用 `*T` 表示可选更新。
 3. Aegis 不直接访问数据库，数据统一通过 Hermes 服务层获取。
-4. API 调用走 services 层，不要在组件或 handler 中绕过服务层直接拼底层调用。
+4. API 调用走 service/client 封装，不要绕过既有层级直接拼底层调用。
 5. 改完代码必须执行：`make lint`（各 module 分别 lint）。
 
 ## 模块边界与依赖
@@ -23,7 +23,7 @@
 | `github.com/heliannuuthus/zwei` | `zwei/` | 业务 API；入口 `zwei/main.go` |
 | `github.com/heliannuuthus/chaos` | `chaos/` | 运维 API；入口 `chaos/main.go`，独立 DB |
 
-- `aegis/iris/`：**Aegis 子模块**（同进程），负责 `/user/*`，不是独立服务。
+- `aegis/profile/`：用户中心/Profile 能力，与 Aegis 同进程，不是独立服务。
 - 服务间 **禁止** import 其他服务的 Go 包；共享只通过 `proto`、`pkg`。
 - `aegis -> hermes`：仅通过 gRPC（`aegis/rpc/hermes` + `proto` 生成代码）。
 
@@ -35,7 +35,7 @@
 - `aegis/models`：Aegis 侧独立数据模型，与 `hermes/internal/models` 完全隔离。
 - `hermes/internal/models`：仅 Hermes 内部使用（`internal` 保护）。
 - `chaos/config.InitDB()`：连 chaos 独立库，禁止 import `hermes/config`。
-- 各服务配置在 `config/*.toml`；加载封装在 `pkg/config` 与各服务 `config/`。
+- 每个服务只在自己的项目根目录使用 `config.toml`，并提交不含密钥的 `example.toml`；加载封装在 `pkg/config` 与各服务 `config/`。
 
 ## PATCH 语义（强约束）
 
@@ -70,7 +70,7 @@ updates := patch.Collect(
 
 ## 路由与网关约定（不要破坏）
 
-- 前端/SDK 认证调用统一走../proto/*`，由网关转换到后端真实路径（如 `/auth/*`）。
+- 前端/SDK 认证调用统一走既有服务封装，由网关转换到后端真实路径（如 `/auth/*`）。
 - 不要在前端/SDK 里改成直接请求 `/auth/*`。
 - `/auth/authorize` 必须是 `POST` + `application/x-www-form-urlencoded`。
 - 禁止把 `ShouldBind` 改为 `ShouldBindQuery`。

@@ -239,7 +239,7 @@ heliannuuthus@aegis:passkey_user
 ```
 1. POST /auth/idps
    { connection: "passkey" }
-   -> { connection: "passkey", mode: "webauthn", uid, options }
+   -> { connection: "passkey", uid, options }
 
 2. 前端执行 WebAuthn
    convertToPublicKeyOptions(options)
@@ -687,7 +687,6 @@ Passkey 入口响应：
 ```json
 {
   "connection": "passkey",
-  "mode": "webauthn",
   "uid": "ch_xxx",
   "options": {}
 }
