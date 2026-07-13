@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -43,6 +44,36 @@ const (
 // Cfg 返回 Aegis 配置单例
 func Cfg() *baseconfig.Cfg {
 	return baseconfig.Aegis()
+}
+
+// Validate 校验 Aegis 所有必需模块的启动配置。
+func Validate() error {
+	var errs []error
+	for _, key := range []string{
+		"redis.url", "aegis.endpoint", "vchan.captcha.turnstile.app_id",
+		"vchan.captcha.turnstile.secret", "mfa.webauthn.rp-id",
+		"mail.host", "mail.port", "mail.username", "mail.password", "sso.master-key",
+		"iris.audience", "iris.secret-key",
+	} {
+		if strings.TrimSpace(Cfg().GetString(key)) == "" {
+			errs = append(errs, fmt.Errorf("必需配置 %s 未设置", key))
+		}
+	}
+	if len(Cfg().GetStringSlice("mfa.webauthn.rp-origins")) == 0 {
+		errs = append(errs, fmt.Errorf("必需配置 mfa.webauthn.rp-origins 未设置"))
+	}
+	for _, key := range []string{"cors.origins", "identity.consumer-idps", "identity.platform-idps"} {
+		if len(Cfg().GetStringSlice(key)) == 0 {
+			errs = append(errs, fmt.Errorf("必需配置 %s 未设置", key))
+		}
+	}
+	if _, err := GetSSOMasterKeys(); err != nil {
+		errs = append(errs, err)
+	}
+	if _, err := GetIrisSecretKeyBytes(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 // ==================== 基础配置 ====================

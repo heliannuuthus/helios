@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -22,6 +23,23 @@ var (
 // Cfg 返回 Hermes 配置单例
 func Cfg() *baseconfig.Cfg {
 	return baseconfig.Hermes()
+}
+
+// Validate 校验 Hermes 启动所需的全部配置。
+func Validate() error {
+	var errs []error
+	for _, key := range []string{"db.url", "db.enc-key", "aegis.audience", "aegis.issuer", "aegis.secret-key"} {
+		if strings.TrimSpace(Cfg().GetString(key)) == "" {
+			errs = append(errs, fmt.Errorf("必需配置 %s 未设置", key))
+		}
+	}
+	if _, err := GetDBEncKeyRaw(); err != nil {
+		errs = append(errs, err)
+	}
+	if _, err := GetAegisSecretKeyBytes(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 // InitDB 初始化 Hermes 数据库连接（单例）

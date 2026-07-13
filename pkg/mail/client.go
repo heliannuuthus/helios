@@ -2,10 +2,13 @@ package mail
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/smtp"
 	"net/textproto"
+	"strings"
 	"time"
 
 	"github.com/knadh/smtppool/v2"
@@ -28,6 +31,8 @@ type Client struct {
 	host     string
 	port     int
 	username string
+	password string
+	useSSL   bool
 }
 
 // ClientConfig 客户端配置
@@ -44,6 +49,18 @@ type ClientConfig struct {
 
 // NewClient 创建 SMTP 连接池客户端
 func NewClient(cfg *ClientConfig) (*Client, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("mail client config is required")
+	}
+	if strings.TrimSpace(cfg.Host) == "" {
+		return nil, fmt.Errorf("smtp host is required")
+	}
+	if strings.TrimSpace(cfg.Username) == "" {
+		return nil, fmt.Errorf("smtp username is required")
+	}
+	if strings.TrimSpace(cfg.Password) == "" {
+		return nil, fmt.Errorf("smtp password is required")
+	}
 	port := cfg.Port
 	if port == 0 {
 		if cfg.UseSSL {
@@ -51,6 +68,9 @@ func NewClient(cfg *ClientConfig) (*Client, error) {
 		} else {
 			port = defaultPort
 		}
+	}
+	if port < 1 || port > 65535 {
+		return nil, fmt.Errorf("invalid smtp port: %d", port)
 	}
 
 	maxConns := cfg.MaxConns
@@ -91,6 +111,8 @@ func NewClient(cfg *ClientConfig) (*Client, error) {
 		host:     cfg.Host,
 		port:     port,
 		username: cfg.Username,
+		password: cfg.Password,
+		useSSL:   cfg.UseSSL,
 	}, nil
 }
 
@@ -107,9 +129,47 @@ func (c *Client) Send(_ context.Context, msg *Message) error {
 	return c.pool.Send(e)
 }
 
-// Verify 验证 SMTP 连接池可用性（池在创建时已建立首个连接，此处为空操作）
-func (c *Client) Verify(_ context.Context) error {
-	logger.Debugf("[Mail] SMTP 连接池验证: %s:%d", c.host, c.port)
+// Verify 建立一次 SMTP/TLS 连接并完成认证，确保凭据不会到首次发信时才暴露问题。
+func (c *Client) Verify(ctx context.Context) error {
+	address := net.JoinHostPort(c.host, fmt.Sprintf("%d", c.port))
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: c.host}
+	var smtpClient *smtp.Client
+	if c.useSSL {
+		conn, err := (&tls.Dialer{Config: tlsConfig}).DialContext(ctx, "tcp", address)
+		if err != nil {
+			return fmt.Errorf("connect smtp tls: %w", err)
+		}
+		client, err := smtp.NewClient(conn, c.host)
+		if err != nil {
+			_ = conn.Close()
+			return fmt.Errorf("create smtp client: %w", err)
+		}
+		smtpClient = client
+	} else {
+		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", address)
+		if err != nil {
+			return fmt.Errorf("connect smtp: %w", err)
+		}
+		client, err := smtp.NewClient(conn, c.host)
+		if err != nil {
+			_ = conn.Close()
+			return fmt.Errorf("create smtp client: %w", err)
+		}
+		if ok, _ := client.Extension("STARTTLS"); !ok {
+			_ = client.Close()
+			return fmt.Errorf("smtp server does not support STARTTLS")
+		}
+		if err := client.StartTLS(tlsConfig); err != nil {
+			_ = client.Close()
+			return fmt.Errorf("start smtp tls: %w", err)
+		}
+		smtpClient = client
+	}
+	defer smtpClient.Close()
+	if err := smtpClient.Auth(smtp.PlainAuth("", c.username, c.password, c.host)); err != nil {
+		return fmt.Errorf("authenticate smtp: %w", err)
+	}
+	logger.Debugf("[Mail] SMTP 连接验证成功: %s:%d", c.host, c.port)
 	return nil
 }
 

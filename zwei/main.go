@@ -29,10 +29,16 @@ func main() {
 		Debug:  config.IsDebug(),
 	})
 	defer logger.Sync()
+	if err := zweiconfig.Validate(); err != nil {
+		logger.Fatalf("Zwei 配置校验失败: %v", err)
+	}
 	initTokenManager()
 
 	db := zweiconfig.InitDB()
-	app := zwei.New(db)
+	app, err := zwei.New(db)
+	if err != nil {
+		logger.Fatalf("初始化 Zwei 失败: %v", err)
+	}
 
 	if !config.IsDebug() {
 		gin.SetMode(gin.ReleaseMode)

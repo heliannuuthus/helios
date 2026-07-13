@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -31,6 +32,9 @@ func main() {
 		Debug:  config.IsDebug(),
 	})
 	defer logger.Sync()
+	if err := aegisconfig.Validate(); err != nil {
+		logger.Fatalf("Aegis 配置校验失败: %v", err)
+	}
 
 	hermesAddr := os.Getenv("HERMES_GRPC_ADDR")
 	if hermesAddr == "" {
@@ -44,7 +48,9 @@ func main() {
 
 	client := hermesrpc.New(conn)
 
-	initTokenManager(client)
+	if err := initTokenManager(client); err != nil {
+		logger.Fatalf("初始化 Aegis token manager 失败: %v", err)
+	}
 
 	redisURL := aegisconfig.Cfg().GetString("redis.url")
 	if redisURL == "" {
@@ -110,7 +116,10 @@ func main() {
 	}
 
 	profile := aegisHandler.Profile()
-	irisGuard := guard.NewGin(aegisconfig.GetIrisAudience())
+	irisGuard, err := guard.NewGin(aegisconfig.GetIrisAudience())
+	if err != nil {
+		logger.Fatalf("初始化 Iris 鉴权中间件失败: %v", err)
+	}
 	userGroup := r.Group("/user")
 	{
 		userRoutes := []struct {
@@ -145,8 +154,20 @@ func main() {
 	}
 }
 
-func initTokenManager(client *hermesrpc.Client) {
+func initTokenManager(client *hermesrpc.Client) error {
 	endpoint := aegisconfig.GetIssuer()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	keys, err := client.GetKeys(ctx, models.KeyOwnerDomain, "consumer")
+	if err != nil {
+		return fmt.Errorf("预加载 consumer 域密钥: %w", err)
+	}
+	if len(keys) == 0 {
+		return fmt.Errorf("consumer 域密钥不存在")
+	}
+	if len(keys[0]) != 48 {
+		return fmt.Errorf("consumer 域密钥长度错误: 期望 48 字节, 实际 %d 字节", len(keys[0]))
+	}
 	seed := key.SingleOf(func(_ context.Context, _ string) ([]byte, error) {
 		keys, err := client.GetKeys(context.Background(), models.KeyOwnerDomain, "consumer")
 		if err != nil {
@@ -158,4 +179,5 @@ func initTokenManager(client *hermesrpc.Client) {
 		return keys[0], nil
 	})
 	guard.NewTokenManager(endpoint, seed)
+	return nil
 }

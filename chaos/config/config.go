@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -22,6 +23,24 @@ var (
 // Cfg 返回 Chaos 配置单例
 func Cfg() *baseconfig.Cfg {
 	return baseconfig.Chaos()
+}
+
+// Validate 校验 Chaos 所有必需模块的启动配置。
+func Validate() error {
+	var errs []error
+	for _, key := range []string{
+		"db.url", "aegis.audience", "aegis.issuer", "aegis.secret-key",
+		"smtp.host", "smtp.port", "smtp.username", "smtp.password", "smtp.from",
+		"r2.account-id", "r2.access-key-id", "r2.access-key-secret", "r2.bucket", "r2.domain",
+	} {
+		if strings.TrimSpace(Cfg().GetString(key)) == "" {
+			errs = append(errs, fmt.Errorf("必需配置 %s 未设置", key))
+		}
+	}
+	if _, err := GetAegisSecretKeyBytes(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 // GetAegisAudience 获取 Chaos 服务 audience（用于 token 验证）

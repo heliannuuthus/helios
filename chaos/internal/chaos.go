@@ -1,7 +1,9 @@
 package chaos
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -11,7 +13,6 @@ import (
 	"github.com/heliannuuthus/chaos/internal/storage"
 	"github.com/heliannuuthus/chaos/internal/template"
 	"github.com/heliannuuthus/pkg/aegis/guard"
-	"github.com/heliannuuthus/pkg/logger"
 )
 
 // Chaos 模块实例
@@ -24,7 +25,9 @@ type Chaos struct {
 
 // New 创建 Chaos 实例
 func New(db *gorm.DB) (*Chaos, error) {
-	_ = config.Cfg()
+	if db == nil {
+		return nil, fmt.Errorf("数据库连接未初始化")
+	}
 
 	if err := autoMigrate(db); err != nil {
 		return nil, fmt.Errorf("数据库迁移失败: %w", err)
@@ -36,17 +39,29 @@ func New(db *gorm.DB) (*Chaos, error) {
 	if err != nil {
 		return nil, fmt.Errorf("创建邮件服务失败: %w", err)
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := mailSvc.Verify(ctx); err != nil {
+		mailSvc.Close()
+		return nil, fmt.Errorf("验证邮件服务失败: %w", err)
+	}
 
-	var storageSvc *storage.Service
-	if config.GetCloudflareR2Endpoint() != "" {
-		storageSvc, err = storage.NewService()
-		if err != nil {
-			logger.Warnf("[Chaos] 创建存储服务失败（将禁用文件上传功能）: %v", err)
-		}
+	storageSvc, err := storage.NewService()
+	if err != nil {
+		mailSvc.Close()
+		return nil, fmt.Errorf("创建存储服务失败: %w", err)
+	}
+	if err := storageSvc.Verify(ctx); err != nil {
+		mailSvc.Close()
+		return nil, fmt.Errorf("验证存储服务失败: %w", err)
 	}
 
 	aud := config.GetAegisAudience()
-	g := guard.NewGin(aud)
+	g, err := guard.NewGin(aud)
+	if err != nil {
+		mailSvc.Close()
+		return nil, fmt.Errorf("创建鉴权中间件失败: %w", err)
+	}
 	handler := NewHandler(g, aud, mailSvc, templateSvc, storageSvc)
 
 	return &Chaos{
@@ -86,7 +101,5 @@ func (c *Chaos) StorageService() *storage.Service {
 
 // Close 关闭服务
 func (c *Chaos) Close() {
-	if c.mailService != nil {
-		c.mailService.Close()
-	}
+	c.mailService.Close()
 }

@@ -47,3 +47,19 @@ func TestNewServiceTokenManagerScopesSeedToAudience(t *testing.T) {
 		t.Fatalf("expected audience-scoped key provider, got %v", err)
 	}
 }
+
+func TestNewGinRequiresInitializedTokenManager(t *testing.T) {
+	previous := globalManager
+	globalManager = nil
+	t.Cleanup(func() { globalManager = previous })
+
+	if _, err := NewGin("hermes"); err == nil {
+		t.Fatal("expected missing token manager error")
+	}
+	if err := NewServiceTokenManager("https://aegis.example.com/api", "hermes", make([]byte, serviceSeedSize)); err != nil {
+		t.Fatalf("initialize token manager: %v", err)
+	}
+	if _, err := NewGin("hermes"); err != nil {
+		t.Fatalf("NewGin returned error after initialization: %v", err)
+	}
+}

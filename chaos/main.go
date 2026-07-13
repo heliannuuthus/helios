@@ -20,6 +20,9 @@ func main() {
 		Debug:  config.IsDebug(),
 	})
 	defer logger.Sync()
+	if err := chaosconfig.Validate(); err != nil {
+		logger.Fatalf("Chaos 配置校验失败: %v", err)
+	}
 	initTokenManager()
 
 	db := chaosconfig.InitDB()

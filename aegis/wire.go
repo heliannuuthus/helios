@@ -45,15 +45,19 @@ func initializeAegis(hermesClient *hermes.Client, cacheManager *cache.Manager) (
 	if cacheManager == nil {
 		return nil, fmt.Errorf("cache manager is required")
 	}
+	if err := warmupRequiredKeys(cacheManager); err != nil {
+		return nil, fmt.Errorf("加载必需密钥失败: %w", err)
+	}
 
 	domainSign, domainVerify, serviceKey, appVerify := initKeyProviders(cacheManager)
 	tokenSvc := token.NewService(cacheManager, domainSign, domainVerify, serviceKey, appVerify)
 	logger.Info("[Auth] Token Service 初始化完成")
 
-	emailSender := initMailSender()
-	if emailSender != nil {
-		logger.Info("[Auth] 邮件发送器初始化完成")
+	emailSender, err := initMailSender()
+	if err != nil {
+		return nil, err
 	}
+	logger.Info("[Auth] 邮件发送器初始化完成")
 
 	webauthnSvc, captchaVerifier, err := initProviders(cacheManager, hermesClient)
 	if err != nil {
@@ -82,6 +86,18 @@ func initializeAegis(hermesClient *hermes.Client, cacheManager *cache.Manager) (
 	handler := auth.NewHandler(authenticateSvc, authorizeSvc, challengeSvc, userService, cacheManager, tokenSvc, profileHandler, pool)
 	logger.Info("[Auth] 模块初始化完成")
 	return handler, nil
+}
+
+func warmupRequiredKeys(cacheManager *cache.Manager) error {
+	if _, err := cacheManager.GetSSOKeys(); err != nil {
+		return fmt.Errorf("加载 SSO 密钥: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := cacheManager.GetService(ctx, config.GetIrisAudience()); err != nil {
+		return fmt.Errorf("加载 Iris 服务密钥: %w", err)
+	}
+	return nil
 }
 
 type keySelector func(cache.Key) []byte
@@ -158,10 +174,11 @@ func initProviders(cacheManager *cache.Manager, hermesClient *hermes.Client) (*w
 	logger.Info("[Auth] WebAuthn 初始化完成")
 
 	// Captcha
-	captchaVerifier := initCaptchaVerifier()
-	if captchaVerifier != nil {
-		logger.Infof("[Auth] Captcha 验证器初始化完成: provider=%s", captchaVerifier.GetProvider())
+	captchaVerifier, err := initCaptchaVerifier()
+	if err != nil {
+		return nil, nil, fmt.Errorf("init captcha verifier: %w", err)
 	}
+	logger.Infof("[Auth] Captcha 验证器初始化完成: provider=%s", captchaVerifier.GetProvider())
 
 	return webauthnSvc, captchaVerifier, nil
 }
@@ -190,15 +207,11 @@ func initRegistry(hermesClient *hermes.Client, cacheManager *cache.Manager, emai
 
 	// ==================== VChan Authenticators ====================
 
-	if captchaVerifier != nil {
-		registry.Register(authenticate.NewVChanAuthenticator(vchan.NewCaptchaProvider(captchaVerifier)))
-	}
+	registry.Register(authenticate.NewVChanAuthenticator(vchan.NewCaptchaProvider(captchaVerifier)))
 
 	// ==================== Factor Authenticators ====================
 
-	if emailSender != nil {
-		registry.Register(authenticate.NewFactorAuthenticator(factor.NewEmailOTPProvider(emailSender, cacheManager), ac, tokenVerifier))
-	}
+	registry.Register(authenticate.NewFactorAuthenticator(factor.NewEmailOTPProvider(emailSender, cacheManager), ac, tokenVerifier))
 
 	registry.Register(authenticate.NewFactorAuthenticator(factor.NewTOTPFactor(totpVerifier), ac, tokenVerifier))
 
@@ -209,24 +222,20 @@ func initRegistry(hermesClient *hermes.Client, cacheManager *cache.Manager, emai
 }
 
 // initCaptchaVerifier 初始化 Captcha 验证器
-func initCaptchaVerifier() captcha.Verifier {
+func initCaptchaVerifier() (captcha.Verifier, error) {
 	cfg := config.Cfg()
 
 	siteKey := cfg.GetString("vchan.captcha.turnstile.app_id")
 	secretKey := cfg.GetString("vchan.captcha.turnstile.secret")
 	if siteKey == "" || secretKey == "" {
-		panic("vchan.captcha.turnstile.app_id or vchan.captcha.turnstile.secret is not set")
+		return nil, fmt.Errorf("vchan.captcha.turnstile.app_id or vchan.captcha.turnstile.secret is not set")
 	}
-	return captcha.NewTurnstileVerifier(siteKey, secretKey)
+	return captcha.NewTurnstileVerifier(siteKey, secretKey), nil
 }
 
 // initMailSender 初始化邮件发送器
-func initMailSender() *mail.Sender {
+func initMailSender() (*mail.Sender, error) {
 	cfg := config.GetMailConfig()
-	if cfg.Username == "" || cfg.Password == "" {
-		logger.Warn("[Auth] 邮件配置不完整（缺少 username 或 password），跳过初始化")
-		return nil
-	}
 
 	sender, err := mail.NewSender(&mail.SenderConfig{
 		Host:     cfg.Host,
@@ -236,10 +245,15 @@ func initMailSender() *mail.Sender {
 		UseSSL:   cfg.UseSSL,
 	})
 	if err != nil {
-		logger.Errorf("[Auth] 创建邮件发送器失败: %v", err)
-		return nil
+		return nil, fmt.Errorf("创建邮件发送器失败: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := sender.Verify(ctx); err != nil {
+		sender.Close()
+		return nil, fmt.Errorf("验证邮件发送器失败: %w", err)
 	}
 
 	logger.Infof("[Auth] 邮件连接池初始化成功: %s:%d", cfg.Host, cfg.Port)
-	return sender
+	return sender, nil
 }

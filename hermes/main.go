@@ -27,13 +27,23 @@ func main() {
 		Debug:  config.IsDebug(),
 	})
 	defer logger.Sync()
+	if err := hermesconfig.Validate(); err != nil {
+		logger.Fatalf("Hermes 配置校验失败: %v", err)
+	}
 	initTokenManager()
 
 	db := hermesconfig.InitDB()
 
-	svc := hermes.NewService(db)
+	svc, err := hermes.NewService(db)
+	if err != nil {
+		logger.Fatalf("初始化 Hermes 失败: %v", err)
+	}
 
-	go startGRPC(svc)
+	grpcServer, lis, err := newGRPCServer(svc)
+	if err != nil {
+		logger.Fatalf("初始化 Hermes gRPC 服务失败: %v", err)
+	}
+	go serveGRPC(grpcServer, lis)
 	startHTTP(svc)
 }
 
@@ -47,11 +57,11 @@ func initTokenManager() {
 	}
 }
 
-func startGRPC(svc *hermes.Service) {
+func newGRPCServer(svc *hermes.Service) (*grpc.Server, net.Listener, error) {
 	lc := net.ListenConfig{}
 	lis, err := lc.Listen(context.Background(), "tcp", ":50051")
 	if err != nil {
-		logger.Fatalf("gRPC listen 失败: %v", err)
+		return nil, nil, fmt.Errorf("gRPC listen 失败: %w", err)
 	}
 
 	s := grpc.NewServer()
@@ -59,7 +69,10 @@ func startGRPC(svc *hermes.Service) {
 	hermesv1.RegisterResourceServiceServer(s, hermesgrpc.NewResourceServiceServer(svc))
 	hermesv1.RegisterKeyServiceServer(s, hermesgrpc.NewKeyServiceServer(svc))
 	hermesv1.RegisterUserServiceServer(s, hermesgrpc.NewUserServiceServer(svc))
+	return s, lis, nil
+}
 
+func serveGRPC(s *grpc.Server, lis net.Listener) {
 	logger.Infof("hermes gRPC 服务启动: :50051")
 	if err := s.Serve(lis); err != nil {
 		logger.Fatalf("gRPC serve 失败: %v", err)
@@ -81,7 +94,10 @@ func startHTTP(svc *hermes.Service) {
 	handler := hermes.NewHandler(svc)
 
 	hermesAud := hermesconfig.GetAegisAudience()
-	hermesGuard := guard.NewGin(hermesAud)
+	hermesGuard, err := guard.NewGin(hermesAud)
+	if err != nil {
+		logger.Fatalf("初始化 Hermes 鉴权中间件失败: %v", err)
+	}
 	adminRelation := hermesGuard.Require(reqr.Relation(relation.Qualify("admin", "service:"+hermesAud)))
 	api := r.Group("/hermes")
 	api.Use(hermesGuard.Require())

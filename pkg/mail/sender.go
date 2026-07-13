@@ -33,6 +33,9 @@ type SenderConfig struct {
 
 // NewSender 创建邮件发送器
 func NewSender(cfg *SenderConfig) (*Sender, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("sender config is required")
+	}
 	client, err := NewClient(&ClientConfig{
 		Host:     cfg.Host,
 		Port:     cfg.Port,
@@ -55,8 +58,8 @@ func NewSender(cfg *SenderConfig) (*Sender, error) {
 		FooterLinks: cfg.FooterLinks,
 	})
 	if err != nil {
-		logger.Errorf("[Mail] 创建模板引擎失败: %v", err)
-		engine = nil
+		client.Close()
+		return nil, fmt.Errorf("create template engine: %w", err)
 	}
 
 	return &Sender{
@@ -90,12 +93,6 @@ func (s *Sender) Send(ctx context.Context, to, subject, body string) error {
 // SendCode 按场景发送验证码邮件
 // scene 由业务层传入（如 "otp_login"、"otp_register"），直接映射到模板引擎的 Scene
 func (s *Sender) SendCode(ctx context.Context, email, code, scene string) error {
-	if s.templateEngine == nil {
-		subject := "您的验证码"
-		body := fmt.Sprintf("您的验证码是：%s，5 分钟内有效。", code)
-		return s.Send(ctx, email, subject, body)
-	}
-
 	subject, html, err := s.templateEngine.RenderOTPScene(templates.Scene(scene), code, "")
 	if err != nil {
 		logger.Errorf("[Mail] 渲染 OTP 模板失败: %v", err)
@@ -115,10 +112,6 @@ func (s *Sender) SendCode(ctx context.Context, email, code, scene string) error 
 
 // SendAction 发送操作邮件（带按钮）
 func (s *Sender) SendAction(ctx context.Context, email string, scene templates.Scene, actionURL, greeting string) error {
-	if s.templateEngine == nil {
-		return fmt.Errorf("template engine not initialized")
-	}
-
 	subject, html, err := s.templateEngine.RenderActionScene(scene, actionURL, greeting)
 	if err != nil {
 		logger.Errorf("[Mail] 渲染 Action 模板失败: %v", err)
@@ -138,10 +131,6 @@ func (s *Sender) SendAction(ctx context.Context, email string, scene templates.S
 
 // SendNotification 发送通知邮件
 func (s *Sender) SendNotification(ctx context.Context, email string, scene templates.Scene, details []templates.DetailItem, actionURL, greeting string) error {
-	if s.templateEngine == nil {
-		return fmt.Errorf("template engine not initialized")
-	}
-
 	subject, html, err := s.templateEngine.RenderNotificationScene(scene, details, actionURL, greeting)
 	if err != nil {
 		logger.Errorf("[Mail] 渲染 Notification 模板失败: %v", err)
@@ -198,16 +187,12 @@ func (s *Sender) GetTemplateEngine() *templates.Engine {
 
 // SetBrandName 设置品牌名称
 func (s *Sender) SetBrandName(name string) {
-	if s.templateEngine != nil {
-		s.templateEngine.SetBrandName(name)
-	}
+	s.templateEngine.SetBrandName(name)
 }
 
 // SetLogoURL 设置 Logo URL
 func (s *Sender) SetLogoURL(url string) {
-	if s.templateEngine != nil {
-		s.templateEngine.SetLogoURL(url)
-	}
+	s.templateEngine.SetLogoURL(url)
 }
 
 // send 内部发送方法
