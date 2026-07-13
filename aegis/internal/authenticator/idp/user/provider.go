@@ -8,10 +8,10 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/authenticator/idp"
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/aegis/rpc/hermes"
 	"github.com/heliannuuthus/pkg/logger"
 )
 
@@ -27,14 +27,12 @@ type credential struct {
 
 // Provider C 端用户账号密码 Provider
 type Provider struct {
-	userSvc     contract.UserProvider
-	identitySvc contract.IdentityProvider
+	hermes *hermes.Client
 }
 
-func NewProvider(userSvc contract.UserProvider, identitySvc contract.IdentityProvider) *Provider {
+func NewProvider(hermesClient *hermes.Client) *Provider {
 	return &Provider{
-		userSvc:     userSvc,
-		identitySvc: identitySvc,
+		hermes: hermesClient,
 	}
 }
 
@@ -130,7 +128,7 @@ func (p *Provider) loginByPassword(ctx context.Context, identifier, password str
 
 // getCredential 获取 C 端用户凭证
 func (p *Provider) getCredential(ctx context.Context, identifier string) (*credential, error) {
-	user, identity, err := idp.ResolveUserIdentity(ctx, p.userSvc, p.identitySvc, idp.TypeUser, identifier)
+	user, identity, err := idp.ResolveUserIdentity(ctx, p.hermes, idp.TypeUser, identifier)
 	if err != nil {
 		return nil, err
 	}

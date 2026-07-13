@@ -11,8 +11,8 @@ import (
 
 	"github.com/tidwall/gjson"
 
-	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/authenticator/idp"
+	"github.com/heliannuuthus/aegis/internal/cache"
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/models"
 	"github.com/heliannuuthus/pkg/logger"
@@ -26,13 +26,13 @@ const (
 
 // Provider GitHub OAuth Provider
 type Provider struct {
-	keys contract.KeyProvider
+	cache *cache.Manager
 }
 
 // NewProvider 创建 GitHub Provider
-func NewProvider(keys contract.KeyProvider) *Provider {
+func NewProvider(cacheManager *cache.Manager) *Provider {
 	return &Provider{
-		keys: keys,
+		cache: cacheManager,
 	}
 }
 
@@ -56,7 +56,7 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*mod
 		}
 	}
 
-	clientID, clientSecret, err := p.keys.GetIDPKey(ctx, appID, idp.TypeGithub)
+	clientID, clientSecret, err := p.cache.GetIDPKey(ctx, appID, idp.TypeGithub)
 	if err != nil {
 		return nil, fmt.Errorf("解析 GitHub IDP 密钥失败: %w", err)
 	}

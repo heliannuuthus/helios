@@ -4,30 +4,30 @@ import (
 	"context"
 	"errors"
 
-	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/aegis/rpc/hermes"
 )
 
 var errIdentityUserNotFound = errors.New("user not found")
 
-func ResolveUserIdentity(ctx context.Context, users contract.UserProvider, identities contract.IdentityProvider, idpType, principal string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
+func ResolveUserIdentity(ctx context.Context, client *hermes.Client, idpType, principal string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
 	if principal == "" {
 		return nil, nil, errIdentityUserNotFound
 	}
 
-	if user, identity, err := resolveByIdentityTag(ctx, users, identities, idpType, principal); err == nil {
+	if user, identity, err := resolveByIdentityTag(ctx, client, idpType, principal); err == nil {
 		return user, identity, nil
 	}
-	if user, identity, err := resolveByOpenID(ctx, users, identities, idpType, principal); err == nil {
+	if user, identity, err := resolveByOpenID(ctx, client, idpType, principal); err == nil {
 		return user, identity, nil
 	}
 	if isEmailPrincipal(principal) {
-		if user, identity, err := resolveByEmail(ctx, users, identities, idpType, principal); err == nil {
+		if user, identity, err := resolveByEmail(ctx, client, idpType, principal); err == nil {
 			return user, identity, nil
 		}
 	}
 	if isPhonePrincipal(principal) {
-		if user, identity, err := resolveByPhone(ctx, users, identities, idpType, principal); err == nil {
+		if user, identity, err := resolveByPhone(ctx, client, idpType, principal); err == nil {
 			return user, identity, nil
 		}
 	}
@@ -35,8 +35,8 @@ func ResolveUserIdentity(ctx context.Context, users contract.UserProvider, ident
 	return nil, nil, errIdentityUserNotFound
 }
 
-func resolveByIdentityTag(ctx context.Context, users contract.UserProvider, identityProvider contract.IdentityProvider, idpType, principal string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
-	identities, err := identityProvider.ListIdentitiesByIdentity(ctx, "", idpType, principal)
+func resolveByIdentityTag(ctx context.Context, client *hermes.Client, idpType, principal string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
+	identities, err := client.ListIdentitiesByIdentity(ctx, "", idpType, principal)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -44,51 +44,51 @@ func resolveByIdentityTag(ctx context.Context, users contract.UserProvider, iden
 	if identity == nil {
 		return nil, nil, errIdentityUserNotFound
 	}
-	user, err := users.GetUserByOpenID(ctx, identity.UID)
+	user, err := client.GetUserByOpenID(ctx, identity.UID)
 	if err != nil {
 		return nil, nil, err
 	}
 	return user, identity, nil
 }
 
-func resolveByOpenID(ctx context.Context, users contract.UserProvider, identities contract.IdentityProvider, idpType, openid string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
-	user, err := users.GetUserByOpenID(ctx, openid)
+func resolveByOpenID(ctx context.Context, client *hermes.Client, idpType, openid string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
+	user, err := client.GetUserByOpenID(ctx, openid)
 	if err != nil {
 		return nil, nil, err
 	}
-	identity, err := getUserIdentity(ctx, identities, user.OpenID, idpType)
-	if err != nil {
-		return nil, nil, err
-	}
-	return user, identity, nil
-}
-
-func resolveByEmail(ctx context.Context, users contract.UserProvider, identities contract.IdentityProvider, idpType, email string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
-	user, err := users.GetUserByEmail(ctx, email)
-	if err != nil {
-		return nil, nil, err
-	}
-	identity, err := getUserIdentity(ctx, identities, user.OpenID, idpType)
+	identity, err := getUserIdentity(ctx, client, user.OpenID, idpType)
 	if err != nil {
 		return nil, nil, err
 	}
 	return user, identity, nil
 }
 
-func resolveByPhone(ctx context.Context, users contract.UserProvider, identities contract.IdentityProvider, idpType, phone string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
-	user, err := users.GetUserByPhone(ctx, phone)
+func resolveByEmail(ctx context.Context, client *hermes.Client, idpType, email string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
+	user, err := client.GetUserByEmail(ctx, email)
 	if err != nil {
 		return nil, nil, err
 	}
-	identity, err := getUserIdentity(ctx, identities, user.OpenID, idpType)
+	identity, err := getUserIdentity(ctx, client, user.OpenID, idpType)
 	if err != nil {
 		return nil, nil, err
 	}
 	return user, identity, nil
 }
 
-func getUserIdentity(ctx context.Context, identityProvider contract.IdentityProvider, openid, idpType string) (*models.UserIdentity, error) {
-	identities, err := identityProvider.ListUserIdentities(ctx, openid)
+func resolveByPhone(ctx context.Context, client *hermes.Client, idpType, phone string) (*models.UserWithDecrypted, *models.UserIdentity, error) {
+	user, err := client.GetUserByPhone(ctx, phone)
+	if err != nil {
+		return nil, nil, err
+	}
+	identity, err := getUserIdentity(ctx, client, user.OpenID, idpType)
+	if err != nil {
+		return nil, nil, err
+	}
+	return user, identity, nil
+}
+
+func getUserIdentity(ctx context.Context, client *hermes.Client, openid, idpType string) (*models.UserIdentity, error) {
+	identities, err := client.ListUserIdentities(ctx, openid)
 	if err != nil {
 		return nil, err
 	}

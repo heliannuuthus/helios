@@ -20,33 +20,34 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	UserService_GetByOpenID_FullMethodName                = "/hermes.v1.UserService/GetByOpenID"
-	UserService_GetByIdentity_FullMethodName              = "/hermes.v1.UserService/GetByIdentity"
-	UserService_GetByEmail_FullMethodName                 = "/hermes.v1.UserService/GetByEmail"
-	UserService_GetByPhonePlain_FullMethodName            = "/hermes.v1.UserService/GetByPhonePlain"
-	UserService_GetDecryptedUser_FullMethodName           = "/hermes.v1.UserService/GetDecryptedUser"
-	UserService_GetDecryptedUserByIdentity_FullMethodName = "/hermes.v1.UserService/GetDecryptedUserByIdentity"
-	UserService_CreateUser_FullMethodName                 = "/hermes.v1.UserService/CreateUser"
-	UserService_PatchUser_FullMethodName                  = "/hermes.v1.UserService/PatchUser"
-	UserService_GetIdentities_FullMethodName              = "/hermes.v1.UserService/GetIdentities"
-	UserService_GetIdentitiesByIdentity_FullMethodName    = "/hermes.v1.UserService/GetIdentitiesByIdentity"
-	UserService_GetIdentityByType_FullMethodName          = "/hermes.v1.UserService/GetIdentityByType"
-	UserService_AddIdentity_FullMethodName                = "/hermes.v1.UserService/AddIdentity"
-	UserService_GetPasswordCredential_FullMethodName      = "/hermes.v1.UserService/GetPasswordCredential"
-	UserService_CreateCredential_FullMethodName           = "/hermes.v1.UserService/CreateCredential"
-	UserService_GetCredentialByID_FullMethodName          = "/hermes.v1.UserService/GetCredentialByID"
-	UserService_GetUserCredentials_FullMethodName         = "/hermes.v1.UserService/GetUserCredentials"
-	UserService_GetUserCredentialsByType_FullMethodName   = "/hermes.v1.UserService/GetUserCredentialsByType"
-	UserService_PatchCredential_FullMethodName            = "/hermes.v1.UserService/PatchCredential"
-	UserService_DeleteCredential_FullMethodName           = "/hermes.v1.UserService/DeleteCredential"
-	UserService_GetOpenIDByCredentialID_FullMethodName    = "/hermes.v1.UserService/GetOpenIDByCredentialID"
-	UserService_CreateGroup_FullMethodName                = "/hermes.v1.UserService/CreateGroup"
-	UserService_GetGroup_FullMethodName                   = "/hermes.v1.UserService/GetGroup"
-	UserService_ListGroups_FullMethodName                 = "/hermes.v1.UserService/ListGroups"
-	UserService_UpdateGroup_FullMethodName                = "/hermes.v1.UserService/UpdateGroup"
-	UserService_DeleteGroup_FullMethodName                = "/hermes.v1.UserService/DeleteGroup"
-	UserService_SetGroupMembers_FullMethodName            = "/hermes.v1.UserService/SetGroupMembers"
-	UserService_GetGroupMembers_FullMethodName            = "/hermes.v1.UserService/GetGroupMembers"
+	UserService_GetByOpenID_FullMethodName                 = "/hermes.v1.UserService/GetByOpenID"
+	UserService_GetByIdentity_FullMethodName               = "/hermes.v1.UserService/GetByIdentity"
+	UserService_GetByEmail_FullMethodName                  = "/hermes.v1.UserService/GetByEmail"
+	UserService_GetByPhonePlain_FullMethodName             = "/hermes.v1.UserService/GetByPhonePlain"
+	UserService_GetDecryptedUser_FullMethodName            = "/hermes.v1.UserService/GetDecryptedUser"
+	UserService_GetDecryptedUserByIdentity_FullMethodName  = "/hermes.v1.UserService/GetDecryptedUserByIdentity"
+	UserService_CreateUser_FullMethodName                  = "/hermes.v1.UserService/CreateUser"
+	UserService_PatchUser_FullMethodName                   = "/hermes.v1.UserService/PatchUser"
+	UserService_GetIdentities_FullMethodName               = "/hermes.v1.UserService/GetIdentities"
+	UserService_GetIdentitiesByIdentity_FullMethodName     = "/hermes.v1.UserService/GetIdentitiesByIdentity"
+	UserService_GetIdentityByType_FullMethodName           = "/hermes.v1.UserService/GetIdentityByType"
+	UserService_AddIdentity_FullMethodName                 = "/hermes.v1.UserService/AddIdentity"
+	UserService_GetPasswordCredential_FullMethodName       = "/hermes.v1.UserService/GetPasswordCredential"
+	UserService_CreateCredential_FullMethodName            = "/hermes.v1.UserService/CreateCredential"
+	UserService_GetCredentialByID_FullMethodName           = "/hermes.v1.UserService/GetCredentialByID"
+	UserService_GetUserCredentials_FullMethodName          = "/hermes.v1.UserService/GetUserCredentials"
+	UserService_GetUserCredentialsByType_FullMethodName    = "/hermes.v1.UserService/GetUserCredentialsByType"
+	UserService_PatchCredential_FullMethodName             = "/hermes.v1.UserService/PatchCredential"
+	UserService_DeleteCredential_FullMethodName            = "/hermes.v1.UserService/DeleteCredential"
+	UserService_DeleteUserCredentialsByType_FullMethodName = "/hermes.v1.UserService/DeleteUserCredentialsByType"
+	UserService_GetOpenIDByCredentialID_FullMethodName     = "/hermes.v1.UserService/GetOpenIDByCredentialID"
+	UserService_CreateGroup_FullMethodName                 = "/hermes.v1.UserService/CreateGroup"
+	UserService_GetGroup_FullMethodName                    = "/hermes.v1.UserService/GetGroup"
+	UserService_ListGroups_FullMethodName                  = "/hermes.v1.UserService/ListGroups"
+	UserService_UpdateGroup_FullMethodName                 = "/hermes.v1.UserService/UpdateGroup"
+	UserService_DeleteGroup_FullMethodName                 = "/hermes.v1.UserService/DeleteGroup"
+	UserService_SetGroupMembers_FullMethodName             = "/hermes.v1.UserService/SetGroupMembers"
+	UserService_GetGroupMembers_FullMethodName             = "/hermes.v1.UserService/GetGroupMembers"
 )
 
 // UserServiceClient is the client API for UserService service.
@@ -74,6 +75,7 @@ type UserServiceClient interface {
 	GetUserCredentialsByType(ctx context.Context, in *GetCredentialsByTypeRequest, opts ...grpc.CallOption) (*UserCredentialList, error)
 	PatchCredential(ctx context.Context, in *PatchCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	DeleteCredential(ctx context.Context, in *DeleteCredentialRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteUserCredentialsByType(ctx context.Context, in *GetCredentialsByTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetOpenIDByCredentialID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*OpenIDResponse, error)
 	CreateGroup(ctx context.Context, in *CreateGroupRequest, opts ...grpc.CallOption) (*Group, error)
 	GetGroup(ctx context.Context, in *GetGroupRequest, opts ...grpc.CallOption) (*Group, error)
@@ -282,6 +284,16 @@ func (c *userServiceClient) DeleteCredential(ctx context.Context, in *DeleteCred
 	return out, nil
 }
 
+func (c *userServiceClient) DeleteUserCredentialsByType(ctx context.Context, in *GetCredentialsByTypeRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, UserService_DeleteUserCredentialsByType_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *userServiceClient) GetOpenIDByCredentialID(ctx context.Context, in *CredentialIDRequest, opts ...grpc.CallOption) (*OpenIDResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(OpenIDResponse)
@@ -387,6 +399,7 @@ type UserServiceServer interface {
 	GetUserCredentialsByType(context.Context, *GetCredentialsByTypeRequest) (*UserCredentialList, error)
 	PatchCredential(context.Context, *PatchCredentialRequest) (*emptypb.Empty, error)
 	DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error)
+	DeleteUserCredentialsByType(context.Context, *GetCredentialsByTypeRequest) (*emptypb.Empty, error)
 	GetOpenIDByCredentialID(context.Context, *CredentialIDRequest) (*OpenIDResponse, error)
 	CreateGroup(context.Context, *CreateGroupRequest) (*Group, error)
 	GetGroup(context.Context, *GetGroupRequest) (*Group, error)
@@ -461,6 +474,9 @@ func (UnimplementedUserServiceServer) PatchCredential(context.Context, *PatchCre
 }
 func (UnimplementedUserServiceServer) DeleteCredential(context.Context, *DeleteCredentialRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteCredential not implemented")
+}
+func (UnimplementedUserServiceServer) DeleteUserCredentialsByType(context.Context, *GetCredentialsByTypeRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteUserCredentialsByType not implemented")
 }
 func (UnimplementedUserServiceServer) GetOpenIDByCredentialID(context.Context, *CredentialIDRequest) (*OpenIDResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOpenIDByCredentialID not implemented")
@@ -849,6 +865,24 @@ func _UserService_DeleteCredential_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _UserService_DeleteUserCredentialsByType_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetCredentialsByTypeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(UserServiceServer).DeleteUserCredentialsByType(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: UserService_DeleteUserCredentialsByType_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(UserServiceServer).DeleteUserCredentialsByType(ctx, req.(*GetCredentialsByTypeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _UserService_GetOpenIDByCredentialID_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CredentialIDRequest)
 	if err := dec(in); err != nil {
@@ -1075,6 +1109,10 @@ var UserService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteCredential",
 			Handler:    _UserService_DeleteCredential_Handler,
+		},
+		{
+			MethodName: "DeleteUserCredentialsByType",
+			Handler:    _UserService_DeleteUserCredentialsByType_Handler,
 		},
 		{
 			MethodName: "GetOpenIDByCredentialID",

@@ -58,9 +58,9 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*mod
 	}
 
 	// 完成 WebAuthn 登录验证（从 proof 解析 assertion，不依赖 *http.Request）
-	userID, credential, err := p.webauthnSvc.FinishLogin(ctx, challengeID, []byte(proof))
+	userID, credential, err := p.webauthnSvc.VerifyAuthentication(ctx, challengeID, []byte(proof))
 	if err != nil {
-		logger.Errorf("[Passkey] FinishLogin failed: %v", err)
+		logger.Errorf("[Passkey] VerifyAuthentication failed: %v", err)
 		return nil, fmt.Errorf("passkey authentication failed: %w", err)
 	}
 
@@ -98,9 +98,16 @@ func (p *Provider) Prepare() *types.ConnectionConfig {
 	}
 }
 
-// BeginLogin 开始 Passkey 登录流程
+// InitializeLogin 初始化 Passkey 登录流程
 // 返回 WebAuthn options 供前端使用
-func (p *Provider) BeginLogin(ctx context.Context) (*webauthn.LoginBeginResponse, error) {
-	// 使用 Discoverable Login（无需提前知道用户）
-	return p.webauthnSvc.BeginDiscoverableLogin(ctx)
+func (p *Provider) InitializeLogin(ctx context.Context) (*webauthn.AuthenticationOptions, error) {
+	ceremonyID := types.GenerateChallengeID()
+	options, err := p.webauthnSvc.InitializeDiscoverableAuthenticationCeremony(ctx, ceremonyID, webauthn.DefaultWebAuthnCeremonyTTL)
+	if err != nil {
+		return nil, err
+	}
+	return &webauthn.AuthenticationOptions{
+		Options:    options,
+		CeremonyID: ceremonyID,
+	}, nil
 }

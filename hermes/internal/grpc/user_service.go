@@ -120,6 +120,9 @@ func (s *userServiceServer) PatchUser(ctx context.Context, req *hermesv1.PatchUs
 	if req.Email != nil {
 		updates["email"] = *req.Email
 	}
+	if req.Phone != nil {
+		updates["phone"] = *req.Phone
+	}
 	if req.Status != nil {
 		updates["status"] = *req.Status
 	}
@@ -258,6 +261,13 @@ func (s *userServiceServer) PatchCredential(ctx context.Context, req *hermesv1.P
 
 func (s *userServiceServer) DeleteCredential(ctx context.Context, req *hermesv1.DeleteCredentialRequest) (*emptypb.Empty, error) {
 	if err := s.svc.DeleteCredential(ctx, req.GetOpenid(), req.GetCredentialId()); err != nil {
+		return nil, toStatus(err)
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *userServiceServer) DeleteUserCredentialsByType(ctx context.Context, req *hermesv1.GetCredentialsByTypeRequest) (*emptypb.Empty, error) {
+	if err := s.svc.DeleteUserCredentialsByType(ctx, req.GetOpenid(), req.GetType()); err != nil {
 		return nil, toStatus(err)
 	}
 	return &emptypb.Empty{}, nil

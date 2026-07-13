@@ -14,13 +14,13 @@ import (
 	"github.com/go-json-experiment/json"
 
 	"github.com/heliannuuthus/aegis/config"
-	"github.com/heliannuuthus/aegis/contract"
 	autherrors "github.com/heliannuuthus/aegis/errors"
 	"github.com/heliannuuthus/aegis/internal/cache"
 	"github.com/heliannuuthus/aegis/internal/token"
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/internal/user"
 	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/aegis/rpc/hermes"
 	tokendef "github.com/heliannuuthus/pkg/aegis/utilities/token"
 	"github.com/heliannuuthus/pkg/async"
 	"github.com/heliannuuthus/pkg/helpers"
@@ -29,11 +29,11 @@ import (
 
 // Service 授权服务
 type Service struct {
-	cache     *cache.Manager
-	hermesSvc contract.HermesProvider
-	userSvc   *user.Service
-	tokenSvc  *token.Service
-	pool      *async.Pool
+	cache    *cache.Manager
+	hermes   *hermes.Client
+	userSvc  *user.Service
+	tokenSvc *token.Service
+	pool     *async.Pool
 
 	// 配置
 	authCodeExpiresIn time.Duration
@@ -94,7 +94,7 @@ func generateRefreshTokenValue() (string, error) {
 // NewService 创建授权服务
 func NewService(
 	cache *cache.Manager,
-	hermesSvc contract.HermesProvider,
+	hermesClient *hermes.Client,
 	userSvc *user.Service,
 	tokenSvc *token.Service,
 	pool *async.Pool,
@@ -102,7 +102,7 @@ func NewService(
 ) *Service {
 	return &Service{
 		cache:             cache,
-		hermesSvc:         hermesSvc,
+		hermes:            hermesClient,
 		userSvc:           userSvc,
 		tokenSvc:          tokenSvc,
 		pool:              pool,
@@ -254,7 +254,7 @@ func (s *Service) ExchangeMultiAudienceToken(ctx context.Context, req *MultiAudi
 
 // CheckRelation 检查用户是否具有指定的关系
 func (s *Service) CheckRelations(ctx context.Context, serviceID, subjectID string, relations []string, objectType, objectID string) (map[string]bool, error) {
-	rels, err := s.hermesSvc.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
+	rels, err := s.hermes.ListRelationships(ctx, serviceID, types.SubjectTypeUser, subjectID)
 	if err != nil {
 		return nil, err
 	}

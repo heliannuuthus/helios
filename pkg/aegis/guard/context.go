@@ -22,6 +22,22 @@ func GetTokenContext(ctx context.Context) *TokenContext {
 	return tc
 }
 
+func AccessToken(ctx context.Context) tokendef.AccessToken {
+	tc := GetTokenContext(ctx)
+	if tc == nil {
+		return nil
+	}
+	return tc.AccessToken
+}
+
+func OpenID(ctx context.Context) string {
+	accessToken := AccessToken(ctx)
+	if accessToken == nil {
+		return ""
+	}
+	return accessToken.OpenID()
+}
+
 // WithTokenContext 将 TokenContext 写入 context。
 func WithTokenContext(ctx context.Context, tc *TokenContext) context.Context {
 	return context.WithValue(ctx, tokenContextKey{}, tc)

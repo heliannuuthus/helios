@@ -17,8 +17,8 @@ import (
 	"github.com/go-json-experiment/json"
 	"github.com/tidwall/gjson"
 
-	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/authenticator/idp"
+	"github.com/heliannuuthus/aegis/internal/cache"
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/models"
 	"github.com/heliannuuthus/pkg/logger"
@@ -26,13 +26,13 @@ import (
 
 // MPProvider 抖音小程序 Provider
 type MPProvider struct {
-	keys contract.KeyProvider
+	cache *cache.Manager
 }
 
 // NewMPProvider 创建抖音小程序 Provider
-func NewMPProvider(keys contract.KeyProvider) *MPProvider {
+func NewMPProvider(cacheManager *cache.Manager) *MPProvider {
 	return &MPProvider{
-		keys: keys,
+		cache: cacheManager,
 	}
 }
 
@@ -56,7 +56,7 @@ func (p *MPProvider) Login(ctx context.Context, proof string, params ...any) (*m
 		}
 	}
 
-	ttAppID, ttAppSecret, err := p.keys.GetIDPKey(ctx, appID, idp.TypeTTMP)
+	ttAppID, ttAppSecret, err := p.cache.GetIDPKey(ctx, appID, idp.TypeTTMP)
 	if err != nil {
 		return nil, fmt.Errorf("解析抖音小程序 IDP 密钥失败: %w", err)
 	}
@@ -216,7 +216,7 @@ func (p *MPProvider) parseUserInfo(bodyBytes []byte) (*models.TUserInfo, error) 
 // 新版 API：code → RSA 加密的密文 → 用应用私钥解密 → phoneNumber
 func (p *MPProvider) getPhoneNumber(ctx context.Context, code string) (string, error) {
 	appID := idp.AppIDFromContext(ctx)
-	ttAppID, ttSecret, err := p.keys.GetIDPKey(ctx, appID, idp.TypeTTMP)
+	ttAppID, ttSecret, err := p.cache.GetIDPKey(ctx, appID, idp.TypeTTMP)
 	if err != nil {
 		return "", fmt.Errorf("解析抖音小程序 IDP 密钥失败: %w", err)
 	}

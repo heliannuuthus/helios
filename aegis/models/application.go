@@ -36,6 +36,41 @@ type ApplicationWithKey struct {
 	Keys [][]byte `json:"-"` // 所有有效密钥
 }
 
+// ApplicationIDPConfig 应用 IDP 配置（从 proto 转换）
+type ApplicationIDPConfig struct {
+	ID        uint      `json:"_id"`
+	AppID     string    `json:"app_id"`
+	Type      string    `json:"type"`
+	Priority  int       `json:"priority"`
+	Strategy  *string   `json:"strategy,omitempty"`
+	Delegate  *string   `json:"delegate,omitempty"`
+	Require   *string   `json:"require,omitempty"`
+	TAppID    *string   `json:"t_app_id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func (a *ApplicationIDPConfig) GetStrategyList() []string {
+	return splitCommaList(a.Strategy)
+}
+
+func (a *ApplicationIDPConfig) GetDelegateList() []string {
+	return splitCommaList(a.Delegate)
+}
+
+func (a *ApplicationIDPConfig) GetRequireList() []string {
+	return splitCommaList(a.Require)
+}
+
+// ApplicationServiceRelation 应用服务关系（从 proto 转换）
+type ApplicationServiceRelation struct {
+	ID        uint      `json:"_id"`
+	AppID     string    `json:"app_id"`
+	ServiceID string    `json:"service_id"`
+	Relation  string    `json:"relation"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // ErrLogoutURINotConfigured allowed_logout_uris 未配置
 var ErrLogoutURINotConfigured = errors.New("allowed_logout_uris not configured")
 
@@ -184,4 +219,11 @@ func normalizeOrigin(origin string) string {
 		u.Host = u.Hostname()
 	}
 	return u.Scheme + "://" + u.Host
+}
+
+func splitCommaList(value *string) []string {
+	if value == nil || *value == "" {
+		return nil
+	}
+	return strings.Split(*value, ",")
 }

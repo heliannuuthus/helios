@@ -1,23 +1,15 @@
 package models
 
-// TOTPSetupRequest TOTP 设置请求
-type TOTPSetupRequest struct {
-	OpenID  string
-	AppName string
+// WebAuthnBeginResponse WebAuthn 流程开始响应（注册或验证）
+type WebAuthnBeginResponse struct {
+	ChallengeID string `json:"challenge_id"`
+	Options     any    `json:"options"`
 }
 
-// TOTPSetupResponse TOTP 设置响应
-type TOTPSetupResponse struct {
-	UID        string `json:"uid"`
-	Secret     string `json:"secret"`
-	OTPAuthURI string `json:"otpauth_uri"`
-}
-
-// ConfirmTOTPRequest TOTP 确认请求
-type ConfirmTOTPRequest struct {
-	OpenID string
-	UID    string
-	Code   string
+// WebAuthnCredentialInfo 凭证信息
+type WebAuthnCredentialInfo struct {
+	ID        []byte `json:"id"`
+	SignCount uint32 `json:"sign_count"`
 }
 
 // RegisterWebAuthnRequest WebAuthn 注册请求

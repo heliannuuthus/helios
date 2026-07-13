@@ -1,4 +1,4 @@
-package aegis
+package auth
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 	"github.com/heliannuuthus/aegis/internal/types"
 	"github.com/heliannuuthus/aegis/internal/user"
 	"github.com/heliannuuthus/aegis/models"
+	"github.com/heliannuuthus/aegis/profile"
 	aegisguard "github.com/heliannuuthus/pkg/aegis/guard"
 	pkgtoken "github.com/heliannuuthus/pkg/aegis/utilities/token"
 	"github.com/heliannuuthus/pkg/async"
@@ -41,8 +42,7 @@ type Handler struct {
 	userSvc         *user.Service
 	cache           *cache.Manager
 	tokenSvc        *token.Service
-	mfaSvc          *MFAService
-	profileHandler  *ProfileHandler
+	profileHandler  *profile.Handler
 	pool            *async.Pool
 }
 
@@ -54,8 +54,7 @@ func NewHandler(
 	userSvc *user.Service,
 	cache *cache.Manager,
 	tokenSvc *token.Service,
-	mfaSvc *MFAService,
-	profileHandler *ProfileHandler,
+	profileHandler *profile.Handler,
 	pool *async.Pool,
 ) *Handler {
 	return &Handler{
@@ -65,7 +64,6 @@ func NewHandler(
 		userSvc:         userSvc,
 		cache:           cache,
 		tokenSvc:        tokenSvc,
-		mfaSvc:          mfaSvc,
 		profileHandler:  profileHandler,
 		pool:            pool,
 	}
@@ -76,14 +74,37 @@ func (h *Handler) CacheManager() *cache.Manager {
 	return h.cache
 }
 
-// MFASvc 返回 MFA 服务
-func (h *Handler) MFASvc() *MFAService {
-	return h.mfaSvc
+// Profile 返回用户信息处理器
+func (h *Handler) Profile() *profile.Handler {
+	return h.profileHandler
 }
 
-// Profile 返回用户信息处理器
-func (h *Handler) Profile() *ProfileHandler {
-	return h.profileHandler
+// RequireClientAuth 要求客户端认证（验证 CT）。
+func (h *Handler) RequireClientAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims, err := h.clientTokenFromRequest(c)
+		if err != nil {
+			c.Header("WWW-Authenticate", pkgtoken.TokenTypeBearer+` error="invalid_token"`)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error":             "invalid_token",
+				"error_description": err.Error(),
+			})
+			return
+		}
+
+		c.Set("client_claims", claims)
+		c.Next()
+	}
+}
+
+// GetClientClaims 从上下文获取客户端信息。
+func GetClientClaims(c *gin.Context) *pkgtoken.ClientToken {
+	if claims, exists := c.Get("client_claims"); exists {
+		if ct, ok := claims.(*pkgtoken.ClientToken); ok {
+			return ct
+		}
+	}
+	return nil
 }
 
 // ==================== 公开方法（按认证流程顺序） ====================
@@ -375,6 +396,7 @@ func (h *Handler) InitiateChallenge(c *gin.Context) {
 	c.JSON(http.StatusOK, &challenge.InitiateResponse{
 		ChallengeID: ch.ID,
 		RetryAfter:  ch.RetryAfter,
+		Options:     challengeOptions(ch),
 	})
 }
 
@@ -577,35 +599,14 @@ func (h *Handler) Token(c *gin.Context) {
 //   - 200: 检查完成（permitted: true/false）
 //   - 401: CT 无效
 func (h *Handler) Check(c *gin.Context) {
-	ctStr := c.GetHeader(HeaderAuthorization)
-	if ctStr == "" {
-		c.JSON(http.StatusUnauthorized, CheckResponse{
-			Error:   "unauthorized",
-			Message: "missing CT",
-		})
-		return
-	}
-
-	if len(ctStr) > 7 && ctStr[:7] == "Bearer " {
-		ctStr = ctStr[7:]
-	}
-
 	ctx := c.Request.Context()
 
-	t, err := h.tokenSvc.Verify(ctx, ctStr)
+	catClaims, err := h.clientTokenFromRequest(c)
 	if err != nil {
 		logger.Debugf("[Handler] verify CT failed: %v", err)
 		c.JSON(http.StatusUnauthorized, CheckResponse{
 			Error:   "unauthorized",
 			Message: "invalid CT",
-		})
-		return
-	}
-	catClaims, ok := t.(*token.ClientToken)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, CheckResponse{
-			Error:   "unauthorized",
-			Message: "expected CT token",
 		})
 		return
 	}
@@ -723,12 +724,32 @@ func (h *Handler) PublicKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, publicKey)
 }
 
-func (h *Handler) openIDFromRequest(c *gin.Context) string {
-	tc := aegisguard.GetTokenContext(c.Request.Context())
-	if tc.AccessToken != nil {
-		return tc.AccessToken.OpenID()
+func (h *Handler) clientTokenFromRequest(c *gin.Context) (*pkgtoken.ClientToken, error) {
+	tokenStr := bearerToken(c.GetHeader(HeaderAuthorization))
+	if tokenStr == "" {
+		return nil, errors.New("missing client token")
 	}
-	return ""
+
+	t, err := h.tokenSvc.Verify(c.Request.Context(), tokenStr)
+	if err != nil {
+		return nil, err
+	}
+	claims, ok := t.(*pkgtoken.ClientToken)
+	if !ok {
+		return nil, errors.New("expected CT token")
+	}
+	return claims, nil
+}
+
+func bearerToken(auth string) string {
+	if strings.HasPrefix(auth, BearerPrefix) {
+		return auth[len(BearerPrefix):]
+	}
+	return auth
+}
+
+func (h *Handler) openIDFromRequest(c *gin.Context) string {
+	return aegisguard.OpenID(c.Request.Context())
 }
 
 func (h *Handler) openIDFromRequestOrSSOCookie(c *gin.Context, app *models.Application) string {
@@ -1179,6 +1200,7 @@ func (h *Handler) handlePrerequisiteVerification(c *gin.Context, ctx context.Con
 	}
 	c.JSON(http.StatusOK, &challenge.VerifyResponse{
 		RetryAfter: ch.RetryAfter,
+		Options:    challengeOptions(ch),
 	})
 }
 
@@ -1225,6 +1247,11 @@ func (h *Handler) initiateChallenge(ctx context.Context, ch *types.Challenge) er
 		return err
 	}
 	return h.challengeSvc.Save(ctx, ch)
+}
+
+func challengeOptions(ch *types.Challenge) any {
+	options, _ := ch.GetData(types.ChallengeDataOptions)
+	return options
 }
 
 // --- Token 引用链 ---

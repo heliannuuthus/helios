@@ -45,6 +45,7 @@ type InitiateResponse struct {
 	Required       ChallengeRequired `json:"required,omitempty"`
 	ChallengeToken string            `json:"challenge_token,omitempty"`
 	ExpiresIn      int               `json:"expires_in,omitempty"`
+	Options        any               `json:"options,omitempty"`
 }
 
 // ==================== Verify ====================
@@ -63,4 +64,5 @@ type VerifyResponse struct {
 	Required       ChallengeRequired `json:"required,omitempty"`        // 前置未完成时引导渲染
 	RetryAfter     int               `json:"retry_after,omitempty"`     // 下次可重发的等待秒数
 	ExpiresIn      int               `json:"expires_in,omitempty"`      // token 有效期（秒）
+	Options        any               `json:"options,omitempty"`         // WebAuthn assertion options
 }

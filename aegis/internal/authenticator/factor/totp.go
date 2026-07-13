@@ -4,27 +4,26 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pquerna/otp/totp"
-
-	"github.com/heliannuuthus/aegis/contract"
 	"github.com/heliannuuthus/aegis/internal/types"
-	"github.com/heliannuuthus/aegis/models"
-	"github.com/heliannuuthus/pkg/logger"
 )
 
 var (
 	_ Provider = (*TOTPFactor)(nil)
 )
 
+type TOTPVerifier interface {
+	VerifyCode(ctx context.Context, openid, code string) (bool, error)
+}
+
 // TOTPFactor TOTP 认证因子
 type TOTPFactor struct {
-	store contract.CredentialStore
+	verifier TOTPVerifier
 }
 
 // NewTOTPFactor 创建 TOTP 认证因子
-func NewTOTPFactor(store contract.CredentialStore) *TOTPFactor {
+func NewTOTPFactor(verifier TOTPVerifier) *TOTPFactor {
 	return &TOTPFactor{
-		store: store,
+		verifier: verifier,
 	}
 }
 
@@ -56,22 +55,7 @@ func (p *TOTPFactor) Verify(ctx context.Context, proof string, params ...any) (b
 		return false, nil
 	}
 
-	creds, err := p.store.ListUserCredentialsByType(ctx, openid, string(models.CredentialTypeTOTP))
-	if err != nil {
-		return false, fmt.Errorf("query totp credentials: %w", err)
-	}
-	for i := range creds {
-		if !isActiveTOTPCredential(&creds[i]) {
-			continue
-		}
-		if totp.Validate(proof, creds[i].Secret) {
-			logger.Infof("[TOTP] 验证成功 - OpenID: %s", openid)
-			return true, nil
-		}
-	}
-
-	logger.Debugf("[TOTP] 验证失败 - OpenID: %s", openid)
-	return false, nil
+	return p.verifier.VerifyCode(ctx, openid, proof)
 }
 
 // Prepare 准备前端公开配置
@@ -79,14 +63,4 @@ func (*TOTPFactor) Prepare() *types.ConnectionConfig {
 	return &types.ConnectionConfig{
 		Connection: TypeTOTP,
 	}
-}
-
-func isActiveTOTPCredential(c *models.UserCredential) bool {
-	if c.Type != string(models.CredentialTypeTOTP) {
-		return false
-	}
-	if c.LastUsedAt != nil {
-		return true
-	}
-	return c.Enabled
 }

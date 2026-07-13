@@ -224,6 +224,22 @@ func (s *Service) createWithIdentities(ctx context.Context, user *models.User, i
 
 // PatchUser patches user fields by openid.
 func (s *Service) PatchUser(ctx context.Context, openid string, updates map[string]any) error {
+	if phone, ok := updates["phone"]; ok {
+		delete(updates, "phone")
+		if phoneStr, ok := phone.(string); ok {
+			if phoneStr == "" {
+				updates["phone"] = nil
+				updates["phone_cipher"] = nil
+			} else {
+				encrypted, err := s.encryptSecret(phoneStr, openid)
+				if err != nil {
+					return fmt.Errorf("加密手机号失败: %w", err)
+				}
+				updates["phone"] = hashPhone(phoneStr)
+				updates["phone_cipher"] = encrypted
+			}
+		}
+	}
 	return s.db.WithContext(ctx).Model(&models.User{}).Where("openid = ?", openid).Updates(updates).Error
 }
 
@@ -286,6 +302,11 @@ func (s *Service) PatchCredential(ctx context.Context, credentialID string, upda
 // DeleteCredential 删除凭证
 func (s *Service) DeleteCredential(ctx context.Context, openid, credentialID string) error {
 	return s.db.WithContext(ctx).Where("openid = ? AND credential_id = ?", openid, credentialID).Delete(&models.UserCredential{}).Error
+}
+
+// DeleteUserCredentialsByType deletes all credentials of a type for a user.
+func (s *Service) DeleteUserCredentialsByType(ctx context.Context, openid, credType string) error {
+	return s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Delete(&models.UserCredential{}).Error
 }
 
 // GetOpenIDByCredentialID 根据凭证 ID 获取用户 OpenID

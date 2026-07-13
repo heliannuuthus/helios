@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/heliannuuthus/aegis"
 	aegisconfig "github.com/heliannuuthus/aegis/config"
 	"github.com/heliannuuthus/aegis/internal/cache"
 	"github.com/heliannuuthus/aegis/middleware"
@@ -58,8 +57,8 @@ func main() {
 	}
 	logger.Infof("[Auth] Redis 连接成功: %s", redisURL)
 
-	cacheManager := cache.NewManager(client, client, redis)
-	aegisHandler, err := aegis.Initialize(client, client, client, client, cacheManager)
+	cacheManager := cache.NewManager(client, redis)
+	aegisHandler, err := initializeAegis(client, cacheManager)
 	if err != nil {
 		logger.Fatalf("初始化 aegis 失败: %v", err)
 	}
@@ -119,9 +118,6 @@ func main() {
 		}{
 			{"GET", "/profile", profile.GetProfile},
 			{"PATCH", "/profile", profile.UpdateProfile},
-			{"POST", "/profile/avatar", profile.UploadAvatar},
-			{"PUT", "/profile/email", profile.UpdateEmail},
-			{"PUT", "/profile/phone", profile.UpdatePhone},
 			{"GET", "/identities", profile.ListIdentities},
 			{"POST", "/identities/:idp", profile.BindIdentity},
 			{"DELETE", "/identities/:idp", profile.UnbindIdentity},

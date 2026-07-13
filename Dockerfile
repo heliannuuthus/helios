@@ -34,7 +34,7 @@ COPY chaos/ ./chaos/
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     if [ "${SERVICE}" = "aegis" ]; then \
-      cd aegis && CGO_ENABLED=1 go build -ldflags="-s -w" -o /server ./server; \
+      cd aegis && CGO_ENABLED=1 go build -ldflags="-s -w" -o /server .; \
     else \
       cd ${SERVICE} && CGO_ENABLED=1 go build -ldflags="-s -w" -o /server .; \
     fi
