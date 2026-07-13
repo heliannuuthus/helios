@@ -1,6 +1,8 @@
 package zwei
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
@@ -28,19 +30,40 @@ type Zwei struct {
 	preferenceHandler *preference.Handler
 }
 
-func New(db *gorm.DB) *Zwei {
-	g := guard.NewGin(zweiconfig.GetAegisAudience())
+func New(db *gorm.DB) (*Zwei, error) {
+	if db == nil {
+		return nil, fmt.Errorf("数据库连接未初始化")
+	}
+	g, err := guard.NewGin(zweiconfig.GetAegisAudience())
+	if err != nil {
+		return nil, fmt.Errorf("创建鉴权中间件失败: %w", err)
+	}
+	if err := tag.InitializeCache(); err != nil {
+		return nil, fmt.Errorf("初始化标签缓存失败: %w", err)
+	}
+	recipeHandler, err := recipe.NewHandler(db)
+	if err != nil {
+		return nil, fmt.Errorf("创建菜谱服务失败: %w", err)
+	}
+	homeHandler, err := home.NewHandler(db)
+	if err != nil {
+		return nil, fmt.Errorf("创建首页服务失败: %w", err)
+	}
+	recommendHandler, err := recommend.NewHandler(db)
+	if err != nil {
+		return nil, fmt.Errorf("创建推荐服务失败: %w", err)
+	}
 
 	return &Zwei{
 		guard:             g,
-		recipeHandler:     recipe.NewHandler(db),
+		recipeHandler:     recipeHandler,
 		favoriteHandler:   favorite.NewHandler(db),
 		historyHandler:    history.NewHandler(db),
-		homeHandler:       home.NewHandler(db),
+		homeHandler:       homeHandler,
 		tagHandler:        tag.NewHandler(db),
-		recommendHandler:  recommend.NewHandler(db),
+		recommendHandler:  recommendHandler,
 		preferenceHandler: preference.NewHandler(db),
-	}
+	}, nil
 }
 
 func (z *Zwei) RegisterRoutes(r gin.IRouter) {

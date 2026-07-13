@@ -2,7 +2,9 @@ package guard
 
 import (
 	stderrors "errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -15,9 +17,15 @@ type Gin struct {
 	audience string
 }
 
-// NewGin 创建 Gin Guard。
-func NewGin(audience string) *Gin {
-	return &Gin{audience: audience}
+// NewGin 创建 Gin Guard，并确保鉴权依赖已在启动阶段完成初始化。
+func NewGin(audience string) (*Gin, error) {
+	if strings.TrimSpace(audience) == "" {
+		return nil, fmt.Errorf("guard audience 未配置")
+	}
+	if GetTokenManager() == nil {
+		return nil, fmt.Errorf("token manager 未初始化")
+	}
+	return &Gin{audience: audience}, nil
 }
 
 // Require 返回 Gin 中间件：认证 + 依次执行所有 Requirement。

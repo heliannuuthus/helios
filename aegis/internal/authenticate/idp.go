@@ -67,6 +67,12 @@ func (a *IDPAuthenticator) Authenticate(ctx context.Context, flow *types.AuthFlo
 	}
 	extraParams := append([]any{appID}, params[1:]...)
 	connection := a.provider.Type()
+	if idp.IsOAuthRedirectConnection(connection) {
+		extraParams = append(extraParams, &idp.OAuthLoginContext{
+			RedirectURI:  flow.GetExtra(types.ExtraKeyOAuthRedirectURI),
+			CodeVerifier: flow.GetExtra(types.ExtraKeyOAuthCodeVerifier),
+		})
+	}
 
 	userInfo, err := a.provider.Login(ctx, proof, extraParams...)
 	if err != nil {
@@ -98,12 +104,12 @@ func (a *IDPAuthenticator) Resolve(ctx context.Context, principal string) (*mode
 }
 
 // Initiate 执行 IDP 认证入口初始化。
-func (a *IDPAuthenticator) Initiate(ctx context.Context, strategy string) (*idp.InitiateResponse, error) {
+func (a *IDPAuthenticator) Initiate(ctx context.Context, initiation *idp.InitiateContext, strategy string) (*idp.InitiateResponse, error) {
 	provider, ok := a.provider.(idp.Initiator)
 	if !ok {
 		return nil, autherrors.NewInvalidRequestf("provider %s does not support idp initiate", a.provider.Type())
 	}
-	return provider.Initiate(ctx, strategy)
+	return provider.Initiate(ctx, initiation, strategy)
 }
 
 // ==================== Exchanger 实现（条件） ====================

@@ -153,11 +153,6 @@ func (h *Handler) RenderTemplate(c *gin.Context) {
 
 // PresignUpload 生成 Presigned URL POST /chaos/presign
 func (h *Handler) PresignUpload(c *gin.Context) {
-	if h.storageService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "文件存储服务未配置"})
-		return
-	}
-
 	var req storage.PresignRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("参数错误: %v", err)})

@@ -26,6 +26,7 @@ type Service struct {
 	db        *gorm.DB
 	amap      *amap.Client
 	llmClient *openai.Client
+	model     string
 }
 
 // ContextRequest 上下文请求
@@ -60,18 +61,33 @@ type ContextResponse struct {
 }
 
 // NewService 创建推荐服务
-func NewService(db *gorm.DB) *Service {
+func NewService(db *gorm.DB) (*Service, error) {
+	if db == nil {
+		return nil, fmt.Errorf("数据库连接未初始化")
+	}
 	cfg := config.Cfg()
 	// 配置 OpenRouter 客户端
-	apiKey := cfg.GetString("openrouter.api-key")
+	apiKey := strings.TrimSpace(cfg.GetString("openrouter.api-key"))
+	model := strings.TrimSpace(cfg.GetString("openrouter.model"))
+	amapKey := strings.TrimSpace(cfg.GetString("amap.api-key"))
+	if apiKey == "" {
+		return nil, fmt.Errorf("openrouter.api-key 未配置")
+	}
+	if model == "" {
+		return nil, fmt.Errorf("openrouter.model 未配置")
+	}
+	if amapKey == "" {
+		return nil, fmt.Errorf("amap.api-key 未配置")
+	}
 	clientConfig := openai.DefaultConfig(apiKey)
 	clientConfig.BaseURL = "https://openrouter.ai/api/v1"
 
 	return &Service{
 		db:        db,
-		amap:      amap.NewClient(cfg.GetString("amap.api-key")),
+		amap:      amap.NewClient(amapKey),
 		llmClient: openai.NewClientWithConfig(clientConfig),
-	}
+		model:     model,
+	}, nil
 }
 
 // GetContext 获取推荐上下文信息（位置、天气、时间）
@@ -288,15 +304,10 @@ func (s *Service) getLLMRecommendations(recCtx *recommendContext, userHistory *U
 	tools := s.buildLLMTools()
 
 	// 3. 初始化对话
-	model := config.Cfg().GetString("openrouter.model")
-	if model == "" {
-		return nil, fmt.Errorf("未配置 openrouter.model，请在配置文件中设置模型")
-	}
-
 	messages := s.initLLMMessages(prompt)
 
 	// 4. 多轮对话循环
-	return s.runLLMConversation(model, messages, tools)
+	return s.runLLMConversation(s.model, messages, tools)
 }
 
 // fetchCandidates 获取候选菜谱并序列化为 JSON

@@ -1,7 +1,7 @@
 # Local config files may contain secrets.
-*.toml
-!config/example.toml
+**/config.toml
 !**/example.toml
+helios-configs-*.tar.gz
 
 .env
 scripts/.env
@@ -9,6 +9,9 @@ scripts/.env
 bin/
 .dev/
 logs/
+**/.venv/
+**/__pycache__/
+**/*.py[cod]
 
 environments/certs/*.pem
 environments/certs/*.key

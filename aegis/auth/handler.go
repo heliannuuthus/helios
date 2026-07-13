@@ -347,7 +347,7 @@ func (h *Handler) Login(c *gin.Context) {
 // --- IDP authentication entry ---
 
 type idpInitiator interface {
-	Initiate(ctx context.Context, strategy string) (*idp.InitiateResponse, error)
+	Initiate(ctx context.Context, initiation *idp.InitiateContext, strategy string) (*idp.InitiateResponse, error)
 }
 
 // IDPs POST /auth/idps
@@ -355,6 +355,10 @@ func (h *Handler) IDPs(c *gin.Context) {
 	var req IDPInitiateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		h.errorResponse(c, autherrors.NewInvalidRequest(err.Error()))
+		return
+	}
+	if err := validateIDPOrigin(c.GetHeader("Origin")); err != nil {
+		h.errorResponse(c, autherrors.NewInvalidRequest("untrusted idp request origin"))
 		return
 	}
 
@@ -369,6 +373,13 @@ func (h *Handler) IDPs(c *gin.Context) {
 		h.errorResponse(c, err)
 		return
 	}
+	flow.SetConnection(req.Connection)
+	flow.SetExtra(types.ExtraKeyStrategy, req.Strategy)
+
+	if actions := unmetRequirements(flow); len(actions) > 0 {
+		actionRedirect(c, buildActionURL(actions))
+		return
+	}
 
 	initiator, err := h.idpInitiator(req.Connection)
 	if err != nil {
@@ -376,21 +387,116 @@ func (h *Handler) IDPs(c *gin.Context) {
 		return
 	}
 
-	resp, err := initiator.Initiate(ctx, req.Strategy)
+	initiation := &idp.InitiateContext{Flow: flow}
+	if idp.IsOAuthRedirectConnection(req.Connection) {
+		transaction, txErr := idp.NewOAuthTransaction(flow.ID, req.Connection, config.GetIDPRedirectURI(req.Connection))
+		if txErr != nil {
+			h.errorResponse(c, autherrors.NewServerError("oauth transaction initialization failed"))
+			return
+		}
+		initiation.Transaction = transaction
+	}
+
+	resp, err := initiator.Initiate(ctx, initiation, req.Strategy)
 	if err != nil {
+		logger.Errorf("[IDPs] 初始化失败 - FlowID: %s, Connection: %s, Error: %v", flow.ID, req.Connection, err)
 		h.errorResponse(c, autherrors.NewServerErrorf("idp initiate failed: %v", err))
+		return
+	}
+
+	if idp.IsOAuthRedirectConnection(req.Connection) {
+		if resp.URL == "" {
+			h.errorResponse(c, autherrors.NewServerError("oauth authorization URL is empty"))
+			return
+		}
+		if err := validateOAuthAuthorizationURL(req.Connection, resp.URL, initiation.Transaction); err != nil {
+			h.errorResponse(c, autherrors.NewServerError("oauth authorization URL is invalid"))
+			return
+		}
+		if err := h.cache.SaveOAuthTransaction(ctx, initiation.Transaction, config.GetOAuthStateExpiresIn()); err != nil {
+			h.errorResponse(c, autherrors.NewServerError("save oauth transaction failed"))
+			return
+		}
+		actionRedirect(c, resp.URL)
 		return
 	}
 
 	c.JSON(http.StatusOK, &IDPInitiateResponse{
 		Connection: req.Connection,
-		Mode:       resp.Mode,
 		UID:        resp.UID,
 		URL:        resp.URL,
 		Action:     resp.Action,
 		Params:     resp.Params,
 		Options:    resp.Options,
 	})
+}
+
+// OAuthCallback completes an upstream Google/GitHub authorization request.
+// The state transaction is consumed atomically before exchanging the authorization code.
+func (h *Handler) OAuthCallback(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Header("Referrer-Policy", "no-referrer")
+
+	connection, flowID, transaction, ok := h.consumeOAuthCallbackTransaction(c)
+	if !ok {
+		return
+	}
+
+	ctx := helpers.WithRemoteIP(c.Request.Context(), c.ClientIP())
+	flow := h.authenticateSvc.GetAndValidateFlow(ctx, flowID)
+	if flow.Failed() {
+		h.flowErrorResponse(c, flow)
+		return
+	}
+	defer h.saveFlow(ctx, flow)
+
+	if err := ensureIDPEnabled(flow, connection); err != nil {
+		h.errorResponse(c, err)
+		return
+	}
+	if c.Query("error") != "" {
+		browserRedirect(c, oauthErrorURL("access_denied"))
+		return
+	}
+
+	code := c.Query("code")
+	if code == "" {
+		h.errorResponse(c, autherrors.NewInvalidRequest("authorization code is required"))
+		return
+	}
+
+	flow.SetConnection(connection)
+	flow.SetExtra(types.ExtraKeyOAuthRedirectURI, transaction.RedirectURI)
+	flow.SetExtra(types.ExtraKeyOAuthCodeVerifier, transaction.CodeVerifier)
+	req := &LoginRequest{Connection: connection, Proof: code}
+	passed, err := h.authenticate(c, ctx, flow, req)
+	if err != nil {
+		logger.Errorf("[OAuthCallback] 上游认证失败 - FlowID: %s, Connection: %s, Error: %v", flow.ID, connection, err)
+		browserRedirect(c, oauthErrorURL("provider_failed"))
+		return
+	}
+	if !passed {
+		return
+	}
+
+	if err := h.resolveUser(ctx, flow); err != nil {
+		if errors.Is(err, errIdentifiedUser) {
+			browserRedirect(c, "/binding")
+			return
+		}
+		logger.Errorf("[OAuthCallback] 用户解析失败 - FlowID: %s, Error: %v", flow.ID, err)
+		h.errorResponse(c, err)
+		return
+	}
+
+	authCode, err := h.authorizeAndGenerateCode(ctx, flow)
+	if err != nil {
+		h.errorResponse(c, err)
+		return
+	}
+	h.issueSSOCookie(c, ctx, flow)
+	clearAuthSessionCookie(c)
+	browserRedirect(c, buildAuthCodeRedirectURL(flow.Request.RedirectURI, authCode))
 }
 
 // --- Challenge ---
@@ -773,6 +879,32 @@ func (h *Handler) PublicKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, publicKey)
 }
 
+func (h *Handler) consumeOAuthCallbackTransaction(c *gin.Context) (string, string, *idp.OAuthTransaction, bool) {
+	connection := c.Param("connection")
+	if !idp.IsOAuthRedirectConnection(connection) {
+		h.errorResponse(c, autherrors.NewInvalidRequest("unsupported oauth connection"))
+		return "", "", nil, false
+	}
+
+	flowID, err := getAuthSessionCookie(c)
+	if err != nil || flowID == "" {
+		h.errorResponse(c, autherrors.NewFlowNotFound("missing session"))
+		return "", "", nil, false
+	}
+
+	state := c.Query("state")
+	transaction, err := h.cache.ConsumeOAuthTransaction(c.Request.Context(), state)
+	if err != nil {
+		h.errorResponse(c, autherrors.NewInvalidRequest("invalid or expired oauth state"))
+		return "", "", nil, false
+	}
+	if transaction.FlowID != flowID || transaction.Connection != connection {
+		h.errorResponse(c, autherrors.NewInvalidRequest("oauth transaction mismatch"))
+		return "", "", nil, false
+	}
+	return connection, flowID, transaction, true
+}
+
 func (h *Handler) clientTokenFromRequest(c *gin.Context) (*pkgtoken.ClientToken, error) {
 	tokenStr := bearerToken(c.GetHeader(HeaderAuthorization))
 	if tokenStr == "" {
@@ -928,9 +1060,7 @@ func (h *Handler) resolveSSO(c *gin.Context, ctx context.Context,
 		return nil, nil
 	}
 
-	if len(ssoTokenString) > 60 {
-		logger.Debugf("[Handler] resolveSSO: cookie token prefix=%s...", ssoTokenString[:60])
-	}
+	logger.Debugf("[Handler] resolveSSO: SSO cookie found")
 
 	t, err := h.tokenSvc.Verify(ctx, ssoTokenString)
 	if err != nil {
@@ -1596,6 +1726,90 @@ func actionRedirect(c *gin.Context, location string) {
 	c.Header("Location", location)
 	c.Header("Access-Control-Expose-Headers", "Location")
 	c.Status(http.StatusMultipleChoices)
+}
+
+// browserRedirect completes a top-level browser navigation after an upstream
+// provider callback. Unlike actionRedirect, this response must be followed by
+// the browser itself rather than interpreted by Pallas.
+func browserRedirect(c *gin.Context, location string) {
+	c.Redirect(http.StatusSeeOther, location)
+}
+
+// validateOAuthAuthorizationURL prevents a provider implementation or future
+// configuration change from turning the 300 Location response into an open
+// redirect. Upstream hosts are deliberately fixed per connection.
+func validateOAuthAuthorizationURL(connection, rawURL string, transaction *idp.OAuthTransaction) error {
+	if transaction == nil {
+		return errors.New("oauth transaction is missing")
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Fragment != "" {
+		return errors.New("invalid oauth authorization URL")
+	}
+
+	if err := validateOAuthProviderEndpoint(connection, u); err != nil {
+		return err
+	}
+
+	query := u.Query()
+	if !oauthAuthorizationQueryMatches(query, transaction) {
+		return errors.New("oauth authorization URL does not match transaction")
+	}
+	return nil
+}
+
+func validateOAuthProviderEndpoint(connection string, u *url.URL) error {
+	switch connection {
+	case idp.TypeGoogle:
+		if u.Host != "accounts.google.com" || u.Path != "/o/oauth2/v2/auth" {
+			return errors.New("unexpected google authorization endpoint")
+		}
+	case idp.TypeGithub:
+		if u.Host != "github.com" || u.Path != "/login/oauth/authorize" {
+			return errors.New("unexpected github authorization endpoint")
+		}
+	default:
+		return errors.New("unsupported oauth connection")
+	}
+	return nil
+}
+
+func oauthAuthorizationQueryMatches(query url.Values, transaction *idp.OAuthTransaction) bool {
+	return query.Get("state") == transaction.State &&
+		query.Get("redirect_uri") == transaction.RedirectURI &&
+		query.Get("code_challenge") == transaction.CodeChallenge &&
+		query.Get("code_challenge_method") == "S256" &&
+		query.Get("response_type") == "code" &&
+		query.Get("client_id") != ""
+}
+
+// validateIDPOrigin rejects browser-triggered login CSRF. Non-browser clients
+// may omit Origin; browsers cannot forge it. Pallas is served from the Aegis
+// origin, so no caller-provided redirect or origin is accepted here.
+func validateIDPOrigin(origin string) error {
+	if origin == "" {
+		return nil
+	}
+	requestOrigin, err := url.Parse(origin)
+	if err != nil || requestOrigin.Scheme == "" || requestOrigin.Host == "" || requestOrigin.Path != "" {
+		return errors.New("invalid origin")
+	}
+	trustedOrigin, err := url.Parse(config.GetEndpoint())
+	if err != nil || requestOrigin.Scheme != trustedOrigin.Scheme || requestOrigin.Host != trustedOrigin.Host {
+		return errors.New("origin is not trusted")
+	}
+	return nil
+}
+
+func oauthErrorURL(code string) string {
+	u, err := url.Parse(config.GetEndpointLogin())
+	if err != nil {
+		return "/login?oauth_error=provider_failed"
+	}
+	query := u.Query()
+	query.Set("oauth_error", code)
+	u.RawQuery = query.Encode()
+	return u.String()
 }
 
 // unmetRequirements 返回当前 Connection 的 Require 中未验证通过的 connection 列表

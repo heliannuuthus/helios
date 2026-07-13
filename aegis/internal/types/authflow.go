@@ -26,7 +26,9 @@ const (
 
 // Extra key 常量
 const (
-	ExtraKeyStrategy = "strategy"
+	ExtraKeyStrategy          = "strategy"
+	ExtraKeyOAuthRedirectURI  = "oauth_redirect_uri"
+	ExtraKeyOAuthCodeVerifier = "oauth_code_verifier"
 )
 
 // AuthFlow 认证流程上下文

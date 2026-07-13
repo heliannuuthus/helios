@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -32,6 +33,7 @@ const (
 	DefaultAegisAuthFlowExpiresIn       = 10 * time.Minute
 	DefaultAegisAuthFlowMaxLifetime     = 1 * time.Hour
 	DefaultAegisAuthCodeExpiresIn       = 5 * time.Minute
+	DefaultAegisOAuthStateExpiresIn     = 10 * time.Minute
 	DefaultAegisOTPExpiresIn            = 5 * time.Minute
 	DefaultAegisChallengeExpiresIn      = 5 * time.Minute
 	DefaultAegisTOTPEnrollmentExpiresIn = 5 * time.Minute
@@ -42,6 +44,36 @@ const (
 // Cfg 返回 Aegis 配置单例
 func Cfg() *baseconfig.Cfg {
 	return baseconfig.Aegis()
+}
+
+// Validate 校验 Aegis 所有必需模块的启动配置。
+func Validate() error {
+	var errs []error
+	for _, key := range []string{
+		"redis.url", "aegis.endpoint", "vchan.captcha.turnstile.app_id",
+		"vchan.captcha.turnstile.secret", "mfa.webauthn.rp-id",
+		"mail.host", "mail.port", "mail.username", "mail.password", "sso.master-key",
+		"iris.audience", "iris.secret-key",
+	} {
+		if strings.TrimSpace(Cfg().GetString(key)) == "" {
+			errs = append(errs, fmt.Errorf("必需配置 %s 未设置", key))
+		}
+	}
+	if len(Cfg().GetStringSlice("mfa.webauthn.rp-origins")) == 0 {
+		errs = append(errs, fmt.Errorf("必需配置 mfa.webauthn.rp-origins 未设置"))
+	}
+	for _, key := range []string{"cors.origins", "identity.consumer-idps", "identity.platform-idps"} {
+		if len(Cfg().GetStringSlice(key)) == 0 {
+			errs = append(errs, fmt.Errorf("必需配置 %s 未设置", key))
+		}
+	}
+	if _, err := GetSSOMasterKeys(); err != nil {
+		errs = append(errs, err)
+	}
+	if _, err := GetIrisSecretKeyBytes(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 // ==================== 基础配置 ====================
@@ -152,6 +184,16 @@ func GetEndpointCallback() string {
 	return endpoint
 }
 
+// GetIDPRedirectURI 获取上游 OAuth Provider 的固定回调地址。
+// 回调地址只来自服务端配置，禁止由浏览器请求覆盖。
+func GetIDPRedirectURI(connection string) string {
+	redirectURI := Cfg().GetString("idps." + connection + ".redirect-uri")
+	if redirectURI != "" {
+		return redirectURI
+	}
+	return strings.TrimRight(GetEndpoint(), "/") + "/" + connection + "/callback"
+}
+
 // ==================== Cache 配置 ====================
 
 // GetCacheKeyPrefix 获取缓存 key 前缀
@@ -162,6 +204,7 @@ func GetCacheKeyPrefix(cacheType string) string {
 	defaultPrefixes := map[string]string{
 		"auth_flow":                    "auth:flow:",
 		"auth_code":                    "auth:code:",
+		"oauth_state":                  "auth:oauth:state:",
 		"refresh_token":                "auth:rt:",
 		"user_token":                   "auth:user:rt:",
 		"otp":                          "auth:otp:",
@@ -229,6 +272,14 @@ func GetAuthFlowMaxLifetime() time.Duration {
 		return val
 	}
 	return DefaultAegisAuthFlowMaxLifetime
+}
+
+// GetOAuthStateExpiresIn 获取上游 OAuth state/PKCE transaction 过期时间。
+func GetOAuthStateExpiresIn() time.Duration {
+	if val := Cfg().GetDuration("aegis.cache.oauth_state.expires_in"); val > 0 {
+		return val
+	}
+	return DefaultAegisOAuthStateExpiresIn
 }
 
 // GetAuthCodeExpiresIn 获取 AuthCode 过期时间

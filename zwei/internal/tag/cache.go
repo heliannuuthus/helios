@@ -33,7 +33,26 @@ type tagCache struct {
 var (
 	globalTagCache *tagCache
 	cacheOnce      sync.Once
+	errCacheInit   error
 )
+
+// InitializeCache 在服务启动阶段初始化标签缓存。
+func InitializeCache() error {
+	cacheOnce.Do(func() {
+		ristrettoCache, err := ristretto.NewCache(&ristretto.Config[string, any]{
+			NumCounters: tagCacheNumCounters,
+			MaxCost:     tagCacheSize,
+			BufferItems: tagCacheBufferItems,
+		})
+		if err != nil {
+			errCacheInit = err
+			return
+		}
+		ristrettoCache.Wait()
+		globalTagCache = &tagCache{cache: ristrettoCache}
+	})
+	return errCacheInit
+}
 
 // GetTagCache 获取全局标签缓存实例（对外暴露，供其他包使用）
 func GetTagCache() *tagCache {
@@ -42,28 +61,9 @@ func GetTagCache() *tagCache {
 
 // getTagCache 获取全局标签缓存实例（内部使用）
 func getTagCache() *tagCache {
-	cacheOnce.Do(func() {
-		// 初始化 Ristretto 缓存
-		ristrettoCache, err := ristretto.NewCache(&ristretto.Config[string, any]{
-			NumCounters: tagCacheNumCounters,
-			MaxCost:     tagCacheSize,
-			BufferItems: tagCacheBufferItems,
-		})
-		if err != nil {
-			// 如果缓存初始化失败，创建一个空的缓存结构（降级处理）
-			globalTagCache = &tagCache{
-				cache: nil,
-			}
-			return
-		}
-
-		// 等待缓存初始化完成
-		ristrettoCache.Wait()
-
-		globalTagCache = &tagCache{
-			cache: ristrettoCache,
-		}
-	})
+	if err := InitializeCache(); err != nil {
+		panic("标签缓存未初始化: " + err.Error())
+	}
 	return globalTagCache
 }
 
@@ -74,15 +74,6 @@ func cacheKey(tagType models.TagType, value string) string {
 
 // Get 从缓存获取标签定义（懒加载：缓存未命中时查询数据库并设置缓存）
 func (c *tagCache) Get(tagType models.TagType, value string, db *gorm.DB) (*models.Tag, error) {
-	if c.cache == nil {
-		// 降级：直接查询数据库
-		var tag models.Tag
-		if err := db.Where("type = ? AND value = ?", tagType, value).First(&tag).Error; err != nil {
-			return nil, err
-		}
-		return &tag, nil
-	}
-
 	key := cacheKey(tagType, value)
 	val, ok := c.cache.Get(key)
 	if ok {
@@ -102,19 +93,6 @@ func (c *tagCache) Get(tagType models.TagType, value string, db *gorm.DB) (*mode
 
 // GetByType 从缓存获取指定类型的所有标签（使用索引，无需查询数据库）
 func (c *tagCache) GetByType(tagType models.TagType, db *gorm.DB) ([]*models.Tag, error) {
-	if c.cache == nil {
-		// 降级：直接查询数据库
-		var tags []models.Tag
-		if err := db.Where("type = ?", tagType).Order("value").Find(&tags).Error; err != nil {
-			return nil, err
-		}
-		result := make([]*models.Tag, len(tags))
-		for i := range tags {
-			result[i] = &tags[i]
-		}
-		return result, nil
-	}
-
 	// 从索引获取（无锁读，性能最优）
 	if tags, ok := c.typeIndex.Load(tagType); ok {
 		tagList, assertOk := tags.([]*models.Tag)
@@ -140,19 +118,6 @@ func (c *tagCache) GetByType(tagType models.TagType, db *gorm.DB) ([]*models.Tag
 
 // GetAll 获取所有标签（按类型分组，使用索引）
 func (c *tagCache) GetAll(db *gorm.DB) (map[models.TagType][]*models.Tag, error) {
-	if c.cache == nil {
-		// 降级：直接查询数据库
-		var tags []models.Tag
-		if err := db.Order("type, value").Find(&tags).Error; err != nil {
-			return nil, err
-		}
-		result := make(map[models.TagType][]*models.Tag)
-		for i := range tags {
-			result[tags[i].Type] = append(result[tags[i].Type], &tags[i])
-		}
-		return result, nil
-	}
-
 	// 查询数据库获取所有类型（只需要类型列表，不需要所有标签）
 	var tagTypes []models.TagType
 	if err := db.Model(&models.Tag{}).Distinct("type").Pluck("type", &tagTypes).Error; err != nil {
@@ -164,8 +129,7 @@ func (c *tagCache) GetAll(db *gorm.DB) (map[models.TagType][]*models.Tag, error)
 	for _, tagType := range tagTypes {
 		tags, err := c.GetByType(tagType, db)
 		if err != nil {
-			// 如果某个类型加载失败，跳过（不影响其他类型）
-			continue
+			return nil, err
 		}
 		if len(tags) > 0 {
 			result[tagType] = tags
@@ -177,10 +141,6 @@ func (c *tagCache) GetAll(db *gorm.DB) (map[models.TagType][]*models.Tag, error)
 
 // Set 设置标签到缓存（同时更新索引）
 func (c *tagCache) Set(tag *models.Tag) {
-	if c.cache == nil {
-		return
-	}
-
 	key := cacheKey(tag.Type, tag.Value)
 	c.cache.SetWithTTL(key, tag, 1, tagCacheTTL)
 
@@ -190,10 +150,6 @@ func (c *tagCache) Set(tag *models.Tag) {
 
 // Delete 从缓存删除标签（同时更新索引）
 func (c *tagCache) Delete(tagType models.TagType, value string) {
-	if c.cache == nil {
-		return
-	}
-
 	key := cacheKey(tagType, value)
 	c.cache.Del(key)
 
@@ -204,10 +160,6 @@ func (c *tagCache) Delete(tagType models.TagType, value string) {
 // DeleteWithDelay 延迟删除（用于延迟双删的第二次删除）
 // 注意：延迟删除不更新索引，因为延迟期间可能已经被重新设置了
 func (c *tagCache) DeleteWithDelay(tagType models.TagType, value string, delay time.Duration) {
-	if c.cache == nil {
-		return
-	}
-
 	go func() {
 		time.Sleep(delay)
 		key := cacheKey(tagType, value)
@@ -273,11 +225,8 @@ func (c *tagCache) loadTypeIndex(tagType models.TagType, db *gorm.DB) ([]*models
 	// 直接使用查询结果，避免重复查询数据库
 	result := make([]*models.Tag, len(tags))
 	for i := range tags {
-		// 设置到缓存（如果缓存可用）
-		if c.cache != nil {
-			key := cacheKey(tagType, tags[i].Value)
-			c.cache.Set(key, &tags[i], 1)
-		}
+		key := cacheKey(tagType, tags[i].Value)
+		c.cache.Set(key, &tags[i], 1)
 		result[i] = &tags[i]
 	}
 

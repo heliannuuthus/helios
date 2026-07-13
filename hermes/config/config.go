@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -22,6 +23,23 @@ var (
 // Cfg 返回 Hermes 配置单例
 func Cfg() *baseconfig.Cfg {
 	return baseconfig.Hermes()
+}
+
+// Validate 校验 Hermes 启动所需的全部配置。
+func Validate() error {
+	var errs []error
+	for _, key := range []string{"db.url", "db.enc-key", "aegis.audience", "aegis.issuer", "aegis.secret-key"} {
+		if strings.TrimSpace(Cfg().GetString(key)) == "" {
+			errs = append(errs, fmt.Errorf("必需配置 %s 未设置", key))
+		}
+	}
+	if _, err := GetDBEncKeyRaw(); err != nil {
+		errs = append(errs, err)
+	}
+	if _, err := GetAegisSecretKeyBytes(); err != nil {
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
 }
 
 // InitDB 初始化 Hermes 数据库连接（单例）
@@ -52,7 +70,7 @@ func InitDB() *gorm.DB {
 		if err != nil {
 			logger.Fatalf("连接 Hermes 数据库失败: %v", err)
 		}
-		logger.Infof("数据库连接成功 (hermes): %s", cfg.GetString("db.url"))
+		logger.Infof("数据库连接成功 (hermes)")
 		hermesDB = db
 	})
 	return hermesDB
@@ -122,6 +140,15 @@ func GetAegisAudience() string {
 		return "hermes"
 	}
 	return audience
+}
+
+// GetAegisIssuer 获取 Aegis API/issuer 端点。
+func GetAegisIssuer() string {
+	issuer := strings.TrimRight(Cfg().GetString("aegis.issuer"), "/")
+	if issuer == "" {
+		return "https://aegis.heliannuuthus.com/api"
+	}
+	return issuer
 }
 
 // GetAegisSecretKey 获取 Hermes 服务解密密钥（原始字符串）

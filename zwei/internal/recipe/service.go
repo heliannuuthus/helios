@@ -59,10 +59,6 @@ func (r *categoryCacheRefresher) doRefresh(ctx context.Context) error {
 
 // refresh 异步刷新分类缓存（非阻塞）
 func (r *categoryCacheRefresher) refresh() {
-	if r.cache == nil {
-		return
-	}
-
 	// 检查是否正在刷新，避免并发刷新
 	r.refreshMutex.Lock()
 	if r.isRefreshing {
@@ -90,16 +86,12 @@ func (r *categoryCacheRefresher) refresh() {
 }
 
 // start 启动定期刷新
-func (r *categoryCacheRefresher) start() {
-	if r.cache == nil {
-		return
-	}
-
+func (r *categoryCacheRefresher) start() error {
 	// 首次同步刷新，确保启动时有数据
 	ctx, cancel := context.WithTimeout(context.Background(), refreshTimeout)
-	// 首次刷新失败时只记录，不影响启动
 	if err := r.doRefresh(ctx); err != nil {
-		logger.Errorf("[Recipe] 分类缓存首次刷新失败: %v", err)
+		cancel()
+		return fmt.Errorf("首次刷新分类缓存: %w", err)
 	}
 	cancel()
 
@@ -115,6 +107,7 @@ func (r *categoryCacheRefresher) start() {
 			}
 		}
 	}()
+	return nil
 }
 
 // Service 菜谱服务
@@ -125,8 +118,10 @@ type Service struct {
 }
 
 // NewService 创建菜谱服务
-func NewService(db *gorm.DB) *Service {
-	s := &Service{db: db}
+func NewService(db *gorm.DB) (*Service, error) {
+	if db == nil {
+		return nil, fmt.Errorf("数据库连接未初始化")
+	}
 
 	// 初始化 Ristretto 缓存
 	cache, err := ristretto.NewCache(&ristretto.Config[string, any]{
@@ -135,19 +130,17 @@ func NewService(db *gorm.DB) *Service {
 		BufferItems: cacheBufferItems,
 	})
 	if err != nil {
-		// 如果缓存初始化失败，继续运行但不使用缓存
-		return s
+		return nil, fmt.Errorf("初始化分类缓存: %w", err)
 	}
-	s.categoriesCache = cache
+	cache.Wait()
 
-	// 等待缓存初始化完成
-	s.categoriesCache.Wait()
+	refresher := newCategoryCacheRefresher(db, cache)
+	if err := refresher.start(); err != nil {
+		cache.Close()
+		return nil, err
+	}
 
-	// 创建并启动分类缓存刷新器
-	s.categoryCacheRefresher = newCategoryCacheRefresher(db, cache)
-	s.categoryCacheRefresher.start()
-
-	return s
+	return &Service{db: db, categoriesCache: cache, categoryCacheRefresher: refresher}, nil
 }
 
 // CreateRecipe 创建菜谱
@@ -351,11 +344,9 @@ func (s *Service) DeleteRecipe(id string) error {
 // GetCategories 获取所有分类（从缓存获取，缓存未命中时查询数据库）
 func (s *Service) GetCategories() ([]string, error) {
 	// 尝试从缓存获取
-	if s.categoriesCache != nil {
-		if cached, found := s.categoriesCache.Get(categoriesCacheKey); found {
-			if categories, ok := cached.([]string); ok {
-				return categories, nil
-			}
+	if cached, found := s.categoriesCache.Get(categoriesCacheKey); found {
+		if categories, ok := cached.([]string); ok {
+			return categories, nil
 		}
 	}
 
@@ -366,7 +357,7 @@ func (s *Service) GetCategories() ([]string, error) {
 		Where("category IS NOT NULL AND category != ''").
 		Pluck("category", &categories).Error
 
-	if err == nil && s.categoriesCache != nil {
+	if err == nil {
 		// 更新缓存，TTL=30分钟
 		s.categoriesCache.SetWithTTL(categoriesCacheKey, categories, 1, 30*time.Minute)
 	}

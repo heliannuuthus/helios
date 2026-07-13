@@ -20,10 +20,12 @@ type Handler struct {
 }
 
 // NewHandler 创建首页处理器
-func NewHandler(db *gorm.DB) *Handler {
-	return &Handler{
-		recipeService: recipe.NewService(db),
+func NewHandler(db *gorm.DB) (*Handler, error) {
+	service, err := recipe.NewService(db)
+	if err != nil {
+		return nil, err
 	}
+	return &Handler{recipeService: service}, nil
 }
 
 type BannerItem struct {

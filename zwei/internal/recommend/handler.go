@@ -20,11 +20,15 @@ type Handler struct {
 }
 
 // NewHandler 创建推荐处理器
-func NewHandler(db *gorm.DB) *Handler {
-	return &Handler{
-		service:     NewService(db),
-		rateLimiter: NewDailyRateLimiter(10), // 每日最多 10 次
+func NewHandler(db *gorm.DB) (*Handler, error) {
+	service, err := NewService(db)
+	if err != nil {
+		return nil, err
 	}
+	return &Handler{
+		service:     service,
+		rateLimiter: NewDailyRateLimiter(10), // 每日最多 10 次
+	}, nil
 }
 
 type RecommendRequest struct {

@@ -1,0 +1,116 @@
+[app]
+name = "Aegis"
+version = "dev"
+debug = true
+
+[log]
+level = "debug"
+format = "console"
+
+[server]
+host = "0.0.0.0"
+port = 18000
+
+[redis]
+url = "redis://:helios@127.0.0.1:6379/0"
+
+[cors]
+origins = ["https://aegis.heliannuuthus.com", "https://atlas.heliannuuthus.com"]
+
+[aegis]
+endpoint = "https://aegis.heliannuuthus.com"
+max-refresh-token = 10
+
+[aegis.cookie]
+domain = ".heliannuuthus.com"
+path = "/"
+secure = true
+http-only = true
+max-age = 600
+
+[aegis.cache.auth_flow]
+expires_in = "10m"
+max_lifetime = "1h"
+
+[aegis.cache.auth_code]
+expires_in = "5m"
+
+[aegis.cache.oauth_state]
+expires_in = "10m"
+
+[aegis.cache.otp]
+expires_in = "5m"
+
+[aegis.cache.challenge]
+expires_in = "5m"
+
+[aegis.cache.totp_enrollment]
+expires_in = "5m"
+
+[aegis.cache.refresh_token]
+expires_in = "168h"
+
+[aegis.cache.public_key]
+max_age = "3h"
+
+[aegis.challenge]
+expires-in = "5m"
+
+[aegis.challenge.rate-limit.default-limits]
+"1m" = 1
+"1h" = 10
+"24h" = 20
+
+[aegis.challenge.rate-limit.ip-limits]
+"1m" = 5
+"1h" = 50
+
+[aegis.challenge.access-control]
+captcha-threshold = 5
+fail-window = "30m"
+
+[aegis.login.access-control]
+captcha-threshold = 5
+fail-window = "30m"
+
+[identity]
+consumer-idps = ["wxmp", "ttmp", "almp", "user", "passkey"]
+platform-idps = ["github", "google", "staff", "passkey"]
+
+[vchan.captcha.turnstile]
+# Cloudflare 官方测试密钥，仅供本地开发。
+app_id = "1x00000000000000000000AA"
+secret = "1x0000000000000000000000000000000AA"
+
+[mfa.webauthn]
+rp-id = "aegis.heliannuuthus.com"
+rp-display-name = "Helios Auth"
+rp-origins = ["https://aegis.heliannuuthus.com"]
+
+[mail]
+provider = "qq-exmail"
+host = "smtp.exmail.qq.com"
+port = 465
+use-ssl = true
+username = ""
+password = ""
+
+[sso]
+# 由 scripts/initialize-hermes.py 生成。
+master-key = ""
+ttl = "168h"
+cookie-name = "aegis-sso"
+
+[iris]
+audience = "iris"
+# 由 scripts/initialize-hermes.py 生成。
+secret-key = ""
+
+[idps.google]
+redirect-uri = ""
+
+[idps.github]
+redirect-uri = ""
+
+[idps.alipay]
+verify-key = ""

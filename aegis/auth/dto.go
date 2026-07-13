@@ -69,7 +69,6 @@ type IDPInitiateRequest struct {
 // IDPInitiateResponse IDP 认证入口响应
 type IDPInitiateResponse struct {
 	Connection string         `json:"connection"`
-	Mode       string         `json:"mode"`
 	UID        string         `json:"uid,omitempty"`
 	URL        string         `json:"url,omitempty"`
 	Action     string         `json:"action,omitempty"`

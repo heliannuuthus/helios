@@ -19,10 +19,12 @@ type Handler struct {
 }
 
 // NewHandler 创建菜谱处理器
-func NewHandler(db *gorm.DB) *Handler {
-	return &Handler{
-		service: NewService(db),
+func NewHandler(db *gorm.DB) (*Handler, error) {
+	service, err := NewService(db)
+	if err != nil {
+		return nil, err
 	}
+	return &Handler{service: service}, nil
 }
 
 var categoryNames = map[string]string{

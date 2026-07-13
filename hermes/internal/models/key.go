@@ -28,7 +28,7 @@ type IDPKey struct {
 	ID        uint      `gorm:"primaryKey;autoIncrement;column:_id" json:"_id"`
 	IDPType   string    `gorm:"column:idp_type;size:32;not null" json:"idp_type"`
 	TAppID    string    `gorm:"column:t_app_id;size:256;not null" json:"t_app_id"`
-	TSecret   string    `gorm:"column:t_secret;size:2048;not null" json:"-"`
+	TSecret   string    `gorm:"column:t_secret;type:text;not null" json:"-"`
 	CreatedAt time.Time `gorm:"column:created_at;not null" json:"created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at;not null" json:"updated_at"`
 }

@@ -30,8 +30,17 @@ type Service struct {
 // NewService 创建存储服务
 func NewService() (*Service, error) {
 	endpoint := chaosconfig.GetCloudflareR2Endpoint()
-	if endpoint == "" {
-		return nil, fmt.Errorf("cloudflare R2 endpoint 未配置")
+	required := map[string]string{
+		"r2.account-id":        endpoint,
+		"r2.access-key-id":     chaosconfig.GetCloudflareR2AccessKeyID(),
+		"r2.access-key-secret": chaosconfig.GetCloudflareR2AccessKeySecret(),
+		"r2.bucket":            chaosconfig.GetCloudflareR2Bucket(),
+		"r2.domain":            chaosconfig.GetCloudflareR2PublicURL(),
+	}
+	for name, value := range required {
+		if strings.TrimSpace(value) == "" {
+			return nil, fmt.Errorf("%s 未配置", name)
+		}
 	}
 
 	cfg, err := config.LoadDefaultConfig(context.Background(),
@@ -56,6 +65,15 @@ func NewService() (*Service, error) {
 		bucket:        chaosconfig.GetCloudflareR2Bucket(),
 		publicURL:     chaosconfig.GetCloudflareR2PublicURL(),
 	}, nil
+}
+
+// Verify 校验 R2 凭据和 bucket 是否可访问。
+func (s *Service) Verify(ctx context.Context) error {
+	_, err := s.s3Client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(s.bucket)})
+	if err != nil {
+		return fmt.Errorf("访问 R2 bucket 失败: %w", err)
+	}
+	return nil
 }
 
 // Upload 上传文件

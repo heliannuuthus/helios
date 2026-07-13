@@ -51,13 +51,12 @@ func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*mod
 }
 
 // Initiate 初始化 Passkey discoverable ceremony。
-func (p *Provider) Initiate(ctx context.Context, _ string) (*idp.InitiateResponse, error) {
+func (p *Provider) Initiate(ctx context.Context, _ *idp.InitiateContext, _ string) (*idp.InitiateResponse, error) {
 	options, err := p.InitializeLogin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return &idp.InitiateResponse{
-		Mode:    "webauthn",
 		UID:     options.CeremonyID,
 		Options: options.Options,
 	}, nil
