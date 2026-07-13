@@ -141,7 +141,7 @@ func (a *FactorAuthenticator) Initiate(ctx context.Context, challenge *types.Cha
 
 // Verify 验证 Challenge proof（委托 factor.Provider.Verify）
 func (a *FactorAuthenticator) Verify(ctx context.Context, challenge *types.Challenge, proof string) (bool, error) {
-	return a.provider.Verify(ctx, proof, challenge.Channel, challenge.ID)
+	return a.provider.Verify(ctx, challenge, proof)
 }
 
 // probeRate 检查限流（IP + Channel 维度），结果写入 challenge.RetryAfter

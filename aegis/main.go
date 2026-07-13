@@ -87,6 +87,7 @@ func main() {
 			{"GET", "/connections", aegisHandler.GetConnections},
 			{"GET", "/context", aegisHandler.GetContext},
 			{"POST", "/login", aegisHandler.Login},
+			{"POST", "/idps", aegisHandler.IDPs},
 			{"GET", "/binding", aegisHandler.GetIdentifyContext},
 			{"POST", "/binding", aegisHandler.ConfirmIdentify},
 			{"POST", "/challenge", aegisHandler.InitiateChallenge},

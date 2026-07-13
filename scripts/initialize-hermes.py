@@ -332,7 +332,6 @@ APP_SERVICE_RELATIONS = [
 SERVICE_CHALLENGE_SETTINGS = [
     ServiceChallengeSetting("iris", "staff:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
     ServiceChallengeSetting("iris", "user:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
-    ServiceChallengeSetting("iris", "passkey:verify", expires_in=300, limits={"1m": 1, "24h": 10}),
 ]
 
 _admin_openid = "11ffa2fb5bfa3b8f8e805d88c479f306"

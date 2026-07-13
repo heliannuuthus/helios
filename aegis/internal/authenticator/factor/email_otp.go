@@ -47,22 +47,16 @@ func (p *EmailOTPProvider) Initiate(ctx context.Context, challenge *types.Challe
 
 // Verify 验证邮件验证码
 // proof: OTP 验证码
-// params[0]: channel (string) - 邮箱地址（未使用，但统一传入）
-// params[1]: challengeID (string) - 用于从 cache 获取已存储的 OTP
-func (p *EmailOTPProvider) Verify(ctx context.Context, proof string, params ...any) (bool, error) {
+func (p *EmailOTPProvider) Verify(ctx context.Context, challenge *types.Challenge, proof string) (bool, error) {
 	if proof == "" {
 		return false, nil
 	}
 
-	if len(params) < 2 {
-		return false, nil
-	}
-	challengeID, ok := params[1].(string)
-	if !ok || challengeID == "" {
+	if challenge == nil || challenge.ID == "" {
 		return false, nil
 	}
 
-	otpKey := types.CacheKeyPrefixEmailOTP + challengeID
+	otpKey := types.CacheKeyPrefixEmailOTP + challenge.ID
 	storedCode, err := p.cache.GetOTP(ctx, otpKey)
 	if err != nil {
 		return false, nil

@@ -36,47 +36,30 @@ func (*Provider) Type() string {
 	return TypePasskey
 }
 
-// Login 执行 Passkey 登录
-// proof: WebAuthn assertion JSON（前端 navigator.credentials.get() 序列化结果，包含 challengeID）
-// params[0]: principal（忽略）
-// params[1]: strategy（忽略）
+// Login 执行 Passkey 登录。
+// proof: WebAuthn assertion JSON
+// params[0]: appID（由 IDPAuthenticator 注入，Passkey 不使用）
+// params[1]: principal（忽略）
+// params[2]: strategy（忽略）
+// params[3]: uid（由 Initiate 返回的 ceremony uid）
 func (p *Provider) Login(ctx context.Context, proof string, params ...any) (*models.TUserInfo, error) {
-	if proof == "" {
-		return nil, fmt.Errorf("webauthn assertion is required")
+	uid := stringParam(params, 3)
+	if uid == "" {
+		return nil, fmt.Errorf("uid is required")
 	}
+	return p.verify(ctx, uid, proof)
+}
 
-	// proof 即 assertion JSON，从中提取 challengeID
-	// TODO: challengeID 应从 assertion 或 params 中获取，当前暂用 principal 传递
-	var challengeID string
-	if len(params) > 0 {
-		if id, ok := params[0].(string); ok && id != "" {
-			challengeID = id
-		}
-	}
-	if challengeID == "" {
-		return nil, fmt.Errorf("challenge_id is required (pass via principal)")
-	}
-
-	// 完成 WebAuthn 登录验证（从 proof 解析 assertion，不依赖 *http.Request）
-	userID, credential, err := p.webauthnSvc.VerifyAuthentication(ctx, challengeID, []byte(proof))
+// Initiate 初始化 Passkey discoverable ceremony。
+func (p *Provider) Initiate(ctx context.Context, _ string) (*idp.InitiateResponse, error) {
+	options, err := p.InitializeLogin(ctx)
 	if err != nil {
-		logger.Errorf("[Passkey] VerifyAuthentication failed: %v", err)
-		return nil, fmt.Errorf("passkey authentication failed: %w", err)
+		return nil, err
 	}
-
-	// 更新凭证签名计数（防重放）
-	if credential != nil {
-		credentialID := base64.RawURLEncoding.EncodeToString(credential.ID)
-		if err := p.webauthnSvc.PatchCredentialSignCount(ctx, credentialID, credential.Authenticator.SignCount); err != nil {
-			logger.Warnf("[Passkey] PatchCredentialSignCount failed: %v", err)
-		}
-	}
-
-	logger.Infof("[Passkey] Login success - UserID: %s", userID)
-
-	return &models.TUserInfo{
-		TOpenID: userID,
-		RawData: fmt.Sprintf(`{"user_id":"%s","challenge_id":"%s"}`, userID, challengeID),
+	return &idp.InitiateResponse{
+		Mode:    "webauthn",
+		UID:     options.CeremonyID,
+		Options: options.Options,
 	}, nil
 }
 
@@ -110,4 +93,42 @@ func (p *Provider) InitializeLogin(ctx context.Context) (*webauthn.Authenticatio
 		Options:    options,
 		CeremonyID: ceremonyID,
 	}, nil
+}
+
+func (p *Provider) verify(ctx context.Context, uid, proof string) (*models.TUserInfo, error) {
+	if uid == "" {
+		return nil, fmt.Errorf("uid is required")
+	}
+	if proof == "" {
+		return nil, fmt.Errorf("webauthn assertion is required")
+	}
+
+	userID, credential, err := p.webauthnSvc.VerifyAuthentication(ctx, uid, []byte(proof))
+	if err != nil {
+		logger.Errorf("[Passkey] VerifyAuthentication failed: %v", err)
+		return nil, fmt.Errorf("passkey authentication failed: %w", err)
+	}
+
+	if credential != nil {
+		credentialID := base64.RawURLEncoding.EncodeToString(credential.ID)
+		if err := p.webauthnSvc.PatchCredentialSignCount(ctx, credentialID, credential.Authenticator.SignCount); err != nil {
+			logger.Warnf("[Passkey] PatchCredentialSignCount failed: %v", err)
+		}
+	}
+
+	return &models.TUserInfo{
+		TOpenID: userID,
+		RawData: fmt.Sprintf(`{"user_id":"%s","type":"passkey","uid":"%s"}`, userID, uid),
+	}, nil
+}
+
+func stringParam(params []any, index int) string {
+	if len(params) <= index {
+		return ""
+	}
+	value, ok := params[index].(string)
+	if !ok {
+		return ""
+	}
+	return value
 }

@@ -97,6 +97,15 @@ func (a *IDPAuthenticator) Resolve(ctx context.Context, principal string) (*mode
 	return a.provider.Resolve(ctx, principal)
 }
 
+// Initiate 执行 IDP 认证入口初始化。
+func (a *IDPAuthenticator) Initiate(ctx context.Context, strategy string) (*idp.InitiateResponse, error) {
+	provider, ok := a.provider.(idp.Initiator)
+	if !ok {
+		return nil, autherrors.NewInvalidRequestf("provider %s does not support idp initiate", a.provider.Type())
+	}
+	return provider.Initiate(ctx, strategy)
+}
+
 // ==================== Exchanger 实现（条件） ====================
 
 // Exchange 用平台授权码换取 principal（如小程序 code 换手机号）

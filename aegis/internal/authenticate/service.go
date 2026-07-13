@@ -102,7 +102,7 @@ func (s *Service) SaveFlow(ctx context.Context, flow *types.AuthFlow) error {
 
 // Authenticate 执行认证
 // 调用方需先完成 flow.SetConnection 设置当前 Connection
-// params 约定顺序：proof, principal, strategy
+// params 约定顺序：proof, principal, strategy, uid
 // remoteIP 通过 context 传递（ctxutil.WithRemoteIP）
 //
 // Strike 后置：仅在认证失败后计数，达阈值时返回 TooManyRequests error（429 + retry_after）

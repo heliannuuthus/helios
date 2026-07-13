@@ -24,8 +24,7 @@ type Provider interface {
 
 	// Verify 验证认证因子凭证
 	// proof: 验证凭证（OTP code / WebAuthn response 等）
-	// params: 额外参数（如 challengeID、channel 等）
-	Verify(ctx context.Context, proof string, params ...any) (bool, error)
+	Verify(ctx context.Context, challenge *types.Challenge, proof string) (bool, error)
 
 	// Prepare 准备前端所需的公开配置
 	Prepare() *types.ConnectionConfig
