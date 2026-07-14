@@ -144,6 +144,8 @@ CREATE TABLE IF NOT EXISTS t_service (
     created_at                DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at                DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
+-- 索引：按域游标分页 WHERE domain_id IN (...) AND _id > ? ORDER BY _id
+INDEX idx_service_domain_cursor (domain_id, _id),
 -- 索引：主查询 WHERE service_id = ?
 UNIQUE KEY uk_service_id (service_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='业务服务';

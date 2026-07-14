@@ -17,8 +17,8 @@ type RateLimits map[string]int
 
 // Service 服务（DB 模型，不直接序列化到 API，请使用 dto.ToServiceResponse）
 type Service struct {
-	ID                   uint                      `gorm:"primaryKey;autoIncrement;column:_id"`
-	DomainID             string                    `gorm:"column:domain_id;size:32;not null"`
+	ID                   uint                      `gorm:"primaryKey;autoIncrement;column:_id;index:idx_service_domain_cursor,priority:2"`
+	DomainID             string                    `gorm:"column:domain_id;size:32;not null;index:idx_service_domain_cursor,priority:1"`
 	ServiceID            string                    `gorm:"column:service_id;size:32;not null;uniqueIndex"`
 	Name                 string                    `gorm:"column:name;size:128;not null"`
 	Description          *string                   `gorm:"column:description;size:512"`
