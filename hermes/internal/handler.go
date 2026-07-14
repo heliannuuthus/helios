@@ -250,7 +250,7 @@ func (h *Handler) GetService(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
+	if service.DomainID != domainID && service.DomainID != models.InheritedDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
@@ -283,7 +283,7 @@ func (h *Handler) UpdateService(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
+	if service.DomainID != domainID && service.DomainID != models.InheritedDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
@@ -308,7 +308,7 @@ func (h *Handler) DeleteService(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
+	if service.DomainID != domainID && service.DomainID != models.InheritedDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
@@ -328,7 +328,7 @@ func (h *Handler) GetServiceApplicationRelations(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
+	if service.DomainID != domainID && service.DomainID != models.InheritedDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
@@ -359,7 +359,7 @@ func (h *Handler) GetServiceAppRelations(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
+	if service.DomainID != domainID && service.DomainID != models.InheritedDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}
@@ -381,7 +381,7 @@ func (h *Handler) SetServiceAppRelations(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
-	if service.DomainID != domainID && service.DomainID != models.CrossDomainID {
+	if service.DomainID != domainID && service.DomainID != models.InheritedDomainID {
 		c.JSON(http.StatusNotFound, gin.H{"error": "service not found in this domain"})
 		return
 	}

@@ -226,7 +226,7 @@ func (h *Handler) GetContext(c *gin.Context) {
 
 	if flow.Service != nil {
 		serviceDomainID := flow.Service.DomainID
-		if serviceDomainID == models.CrossDomainID && flow.Application != nil {
+		if serviceDomainID == models.InheritedDomainID && flow.Application != nil {
 			serviceDomainID = flow.Application.DomainID
 		}
 		resp.Service = &ServiceInfo{

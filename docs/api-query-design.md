@@ -195,7 +195,7 @@ var serviceFilters = filter.Whitelist{
 func (s *Service) ListServices(ctx context.Context, domainID string, req *ListRequest) (*pagination.Items[models.Service], error) {
     query := s.db.WithContext(ctx).Model(&models.Service{})
     if domainID != "" {
-        query = query.Where("domain_id = ? OR domain_id = ?", domainID, models.CrossDomainID)
+        query = query.Where("domain_id = ? OR domain_id = ?", domainID, models.InheritedDomainID)
     }
     query = filter.Apply(query, req.Filter, serviceFilters)
     return pagination.CursorPaginate[models.Service](query, req.Pagination)

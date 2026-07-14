@@ -54,7 +54,7 @@ type ServiceResponse struct {
 
 func NewServiceResponse(s *models.Service, domainID string) ServiceResponse {
 	effectiveDomainID := s.DomainID
-	if effectiveDomainID == models.CrossDomainID {
+	if effectiveDomainID == models.InheritedDomainID {
 		effectiveDomainID = domainID
 	}
 	return ServiceResponse{

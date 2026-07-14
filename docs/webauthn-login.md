@@ -22,13 +22,13 @@
 
 `user_hints` 不是 WebAuthn 协议标准字段，本方案不要求后端新增该字段。用户信息来源为前端已登录态页面中的现有 Profile 数据。
 
-登录页需要知道当前 AuthFlow 所属的业务身份域，因此 `GET /auth/context` 的 `application` 会返回标准应用元数据 `domain_id`。该字段只用于选择本地提示缓存，不参与 WebAuthn 验签。
+登录页需要知道当前 AuthFlow 所属的业务域，因此 `GET /auth/context` 的 `application` 会返回标准应用元数据 `domain_id`。该字段只用于选择本地提示缓存，不参与 WebAuthn 验签。
 
-### 2.3 本地缓存按业务身份域隔离
+### 2.3 本地缓存按业务域隔离
 
-当前策略：在 Aegis Origin 内，以 `platform` / `consumer` 业务身份域分别缓存最近一次设置 Passkey 的用户提示信息。缓存不按 OpenID 建 key，也不使用 `registered: true`；对应 key 中存在合法 value 本身就是提示标记。
+当前策略：在 Aegis Origin 内，以 `platform` / `consumer` 业务域分别缓存最近一次设置 Passkey 的用户提示信息。缓存不按 OpenID 建 key，也不使用 `registered: true`；对应 key 中存在合法 value 本身就是提示标记。
 
-这里的 domain 是 Helios 业务身份域，不是浏览器 Cookie Domain。`staff` / `user` 是登录 Connection，也不用于 localStorage key。
+这里的 domain 是 Helios 业务域，不是浏览器 Cookie Domain。`staff` / `user` 是登录 Connection，也不用于 localStorage key。
 
 ## 3. 系统架构与组件关系
 
@@ -577,7 +577,7 @@ Challenge 验证（`challenge/service.go`）有独立的访问控制链：
 | 缓存不参与认证        | localStorage 中的 `aegis:passkey:${domain}` 仅用于 UI 提示展示（昵称、头像），不作为身份验证的依据。实际身份由后端 WebAuthn 验签和认证流程确认 |
 | 缓存不含高敏字段      | 缓存中仅存储 `uid`、`nickname`、`picture`。**不得**写入邮箱、手机号、token 等可用于身份关联或认证的信息                                        |
 | 缓存可被篡改          | 攻击者修改 localStorage 只能影响 UI 展示（显示错误的昵称/头像），无法绕过后端认证流程                                                          |
-| domain 不可由缓存决定 | 当前业务域来自服务端 AuthFlow 的 `application.domain_id`，localStorage 不能切换身份域或提升权限                                                |
+| domain 不可由缓存决定 | 当前业务域来自服务端 AuthFlow 的 `application.domain_id`，localStorage 不能切换业务域或提升权限                                                |
 
 ### 12.2 并发安全
 
@@ -624,12 +624,12 @@ Challenge 验证（`challenge/service.go`）有独立的访问控制链：
 }
 ```
 
-| 字段                    | 类型                   | 说明                                                           |
-| ----------------------- | ---------------------- | -------------------------------------------------------------- |
-| `application.domain_id` | `platform \| consumer` | 当前 AuthFlow 的业务身份域，用于选择 `aegis:passkey:${domain}` |
-| `service.domain_id`     | `platform \| consumer` | 当前客户端上下文中服务的有效业务域                             |
+| 字段                    | 类型                   | 说明                                                       |
+| ----------------------- | ---------------------- | ---------------------------------------------------------- |
+| `application.domain_id` | `platform \| consumer` | 当前 AuthFlow 的业务域，用于选择 `aegis:passkey:${domain}` |
+| `service.domain_id`     | `platform \| consumer` | 当前客户端上下文中服务的有效业务域                         |
 
-共享服务在底层以 `domain_id = "-"` 存储，但该占位值不对 API 暴露。Aegis 返回 Context 时使用当前 Application 的 `domain_id` 解析有效服务域：`piris + iris` 返回 `platform`，`ciris + iris` 返回 `consumer`。
+需要继承客户端域的服务在底层以 `domain_id = "-"` 存储，但该占位值不对 API 暴露。Aegis 返回 Context 时使用当前 Application 的 `domain_id` 解析有效服务域：`piris + iris` 返回 `platform`，`ciris + iris` 返回 `consumer`。
 
 缺少 `application` 或 `domain_id` 时，前端不得猜测 domain，应跳过 Welcome Back 遮盖层并继续提供普通登录与手动 Passkey 入口。
 
