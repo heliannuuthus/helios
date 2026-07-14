@@ -279,8 +279,8 @@ func (s *provisionServiceServer) DeleteApplicationIDPConfig(ctx context.Context,
 
 func (s *provisionServiceServer) CreateService(ctx context.Context, req *hermesv1.CreateServiceRequest) (*hermesv1.Service, error) {
 	createReq := &dto.ServiceCreateRequest{
-		ServiceID:   req.GetServiceId(),
 		DomainID:    req.GetDomainId(),
+		ServiceID:   req.GetServiceId(),
 		Name:        req.GetName(),
 		Description: req.GetDescription(),
 		LogoURL:     req.LogoUrl,

@@ -8,6 +8,9 @@ import (
 	"github.com/heliannuuthus/pkg/logger"
 )
 
+// InheritedDomainID 表示服务的有效域由当前请求上下文继承。
+const InheritedDomainID = "-"
+
 // RateLimits 限流配置 map[window]limit
 type RateLimits map[string]int
 

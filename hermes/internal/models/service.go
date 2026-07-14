@@ -8,8 +8,8 @@ import (
 	"github.com/heliannuuthus/pkg/logger"
 )
 
-// CrossDomainID 底层约定：domain_id 为该值时表示跨域服务，可被多域共用。不在 API 响应中暴露，上层用请求的 domain_id 表示。
-const CrossDomainID = "-"
+// InheritedDomainID 表示服务的有效域由当前请求上下文继承，不在 API 响应中暴露。
+const InheritedDomainID = "-"
 
 // RateLimits 限流配置 map[window]limit
 // 例如: {"1m": 1, "24h": 10} 表示每分钟 1 次，每天 10 次
@@ -17,8 +17,8 @@ type RateLimits map[string]int
 
 // Service 服务（DB 模型，不直接序列化到 API，请使用 dto.ToServiceResponse）
 type Service struct {
-	ID                   uint                      `gorm:"primaryKey;autoIncrement;column:_id"`
-	DomainID             string                    `gorm:"column:domain_id;size:32;not null"`
+	ID                   uint                      `gorm:"primaryKey;autoIncrement;column:_id;index:idx_service_domain_cursor,priority:2"`
+	DomainID             string                    `gorm:"column:domain_id;size:32;not null;index:idx_service_domain_cursor,priority:1"`
 	ServiceID            string                    `gorm:"column:service_id;size:32;not null;uniqueIndex"`
 	Name                 string                    `gorm:"column:name;size:128;not null"`
 	Description          *string                   `gorm:"column:description;size:512"`

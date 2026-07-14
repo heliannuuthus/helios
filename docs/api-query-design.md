@@ -189,13 +189,13 @@ var serviceFilters = filter.Whitelist{
 
 ### 5.3 Service
 
-接收 `*ListRequest`，对特殊字段（如 domain_id 需要 OR 逻辑）手动 WHERE，其余通过 `filter.Apply` 自动处理：
+接收 `*ListRequest`，对特殊字段（如 domain_id 的上下文继承逻辑）手动 WHERE，其余通过 `filter.Apply` 自动处理：
 
 ```go
 func (s *Service) ListServices(ctx context.Context, domainID string, req *ListRequest) (*pagination.Items[models.Service], error) {
     query := s.db.WithContext(ctx).Model(&models.Service{})
     if domainID != "" {
-        query = query.Where("domain_id = ? OR domain_id = ?", domainID, models.CrossDomainID)
+        query = query.Where("domain_id IN (?, ?)", domainID, models.InheritedDomainID)
     }
     query = filter.Apply(query, req.Filter, serviceFilters)
     return pagination.CursorPaginate[models.Service](query, req.Pagination)

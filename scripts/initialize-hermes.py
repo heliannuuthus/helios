@@ -242,13 +242,13 @@ DOMAIN_IDPS: dict[str, list[str]] = {
     "platform": ["github", "google", "staff", "oper"],
 }
 
-# 与 hermes/models.CrossDomainID 一致：底层约定，domain_id 为该值时表示跨域服务，不在 API 暴露。
-CROSS_DOMAIN_ID = "-"
+# 与 hermes/models.InheritedDomainID 一致：服务的有效域由当前客户端上下文继承，不在 API 暴露该占位值。
+INHERITED_DOMAIN_ID = "-"
 
-# 服务归属域：hermes/iris 为跨域（多域共用）；zwei/chaos 归属 platform。
+# 服务归属域：hermes/iris 从当前客户端上下文继承；zwei/chaos 归属 platform。
 SERVICES = [
-    Service("hermes", CROSS_DOMAIN_ID, "Hermes 管理服务", "身份与访问管理服务", "https://aegis.heliannuuthus.com/logos/hermes.svg"),
-    Service("iris", CROSS_DOMAIN_ID, "Iris 用户服务", "用户信息管理服务", "https://aegis.heliannuuthus.com/logos/iris.svg"),
+    Service("hermes", INHERITED_DOMAIN_ID, "Hermes 管理服务", "身份与访问管理服务", "https://aegis.heliannuuthus.com/logos/hermes.svg"),
+    Service("iris", INHERITED_DOMAIN_ID, "Iris 用户服务", "用户信息管理服务", "https://aegis.heliannuuthus.com/logos/iris.svg"),
     Service("zwei", "platform", "Zwei 菜谱服务", "菜谱管理、收藏、推荐服务", "https://aegis.heliannuuthus.com/logos/zwei.svg"),
     Service("chaos", "platform", "Chaos 聚合服务", "邮件发送、文件上传等业务聚合服务", "https://aegis.heliannuuthus.com/logos/chaos.svg"),
 ]

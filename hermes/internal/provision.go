@@ -94,16 +94,16 @@ func (s *Service) DeleteDomain(ctx context.Context, domainID string) error {
 
 // CreateService 创建服务
 func (s *Service) CreateService(ctx context.Context, req *dto.ServiceCreateRequest) (*models.Service, error) {
-	if err := validation.ValidateID("service_id", req.ServiceID); err != nil {
+	if err := validation.ValidateID("domain_id", req.DomainID); err != nil {
 		return nil, err
 	}
-	if err := validation.ValidateID("domain_id", req.DomainID); err != nil {
+	if err := validation.ValidateID("service_id", req.ServiceID); err != nil {
 		return nil, err
 	}
 	desc := req.Description
 	svc := &models.Service{
-		ServiceID:            req.ServiceID,
 		DomainID:             req.DomainID,
+		ServiceID:            req.ServiceID,
 		Name:                 req.Name,
 		Description:          &desc,
 		LogoURL:              req.LogoURL,
@@ -143,7 +143,7 @@ var serviceFilters = filter.Whitelist{
 func (s *Service) ListServices(ctx context.Context, domainID string, req *dto.ListRequest) (*pagination.Items[models.Service], error) {
 	query := s.db.WithContext(ctx).Model(&models.Service{})
 	if domainID != "" {
-		query = query.Where("domain_id = ? OR domain_id = ?", domainID, models.CrossDomainID)
+		query = query.Where("domain_id IN (?, ?)", domainID, models.InheritedDomainID)
 	}
 	query = filter.Apply(query, req.Filter, serviceFilters)
 	return pagination.CursorPaginate[models.Service](query, req.Pagination)
