@@ -43,6 +43,9 @@ make build
 make build aegis
 make run aegis
 
+# 停止服务并清理构建产物与 MySQL/Redis 持久化卷
+make clean
+
 # 验证
 make test
 make lint

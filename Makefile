@@ -3,7 +3,7 @@ export PATH := $(HOME)/.asdf/shims:$(HOME)/.go/bin:$(HOME)/.cargo/bin:$(PATH)
 
 .PHONY: all build run test lint fmt generate proto swag clean help tidy \
        up down logs ps dev dev-up dev-down dev-logs dev-ps dev-check reset \
-       _dev-stop-processes _wait-infra _wait-prod-core _wait-aegis
+       _dev-stop-processes _clean-compose-data _wait-infra _wait-prod-core _wait-aegis
 
 SERVICES := hermes aegis zwei chaos
 MODULES  := proto pkg $(SERVICES)
@@ -90,8 +90,9 @@ check-generate: generate
 		exit 1; \
 	fi
 
-clean:
+clean: _clean-compose-data
 	rm -rf bin/ coverage.out dist/
+	@echo "[clean] 构建产物与 MySQL/Redis 持久化卷已清理"
 
 # ── docker build ─────────────────────────────────────
 
@@ -190,11 +191,23 @@ down:
 		echo "[down] $(CTR) daemon 未运行，跳过容器清理"; \
 	fi
 
-reset:
-	@echo "[reset] 停止容器并删除数据卷（MySQL + Redis 数据全部清空）"
-	-$(COMPOSE_PROD) down -v
-	-$(COMPOSE_DEV) down -v
-	@echo "[reset] 完成，下次 make dev-up/up 会重新初始化数据库"
+_clean-compose-data: _dev-stop-processes
+	@echo "[clean] 停止容器并删除数据卷（MySQL + Redis 数据全部清空）"
+	@if $(CTR) info >/dev/null 2>&1; then \
+		dev_rc=0; prod_rc=0; \
+		$(COMPOSE_DEV) down -v || dev_rc=$$?; \
+		$(COMPOSE_PROD) down -v || prod_rc=$$?; \
+		if [ $$dev_rc -ne 0 ] || [ $$prod_rc -ne 0 ]; then \
+			echo "[clean] ERROR: Compose 数据卷清理失败 (dev=$$dev_rc prod=$$prod_rc)"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "[clean] $(CTR) daemon 未运行，无法删除容器数据卷"; \
+		exit 1; \
+	fi
+
+reset: _clean-compose-data
+	@echo "[reset] 持久化数据已清空，下次 make dev-up/up 会重新初始化数据库"
 
 logs:
 	$(COMPOSE_PROD) logs -f
@@ -315,7 +328,7 @@ help:
 	@echo "生产容器模式（Gateway HTTP，不含 HTTPS Proxy）:"
 	@echo "  make up           使用 compose.prod.yaml 启动"
 	@echo "  make down         停止 compose.prod.yaml 服务"
-	@echo "  make reset        停止并清空所有数据（MySQL + Redis 卷删除）"
+	@echo "  make reset        停止服务并清空持久化数据（保留构建产物）"
 	@echo "  make logs         跟踪生产容器日志"
 	@echo "  make ps           查看生产容器状态"
 	@echo ""
@@ -326,4 +339,4 @@ help:
 	@echo "  make lint         检查"
 	@echo "  make tidy         整理依赖"
 	@echo "  make generate     codegen (proto + swag)"
-	@echo "  make clean        清理"
+	@echo "  make clean        停止服务，清理构建产物和 MySQL/Redis 持久化卷"
