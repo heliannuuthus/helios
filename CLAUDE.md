@@ -30,9 +30,13 @@ Helios 是 Go 多服务后端工作区，包含认证、IAM 数据层、业务 A
 make dev-check
 
 # 启动基础组件 + 本地服务进程
-make dev
+make dev-up
 make dev-down
 make dev-ps
+
+# 启动/停止生产容器（不含 HTTPS Proxy）
+make up
+make down
 
 # 构建/运行
 make build

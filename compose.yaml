@@ -19,6 +19,12 @@ services:
       - ./chaos/sql/schema.sql:/docker-entrypoint-initdb.d/04-chaos-schema.sql:ro
       - ./environments/db/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h127.0.0.1 -uroot -proot --silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 10s
     deploy:
       resources:
         limits:
@@ -35,6 +41,11 @@ services:
       - ./environments/cache/redis.conf:/usr/local/etc/redis/redis.conf:ro
     command: redis-server /usr/local/etc/redis/redis.conf
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a helios ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
     deploy:
       resources:
         limits:

@@ -2,7 +2,8 @@ SHELL := /bin/zsh
 export PATH := $(HOME)/.asdf/shims:$(HOME)/.go/bin:$(HOME)/.cargo/bin:$(PATH)
 
 .PHONY: all build run test lint fmt generate proto swag clean help tidy \
-       up down logs ps dev dev-down dev-ps dev-check reset
+       up down logs ps dev dev-up dev-down dev-logs dev-ps dev-check reset \
+       _dev-stop-processes _wait-infra _wait-prod-core _wait-aegis
 
 SERVICES := hermes aegis zwei chaos
 MODULES  := proto pkg $(SERVICES)
@@ -16,7 +17,7 @@ CTR := docker
 endif
 
 COMPOSE      := $(CTR) compose
-COMPOSE_FULL := $(COMPOSE) -f compose.yaml -f compose.full.yaml
+COMPOSE_PROD := $(COMPOSE) -f compose.yaml -f compose.prod.yaml
 COMPOSE_DEV  := $(COMPOSE) -f compose.yaml -f compose.dev.yaml
 
 CERTS    := environments/certs/fullchain.pem
@@ -131,73 +132,136 @@ dev-check:
 	fi; \
 	log "环境校验完成"
 
-# ── full (全容器) ────────────────────────────────────
+# ── prod (全容器，不含本地 HTTPS Proxy) ─────────────
 
-up: dev-check
+up: _dev-stop-processes
 	@command -v $(CTR) >/dev/null || { echo "[up] ERROR: 未找到 $(CTR)"; exit 1; }
 	@$(CTR) info >/dev/null 2>&1 || { echo "[up] ERROR: $(CTR) daemon 未运行"; exit 1; }
-	$(COMPOSE_FULL) up --build -d
+	@if $(CTR) container inspect helios-https-proxy >/dev/null 2>&1; then \
+		echo "[up] 停止开发 HTTPS Proxy"; \
+		$(COMPOSE_DEV) stop https-proxy; \
+		$(COMPOSE_DEV) rm -f https-proxy; \
+	fi
+	@echo "[up] 启动 db + cache（已运行则跳过）"
+	@if [ "$$($(CTR) container inspect -f '{{.State.Status}}' helios-db 2>/dev/null || true)" = running ] && \
+	    [ "$$($(CTR) container inspect -f '{{.State.Status}}' helios-cache 2>/dev/null || true)" = running ]; then \
+		echo "[up] MySQL + Redis 已在运行，跳过"; \
+	else \
+		$(COMPOSE_PROD) up -d db cache; \
+	fi
+	@$(MAKE) --no-print-directory _wait-infra LOG_PREFIX=up
+	@echo "[up] 构建生产服务镜像"
+	@$(COMPOSE_PROD) build hermes aegis zwei chaos
+	@echo "[up] 启动 hermes + zwei + chaos"
+	@$(COMPOSE_PROD) up -d hermes zwei chaos
+	@$(MAKE) --no-print-directory _wait-prod-core
+	@echo "[up] 启动 aegis"
+	@$(COMPOSE_PROD) up -d aegis
+	@$(MAKE) --no-print-directory _wait-aegis
+	@echo "[up] 启动 gateway"
+	@$(COMPOSE_PROD) up -d --force-recreate gateway
 	@echo ""
-	@echo "Helios 已启动: https://aegis.heliannuuthus.com"
+	@echo "Helios 生产容器已启动: Gateway http://127.0.0.1"
 	@echo "直连: aegis :18000 | hermes :8081/:50051 | zwei :18001 | chaos :18002"
 
-down:
-	-$(COMPOSE_FULL) down
-	-$(COMPOSE_DEV) down
-
-reset:
-	@echo "[reset] 停止容器并删除数据卷（MySQL + Redis 数据全部清空）"
-	-$(COMPOSE_FULL) down -v
-	-$(COMPOSE_DEV) down -v
-	-$(COMPOSE) down -v
-	@echo "[reset] 完成，下次 make dev/up 会重新初始化数据库"
-
-logs:
-	$(COMPOSE_FULL) logs -f
-
-ps:
-	$(COMPOSE_FULL) ps
-
-# ── dev (容器基础组件 + 本地进程) ────────────────────
-
-dev: dev-check build
-	@command -v $(CTR) >/dev/null || { echo "[dev] ERROR: 未找到 $(CTR)"; exit 1; }
-	@$(CTR) info >/dev/null 2>&1 || { echo "[dev] ERROR: $(CTR) daemon 未运行"; exit 1; }
-	@echo "[dev] 启动 db + cache"
-	@$(COMPOSE) up -d
+_wait-infra:
 	@set -e; \
 	wait_mysql() { i=0; while [ $$i -lt 60 ]; do $(CTR) exec helios-db mysqladmin ping -h127.0.0.1 -uroot -proot --silent >/dev/null 2>&1 && return 0; i=$$((i+1)); sleep 0.5; done; return 1; }; \
 	wait_redis() { i=0; while [ $$i -lt 30 ]; do $(CTR) exec helios-cache redis-cli -a helios ping 2>/dev/null | grep -q PONG && return 0; i=$$((i+1)); sleep 0.5; done; return 1; }; \
-	echo "[dev] 等待 MySQL..."; wait_mysql || { echo "[dev] ERROR: MySQL 超时"; $(CTR) logs --tail 20 helios-db; exit 1; }; echo "[dev] MySQL OK"; \
-	echo "[dev] 等待 Redis..."; wait_redis || { echo "[dev] ERROR: Redis 超时"; $(CTR) logs --tail 20 helios-cache; exit 1; }; echo "[dev] Redis OK"
-	@echo "[dev] 启动 gateway + https-proxy (dev)"
-	@$(COMPOSE_DEV) up -d
+	echo "[$(or $(LOG_PREFIX),dev)] 等待 MySQL..."; wait_mysql || { echo "[$(or $(LOG_PREFIX),dev)] ERROR: MySQL 超时"; $(CTR) logs --tail 20 helios-db; exit 1; }; echo "[$(or $(LOG_PREFIX),dev)] MySQL OK"; \
+	echo "[$(or $(LOG_PREFIX),dev)] 等待 Redis..."; wait_redis || { echo "[$(or $(LOG_PREFIX),dev)] ERROR: Redis 超时"; $(CTR) logs --tail 20 helios-cache; exit 1; }; echo "[$(or $(LOG_PREFIX),dev)] Redis OK"
+
+_wait-prod-core:
+	@set -e; \
+	wait_http() { name=$$1; port=$$2; i=0; while [ $$i -lt 60 ]; do curl -fsS --max-time 1 "http://127.0.0.1:$$port/health" >/dev/null 2>&1 && { echo "[up] $$name OK"; return 0; }; i=$$((i+1)); sleep 0.5; done; echo "[up] ERROR: $$name 健康检查超时"; $(CTR) logs --tail 30 "helios-$$name"; return 1; }; \
+	wait_http hermes 8081; \
+	wait_http zwei 18001; \
+	wait_http chaos 18002
+
+_wait-aegis:
+	@set -e; \
+	i=0; while [ $$i -lt 60 ]; do curl -fsS --max-time 1 http://127.0.0.1:18000/health >/dev/null 2>&1 && { echo "[up] aegis OK"; exit 0; }; i=$$((i+1)); sleep 0.5; done; \
+	echo "[up] ERROR: aegis 健康检查超时"; $(CTR) logs --tail 30 helios-aegis; exit 1
+
+down:
+	@if $(CTR) info >/dev/null 2>&1; then \
+		$(COMPOSE_PROD) down; \
+	else \
+		echo "[down] $(CTR) daemon 未运行，跳过容器清理"; \
+	fi
+
+reset:
+	@echo "[reset] 停止容器并删除数据卷（MySQL + Redis 数据全部清空）"
+	-$(COMPOSE_PROD) down -v
+	-$(COMPOSE_DEV) down -v
+	@echo "[reset] 完成，下次 make dev-up/up 会重新初始化数据库"
+
+logs:
+	$(COMPOSE_PROD) logs -f
+
+ps:
+	$(COMPOSE_PROD) ps
+
+# ── dev (容器基础组件 + 本地进程 + HTTPS Proxy) ─────
+
+dev: dev-up
+
+dev-up: dev-check build
+	@command -v $(CTR) >/dev/null || { echo "[dev] ERROR: 未找到 $(CTR)"; exit 1; }
+	@$(CTR) info >/dev/null 2>&1 || { echo "[dev] ERROR: $(CTR) daemon 未运行"; exit 1; }
+	@has_prod=false; for s in aegis hermes zwei chaos; do \
+		if $(CTR) container inspect "helios-$$s" >/dev/null 2>&1; then has_prod=true; break; fi; \
+	done; \
+	if $$has_prod; then \
+		echo "[dev] 停止生产后端容器"; \
+		$(COMPOSE_PROD) stop aegis hermes zwei chaos; \
+		$(COMPOSE_PROD) rm -f aegis hermes zwei chaos; \
+	fi
+	@echo "[dev] 启动 db + cache + gateway + https-proxy（已运行的服务会跳过）"
+	@if [ "$$($(CTR) container inspect -f '{{.State.Status}}' helios-db 2>/dev/null || true)" = running ] && \
+	    [ "$$($(CTR) container inspect -f '{{.State.Status}}' helios-cache 2>/dev/null || true)" = running ]; then \
+		echo "[dev] MySQL + Redis 已在运行，跳过"; \
+	else \
+		$(COMPOSE_DEV) up -d db cache; \
+	fi
+	@$(MAKE) --no-print-directory _wait-infra LOG_PREFIX=dev
+	@if [ "$$($(CTR) container inspect -f '{{.State.Status}}' helios-gateway 2>/dev/null || true)" = running ] && \
+	    [ "$$($(CTR) container inspect -f '{{.State.Status}}' helios-https-proxy 2>/dev/null || true)" = running ]; then \
+		echo "[dev] Gateway + HTTPS Proxy 已在运行，跳过"; \
+	else \
+		$(COMPOSE_DEV) up -d gateway; \
+		$(COMPOSE_DEV) up -d https-proxy; \
+	fi
 	@mkdir -p $(DEV_PID)
 	@set -e; \
 	log() { echo "[dev] $$*"; }; \
-	for s in hermes aegis zwei chaos; do \
-		if [ -f "$(DEV_PID)/$$s.pid" ] && kill -0 "$$(cat "$(DEV_PID)/$$s.pid")" 2>/dev/null; then \
-			log "$$s 已在运行 (pid $$(cat $(DEV_PID)/$$s.pid))，跳过"; continue; \
-		fi; \
-	done; \
+	service_running() { \
+		s=$$1; pid_file="$(DEV_PID)/$$s.pid"; \
+		[ -f "$$pid_file" ] || return 1; \
+		pid=$$(cat "$$pid_file" 2>/dev/null || true); \
+		case "$$pid" in ''|*[!0-9]*) return 1 ;; esac; \
+		kill -0 "$$pid" 2>/dev/null || return 1; \
+		expected=$$(realpath "./bin/$$s" 2>/dev/null || true); \
+		actual=$$(readlink -f "/proc/$$pid/exe" 2>/dev/null || true); \
+		actual=$${actual% (deleted)}; \
+		[ -n "$$expected" ] && [ "$$actual" = "$$expected" ]; \
+	}; \
 	wait_port() { i=0; while [ $$i -lt 50 ]; do nc -z 127.0.0.1 $$1 >/dev/null 2>&1 && return 0; i=$$((i+1)); sleep 0.2; done; return 1; }; \
-	log "启动 hermes (:8081 + gRPC :50051)"; \
-	BASE_SERVER_PORT=8081 ./bin/hermes & echo $$! > "$(DEV_PID)/hermes.pid"; \
+	if service_running hermes; then log "hermes 已在运行，跳过"; else log "启动 hermes (:8081 + gRPC :50051)"; HERMES_SERVER_PORT=8081 ./bin/hermes & echo $$! > "$(DEV_PID)/hermes.pid"; fi; \
 	wait_port 50051 || { log "ERROR: hermes 超时"; exit 1; }; \
-	log "启动 aegis (:18000)"; \
-	HERMES_GRPC_ADDR=127.0.0.1:50051 ./bin/aegis & echo $$! > "$(DEV_PID)/aegis.pid"; \
+	wait_port 8081 || { log "ERROR: hermes HTTP 超时"; exit 1; }; \
+	if service_running aegis; then log "aegis 已在运行，跳过"; else log "启动 aegis (:18000)"; HERMES_GRPC_ADDR=127.0.0.1:50051 ./bin/aegis & echo $$! > "$(DEV_PID)/aegis.pid"; fi; \
 	wait_port 18000 || { log "ERROR: aegis 超时"; exit 1; }; \
-	log "启动 zwei (:18001)"; \
-	BASE_SERVER_PORT=18001 ./bin/zwei & echo $$! > "$(DEV_PID)/zwei.pid"; \
-	log "启动 chaos (:18002)"; \
-	BASE_SERVER_PORT=18002 ./bin/chaos & echo $$! > "$(DEV_PID)/chaos.pid"; \
-	sleep 0.5; \
+	if service_running zwei; then log "zwei 已在运行，跳过"; else log "启动 zwei (:18001)"; ZWEI_SERVER_PORT=18001 ./bin/zwei & echo $$! > "$(DEV_PID)/zwei.pid"; fi; \
+	wait_port 18001 || { log "ERROR: zwei 超时"; exit 1; }; \
+	if service_running chaos; then log "chaos 已在运行，跳过"; else log "启动 chaos (:18002)"; CHAOS_SERVER_PORT=18002 ./bin/chaos & echo $$! > "$(DEV_PID)/chaos.pid"; fi; \
+	wait_port 18002 || { log "ERROR: chaos 超时"; exit 1; }; \
 	log "全部就绪 (Ctrl+C 停止前台输出, make dev-down 停进程)"; \
 	log "  https://aegis.heliannuuthus.com"; \
 	log "  hermes :8081 + gRPC :50051 | aegis :18000 | zwei :18001 | chaos :18002"; \
 	wait
 
-dev-down:
+_dev-stop-processes:
 	@log() { echo "[dev] $$*"; }; \
 	for s in chaos zwei aegis hermes; do \
 		pid_file="$(DEV_PID)/$$s.pid"; \
@@ -211,17 +275,23 @@ dev-down:
 		fi; \
 		expected=$$(realpath "./bin/$$s" 2>/dev/null || true); \
 		actual=$$(readlink -f "/proc/$$pid/exe" 2>/dev/null || true); \
+		actual=$${actual% (deleted)}; \
 		if [ -z "$$expected" ] || [ "$$actual" != "$$expected" ]; then \
 			log "WARN: PID $$pid 不属于 ./bin/$$s，拒绝停止 ($${actual:-unknown})"; \
 			continue; \
 		fi; \
 		kill "$$pid" 2>/dev/null && log "停止 $$s (pid $$pid)" || log "WARN: 无法停止 $$s (pid $$pid)"; \
 	done
+
+dev-down: _dev-stop-processes
 	@if $(CTR) info >/dev/null 2>&1; then \
-		$(COMPOSE_DEV) down && $(COMPOSE) down; \
+		$(COMPOSE_DEV) down; \
 	else \
 		echo "[dev] $(CTR) daemon 未运行，跳过容器清理"; \
 	fi
+
+dev-logs:
+	$(COMPOSE_DEV) logs -f
 
 dev-ps:
 	@for s in hermes aegis zwei chaos; do \
@@ -235,17 +305,19 @@ dev-ps:
 # ── help ─────────────────────────────────────────────
 
 help:
-	@echo "开发模式（容器基础组件 + 本地服务进程）:"
-	@echo "  make dev          一键启动（日志直接打印到终端，Ctrl+C 断开）"
-	@echo "  make dev-down     停止全部进程和容器"
+	@echo "开发模式（基础组件 + 本地服务 + Gateway + HTTPS Proxy）:"
+	@echo "  make dev-up       一键启动（日志直接打印到终端，Ctrl+C 断开）"
+	@echo "  make dev          dev-up 的兼容别名"
+	@echo "  make dev-down     停止本地进程与 compose.dev.yaml 服务"
+	@echo "  make dev-logs     跟踪开发容器日志"
 	@echo "  make dev-ps       查看进程状态"
 	@echo ""
-	@echo "全容器模式:"
-	@echo "  make up           全部容器化启动"
-	@echo "  make down         全部停止"
+	@echo "生产容器模式（Gateway HTTP，不含 HTTPS Proxy）:"
+	@echo "  make up           使用 compose.prod.yaml 启动"
+	@echo "  make down         停止 compose.prod.yaml 服务"
 	@echo "  make reset        停止并清空所有数据（MySQL + Redis 卷删除）"
-	@echo "  make logs         跟踪容器日志"
-	@echo "  make ps           查看容器状态"
+	@echo "  make logs         跟踪生产容器日志"
+	@echo "  make ps           查看生产容器状态"
 	@echo ""
 	@echo "构建 & 工具:"
 	@echo "  make build [svc]  编译 (hermes/aegis/zwei/chaos)"
