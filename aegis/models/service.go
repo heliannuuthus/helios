@@ -8,6 +8,9 @@ import (
 	"github.com/heliannuuthus/pkg/logger"
 )
 
+// CrossDomainID 是共享服务在底层存储中的占位值；API 应返回当前应用的有效域。
+const CrossDomainID = "-"
+
 // RateLimits 限流配置 map[window]limit
 type RateLimits map[string]int
 

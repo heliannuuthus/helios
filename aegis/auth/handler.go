@@ -217,15 +217,21 @@ func (h *Handler) GetContext(c *gin.Context) {
 
 	if flow.Application != nil {
 		resp.Application = &ApplicationInfo{
-			AppID:   flow.Application.AppID,
-			Name:    flow.Application.Name,
-			LogoURL: flow.Application.LogoURL,
+			AppID:    flow.Application.AppID,
+			DomainID: flow.Application.DomainID,
+			Name:     flow.Application.Name,
+			LogoURL:  flow.Application.LogoURL,
 		}
 	}
 
 	if flow.Service != nil {
+		serviceDomainID := flow.Service.DomainID
+		if serviceDomainID == models.CrossDomainID && flow.Application != nil {
+			serviceDomainID = flow.Application.DomainID
+		}
 		resp.Service = &ServiceInfo{
 			ServiceID:   flow.Service.ServiceID,
+			DomainID:    serviceDomainID,
 			Name:        flow.Service.Name,
 			Description: flow.Service.Description,
 		}

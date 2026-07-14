@@ -118,14 +118,16 @@ type ConfirmIdentifyRequest struct {
 
 // ApplicationInfo 应用信息
 type ApplicationInfo struct {
-	AppID   string  `json:"app_id"`
-	Name    string  `json:"name"`
-	LogoURL *string `json:"logo_url,omitempty"`
+	AppID    string  `json:"app_id"`
+	DomainID string  `json:"domain_id"`
+	Name     string  `json:"name"`
+	LogoURL  *string `json:"logo_url,omitempty"`
 }
 
 // ServiceInfo 服务信息
 type ServiceInfo struct {
 	ServiceID   string  `json:"service_id"`
+	DomainID    string  `json:"domain_id"`
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
 }
