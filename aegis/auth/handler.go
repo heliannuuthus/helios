@@ -217,8 +217,8 @@ func (h *Handler) GetContext(c *gin.Context) {
 
 	if flow.Application != nil {
 		resp.Application = &ApplicationInfo{
-			AppID:    flow.Application.AppID,
 			DomainID: flow.Application.DomainID,
+			AppID:    flow.Application.AppID,
 			Name:     flow.Application.Name,
 			LogoURL:  flow.Application.LogoURL,
 		}
@@ -230,8 +230,8 @@ func (h *Handler) GetContext(c *gin.Context) {
 			serviceDomainID = flow.Application.DomainID
 		}
 		resp.Service = &ServiceInfo{
-			ServiceID:   flow.Service.ServiceID,
 			DomainID:    serviceDomainID,
+			ServiceID:   flow.Service.ServiceID,
 			Name:        flow.Service.Name,
 			Description: flow.Service.Description,
 		}

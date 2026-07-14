@@ -24,8 +24,8 @@ type DomainResponse struct {
 
 // ServiceCreateRequest 创建服务请求（服务仅控制 access_token 有效期）
 type ServiceCreateRequest struct {
-	ServiceID            string  `json:"service_id" binding:"required"`
 	DomainID             string  `json:"domain_id" binding:"required"`
+	ServiceID            string  `json:"service_id" binding:"required"`
 	Name                 string  `json:"name" binding:"required"`
 	Description          string  `json:"description" binding:"required"`
 	LogoURL              *string `json:"logo_url"`
@@ -42,8 +42,8 @@ type ServiceUpdateRequest struct {
 
 // ServiceResponse 服务（无 _id，仅 access_token 有效期由服务控制）
 type ServiceResponse struct {
-	ServiceID            string  `json:"service_id"`
 	DomainID             string  `json:"domain_id"`
+	ServiceID            string  `json:"service_id"`
 	Name                 string  `json:"name"`
 	Description          *string `json:"description,omitempty"`
 	LogoURL              *string `json:"logo_url,omitempty"`
@@ -58,8 +58,8 @@ func NewServiceResponse(s *models.Service, domainID string) ServiceResponse {
 		effectiveDomainID = domainID
 	}
 	return ServiceResponse{
-		ServiceID:            s.ServiceID,
 		DomainID:             effectiveDomainID,
+		ServiceID:            s.ServiceID,
 		Name:                 s.Name,
 		Description:          s.Description,
 		LogoURL:              s.LogoURL,

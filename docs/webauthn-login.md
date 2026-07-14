@@ -175,15 +175,14 @@ Value 中不设置 `registered`。读取逻辑使用 `localStorage.getItem(key) 
 
 ### 5.3 缓存管理设计
 
-缓存模块（`passkeyCache`）对外提供五个操作：
+缓存模块（`passkeyCache`）对外提供四个操作：
 
-| 操作                               | 语义                                                      | 触发场景                                        |
-| ---------------------------------- | --------------------------------------------------------- | ----------------------------------------------- |
-| `get(domain)`                      | 读取指定业务域的用户提示信息，不存在或格式非法则返回 null | 登录页加载时判断是否展示遮盖层                  |
-| `set(domain, info)`                | 写入指定业务域的缓存，自动附加 `updated_at`               | `writeAfterRegistration` 内部调用               |
-| `clear(domain)`                    | 只清除指定业务域的缓存                                    | 删除该域最后一个 Passkey 凭证后；凭证失效检测时 |
-| `setPendingUserInfo(domain, info)` | 按业务域将用户信息暂存到内存 Map，不写 localStorage       | Profile 数据加载成功后                          |
-| `writeAfterRegistration(domain)`   | 将该业务域暂存的信息写入 localStorage                     | Passkey 注册成功后                              |
+| 操作                                   | 语义                                                     | 触发场景                                        |
+| -------------------------------------- | -------------------------------------------------------- | ----------------------------------------------- |
+| `get(domainId)`                        | 读取指定业务域的用户提示，不存在或格式非法则返回 null    | 登录页加载时判断是否展示遮盖层                  |
+| `clear(domainId)`                      | 只清除指定业务域的提示                                   | 删除该域最后一个 Passkey 凭证后；凭证失效检测时 |
+| `stagePasskeyUserHint(domainId, hint)` | 按业务域暂存待提交的 Passkey 用户提示，不写 localStorage | Profile 数据加载成功后                          |
+| `commitPasskeyUserHint(domainId)`      | 将该业务域已暂存的 Passkey 用户提示写入 localStorage     | Passkey 注册成功后                              |
 
 #### 暂存-提交两阶段写入机制
 
@@ -191,8 +190,8 @@ Value 中不设置 `registered`。读取逻辑使用 `localStorage.getItem(key) 
 
 为此采用两阶段机制：
 
-1. **暂存阶段**（`setPendingUserInfo(domain, info)`）：个人信息页加载 Profile 后，将当前用户的 `uid`、`nickname`、`picture` 按业务域写入模块内部的内存 Map。此时 localStorage 不发生变化。
-2. **提交阶段**（`writeAfterRegistration(domain)`）：WebAuthn 注册完整成功（后端 Finish 返回 `success: true`）后，才将对应业务域的暂存数据写入 localStorage。如果注册失败，localStorage 保持不变，暂存数据在页面刷新后自然丢失。
+1. **暂存阶段**（`stagePasskeyUserHint(domainId, hint)`）：个人信息页加载 Profile 后，将当前用户的 `uid`、`nickname`、`picture` 按业务域写入模块内部的内存 Map。此时 localStorage 不发生变化。
+2. **提交阶段**（`commitPasskeyUserHint(domainId)`）：WebAuthn 注册完整成功（后端 Finish 返回 `success: true`）后，才将对应业务域的暂存提示写入 localStorage。如果注册失败，localStorage 保持不变，暂存提示在页面刷新后自然丢失。
 
 这一设计可以避免“注册未完成却留下提示”的假阳性，但不能检测用户在系统设置、其他设备或同步 Passkey 管理器中删除凭证的情况。localStorage 始终只是提示，实际可用性必须由 `navigator.credentials.get()` 和后端验签确认。
 
@@ -210,14 +209,14 @@ Value 中不设置 `registered`。读取逻辑使用 `localStorage.getItem(key) 
 
 #### 写入场景：Passkey 注册成功
 
-| 步骤 | 动作                                 | 说明                                                                  |
-| ---- | ------------------------------------ | --------------------------------------------------------------------- |
-| 1    | 用户在个人信息页点击"添加安全密钥"   | 进入 WebAuthn 注册流程                                                |
-| 2    | 前端按业务域暂存当前用户信息         | 调用 `setPendingUserInfo(domain, info)`，此时不写 localStorage        |
-| 3    | 调用 Iris `POST /user/mfa`（Begin）  | 获取 `PublicKeyCredentialCreationOptions`                             |
-| 4    | 浏览器弹出系统验证弹窗               | 用户进行指纹/面容/PIN 认证                                            |
-| 5    | 调用 Iris `POST /user/mfa`（Finish） | 提交 attestation，后端保存凭证                                        |
-| 6    | 注册成功，提交缓存写入               | 调用 `writeAfterRegistration(domain)`，写入 `aegis:passkey:${domain}` |
+| 步骤 | 动作                                 | 说明                                                                   |
+| ---- | ------------------------------------ | ---------------------------------------------------------------------- |
+| 1    | 用户在个人信息页点击"添加安全密钥"   | 进入 WebAuthn 注册流程                                                 |
+| 2    | 前端按业务域暂存 Passkey 用户提示    | 调用 `stagePasskeyUserHint(domainId, hint)`，此时不写 localStorage     |
+| 3    | 调用 Iris `POST /user/mfa`（Begin）  | 获取 `PublicKeyCredentialCreationOptions`                              |
+| 4    | 浏览器弹出系统验证弹窗               | 用户进行指纹/面容/PIN 认证                                             |
+| 5    | 调用 Iris `POST /user/mfa`（Finish） | 提交 attestation，后端保存凭证                                         |
+| 6    | 注册成功，提交缓存写入               | 调用 `commitPasskeyUserHint(domainId)`，写入 `aegis:passkey:${domain}` |
 
 若步骤 3~5 中任何环节失败，步骤 6 不会执行，localStorage 保持不变。
 
@@ -553,8 +552,8 @@ Challenge 验证（`challenge/service.go`）有独立的访问控制链：
 - [x] 登录页新增 Welcome Back 遮盖层组件（`SecurityMask`）
 - [x] `/auth/context` 返回 `application.domain_id`
 - [x] 接入当前 domain 缓存、设备能力与 connections 判断逻辑
-- [x] 个人信息页 Passkey 注册成功后写入当前 domain 缓存（`writeAfterRegistration(domain)`）
-- [x] Passkey 删除后清理当前 domain 缓存（`clear(domain)`）
+- [x] 个人信息页 Passkey 注册成功后写入当前 domain 缓存（`commitPasskeyUserHint(domainId)`）
+- [x] Passkey 删除后清理当前 domain 缓存（`clear(domainId)`）
 - [x] 移除 `registered` 状态字段，以合法 value 是否存在作为提示标记
 - [x] Conditional UI 与遮盖层的互斥协作
 - [x] 独立 Passkey 按钮（非遮盖层时的手动触发入口）
@@ -612,13 +611,13 @@ Challenge 验证（`challenge/service.go`）有独立的访问控制链：
 ```json
 {
   "application": {
-    "app_id": "piris",
     "domain_id": "platform",
+    "app_id": "piris",
     "name": "平台个人中心"
   },
   "service": {
-    "service_id": "iris",
     "domain_id": "platform",
+    "service_id": "iris",
     "name": "Iris 用户服务"
   }
 }
@@ -1006,6 +1005,6 @@ Staff Provider 对 delegate 的处理是**token 来源无关**的——无论 ch
 
 3. **多设备场景**：用户在设备 A 注册 Passkey 后在设备 B 登录，设备 B 无缓存不会显示遮盖层，但 Conditional UI（如果支持）可作为备选入口。
 
-4. **Passkey 注册时的暂存依赖**：`setPendingUserInfo(domain, info)` 依赖 Profile/Layout 加载用户资料后暂存。如果用户中心重构，需确保注册成功前已经完成对应 domain 的暂存。
+4. **Passkey 注册时的暂存依赖**：`stagePasskeyUserHint(domainId, hint)` 依赖 Profile/Layout 加载用户资料后暂存。如果用户中心重构，需确保注册成功前已经完成对应 domain 的暂存。
 
 5. **用户中心尚未与登录页同源**：当前 Iris 页面仍运行在 `iris.heliannuuthus.com`，其 localStorage 无法被 `aegis.heliannuuthus.com` 登录页读取。需要完成 `/u` 路由、`piris/ciris` OAuth 回调白名单和部署路由的联合迁移。
