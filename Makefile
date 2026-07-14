@@ -200,18 +200,28 @@ dev: dev-check build
 dev-down:
 	@log() { echo "[dev] $$*"; }; \
 	for s in chaos zwei aegis hermes; do \
-		if [ -f "$(DEV_PID)/$$s.pid" ]; then \
-			pid=$$(cat "$(DEV_PID)/$$s.pid"); \
-			kill "$$pid" 2>/dev/null && log "停止 $$s (pid $$pid)" || true; \
-			rm -f "$(DEV_PID)/$$s.pid"; \
+		pid_file="$(DEV_PID)/$$s.pid"; \
+		[ -f "$$pid_file" ] || continue; \
+		pid=$$(cat "$$pid_file" 2>/dev/null || true); \
+		rm -f "$$pid_file"; \
+		case "$$pid" in ''|*[!0-9]*) log "忽略无效 PID 文件: $$pid_file"; continue ;; esac; \
+		if ! kill -0 "$$pid" 2>/dev/null; then \
+			log "清理已失效的 PID: $$s (pid $$pid)"; \
+			continue; \
 		fi; \
-	done; \
-	for port in 8081 50051 18000 18001 18002; do \
-		pids=$$(lsof -ti:$$port 2>/dev/null || true); \
-		if [ -n "$$pids" ]; then kill $$pids 2>/dev/null && log "清理端口 :$$port (pid $$pids)" || true; fi; \
+		expected=$$(realpath "./bin/$$s" 2>/dev/null || true); \
+		actual=$$(readlink -f "/proc/$$pid/exe" 2>/dev/null || true); \
+		if [ -z "$$expected" ] || [ "$$actual" != "$$expected" ]; then \
+			log "WARN: PID $$pid 不属于 ./bin/$$s，拒绝停止 ($${actual:-unknown})"; \
+			continue; \
+		fi; \
+		kill "$$pid" 2>/dev/null && log "停止 $$s (pid $$pid)" || log "WARN: 无法停止 $$s (pid $$pid)"; \
 	done
-	-$(COMPOSE_DEV) down
-	-$(COMPOSE) down
+	@if $(CTR) info >/dev/null 2>&1; then \
+		$(COMPOSE_DEV) down && $(COMPOSE) down; \
+	else \
+		echo "[dev] $(CTR) daemon 未运行，跳过容器清理"; \
+	fi
 
 dev-ps:
 	@for s in hermes aegis zwei chaos; do \
