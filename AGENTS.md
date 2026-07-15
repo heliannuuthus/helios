@@ -1,6 +1,6 @@
-# Helios AGENTS
+# Helios
 
-本文件是 Helios 的高优先级协作约束，面向 AI Agent 与开发者。
+Helios 是 Go 多服务后端工作区，包含认证、IAM 数据层、业务 API、运维 API、proto 与公共基础库。各服务是独立进程，仓库根没有统一 `main.go`。本文件是面向 AI Agent 与开发者的高优先级项目说明和协作约束。
 
 ## 一眼就要记住的规则
 
@@ -22,6 +22,8 @@
 | `github.com/heliannuuthus/aegis` | `aegis/` | 认证 + 用户中心；入口 `aegis/main.go` |
 | `github.com/heliannuuthus/zwei` | `zwei/` | 业务 API；入口 `zwei/main.go` |
 | `github.com/heliannuuthus/chaos` | `chaos/` | 运维 API；入口 `chaos/main.go`，独立 DB |
+| - | `environments/` | DB、Redis、gateway、https-proxy 与本地证书 |
+| - | `scripts/` | 开发和运维辅助脚本 |
 
 - `aegis/profile/`：用户中心/Profile 能力，与 Aegis 同进程，不是独立服务。
 - 服务间 **禁止** import 其他服务的 Go 包；共享只通过 `proto`、`pkg`。
@@ -36,6 +38,40 @@
 - `hermes/internal/models`：仅 Hermes 内部使用（`internal` 保护）。
 - `chaos/config.InitDB()`：连 chaos 独立库，禁止 import `hermes/config`。
 - 每个服务只在自己的项目根目录使用 `config.toml`，并提交不含密钥的 `example.toml`；加载封装在 `pkg/config` 与各服务 `config/`。
+
+## 常用命令
+
+```bash
+# 本地依赖检查、证书和 hosts
+make dev-check
+
+# 启动基础组件 + 本地服务进程
+make dev-up
+make dev-down
+make dev-ps
+
+# 启动/停止生产容器（不含 HTTPS Proxy）
+make up
+make down
+
+# 构建/运行
+make build
+make build aegis
+make run aegis
+
+# 停止服务并清理构建产物与 MySQL/Redis 持久化卷
+make clean
+
+# 验证
+make test
+make lint
+make fmt
+make tidy
+
+# 代码生成
+make proto
+make generate
+```
 
 ## PATCH 语义（强约束）
 
@@ -81,6 +117,13 @@ updates := patch.Collect(
 - 确保 import 分组正确：标准库 / 第三方 / 项目内部
 - 不要硬编码密钥、token，不要提交 `.env`
 
+验证 Checklist：
+
+1. Go 代码改动：运行 `make test`，必要时运行 `make lint`。
+2. Proto 改动：运行 `make proto` 或 `make generate`，检查生成代码。
+3. 服务边界改动：确认没有跨服务 import `internal` 或直接访问其他服务 DB。
+4. 认证流程改动：同步检查 Pallas 和 aegis-ts 的调用契约。
+
 ---
 
-如果和历史文档冲突，以本文件和当前代码实现为准；变更该规则时请同步更新 `CLAUDE.md`。
+如果和历史文档冲突，以本文件和当前代码实现为准。
