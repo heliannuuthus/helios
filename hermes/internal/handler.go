@@ -1,13 +1,16 @@
 package hermes
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/heliannuuthus/hermes/internal/dto"
 	"github.com/heliannuuthus/hermes/internal/models"
+	"github.com/heliannuuthus/pkg/logger"
 	"github.com/heliannuuthus/pkg/pagination"
 )
 
@@ -30,6 +33,34 @@ func NewHandler(services *Services) *Handler {
 }
 
 // ==================== Domain 相关 ====================
+
+// CreateDomain POST /hermes/domains
+func (h *Handler) CreateDomain(c *gin.Context) {
+	var req dto.DomainCreateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	domain, err := h.provision.CreateDomain(c.Request.Context(), &req)
+	if err != nil {
+		if errors.Is(err, ErrDomainAlreadyExists) {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, ErrInvalidDomain) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		logger.Errorf("创建域失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建域失败"})
+		return
+	}
+	c.JSON(http.StatusCreated, dto.DomainResponse{
+		DomainID:    domain.DomainID,
+		Name:        domain.Name,
+		Description: domain.Description,
+	})
+}
 
 // GetDomain GET /hermes/domains/:domain_id
 func (h *Handler) GetDomain(c *gin.Context) {
@@ -199,7 +230,16 @@ func (h *Handler) UpdateDomain(c *gin.Context) {
 	}
 	domain, err := h.provision.UpdateDomain(c.Request.Context(), domainID, &req)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if errors.Is(err, ErrInvalidDomain) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "域不存在"})
+			return
+		}
+		logger.Errorf("更新域失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新域失败"})
 		return
 	}
 	c.JSON(http.StatusOK, dto.DomainResponse{

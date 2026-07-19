@@ -2,8 +2,10 @@ package hermes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-json-experiment/json"
 	"gorm.io/gorm"
@@ -18,6 +20,76 @@ import (
 )
 
 // ==================== Domain 相关 ====================
+
+var (
+	ErrDomainAlreadyExists = errors.New("域已存在")
+	ErrInvalidDomain       = errors.New("域参数无效")
+)
+
+func validateDomainName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("name 不能为空")
+	}
+	if utf8.RuneCountInString(name) > 128 {
+		return "", fmt.Errorf("name 不能超过 128 个字符")
+	}
+	return name, nil
+}
+
+func validateDomainDescription(description string) (string, error) {
+	description = strings.TrimSpace(description)
+	if utf8.RuneCountInString(description) > 512 {
+		return "", fmt.Errorf("description 不能超过 512 个字符")
+	}
+	return description, nil
+}
+
+// CreateDomain 创建域。
+func (s *ProvisionService) CreateDomain(ctx context.Context, req *dto.DomainCreateRequest) (*models.Domain, error) {
+	domainID := strings.TrimSpace(req.DomainID)
+	if err := validation.ValidateID("domain_id", domainID); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidDomain, err)
+	}
+	name, err := validateDomainName(req.Name)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidDomain, err)
+	}
+
+	var description *string
+	if req.Description != nil {
+		value, err := validateDomainDescription(*req.Description)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidDomain, err)
+		}
+		if value != "" {
+			description = &value
+		}
+	}
+
+	var count int64
+	if err := s.db.WithContext(ctx).Model(&models.DomainRecord{}).
+		Where("domain_id = ?", domainID).Count(&count).Error; err != nil {
+		return nil, fmt.Errorf("检查域失败: %w", err)
+	}
+	if count > 0 {
+		return nil, fmt.Errorf("%w: %s", ErrDomainAlreadyExists, domainID)
+	}
+
+	record := &models.DomainRecord{
+		DomainID:    domainID,
+		Name:        name,
+		Description: description,
+	}
+	if err := s.db.WithContext(ctx).Create(record).Error; err != nil {
+		return nil, fmt.Errorf("创建域失败: %w", err)
+	}
+	return &models.Domain{
+		DomainID:    record.DomainID,
+		Name:        record.Name,
+		Description: record.Description,
+	}, nil
+}
 
 // GetDomain 获取域基础信息（仅 t_domain 元数据）
 func (s *ProvisionService) GetDomain(ctx context.Context, domainID string) (*models.Domain, error) {
@@ -51,8 +123,28 @@ func (s *ProvisionService) ListDomains(ctx context.Context) ([]models.Domain, er
 
 // UpdateDomain 更新域（仅 name、description）
 func (s *ProvisionService) UpdateDomain(ctx context.Context, domainID string, req *dto.DomainUpdateRequest) (*models.Domain, error) {
+	if err := validation.ValidateID("domain_id", domainID); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidDomain, err)
+	}
 	if _, err := s.getDomain(ctx, domainID); err != nil {
 		return nil, err
+	}
+	if req.Name.IsPresent() {
+		if !req.Name.HasValue() {
+			return nil, fmt.Errorf("%w: name 不能为空", ErrInvalidDomain)
+		}
+		name, err := validateDomainName(req.Name.Value())
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidDomain, err)
+		}
+		req.Name = patch.Set(name)
+	}
+	if req.Description.HasValue() {
+		description, err := validateDomainDescription(req.Description.Value())
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidDomain, err)
+		}
+		req.Description = patch.Set(description)
 	}
 	updates := patch.Collect(
 		patch.Field("name", req.Name),

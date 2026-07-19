@@ -105,6 +105,7 @@ func startHTTP(services *hermes.Services) {
 		domains := api.Group("/domains")
 		{
 			domains.GET("", handler.ListDomains)
+			domains.POST("", adminRelation, handler.CreateDomain)
 			domains.GET("/:domain_id", handler.GetDomain)
 			domains.PATCH("/:domain_id", adminRelation, handler.UpdateDomain)
 			domains.DELETE("/:domain_id", adminRelation, handler.DeleteDomain)
