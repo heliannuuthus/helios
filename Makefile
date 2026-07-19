@@ -8,6 +8,11 @@ export PATH := $(HOME)/.asdf/shims:$(HOME)/.go/bin:$(HOME)/.cargo/bin:$(PATH)
 SERVICES := hermes aegis zwei chaos
 MODULES  := proto pkg $(SERVICES)
 
+GO_TOOLCHAIN            := $(shell go env GOVERSION)
+GOLANGCI_LINT_VERSION  ?= v2.12.2
+GOLANGCI_LINT_DIR       := $(CURDIR)/bin/tools/$(GO_TOOLCHAIN)/$(GOLANGCI_LINT_VERSION)
+GOLANGCI_LINT           := $(GOLANGCI_LINT_DIR)/golangci-lint
+
 ifneq ($(CONTAINER_RUNTIME),)
 CTR := $(CONTAINER_RUNTIME)
 else ifneq ($(shell command -v nerdctl 2>/dev/null),)
@@ -66,8 +71,15 @@ run: build
 test:
 	@for m in $(MODULES); do (cd $$m && go test ./...); done
 
-lint:
-	@for m in $(MODULES); do (cd $$m && golangci-lint run --fix ./...); done
+$(GOLANGCI_LINT):
+	@echo "[tools] install golangci-lint $(GOLANGCI_LINT_VERSION) with $(GO_TOOLCHAIN)"
+	@mkdir -p "$(GOLANGCI_LINT_DIR)"
+	@GOBIN="$(GOLANGCI_LINT_DIR)" GOTOOLCHAIN="$(GO_TOOLCHAIN)" \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+lint: $(GOLANGCI_LINT)
+	@$(GOLANGCI_LINT) version
+	@for m in $(MODULES); do (cd $$m && $(GOLANGCI_LINT) run --fix ./...); done
 
 fmt:
 	@for m in $(MODULES); do (cd $$m && go fmt ./...); done
