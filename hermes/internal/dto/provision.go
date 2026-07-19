@@ -7,6 +7,13 @@ import (
 
 // ==================== Domain ====================
 
+// DomainCreateRequest 创建域请求。
+type DomainCreateRequest struct {
+	DomainID    string  `json:"domain_id" binding:"required"`
+	Name        string  `json:"name" binding:"required"`
+	Description *string `json:"description"`
+}
+
 // DomainUpdateRequest 更新域请求（JSON Merge Patch 语义，仅 name、description 可编辑）
 type DomainUpdateRequest struct {
 	Name        patch.Optional[string] `json:"name"`

@@ -17,10 +17,10 @@ import (
 
 type resourceServiceServer struct {
 	hermesv1.UnimplementedResourceServiceServer
-	svc *hermes.Service
+	svc *hermes.ResourceService
 }
 
-func NewResourceServiceServer(svc *hermes.Service) hermesv1.ResourceServiceServer {
+func NewResourceServiceServer(svc *hermes.ResourceService) hermesv1.ResourceServiceServer {
 	return &resourceServiceServer{svc: svc}
 }
 

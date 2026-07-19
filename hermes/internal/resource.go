@@ -16,7 +16,7 @@ import (
 // ==================== ApplicationServiceRelation 相关 ====================
 
 // SetApplicationServiceRelations 设置应用可访问的服务和关系
-func (s *Service) SetApplicationServiceRelations(ctx context.Context, req *dto.ApplicationServiceRelationRequest) error {
+func (s *ResourceService) SetApplicationServiceRelations(ctx context.Context, req *dto.ApplicationServiceRelationRequest) error {
 	if err := s.db.WithContext(ctx).Where("app_id = ? AND service_id = ?", req.AppID, req.ServiceID).
 		Delete(&models.ApplicationServiceRelation{}).Error; err != nil {
 		return fmt.Errorf("删除旧关系失败: %w", err)
@@ -36,7 +36,7 @@ func (s *Service) SetApplicationServiceRelations(ctx context.Context, req *dto.A
 }
 
 // ListApplicationServiceRelations 获取应用可访问的服务和关系
-func (s *Service) ListApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error) {
+func (s *ResourceService) ListApplicationServiceRelations(ctx context.Context, appID string) ([]models.ApplicationServiceRelation, error) {
 	var relations []models.ApplicationServiceRelation
 	if err := s.db.WithContext(ctx).Where("app_id = ?", appID).Find(&relations).Error; err != nil {
 		return nil, fmt.Errorf("获取应用服务关系失败: %w", err)
@@ -45,7 +45,7 @@ func (s *Service) ListApplicationServiceRelations(ctx context.Context, appID str
 }
 
 // GetServiceApplicationRelations 获取服务已授权给哪些应用及授予的权限
-func (s *Service) GetServiceApplicationRelations(ctx context.Context, serviceID string) ([]models.ApplicationServiceRelation, error) {
+func (s *ResourceService) GetServiceApplicationRelations(ctx context.Context, serviceID string) ([]models.ApplicationServiceRelation, error) {
 	var relations []models.ApplicationServiceRelation
 	if err := s.db.WithContext(ctx).Where("service_id = ?", serviceID).Find(&relations).Error; err != nil {
 		return nil, fmt.Errorf("获取服务已授权应用失败: %w", err)
@@ -54,7 +54,7 @@ func (s *Service) GetServiceApplicationRelations(ctx context.Context, serviceID 
 }
 
 // GetServiceAppRelations 获取某服务授予某应用的关系列表
-func (s *Service) GetServiceAppRelations(ctx context.Context, serviceID, appID string) ([]string, error) {
+func (s *ResourceService) GetServiceAppRelations(ctx context.Context, serviceID, appID string) ([]string, error) {
 	var relations []models.ApplicationServiceRelation
 	if err := s.db.WithContext(ctx).Where("service_id = ? AND app_id = ?", serviceID, appID).Find(&relations).Error; err != nil {
 		return nil, fmt.Errorf("获取服务应用关系失败: %w", err)
@@ -69,7 +69,7 @@ func (s *Service) GetServiceAppRelations(ctx context.Context, serviceID, appID s
 // ==================== Relationship 相关 ====================
 
 // CreateRelationship 创建关系
-func (s *Service) CreateRelationship(ctx context.Context, req *dto.RelationshipCreateRequest) (*models.Relationship, error) {
+func (s *ResourceService) CreateRelationship(ctx context.Context, req *dto.RelationshipCreateRequest) (*models.Relationship, error) {
 	var expiresAt *time.Time
 	if req.ExpiresAt != nil {
 		exp, err := time.Parse(time.RFC3339, *req.ExpiresAt)
@@ -95,7 +95,7 @@ func (s *Service) CreateRelationship(ctx context.Context, req *dto.RelationshipC
 }
 
 // DeleteRelationship 删除关系
-func (s *Service) DeleteRelationship(ctx context.Context, req *dto.RelationshipDeleteRequest) error {
+func (s *ResourceService) DeleteRelationship(ctx context.Context, req *dto.RelationshipDeleteRequest) error {
 	if err := s.db.WithContext(ctx).Where(
 		"service_id = ? AND subject_type = ? AND subject_id = ? AND relation = ? AND object_type = ? AND object_id = ?",
 		req.ServiceID, req.SubjectType, req.SubjectID, req.Relation, req.ObjectType, req.ObjectID,
@@ -112,14 +112,14 @@ var relationshipFilters = filter.Whitelist{
 }
 
 // ListRelationships 列出关系（游标分页）
-func (s *Service) ListRelationships(ctx context.Context, req *dto.ListRequest) (*pagination.Items[models.Relationship], error) {
+func (s *ResourceService) ListRelationships(ctx context.Context, req *dto.ListRequest) (*pagination.Items[models.Relationship], error) {
 	query := s.db.WithContext(ctx).Model(&models.Relationship{})
 	query = filter.Apply(query, req.Filter, relationshipFilters)
 	return pagination.CursorPaginate[models.Relationship](query, req.Pagination)
 }
 
 // ListRelationshipsBySubject 按精确条件查询关系（不分页），供内部服务调用
-func (s *Service) ListRelationshipsBySubject(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
+func (s *ResourceService) ListRelationshipsBySubject(ctx context.Context, serviceID, subjectType, subjectID string) ([]models.Relationship, error) {
 	var rels []models.Relationship
 	query := s.db.WithContext(ctx).Where("service_id = ? AND subject_type = ? AND subject_id = ?", serviceID, subjectType, subjectID)
 	if err := query.Find(&rels).Error; err != nil {
@@ -129,7 +129,7 @@ func (s *Service) ListRelationshipsBySubject(ctx context.Context, serviceID, sub
 }
 
 // UpdateRelationship 更新关系（JSON Merge Patch 语义）
-func (s *Service) UpdateRelationship(ctx context.Context, req *dto.RelationshipUpdateRequest) (*models.Relationship, error) {
+func (s *ResourceService) UpdateRelationship(ctx context.Context, req *dto.RelationshipUpdateRequest) (*models.Relationship, error) {
 	var rel models.Relationship
 	if err := s.db.WithContext(ctx).Where(
 		"service_id = ? AND subject_type = ? AND subject_id = ? AND relation = ? AND object_type = ? AND object_id = ?",
@@ -176,7 +176,7 @@ var appServiceRelationshipFilters = filter.Whitelist{
 }
 
 // verifyAppServiceAccess 验证应用是否有权访问该服务
-func (s *Service) verifyAppServiceAccess(ctx context.Context, appID, serviceID string) error {
+func (s *ResourceService) verifyAppServiceAccess(ctx context.Context, appID, serviceID string) error {
 	var app models.Application
 	if err := s.db.WithContext(ctx).Where("app_id = ?", appID).First(&app).Error; err != nil {
 		return fmt.Errorf("应用不存在: %w", err)
@@ -193,7 +193,7 @@ func (s *Service) verifyAppServiceAccess(ctx context.Context, appID, serviceID s
 }
 
 // ListAppServiceRelationships 列出应用服务下的关系（游标分页）
-func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, serviceID string, req *dto.ListRequest) (*pagination.Items[models.Relationship], error) {
+func (s *ResourceService) ListAppServiceRelationships(ctx context.Context, appID, serviceID string, req *dto.ListRequest) (*pagination.Items[models.Relationship], error) {
 	if err := s.verifyAppServiceAccess(ctx, appID, serviceID); err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (s *Service) ListAppServiceRelationships(ctx context.Context, appID, servic
 }
 
 // CreateAppServiceRelationship 在应用服务下创建关系
-func (s *Service) CreateAppServiceRelationship(ctx context.Context, appID, serviceID string, req *dto.AppServiceRelationshipCreateRequest) (*models.Relationship, error) {
+func (s *ResourceService) CreateAppServiceRelationship(ctx context.Context, appID, serviceID string, req *dto.AppServiceRelationshipCreateRequest) (*models.Relationship, error) {
 	if err := s.verifyAppServiceAccess(ctx, appID, serviceID); err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func (s *Service) CreateAppServiceRelationship(ctx context.Context, appID, servi
 }
 
 // UpdateAppServiceRelationship 在应用服务下更新关系（JSON Merge Patch 语义）
-func (s *Service) UpdateAppServiceRelationship(ctx context.Context, appID, serviceID string, relationshipID uint, req *dto.AppServiceRelationshipUpdateRequest) (*models.Relationship, error) {
+func (s *ResourceService) UpdateAppServiceRelationship(ctx context.Context, appID, serviceID string, relationshipID uint, req *dto.AppServiceRelationshipUpdateRequest) (*models.Relationship, error) {
 	if err := s.verifyAppServiceAccess(ctx, appID, serviceID); err != nil {
 		return nil, err
 	}
@@ -274,7 +274,7 @@ func (s *Service) UpdateAppServiceRelationship(ctx context.Context, appID, servi
 }
 
 // DeleteAppServiceRelationship 在应用服务下删除关系
-func (s *Service) DeleteAppServiceRelationship(ctx context.Context, appID, serviceID string, relationshipID uint) error {
+func (s *ResourceService) DeleteAppServiceRelationship(ctx context.Context, appID, serviceID string, relationshipID uint) error {
 	if err := s.verifyAppServiceAccess(ctx, appID, serviceID); err != nil {
 		return err
 	}

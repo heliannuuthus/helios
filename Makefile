@@ -8,6 +8,11 @@ export PATH := $(HOME)/.asdf/shims:$(HOME)/.go/bin:$(HOME)/.cargo/bin:$(PATH)
 SERVICES := hermes aegis zwei chaos
 MODULES  := proto pkg $(SERVICES)
 
+GO_TOOLCHAIN            := $(shell go env GOVERSION)
+GOLANGCI_LINT_VERSION  ?= v2.12.2
+GOLANGCI_LINT_DIR       := $(CURDIR)/bin/tools/$(GO_TOOLCHAIN)/$(GOLANGCI_LINT_VERSION)
+GOLANGCI_LINT           := $(GOLANGCI_LINT_DIR)/golangci-lint
+
 ifneq ($(CONTAINER_RUNTIME),)
 CTR := $(CONTAINER_RUNTIME)
 else ifneq ($(shell command -v nerdctl 2>/dev/null),)
@@ -66,8 +71,15 @@ run: build
 test:
 	@for m in $(MODULES); do (cd $$m && go test ./...); done
 
-lint:
-	@for m in $(MODULES); do (cd $$m && golangci-lint run --fix ./...); done
+$(GOLANGCI_LINT):
+	@echo "[tools] install golangci-lint $(GOLANGCI_LINT_VERSION) with $(GO_TOOLCHAIN)"
+	@mkdir -p "$(GOLANGCI_LINT_DIR)"
+	@GOBIN="$(GOLANGCI_LINT_DIR)" GOTOOLCHAIN="$(GO_TOOLCHAIN)" \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+
+lint: $(GOLANGCI_LINT)
+	@$(GOLANGCI_LINT) version
+	@for m in $(MODULES); do (cd $$m && $(GOLANGCI_LINT) run --fix ./...); done
 
 fmt:
 	@for m in $(MODULES); do (cd $$m && go fmt ./...); done
@@ -219,7 +231,7 @@ ps:
 
 dev: dev-up
 
-dev-up: dev-check build
+dev-up: dev-check _dev-stop-processes build
 	@command -v $(CTR) >/dev/null || { echo "[dev] ERROR: 未找到 $(CTR)"; exit 1; }
 	@$(CTR) info >/dev/null 2>&1 || { echo "[dev] ERROR: $(CTR) daemon 未运行"; exit 1; }
 	@has_prod=false; for s in aegis hermes zwei chaos; do \
@@ -248,27 +260,24 @@ dev-up: dev-check build
 	@mkdir -p $(DEV_PID)
 	@set -e; \
 	log() { echo "[dev] $$*"; }; \
-	service_running() { \
-		s=$$1; pid_file="$(DEV_PID)/$$s.pid"; \
-		[ -f "$$pid_file" ] || return 1; \
-		pid=$$(cat "$$pid_file" 2>/dev/null || true); \
-		case "$$pid" in ''|*[!0-9]*) return 1 ;; esac; \
-		kill -0 "$$pid" 2>/dev/null || return 1; \
-		expected=$$(realpath "./bin/$$s" 2>/dev/null || true); \
-		actual=$$(readlink -f "/proc/$$pid/exe" 2>/dev/null || true); \
-		actual=$${actual% (deleted)}; \
-		[ -n "$$expected" ] && [ "$$actual" = "$$expected" ]; \
+	fail_start() { \
+		log "ERROR: $$*"; \
+		$(MAKE) --no-print-directory _dev-stop-processes; \
+		exit 1; \
 	}; \
-	wait_port() { i=0; while [ $$i -lt 50 ]; do nc -z 127.0.0.1 $$1 >/dev/null 2>&1 && return 0; i=$$((i+1)); sleep 0.2; done; return 1; }; \
-	if service_running hermes; then log "hermes 已在运行，跳过"; else log "启动 hermes (:8081 + gRPC :50051)"; HERMES_SERVER_PORT=8081 ./bin/hermes & echo $$! > "$(DEV_PID)/hermes.pid"; fi; \
-	wait_port 50051 || { log "ERROR: hermes 超时"; exit 1; }; \
-	wait_port 8081 || { log "ERROR: hermes HTTP 超时"; exit 1; }; \
-	if service_running aegis; then log "aegis 已在运行，跳过"; else log "启动 aegis (:18000)"; HERMES_GRPC_ADDR=127.0.0.1:50051 ./bin/aegis & echo $$! > "$(DEV_PID)/aegis.pid"; fi; \
-	wait_port 18000 || { log "ERROR: aegis 超时"; exit 1; }; \
-	if service_running zwei; then log "zwei 已在运行，跳过"; else log "启动 zwei (:18001)"; ZWEI_SERVER_PORT=18001 ./bin/zwei & echo $$! > "$(DEV_PID)/zwei.pid"; fi; \
-	wait_port 18001 || { log "ERROR: zwei 超时"; exit 1; }; \
-	if service_running chaos; then log "chaos 已在运行，跳过"; else log "启动 chaos (:18002)"; CHAOS_SERVER_PORT=18002 ./bin/chaos & echo $$! > "$(DEV_PID)/chaos.pid"; fi; \
-	wait_port 18002 || { log "ERROR: chaos 超时"; exit 1; }; \
+	wait_service() { pid=$$1; port=$$2; i=0; while [ $$i -lt 50 ]; do kill -0 "$$pid" 2>/dev/null || return 1; nc -z 127.0.0.1 "$$port" >/dev/null 2>&1 && return 0; i=$$((i+1)); sleep 0.2; done; return 1; }; \
+	for port in 50051 8081 18000 18001 18002; do \
+		nc -z 127.0.0.1 "$$port" >/dev/null 2>&1 && fail_start "端口 :$$port 已被其他进程占用"; \
+	done; \
+	log "启动 hermes (:8081 + gRPC :50051)"; HERMES_SERVER_PORT=8081 ./bin/hermes & pid=$$!; echo "$$pid" > "$(DEV_PID)/hermes.pid"; \
+	wait_service "$$pid" 50051 || fail_start "hermes gRPC 启动失败"; \
+	wait_service "$$pid" 8081 || fail_start "hermes HTTP 启动失败"; \
+	log "启动 aegis (:18000)"; HERMES_GRPC_ADDR=127.0.0.1:50051 ./bin/aegis & pid=$$!; echo "$$pid" > "$(DEV_PID)/aegis.pid"; \
+	wait_service "$$pid" 18000 || fail_start "aegis 启动失败"; \
+	log "启动 zwei (:18001)"; ZWEI_SERVER_PORT=18001 ./bin/zwei & pid=$$!; echo "$$pid" > "$(DEV_PID)/zwei.pid"; \
+	wait_service "$$pid" 18001 || fail_start "zwei 启动失败"; \
+	log "启动 chaos (:18002)"; CHAOS_SERVER_PORT=18002 ./bin/chaos & pid=$$!; echo "$$pid" > "$(DEV_PID)/chaos.pid"; \
+	wait_service "$$pid" 18002 || fail_start "chaos 启动失败"; \
 	log "全部就绪 (Ctrl+C 停止前台输出, make dev-down 停进程)"; \
 	log "  https://aegis.heliannuuthus.com"; \
 	log "  hermes :8081 + gRPC :50051 | aegis :18000 | zwei :18001 | chaos :18002"; \
@@ -277,28 +286,45 @@ dev-up: dev-check build
 _dev-stop-processes:
 	@log() { echo "[dev] $$*"; }; \
 	for s in chaos zwei aegis hermes; do \
+		expected=$$(realpath -m "./bin/$$s" 2>/dev/null || true); \
+		tracked_pid=""; \
 		pid_file="$(DEV_PID)/$$s.pid"; \
-		[ -f "$$pid_file" ] || continue; \
-		pid=$$(cat "$$pid_file" 2>/dev/null || true); \
-		rm -f "$$pid_file"; \
-		case "$$pid" in ''|*[!0-9]*) log "忽略无效 PID 文件: $$pid_file"; continue ;; esac; \
-		if ! kill -0 "$$pid" 2>/dev/null; then \
-			log "清理已失效的 PID: $$s (pid $$pid)"; \
-			continue; \
+		if [ -f "$$pid_file" ]; then \
+			pid=$$(cat "$$pid_file" 2>/dev/null || true); \
+			rm -f "$$pid_file"; \
+			case "$$pid" in \
+				''|*[!0-9]*) log "忽略无效 PID 文件: $$pid_file" ;; \
+				*) \
+					tracked_pid="$$pid"; \
+					actual=$$(readlink "/proc/$$pid/exe" 2>/dev/null || true); \
+					normalized=$${actual%\ \(deleted\)}; \
+					if [ -n "$$expected" ] && [ "$$normalized" = "$$expected" ]; then \
+						kill "$$pid" 2>/dev/null && log "停止 $$s (pid $$pid)" || true; \
+					elif kill -0 "$$pid" 2>/dev/null; then \
+						log "WARN: PID $$pid 不属于 ./bin/$$s，拒绝停止 ($${actual:-unknown})"; \
+					else \
+						log "清理已失效的 PID: $$s (pid $$pid)"; \
+					fi ;; \
+			esac; \
 		fi; \
-		expected=$$(realpath "./bin/$$s" 2>/dev/null || true); \
-		actual=$$(readlink -f "/proc/$$pid/exe" 2>/dev/null || true); \
-		actual=$${actual% (deleted)}; \
-		if [ -z "$$expected" ] || [ "$$actual" != "$$expected" ]; then \
-			log "WARN: PID $$pid 不属于 ./bin/$$s，拒绝停止 ($${actual:-unknown})"; \
-			continue; \
-		fi; \
-		kill "$$pid" 2>/dev/null && log "停止 $$s (pid $$pid)" || log "WARN: 无法停止 $$s (pid $$pid)"; \
+		for exe_link in /proc/[0-9]*/exe; do \
+			pid=$${exe_link#/proc/}; pid=$${pid%/exe}; \
+			[ "$$pid" = "$$tracked_pid" ] && continue; \
+			actual=$$(readlink "$$exe_link" 2>/dev/null || true); \
+			normalized=$${actual%\ \(deleted\)}; \
+			if [ -n "$$expected" ] && [ "$$normalized" = "$$expected" ]; then \
+				kill "$$pid" 2>/dev/null && log "停止孤儿 $$s (pid $$pid)" || true; \
+			fi; \
+		done; \
 	done
 
 dev-down: _dev-stop-processes
 	@if $(CTR) info >/dev/null 2>&1; then \
 		$(COMPOSE_DEV) down; \
+		for port in 3306 6379 80 443; do \
+			i=0; while [ $$i -lt 50 ] && nc -z 127.0.0.1 "$$port" >/dev/null 2>&1; do i=$$((i+1)); sleep 0.1; done; \
+			if nc -z 127.0.0.1 "$$port" >/dev/null 2>&1; then echo "[dev] ERROR: 容器端口 :$$port 未释放"; exit 1; fi; \
+		done; \
 	else \
 		echo "[dev] $(CTR) daemon 未运行，跳过容器清理"; \
 	fi

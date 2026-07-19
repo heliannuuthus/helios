@@ -23,7 +23,7 @@ import (
 // ==================== User CRUD ====================
 
 // GetUserByOpenID 根据 OpenID 查找用户
-func (s *Service) GetUserByOpenID(ctx context.Context, openid string) (*models.User, error) {
+func (s *UserService) GetUserByOpenID(ctx context.Context, openid string) (*models.User, error) {
 	var user models.User
 	if err := s.db.WithContext(ctx).Where("openid = ?", openid).First(&user).Error; err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func (s *Service) GetUserByOpenID(ctx context.Context, openid string) (*models.U
 }
 
 // GetUserByIdentity 根据身份定位查找用户（domain + idp + t_openid）
-func (s *Service) GetUserByIdentity(ctx context.Context, domain, idp, tOpenID string) (*models.User, error) {
+func (s *UserService) GetUserByIdentity(ctx context.Context, domain, idp, tOpenID string) (*models.User, error) {
 	var matched models.UserIdentity
 	if err := s.db.WithContext(ctx).
 		Where("domain = ? AND idp = ? AND t_openid = ?", domain, idp, tOpenID).
@@ -43,7 +43,7 @@ func (s *Service) GetUserByIdentity(ctx context.Context, domain, idp, tOpenID st
 }
 
 // GetUserByEmail 根据邮箱查找用户（返回解密后的完整用户信息）
-func (s *Service) GetUserByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error) {
+func (s *UserService) GetUserByEmail(ctx context.Context, email string) (*models.UserWithDecrypted, error) {
 	user, err := s.getUserByEmail(ctx, email)
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func (s *Service) GetUserByEmail(ctx context.Context, email string) (*models.Use
 }
 
 // GetUserByUsername 根据用户名查找用户（最左模糊匹配）
-func (s *Service) GetUserByUsername(ctx context.Context, username string) (*models.User, error) {
+func (s *UserService) GetUserByUsername(ctx context.Context, username string) (*models.User, error) {
 	var user models.User
 	if err := s.db.WithContext(ctx).Where("username LIKE ?", username+"%").First(&user).Error; err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func (s *Service) GetUserByUsername(ctx context.Context, username string) (*mode
 }
 
 // GetUserByPhone 根据手机号明文查找用户（内部哈希后查询，返回解密后的完整用户信息）
-func (s *Service) GetUserByPhone(ctx context.Context, phone string) (*models.UserWithDecrypted, error) {
+func (s *UserService) GetUserByPhone(ctx context.Context, phone string) (*models.UserWithDecrypted, error) {
 	phoneHash := hashPhone(phone)
 	var user models.User
 	if err := s.db.WithContext(ctx).Where("phone = ?", phoneHash).First(&user).Error; err != nil {
@@ -71,7 +71,7 @@ func (s *Service) GetUserByPhone(ctx context.Context, phone string) (*models.Use
 }
 
 // GetDecryptedUserByOpenID 获取解密后的用户（解密手机号）
-func (s *Service) GetDecryptedUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
+func (s *UserService) GetDecryptedUserByOpenID(ctx context.Context, openid string) (*models.UserWithDecrypted, error) {
 	user, err := s.GetUserByOpenID(ctx, openid)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (s *Service) GetDecryptedUserByOpenID(ctx context.Context, openid string) (
 }
 
 // GetDecryptedUserByIdentity 根据身份定位获取解密后的用户
-func (s *Service) GetDecryptedUserByIdentity(ctx context.Context, domain, idp, tOpenID string) (*models.UserWithDecrypted, error) {
+func (s *UserService) GetDecryptedUserByIdentity(ctx context.Context, domain, idp, tOpenID string) (*models.UserWithDecrypted, error) {
 	user, err := s.GetUserByIdentity(ctx, domain, idp, tOpenID)
 	if err != nil {
 		return nil, err
@@ -110,7 +110,7 @@ func (s *Service) GetDecryptedUserByIdentity(ctx context.Context, domain, idp, t
 
 // GetIdentities 根据 domain + idp + t_openid 查找该用户的全部身份
 // 用户不存在返回空切片（非 error），仅基础设施故障才返回 error
-func (s *Service) ListIdentitiesByIdentity(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error) {
+func (s *UserService) ListIdentitiesByIdentity(ctx context.Context, domain, idp, tOpenID string) (models.Identities, error) {
 	var matched models.UserIdentity
 	query := s.db.WithContext(ctx).Where("idp = ? AND t_openid = ?", idp, tOpenID)
 	if domain != "" {
@@ -126,7 +126,7 @@ func (s *Service) ListIdentitiesByIdentity(ctx context.Context, domain, idp, tOp
 }
 
 // ListUserIdentities 获取用户所有身份关联
-func (s *Service) ListUserIdentities(ctx context.Context, openid string) (models.Identities, error) {
+func (s *UserService) ListUserIdentities(ctx context.Context, openid string) (models.Identities, error) {
 	var identities models.Identities
 	if err := s.db.WithContext(ctx).Where("uid = ?", openid).Find(&identities).Error; err != nil {
 		return nil, err
@@ -135,7 +135,7 @@ func (s *Service) ListUserIdentities(ctx context.Context, openid string) (models
 }
 
 // GetUserIdentityByType 获取用户指定域和 IDP 类型的身份
-func (s *Service) GetUserIdentityByType(ctx context.Context, domain, openid, idpType string) (*models.UserIdentity, error) {
+func (s *UserService) GetUserIdentityByType(ctx context.Context, domain, openid, idpType string) (*models.UserIdentity, error) {
 	var identity models.UserIdentity
 	if err := s.db.WithContext(ctx).Where("domain = ? AND uid = ? AND idp = ?", domain, openid, idpType).First(&identity).Error; err != nil {
 		return nil, err
@@ -144,14 +144,14 @@ func (s *Service) GetUserIdentityByType(ctx context.Context, domain, openid, idp
 }
 
 // AddIdentity 添加身份关联
-func (s *Service) CreateIdentity(ctx context.Context, identity *models.UserIdentity) error {
+func (s *UserService) CreateIdentity(ctx context.Context, identity *models.UserIdentity) error {
 	return s.db.WithContext(ctx).Create(identity).Error
 }
 
 // ==================== User Write ====================
 
 // CreateUser 创建用户及其身份关联（认证身份 + global 身份）
-func (s *Service) CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error) {
+func (s *UserService) CreateUser(ctx context.Context, identity *models.UserIdentity, userInfo *models.TUserInfo) (*models.UserWithDecrypted, error) {
 	now := time.Now()
 	openid := models.GenerateOpenID()
 
@@ -207,7 +207,7 @@ func (s *Service) CreateUser(ctx context.Context, identity *models.UserIdentity,
 }
 
 // createWithIdentities 创建用户及多个身份关联（事务）
-func (s *Service) createWithIdentities(ctx context.Context, user *models.User, identities models.Identities) error {
+func (s *UserService) createWithIdentities(ctx context.Context, user *models.User, identities models.Identities) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(user).Error; err != nil {
 			return fmt.Errorf("创建用户失败: %w", err)
@@ -223,7 +223,7 @@ func (s *Service) createWithIdentities(ctx context.Context, user *models.User, i
 }
 
 // PatchUser patches user fields by openid.
-func (s *Service) PatchUser(ctx context.Context, openid string, updates map[string]any) error {
+func (s *UserService) PatchUser(ctx context.Context, openid string, updates map[string]any) error {
 	if phone, ok := updates["phone"]; ok {
 		delete(updates, "phone")
 		if phoneStr, ok := phone.(string); ok {
@@ -246,7 +246,7 @@ func (s *Service) PatchUser(ctx context.Context, openid string, updates map[stri
 // ==================== WebAuthn 凭证管理 ====================
 
 // CreateCredential 创建凭证（TOTP 类型自动加密 Secret）
-func (s *Service) CreateCredential(ctx context.Context, cred *models.UserCredential) error {
+func (s *UserService) CreateCredential(ctx context.Context, cred *models.UserCredential) error {
 	if models.CredentialType(cred.Type) == models.CredentialTypeTOTP && cred.Secret != "" {
 		encrypted, err := s.encryptSecret(cred.Secret, cred.OpenID)
 		if err != nil {
@@ -258,7 +258,7 @@ func (s *Service) CreateCredential(ctx context.Context, cred *models.UserCredent
 }
 
 // GetCredentialByID 根据凭证 ID 获取凭证（TOTP 类型自动解密 Secret）
-func (s *Service) GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error) {
+func (s *UserService) GetCredentialByID(ctx context.Context, credentialID string) (*models.UserCredential, error) {
 	var cred models.UserCredential
 	if err := s.db.WithContext(ctx).Where("credential_id = ?", credentialID).First(&cred).Error; err != nil {
 		return nil, err
@@ -268,7 +268,7 @@ func (s *Service) GetCredentialByID(ctx context.Context, credentialID string) (*
 }
 
 // ListUserCredentials 获取用户所有凭证（TOTP 类型自动解密 Secret）
-func (s *Service) ListUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
+func (s *UserService) ListUserCredentials(ctx context.Context, openid string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
 	if err := s.db.WithContext(ctx).Where("openid = ?", openid).Find(&credentials).Error; err != nil {
 		return nil, err
@@ -278,7 +278,7 @@ func (s *Service) ListUserCredentials(ctx context.Context, openid string) ([]mod
 }
 
 // ListUserCredentialsByType 获取用户指定类型的凭证（TOTP 类型自动解密 Secret）
-func (s *Service) ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
+func (s *UserService) ListUserCredentialsByType(ctx context.Context, openid, credType string) ([]models.UserCredential, error) {
 	var credentials []models.UserCredential
 	if err := s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Find(&credentials).Error; err != nil {
 		return nil, err
@@ -288,7 +288,7 @@ func (s *Service) ListUserCredentialsByType(ctx context.Context, openid, credTyp
 }
 
 // PatchCredential patches credential fields by credential_id.
-func (s *Service) PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error {
+func (s *UserService) PatchCredential(ctx context.Context, credentialID string, updates map[string]any) error {
 	if signCount, ok := updates["sign_count"]; ok {
 		delete(updates, "sign_count")
 		updates["secret"] = gorm.Expr("JSON_SET(secret, '$.sign_count', ?)", signCount)
@@ -300,17 +300,17 @@ func (s *Service) PatchCredential(ctx context.Context, credentialID string, upda
 }
 
 // DeleteCredential 删除凭证
-func (s *Service) DeleteCredential(ctx context.Context, openid, credentialID string) error {
+func (s *UserService) DeleteCredential(ctx context.Context, openid, credentialID string) error {
 	return s.db.WithContext(ctx).Where("openid = ? AND credential_id = ?", openid, credentialID).Delete(&models.UserCredential{}).Error
 }
 
 // DeleteUserCredentialsByType deletes all credentials of a type for a user.
-func (s *Service) DeleteUserCredentialsByType(ctx context.Context, openid, credType string) error {
+func (s *UserService) DeleteUserCredentialsByType(ctx context.Context, openid, credType string) error {
 	return s.db.WithContext(ctx).Where("openid = ? AND type = ?", openid, credType).Delete(&models.UserCredential{}).Error
 }
 
 // GetOpenIDByCredentialID 根据凭证 ID 获取用户 OpenID
-func (s *Service) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
+func (s *UserService) GetOpenIDByCredentialID(ctx context.Context, credentialID string) (string, error) {
 	var cred models.UserCredential
 	if err := s.db.WithContext(ctx).
 		Select("openid").
@@ -325,7 +325,7 @@ func (s *Service) GetOpenIDByCredentialID(ctx context.Context, credentialID stri
 }
 
 // GetCredentialByInternalID 根据内部主键 ID 获取凭证（TOTP 类型自动解密 Secret）
-func (s *Service) GetCredentialByInternalID(ctx context.Context, id uint) (*models.UserCredential, error) {
+func (s *UserService) GetCredentialByInternalID(ctx context.Context, id uint) (*models.UserCredential, error) {
 	var cred models.UserCredential
 	if err := s.db.WithContext(ctx).Where("_id = ?", id).First(&cred).Error; err != nil {
 		return nil, err
@@ -335,7 +335,7 @@ func (s *Service) GetCredentialByInternalID(ctx context.Context, id uint) (*mode
 }
 
 // getUserByEmail 根据邮箱查找用户（内部使用，返回基础 User）
-func (s *Service) getUserByEmail(ctx context.Context, email string) (*models.User, error) {
+func (s *UserService) getUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
 	if err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
 		return nil, err
@@ -351,7 +351,7 @@ var groupFilters = filter.Whitelist{
 }
 
 // CreateGroup 创建组
-func (s *Service) CreateGroup(ctx context.Context, req *dto.GroupCreateRequest) (*models.Group, error) {
+func (s *UserService) CreateGroup(ctx context.Context, req *dto.GroupCreateRequest) (*models.Group, error) {
 	group := &models.Group{
 		GroupID:     req.GroupID,
 		ServiceID:   req.ServiceID,
@@ -365,7 +365,7 @@ func (s *Service) CreateGroup(ctx context.Context, req *dto.GroupCreateRequest) 
 }
 
 // GetGroup 获取组
-func (s *Service) GetGroup(ctx context.Context, groupID string) (*models.Group, error) {
+func (s *UserService) GetGroup(ctx context.Context, groupID string) (*models.Group, error) {
 	var group models.Group
 	if err := s.db.WithContext(ctx).Where("group_id = ?", groupID).First(&group).Error; err != nil {
 		return nil, err
@@ -374,14 +374,14 @@ func (s *Service) GetGroup(ctx context.Context, groupID string) (*models.Group, 
 }
 
 // ListGroups 列出组（游标分页）
-func (s *Service) ListGroups(ctx context.Context, req *dto.ListRequest) (*pagination.Items[models.Group], error) {
+func (s *UserService) ListGroups(ctx context.Context, req *dto.ListRequest) (*pagination.Items[models.Group], error) {
 	query := s.db.WithContext(ctx).Model(&models.Group{})
 	query = filter.Apply(query, req.Filter, groupFilters)
 	return pagination.CursorPaginate[models.Group](query, req.Pagination)
 }
 
 // UpdateGroup 更新组（JSON Merge Patch 语义）
-func (s *Service) UpdateGroup(ctx context.Context, groupID string, req *dto.GroupUpdateRequest) error {
+func (s *UserService) UpdateGroup(ctx context.Context, groupID string, req *dto.GroupUpdateRequest) error {
 	updates := patch.Collect(
 		patch.Field("name", req.Name),
 		patch.Field("description", req.Description),
@@ -393,7 +393,7 @@ func (s *Service) UpdateGroup(ctx context.Context, groupID string, req *dto.Grou
 }
 
 // DeleteGroup 删除组（级联删除成员关系）
-func (s *Service) DeleteGroup(ctx context.Context, groupID string) error {
+func (s *UserService) DeleteGroup(ctx context.Context, groupID string) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("object_type = ? AND object_id = ? AND relation = ?", "group", groupID, "member").
 			Delete(&models.Relationship{}).Error; err != nil {
@@ -407,7 +407,7 @@ func (s *Service) DeleteGroup(ctx context.Context, groupID string) error {
 }
 
 // SetGroupMembers 设置组成员（全量替换，通过 Relationship 表实现）
-func (s *Service) SetGroupMembers(ctx context.Context, req *dto.GroupMemberRequest) error {
+func (s *UserService) SetGroupMembers(ctx context.Context, req *dto.GroupMemberRequest) error {
 	group, err := s.GetGroup(ctx, req.GroupID)
 	if err != nil {
 		return fmt.Errorf("组不存在: %w", err)
@@ -437,7 +437,7 @@ func (s *Service) SetGroupMembers(ctx context.Context, req *dto.GroupMemberReque
 }
 
 // GetGroupMembers 获取组成员列表
-func (s *Service) GetGroupMembers(ctx context.Context, groupID string) ([]string, error) {
+func (s *UserService) GetGroupMembers(ctx context.Context, groupID string) ([]string, error) {
 	var rels []models.Relationship
 	if err := s.db.WithContext(ctx).
 		Where("object_type = ? AND object_id = ? AND relation = ? AND subject_type = ?", "group", groupID, "member", "user").
@@ -487,7 +487,7 @@ func hashPhone(phone string) string {
 // ==================== 凭证加解密辅助 ====================
 
 // encryptSecret 加密凭证密钥（AES-256-GCM，openid 作为 AAD）
-func (s *Service) encryptSecret(plaintext, openid string) (string, error) {
+func (s *UserService) encryptSecret(plaintext, openid string) (string, error) {
 	key, err := config.GetDBEncKeyRaw()
 	if err != nil {
 		return "", fmt.Errorf("获取加密密钥失败: %w", err)
@@ -496,7 +496,7 @@ func (s *Service) encryptSecret(plaintext, openid string) (string, error) {
 }
 
 // decryptSecret 解密凭证密钥
-func (s *Service) decryptSecret(ciphertext, openid string) (string, error) {
+func (s *UserService) decryptSecret(ciphertext, openid string) (string, error) {
 	key, err := config.GetDBEncKeyRaw()
 	if err != nil {
 		return "", fmt.Errorf("获取加密密钥失败: %w", err)
@@ -505,7 +505,7 @@ func (s *Service) decryptSecret(ciphertext, openid string) (string, error) {
 }
 
 // decryptCredentialSecret 解密单个凭证的 Secret（仅 TOTP 类型）
-func (s *Service) decryptCredentialSecret(cred *models.UserCredential) {
+func (s *UserService) decryptCredentialSecret(cred *models.UserCredential) {
 	if models.CredentialType(cred.Type) == models.CredentialTypeTOTP && cred.Secret != "" {
 		plain, err := s.decryptSecret(cred.Secret, cred.OpenID)
 		if err != nil {
@@ -517,7 +517,7 @@ func (s *Service) decryptCredentialSecret(cred *models.UserCredential) {
 }
 
 // decryptCredentialSecrets 批量解密凭证的 Secret（仅 TOTP 类型）
-func (s *Service) decryptCredentialSecrets(creds []models.UserCredential) {
+func (s *UserService) decryptCredentialSecrets(creds []models.UserCredential) {
 	for i := range creds {
 		s.decryptCredentialSecret(&creds[i])
 	}

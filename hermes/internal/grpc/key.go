@@ -16,10 +16,10 @@ import (
 
 type keyServiceServer struct {
 	hermesv1.UnimplementedKeyServiceServer
-	svc *hermes.Service
+	svc *hermes.KeyService
 }
 
-func NewKeyServiceServer(svc *hermes.Service) hermesv1.KeyServiceServer {
+func NewKeyServiceServer(svc *hermes.KeyService) hermesv1.KeyServiceServer {
 	return &keyServiceServer{svc: svc}
 }
 
